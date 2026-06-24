@@ -31,7 +31,7 @@
         <el-table
           :data="queryResult.rows"
           border
-          size="small"
+         
           style="width:100%"
           :empty-text="t('db.noData')"
           @cell-dblclick="onCellDblClick"

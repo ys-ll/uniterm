@@ -19,7 +19,7 @@
       </div>
 
       <div v-if="message.needsContinue" class="continue-box">
-        <el-button type="primary" size="small" @click="$emit('continue')">
+        <el-button type="primary" @click="$emit('continue')">
           {{ t('ai.continue') }}
         </el-button>
       </div>
@@ -64,8 +64,8 @@
           </div>
           <code class="tool-args">{{ pendingCmd.command }}</code>
           <div class="tool-actions">
-            <el-button size="small" type="primary" @click="handleApprove">{{ t('ai.run') }}</el-button>
-            <el-button size="small" @click="handleReject">{{ t('ai.skip') }}</el-button>
+            <el-button type="primary" @click="handleApprove">{{ t('ai.run') }}</el-button>
+            <el-button @click="handleReject">{{ t('ai.skip') }}</el-button>
           </div>
         </div>
       </div>

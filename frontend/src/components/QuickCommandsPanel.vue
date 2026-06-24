@@ -6,7 +6,7 @@
         v-model="searchQuery"
         :placeholder="t('quickCommands.searchPlaceholder')"
         clearable
-        size="small"
+       
         class="qc-search-input"
         @keydown="onListKeydown"
       />

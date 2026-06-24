@@ -4,37 +4,37 @@
       <el-input
         v-model="filterText"
         :placeholder="t('sftp.filterByName')"
-        size="small"
+       
         clearable
       />
-      <el-button size="small" @click="emit('refresh')" :title="t('sftp.refresh')">
+      <el-button @click="emit('refresh')" :title="t('sftp.refresh')">
         <el-icon><RefreshCw :size="14" /></el-icon>
       </el-button>
-      <el-button size="small" @click="showHidden = !showHidden" :type="showHidden ? 'primary' : undefined" :title="showHidden ? t('sftp.hideHidden') : t('sftp.showHidden')">
+      <el-button @click="showHidden = !showHidden" :type="showHidden ? 'primary' : undefined" :title="showHidden ? t('sftp.hideHidden') : t('sftp.showHidden')">
         <el-icon><Eye :size="14" /></el-icon>
       </el-button>
-      <el-button v-if="mode === 'remote'" size="small" type="primary" @click="emit('upload')" :title="t('sftp.upload')">
+      <el-button v-if="mode === 'remote'" type="primary" @click="emit('upload')" :title="t('sftp.upload')">
         <el-icon><Upload :size="14" /></el-icon>
       </el-button>
     </div>
     <div v-if="clipboardCount" class="clipboard-bar">
       <span class="clipboard-info">{{ clipboardMode === 'cut' ? t('sftp.cut') : t('sftp.copy') }} ({{ clipboardCount }})</span>
-      <el-button size="small" type="primary" @click="emit('paste')">{{ t('sftp.paste') }}</el-button>
-      <el-button size="small" @click="emit('clearClipboard')">{{ t('sftp.dialog.cancel') }}</el-button>
+      <el-button type="primary" @click="emit('paste')">{{ t('sftp.paste') }}</el-button>
+      <el-button @click="emit('clearClipboard')">{{ t('sftp.dialog.cancel') }}</el-button>
     </div>
     <div class="table-wrapper" @contextmenu.prevent="onEmptyAreaContextMenu">
       <div v-if="loading || pasteLoading" class="loading-overlay">
         <div class="loading-content">
           <div class="loading-spinner"></div>
           <span class="loading-text">{{ pasteLoading ? t('sftp.pasting') : t('sftp.loading') }}</span>
-          <el-button size="small" @click="pasteLoading ? emit('cancelPaste') : emit('cancelLoad')">{{ t('sftp.cancel') }}</el-button>
+          <el-button @click="pasteLoading ? emit('cancelPaste') : emit('cancelLoad')">{{ t('sftp.cancel') }}</el-button>
         </div>
       </div>
       <el-table
         ref="tableRef"
         :key="locale"
         :data="filteredFiles"
-        size="small"
+       
         :row-class-name="getRowClassName"
         @row-click="onRowClick"
         @row-dblclick="onRowDblClick"

@@ -159,7 +159,10 @@ function mergeSettings(loaded: AppSettings): AppSettings {
     language: loaded.language || DEFAULT_SETTINGS.language,
     terminal: {
       ...DEFAULT_SETTINGS.terminal,
-      ...loaded.terminal
+      ...loaded.terminal,
+      theme: (loaded.terminal?.theme as string) === 'dark' || (loaded.terminal?.theme as string) === 'light'
+        ? DEFAULT_SETTINGS.terminal.theme
+        : loaded.terminal?.theme || DEFAULT_SETTINGS.terminal.theme
     },
     ai: {
       models: loaded.ai?.models?.length ? loaded.ai.models : DEFAULT_SETTINGS.ai.models,

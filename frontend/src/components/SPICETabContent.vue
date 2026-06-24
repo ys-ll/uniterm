@@ -37,7 +37,7 @@
       <span class="spice-scale-label">{{ t('spice.scale') }}</span>
       <el-switch
         v-model="scaleViewport"
-        size="small"
+       
         style="--el-switch-on-color: #67c23a; --el-switch-off-color: #606266"
       />
     </div>

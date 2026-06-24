@@ -53,7 +53,9 @@ export function getXtermTheme(name: string): any {
     brightWhite: '#d0d0d8'
   }
   switch (name) {
-    case 'light':
+    case 'uniterm-dark':
+      return base
+    case 'uniterm-light':
       return {
         background: '#fafafa',
         foreground: '#1f1f1f',
@@ -145,6 +147,140 @@ export function getXtermTheme(name: string): any {
         brightCyan: '#a1efe4',
         brightWhite: '#f9f8f5'
       }
+    case 'dracula':
+      return {
+        background: '#282a36',
+        foreground: '#f8f8f2',
+        cursor: '#f8f8f0',
+        selectionBackground: 'rgba(248, 248, 242, 0.2)',
+        black: '#21222c', red: '#ff5555', green: '#50fa7b', yellow: '#f1fa8c',
+        blue: '#bd93f9', magenta: '#ff79c6', cyan: '#8be9fd', white: '#f8f8f2',
+        brightBlack: '#6272a4', brightRed: '#ff6e6e', brightGreen: '#69ff94',
+        brightYellow: '#ffffa5', brightBlue: '#d6acff', brightMagenta: '#ff92df',
+        brightCyan: '#a4ffff', brightWhite: '#ffffff'
+      }
+    case 'molokai':
+      return {
+        background: '#1b1d1e',
+        foreground: '#f8f8f2',
+        cursor: '#bbbbbb',
+        selectionBackground: 'rgba(248, 248, 242, 0.2)',
+        black: '#1b1d1e', red: '#f92672', green: '#a6e22e', yellow: '#e6db74',
+        blue: '#66d9ef', magenta: '#ae81ff', cyan: '#a1efe4', white: '#f8f8f2',
+        brightBlack: '#465457', brightRed: '#ff5995', brightGreen: '#b6e354',
+        brightYellow: '#feed6c', brightBlue: '#8cedff', brightMagenta: '#9e6ffe',
+        brightCyan: '#899ca1', brightWhite: '#ffffff'
+      }
+    case 'tomorrow-night':
+      return {
+        background: '#1d1f21',
+        foreground: '#c5c8c6',
+        cursor: '#c5c8c6',
+        selectionBackground: 'rgba(197, 200, 198, 0.2)',
+        black: '#1d1f21', red: '#cc6666', green: '#b5bd68', yellow: '#f0c674',
+        blue: '#81a2be', magenta: '#b294bb', cyan: '#8abeb7', white: '#c5c8c6',
+        brightBlack: '#969896', brightRed: '#cc6666', brightGreen: '#b5bd68',
+        brightYellow: '#f0c674', brightBlue: '#81a2be', brightMagenta: '#b294bb',
+        brightCyan: '#8abeb7', brightWhite: '#ffffff'
+      }
+    case 'tomorrow':
+      return { background: '#ffffff', foreground: '#4d4d4c', cursor: '#4d4d4c', selectionBackground: 'rgba(77,77,76,0.2)', black: '#1d1f21', red: '#c82829', green: '#718c00', yellow: '#eab700', blue: '#4271ae', magenta: '#8959a8', cyan: '#3e999f', white: '#8e908c', brightBlack: '#969896', brightRed: '#c82829', brightGreen: '#718c00', brightYellow: '#eab700', brightBlue: '#4271ae', brightMagenta: '#8959a8', brightCyan: '#3e999f', brightWhite: '#4d4d4c' }
+    case 'tomorrow-night-bright':
+      return {
+        background: '#000000',
+        foreground: '#eaeaea',
+        cursor: '#eaeaea',
+        selectionBackground: 'rgba(234, 234, 234, 0.2)',
+        black: '#000000', red: '#d54e53', green: '#b9ca4a', yellow: '#e7c547',
+        blue: '#7aa6da', magenta: '#c397d8', cyan: '#70c0b1', white: '#eaeaea',
+        brightBlack: '#666666', brightRed: '#ff3334', brightGreen: '#9ec400',
+        brightYellow: '#e7c547', brightBlue: '#7aa6da', brightMagenta: '#b77ee0',
+        brightCyan: '#54ced6', brightWhite: '#ffffff'
+      }
+    case 'one-dark':
+      return {
+        background: '#282c34',
+        foreground: '#abb2bf',
+        cursor: '#528bff',
+        selectionBackground: 'rgba(171, 178, 191, 0.2)',
+        black: '#282c34', red: '#e06c75', green: '#98c379', yellow: '#e5c07b',
+        blue: '#61afef', magenta: '#c678dd', cyan: '#56b6c2', white: '#abb2bf',
+        brightBlack: '#545862', brightRed: '#e06c75', brightGreen: '#98c379',
+        brightYellow: '#e5c07b', brightBlue: '#61afef', brightMagenta: '#c678dd',
+        brightCyan: '#56b6c2', brightWhite: '#c8ccd4'
+      }
+    case 'one-light':
+      return {
+        background: '#fafafa',
+        foreground: '#383a42',
+        cursor: '#526fff',
+        selectionBackground: 'rgba(56, 58, 66, 0.2)',
+        black: '#383a42', red: '#e45649', green: '#50a14f', yellow: '#c18401',
+        blue: '#4078f2', magenta: '#a626a4', cyan: '#0184bc', white: '#fafafa',
+        brightBlack: '#4f525e', brightRed: '#e06c75', brightGreen: '#98c379',
+        brightYellow: '#e5c07b', brightBlue: '#61afef', brightMagenta: '#c678dd',
+        brightCyan: '#56b6c2', brightWhite: '#ffffff'
+      }
+    case 'github-dark':
+      return {
+        background: '#0d1117',
+        foreground: '#c9d1d9',
+        cursor: '#c9d1d9',
+        selectionBackground: 'rgba(201, 209, 217, 0.2)',
+        black: '#0d1117', red: '#ff7b72', green: '#3fb950', yellow: '#d29922',
+        blue: '#58a6ff', magenta: '#bc8cff', cyan: '#39c5cf', white: '#b1bac4',
+        brightBlack: '#484f58', brightRed: '#ffa198', brightGreen: '#56d364',
+        brightYellow: '#e3b341', brightBlue: '#79c0ff', brightMagenta: '#d2a8ff',
+        brightCyan: '#56d4dd', brightWhite: '#f0f6fc'
+      }
+    case 'gotham':
+      return {
+        background: '#0a0f14',
+        foreground: '#98d1ce',
+        cursor: '#d3ebe9',
+        selectionBackground: 'rgba(152, 209, 206, 0.2)',
+        black: '#0a0f14', red: '#c33027', green: '#26a98b', yellow: '#edb54b',
+        blue: '#195465', magenta: '#4e5165', cyan: '#33859e', white: '#98d1ce',
+        brightBlack: '#10151b', brightRed: '#d26939', brightGreen: '#2a9b72',
+        brightYellow: '#f1c83e', brightBlue: '#25525e', brightMagenta: '#696d87',
+        brightCyan: '#4d97b1', brightWhite: '#d3ebe9'
+      }
+    case 'hybrid':
+      return {
+        background: '#1d1f21',
+        foreground: '#c5c8c6',
+        cursor: '#c5c8c6',
+        selectionBackground: 'rgba(197, 200, 198, 0.2)',
+        black: '#282a2e', red: '#a54242', green: '#8c9440', yellow: '#de935f',
+        blue: '#5f819d', magenta: '#85678f', cyan: '#5e8d87', white: '#707880',
+        brightBlack: '#373b41', brightRed: '#cc6666', brightGreen: '#b5bd68',
+        brightYellow: '#f0c674', brightBlue: '#81a2be', brightMagenta: '#b294bb',
+        brightCyan: '#8abeb7', brightWhite: '#c5c8c6'
+      }
+    case 'nord':
+      return { background: '#2e3440', foreground: '#d8dee9', cursor: '#d8dee9', selectionBackground: 'rgba(216,222,233,0.2)', black: '#3b4252', red: '#bf616a', green: '#a3be8c', yellow: '#ebcb8b', blue: '#81a1c1', magenta: '#b48ead', cyan: '#88c0d0', white: '#e5e9f0', brightBlack: '#4c566a', brightRed: '#bf616a', brightGreen: '#a3be8c', brightYellow: '#ebcb8b', brightBlue: '#81a1c1', brightMagenta: '#b48ead', brightCyan: '#8fbcbb', brightWhite: '#eceff4' }
+    case 'gruvbox-dark':
+      return { background: '#282828', foreground: '#ebdbb2', cursor: '#ebdbb2', selectionBackground: 'rgba(235,219,178,0.2)', black: '#282828', red: '#cc241d', green: '#98971a', yellow: '#d79921', blue: '#458588', magenta: '#b16286', cyan: '#689d6a', white: '#a89984', brightBlack: '#928374', brightRed: '#fb4934', brightGreen: '#b8bb26', brightYellow: '#fabd2f', brightBlue: '#83a598', brightMagenta: '#d3869b', brightCyan: '#8ec07c', brightWhite: '#ebdbb2' }
+    case 'gruvbox-light':
+      return { background: '#fbf1c7', foreground: '#3c3836', cursor: '#3c3836', selectionBackground: 'rgba(60,56,54,0.2)', black: '#fbf1c7', red: '#cc241d', green: '#98971a', yellow: '#d79921', blue: '#458588', magenta: '#b16286', cyan: '#689d6a', white: '#7c6f64', brightBlack: '#928374', brightRed: '#9d0006', brightGreen: '#79740e', brightYellow: '#b57614', brightBlue: '#076678', brightMagenta: '#8f3f71', brightCyan: '#427b58', brightWhite: '#3c3836' }
+    case 'catppuccin-mocha':
+      return { background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc', selectionBackground: 'rgba(205,214,244,0.2)', black: '#45475a', red: '#f38ba8', green: '#a6e3a1', yellow: '#f9e2af', blue: '#89b4fa', magenta: '#f5c2e7', cyan: '#94e2d5', white: '#bac2de', brightBlack: '#585b70', brightRed: '#f38ba8', brightGreen: '#a6e3a1', brightYellow: '#f9e2af', brightBlue: '#89b4fa', brightMagenta: '#f5c2e7', brightCyan: '#94e2d5', brightWhite: '#a6adc8' }
+    case 'catppuccin-latte':
+      return { background: '#eff1f5', foreground: '#4c4f69', cursor: '#dc8a78', selectionBackground: 'rgba(76,79,105,0.2)', black: '#5c5f77', red: '#d20f39', green: '#40a02b', yellow: '#df8e1d', blue: '#1e66f5', magenta: '#ea76cb', cyan: '#179299', white: '#acb0be', brightBlack: '#6c6f85', brightRed: '#d20f39', brightGreen: '#40a02b', brightYellow: '#df8e1d', brightBlue: '#1e66f5', brightMagenta: '#ea76cb', brightCyan: '#179299', brightWhite: '#bcc0cc' }
+    case 'tokyo-night':
+      return { background: '#1a1b26', foreground: '#c0caf5', cursor: '#c0caf5', selectionBackground: 'rgba(192,202,245,0.2)', black: '#15161e', red: '#f7768e', green: '#9ece6a', yellow: '#e0af68', blue: '#7aa2f7', magenta: '#bb9af7', cyan: '#7dcfff', white: '#a9b1d6', brightBlack: '#414868', brightRed: '#f7768e', brightGreen: '#9ece6a', brightYellow: '#e0af68', brightBlue: '#7aa2f7', brightMagenta: '#bb9af7', brightCyan: '#7dcfff', brightWhite: '#c0caf5' }
+    case 'tokyo-day':
+      return { background: '#f8fafc', foreground: '#334155', cursor: '#334155', selectionBackground: 'rgba(51,65,85,0.2)', black: '#e2e8f0', red: '#ef4444', green: '#22c55e', yellow: '#eab308', blue: '#3b82f6', magenta: '#8b5cf6', cyan: '#06b6d4', white: '#64748b', brightBlack: '#94a3b8', brightRed: '#ef4444', brightGreen: '#22c55e', brightYellow: '#eab308', brightBlue: '#3b82f6', brightMagenta: '#8b5cf6', brightCyan: '#06b6d4', brightWhite: '#1e293b' }
+    case 'rose-pine':
+      return { background: '#191724', foreground: '#e0def4', cursor: '#e0def4', selectionBackground: 'rgba(224,222,244,0.2)', black: '#26233a', red: '#eb6f92', green: '#31748f', yellow: '#f6c177', blue: '#9ccfd8', magenta: '#c4a7e7', cyan: '#ebbcba', white: '#e0def4', brightBlack: '#6e6a86', brightRed: '#eb6f92', brightGreen: '#31748f', brightYellow: '#f6c177', brightBlue: '#9ccfd8', brightMagenta: '#c4a7e7', brightCyan: '#ebbcba', brightWhite: '#e0def4' }
+    case 'rose-pine-dawn':
+      return { background: '#faf4ed', foreground: '#575279', cursor: '#575279', selectionBackground: 'rgba(87,82,121,0.2)', black: '#f2e9e1', red: '#b4637a', green: '#286983', yellow: '#ea9d34', blue: '#56949f', magenta: '#907aa9', cyan: '#d7827e', white: '#575279', brightBlack: '#9893a5', brightRed: '#b4637a', brightGreen: '#286983', brightYellow: '#ea9d34', brightBlue: '#56949f', brightMagenta: '#907aa9', brightCyan: '#d7827e', brightWhite: '#575279' }
+    case 'github-light':
+      return { background: '#ffffff', foreground: '#24292f', cursor: '#24292f', selectionBackground: 'rgba(36,41,47,0.2)', black: '#ffffff', red: '#cf222e', green: '#1a7f37', yellow: '#9a6700', blue: '#0969da', magenta: '#8250df', cyan: '#1b7c83', white: '#6e7781', brightBlack: '#57606a', brightRed: '#a40e26', brightGreen: '#116329', brightYellow: '#633d01', brightBlue: '#0550ae', brightMagenta: '#7339ac', brightCyan: '#126061', brightWhite: '#24292f' }
+    case 'everforest-dark':
+      return { background: '#2d353b', foreground: '#d3c6aa', cursor: '#d3c6aa', selectionBackground: 'rgba(211,198,170,0.2)', black: '#475258', red: '#e67e80', green: '#a7c080', yellow: '#dbbc7f', blue: '#7fbbb3', magenta: '#d699b6', cyan: '#83c092', white: '#d3c6aa', brightBlack: '#475258', brightRed: '#e67e80', brightGreen: '#a7c080', brightYellow: '#dbbc7f', brightBlue: '#7fbbb3', brightMagenta: '#d699b6', brightCyan: '#83c092', brightWhite: '#d3c6aa' }
+    case 'everforest-light':
+      return { background: '#fdf6e3', foreground: '#5c6a72', cursor: '#5c6a72', selectionBackground: 'rgba(92,106,114,0.2)', black: '#fdf6e3', red: '#f85552', green: '#8da101', yellow: '#dfa000', blue: '#3a94c5', magenta: '#df69ba', cyan: '#35a77c', white: '#5c6a72', brightBlack: '#a6b0a0', brightRed: '#f85552', brightGreen: '#8da101', brightYellow: '#dfa000', brightBlue: '#3a94c5', brightMagenta: '#df69ba', brightCyan: '#35a77c', brightWhite: '#5c6a72' }
     default:
       return base
   }
@@ -176,7 +312,7 @@ export function useTerminal(
 
   function getTerminalOptions() {
     const ts = settingsStore.settings.terminal
-    const themeName = ts.theme || 'dark'
+    const themeName = ts.theme || 'uniterm-dark'
     return {
       fontSize: ts.fontSize || 13,
       fontFamily: ts.fontFamily || 'Consolas, "Courier New", monospace',

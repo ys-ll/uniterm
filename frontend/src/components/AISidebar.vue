@@ -95,8 +95,8 @@
           @keydown.enter="onKeydownEnter"
         />
         <div class="input-actions">
-          <el-dropdown trigger="click" @command="onModelChange" size="small" v-if="settingsStore.settings.ai.models.length > 0">
-            <el-button size="small" class="model-btn">
+          <el-dropdown trigger="click" @command="onModelChange" v-if="settingsStore.settings.ai.models.length > 0">
+            <el-button class="model-btn">
               <span class="model-btn-name">{{ currentModelName }}</span>
               <el-icon class="dropdown-icon"><ChevronDown /></el-icon>
             </el-button>
@@ -113,8 +113,8 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-dropdown trigger="click" @command="onModeChange" size="small">
-            <el-button :type="modeButtonType" size="small" class="mode-btn">
+          <el-dropdown trigger="click" @command="onModeChange">
+            <el-button :type="modeButtonType" class="mode-btn">
               {{ modeLabel }}<el-icon class="dropdown-icon"><ChevronDown /></el-icon>
             </el-button>
             <template #dropdown>
@@ -134,10 +134,10 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-button v-if="!aiStore.isRunning && !aiStore.pendingCommand" type="primary" size="small" :disabled="!input.trim()" @click="onSend">
+          <el-button v-if="!aiStore.isRunning && !aiStore.pendingCommand" type="primary" :disabled="!input.trim()" @click="onSend">
             {{ t('ai.send') }}
           </el-button>
-          <el-button v-else type="danger" size="small" @click="onStop">{{ t('ai.stop') }}</el-button>
+          <el-button v-else type="danger" @click="onStop">{{ t('ai.stop') }}</el-button>
         </div>
       </div>
     </div>

@@ -9,7 +9,7 @@
       <el-input
         ref="inputRef"
         v-model="pathInput"
-        size="small"
+       
         class="path-input"
         @keyup.enter="commitEdit"
         @blur="commitEdit"

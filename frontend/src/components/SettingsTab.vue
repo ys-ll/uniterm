@@ -25,7 +25,7 @@
               <div class="setting-desc">{{ t('settings.themeDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.theme" size="small" @change="settingsStore.save()">
+              <el-select v-model="settingsStore.settings.theme" @change="settingsStore.save()">
                 <el-option :label="t('settings.themeDark')" value="dark" />
                 <el-option :label="t('settings.themeDeepBlue')" value="deep-blue" />
                 <el-option :label="t('settings.themeLight')" value="light" />
@@ -40,7 +40,7 @@
               <div class="setting-desc">{{ t('settings.languageDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-select :model-value="settingsStore.settings.language" size="small" @change="settingsStore.updateLanguage">
+              <el-select :model-value="settingsStore.settings.language" @change="settingsStore.updateLanguage">
                 <el-option
                   v-for="lang in LANGUAGE_OPTIONS"
                   :key="lang.value"
@@ -65,13 +65,19 @@
               <div class="setting-desc">{{ t('settings.colorSchemeDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.theme" size="small" @change="settingsStore.save()">
-                <el-option
-                  v-for="th in TERMINAL_THEMES"
-                  :key="th.value"
-                  :label="th.label"
-                  :value="th.value"
-                />
+              <el-select v-model="settingsStore.settings.terminal.theme" @change="settingsStore.save()" popper-class="theme-select-popper">
+                <el-option-group
+                  v-for="group in terminalThemeGroups"
+                  :key="group.label"
+                  :label="group.label"
+                >
+                  <el-option
+                    v-for="th in group.options"
+                    :key="th.value"
+                    :label="th.label"
+                    :value="th.value"
+                  />
+                </el-option-group>
               </el-select>
             </div>
           </div>
@@ -82,7 +88,7 @@
               <div class="setting-desc">{{ t('settings.fontDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.fontFamily" size="small" filterable @change="settingsStore.save()">
+              <el-select v-model="settingsStore.settings.terminal.fontFamily" @change="settingsStore.save()">
                 <el-option
                   v-for="f in fontOptions"
                   :key="f.value"
@@ -104,7 +110,7 @@
                 v-model="settingsStore.settings.terminal.fontSize"
                 :min="8"
                 :max="32"
-                size="small"
+               
                 @change="settingsStore.save()"
               />
             </div>
@@ -116,7 +122,7 @@
               <div class="setting-desc">{{ t('settings.selectionActionDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.selectionAction" size="small" @change="settingsStore.save()">
+              <el-select v-model="settingsStore.settings.terminal.selectionAction" @change="settingsStore.save()">
                 <el-option :label="t('settings.selectionNone')" value="none" />
                 <el-option :label="t('settings.selectionCopy')" value="copy" />
               </el-select>
@@ -129,7 +135,7 @@
               <div class="setting-desc">{{ t('settings.rightClickDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.rightClickAction" size="small" @change="settingsStore.save()">
+              <el-select v-model="settingsStore.settings.terminal.rightClickAction" @change="settingsStore.save()">
                 <el-option :label="t('settings.rightClickMenu')" value="menu" />
                 <el-option :label="t('settings.rightClickPaste')" value="paste" />
               </el-select>
@@ -147,7 +153,7 @@
                 :min="100"
                 :max="50000"
                 :step="100"
-                size="small"
+               
                 @change="settingsStore.save()"
               />
             </div>
@@ -198,7 +204,7 @@
           <div class="sync-card">
             <div class="sync-card-header">
               <span>{{ t('settings.syncRepoCard') }}</span>
-              <el-button size="small" text @click="openEditRepo">{{ t('settings.syncEdit') }}</el-button>
+              <el-button text @click="openEditRepo">{{ t('settings.syncEdit') }}</el-button>
             </div>
             <div class="sync-card-body">
               <div class="repo-info">
@@ -212,8 +218,8 @@
                 </div>
               </div>
               <div class="repo-actions">
-                <el-button size="small" @click="syncStore.showChangePassword = true">{{ t('settings.syncChangePassword') }}</el-button>
-                <el-button size="small" @click="syncStore.showDeleteRepo = true">{{ t('settings.syncDeleteRepo') }}</el-button>
+                <el-button @click="syncStore.showChangePassword = true">{{ t('settings.syncChangePassword') }}</el-button>
+                <el-button @click="syncStore.showDeleteRepo = true">{{ t('settings.syncDeleteRepo') }}</el-button>
               </div>
             </div>
           </div>
@@ -274,7 +280,7 @@
           </div>
           <div class="about-update-actions">
             <el-button
-              size="small"
+             
               :loading="updateCheck.checking"
               @click="handleCheckUpdate"
             >
@@ -311,7 +317,7 @@
               <td><kbd class="kb-key">{{ bindingDisplay(action) }}</kbd></td>
               <td class="kb-actions">
                 <el-button
-                  size="small"
+                 
                   :type="rebindingAction === action ? 'warning' : 'default'"
                   @click="startRebind(action)"
                 >
@@ -319,14 +325,14 @@
                 </el-button>
                 <el-button
                   v-if="rebindingAction === action"
-                  size="small"
+                 
                   @click="stopRebind()"
                 >
                   {{ t('shortcut.cancel') }}
                 </el-button>
                 <el-button
                   v-if="rebindingAction === action"
-                  size="small"
+                 
                   type="danger"
                   @click="clearBinding(action)"
                 >
@@ -334,7 +340,7 @@
                 </el-button>
                 <el-button
                   v-if="!isDefaultBinding(action) && rebindingAction !== action"
-                  size="small"
+                 
                   type="danger"
                   @click="resetBinding(action)"
                 >
@@ -357,7 +363,7 @@
               <div class="setting-desc">{{ t('settings.modelListDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-button size="small" @click="showModelForm = true">+ {{ t('settings.addModel') }}</el-button>
+              <el-button @click="showModelForm = true">+ {{ t('settings.addModel') }}</el-button>
             </div>
           </div>
 
@@ -378,10 +384,10 @@
               <span class="model-detail">{{ model.model }} @ {{ model.baseURL }}</span>
             </div>
             <div class="model-actions">
-              <el-button link size="small" @click="editModel(model)">
+              <el-button link @click="editModel(model)">
                 <el-icon><Pencil :size="14" /></el-icon>
               </el-button>
-              <el-button link size="small" type="danger" @click="settingsStore.removeModel(model.id)">
+              <el-button link type="danger" @click="settingsStore.removeModel(model.id)">
                 <el-icon><Trash2 :size="14" /></el-icon>
               </el-button>
             </div>
@@ -425,13 +431,13 @@
               :fetch-suggestions="(qs, cb) => cb(qs ? modelSuggestions.filter(s => s.value.toLowerCase().includes(qs.toLowerCase())) : modelSuggestions)"
               class="model-autocomplete"
             />
-            <el-button size="small" :loading="modelFetching" @click="fetchModelList">
+            <el-button :loading="modelFetching" @click="fetchModelList">
               {{ t('settings.fetchModels') }}
             </el-button>
           </div>
         </el-form-item>
         <el-form-item>
-          <el-button size="small" :loading="testingConnection" @click="testConnection">
+          <el-button :loading="testingConnection" @click="testConnection">
             {{ t('settings.testConnection') }}
           </el-button>
           <span v-if="testResult != null" :class="testResult ? 'test-ok' : 'test-fail'" style="margin-left: 8px; font-size: 13px;">
@@ -465,7 +471,7 @@ import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { useI18n } from '../i18n'
 import { BrowserOpenURL } from '../../wailsjs/runtime'
 import { TERMINAL_THEMES, FONT_OPTIONS, LANGUAGE_OPTIONS, DEFAULT_KEYBOARD, SHORTCUT_LABELS, USER_AGENT_PRESETS } from '../types/settings'
-import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings } from '../types/settings'
+import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings, TerminalTheme } from '../types/settings'
 import { uninstallGlobalListener, installGlobalListener } from '../composables/useKeyboardShortcuts'
 import AddRepoDialog from './AddRepoDialog.vue'
 import EditRepoDialog from './EditRepoDialog.vue'
@@ -515,6 +521,11 @@ const fontOptions = computed(() => {
   }
   return FONT_OPTIONS
 })
+
+const terminalThemeGroups = computed(() => [
+  { label: 'Dark', options: TERMINAL_THEMES.filter(t => t.type === 'dark') },
+  { label: 'Light', options: TERMINAL_THEMES.filter(t => t.type === 'light') }
+])
 
 onMounted(async () => {
   try {

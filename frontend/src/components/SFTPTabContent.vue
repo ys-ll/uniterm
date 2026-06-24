@@ -159,14 +159,14 @@
       <template #footer>
         <div class="editor-footer">
           <div class="editor-footer-left">
-            <el-checkbox v-model="editorWrapEnabled" size="small">{{ t('sftp.edit.wrap') }}</el-checkbox>
-            <el-select v-model="editorEncoding" size="small" style="width: 100px">
+            <el-checkbox v-model="editorWrapEnabled">{{ t('sftp.edit.wrap') }}</el-checkbox>
+            <el-select v-model="editorEncoding" style="width: 100px">
               <el-option label="UTF-8" value="utf-8" />
               <el-option label="UTF-16 LE" value="utf-16le" />
               <el-option label="UTF-16 BE" value="utf-16be" />
               <el-option label="GBK" value="gbk" />
             </el-select>
-            <el-select v-model="editorLineEnding" size="small" style="width: 140px">
+            <el-select v-model="editorLineEnding" style="width: 140px">
               <el-option label="LF (Linux/macOS)" value="lf" />
               <el-option label="CRLF (Windows)" value="crlf" />
               <el-option label="CR (old Mac)" value="cr" />

@@ -14,7 +14,7 @@
           <div class="section-title">{{ t('db.columns') }}</div>
           <button class="exec-btn" @click="startAddColumn">{{ t('db.addColumn') }}</button>
         </div>
-        <el-table :data="schema?.columns || []" border size="small" style="width:100%">
+        <el-table :data="schema?.columns || []" border style="width:100%">
           <el-table-column prop="name" :label="t('db.colName')" />
           <el-table-column prop="type" :label="t('db.colType')" />
           <el-table-column :label="t('db.colNullable')" width="80">
@@ -47,7 +47,7 @@
           <div class="section-title">{{ t('db.indexes') }}</div>
           <button class="exec-btn" @click="startAddIndex">{{ t('db.addIndex') }}</button>
         </div>
-        <el-table :data="schema?.indexes || []" border size="small" style="width:100%">
+        <el-table :data="schema?.indexes || []" border style="width:100%">
           <el-table-column prop="name" :label="t('db.idxName')" />
           <el-table-column :label="t('db.idxColumns')">
             <template #default="{ row }">

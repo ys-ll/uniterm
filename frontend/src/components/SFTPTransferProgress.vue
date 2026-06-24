@@ -13,7 +13,7 @@
       />
       <el-button
         v-if="task.status === 'running'"
-        size="small"
+       
         :icon="Pause"
         circle
         @click="emit('pause', task.id)"
@@ -21,7 +21,7 @@
       />
       <el-button
         v-else-if="task.status === 'paused'"
-        size="small"
+       
         type="success"
         :icon="Play"
         circle
@@ -30,7 +30,7 @@
       />
       <el-button
         v-if="task.status === 'running' || task.status === 'paused'"
-        size="small"
+       
         type="danger"
         :icon="X"
         circle

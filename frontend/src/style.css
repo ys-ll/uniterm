@@ -293,13 +293,10 @@ body::before {
    Unified control sizing — all input/button/select controls = 28px
    ============================================================ */
 
-/* --- height: 28px group --- */
+/* --- input wrapper base --- */
 .el-input__wrapper,
 .el-select .el-input__wrapper,
 .el-input-number .el-input__wrapper {
-  height: 28px !important;
-  min-height: 28px !important;
-  padding: 1px 8px !important;
   box-sizing: border-box !important;
   background-color: var(--bg-base) !important;
 }
@@ -604,4 +601,23 @@ body.drag-active .zone {
   box-shadow: var(--shadow-md);
   pointer-events: none;
   white-space: nowrap;
+}
+
+/* --- Theme select group labels --- */
+.theme-select-popper .el-select-group__title {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--text-disabled);
+  text-align: center;
+  padding: 2px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.theme-select-popper .el-select-group__title::before,
+.theme-select-popper .el-select-group__title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
 }

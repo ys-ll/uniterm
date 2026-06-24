@@ -154,7 +154,7 @@ func defaultSettings() AppSettings {
 		Theme:    "dark",
 		Language: "system",
 		Terminal: TerminalSettings{
-			Theme:            "dark",
+			Theme:            "uniterm-dark",
 			FontFamily:       "Consolas, \"Courier New\", monospace",
 			FontSize:         14,
 			SelectionAction:  "none",

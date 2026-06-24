@@ -66,13 +66,13 @@
           </div>
         </div>
         <div class="process-actions">
-          <el-button :type="paused ? 'primary' : 'default'" size="small" @click="togglePause">
+          <el-button :type="paused ? 'primary' : 'default'" @click="togglePause">
             {{ paused ? t('monitor.resume') : t('monitor.pause') }}
           </el-button>
         </div>
       </div>
       <el-input v-model="processSearch" :placeholder="t('monitor.searchProcess')" clearable class="process-search" />
-      <el-table :data="filteredProcesses" height="calc(100% - 40px)" size="small" class="process-table" @row-click="onProcessRowClick">
+      <el-table :data="filteredProcesses" height="calc(100% - 40px)" class="process-table" @row-click="onProcessRowClick">
         <el-table-column prop="pid" label="PID" sortable width="80" />
         <el-table-column prop="name" :label="t('monitor.processName')" sortable />
         <el-table-column prop="user" :label="t('monitor.user')" sortable width="100" />
@@ -92,11 +92,11 @@
     <div v-show="activeTab === 'ports'" class="tab-pane ports-pane" @contextmenu.prevent="showContextMenu($event)">
       <div class="od-toolbar">
         <el-input v-model="portSearch" :placeholder="t('monitor.searchPort')" clearable class="od-search" />
-        <el-button size="small" :icon="RefreshRight" :loading="loadingPorts" @click="fetchPorts">
+        <el-button :icon="RefreshRight" :loading="loadingPorts" @click="fetchPorts">
           {{ t('monitor.refresh') }}
         </el-button>
       </div>
-      <el-table :data="filteredPorts" v-loading="loadingPorts" height="calc(100% - 36px)" size="small" class="od-table">
+      <el-table :data="filteredPorts" v-loading="loadingPorts" height="calc(100% - 36px)" class="od-table">
         <el-table-column prop="protocol" :label="t('monitor.port.protocol')" sortable width="90" />
         <el-table-column prop="localAddr" :label="t('monitor.port.localAddr')" sortable width="160" />
         <el-table-column prop="process" :label="t('monitor.port.process')" sortable />
@@ -107,11 +107,11 @@
     <div v-show="activeTab === 'disks'" class="tab-pane disks-pane" @contextmenu.prevent="showContextMenu($event)">
       <div class="od-toolbar">
         <el-input v-model="diskSearch" :placeholder="t('monitor.searchDisk')" clearable class="od-search" />
-        <el-button size="small" :icon="RefreshRight" :loading="loadingDisks" @click="fetchDisks">
+        <el-button :icon="RefreshRight" :loading="loadingDisks" @click="fetchDisks">
           {{ t('monitor.refresh') }}
         </el-button>
       </div>
-      <el-table :data="filteredDisks" v-loading="loadingDisks" height="calc(100% - 36px)" size="small" class="od-table">
+      <el-table :data="filteredDisks" v-loading="loadingDisks" height="calc(100% - 36px)" class="od-table">
         <el-table-column prop="name" :label="t('monitor.disk.name')" sortable>
           <template #default="{ row }">
             <span :style="{ paddingLeft: (row.name.match(/^ +/)?.[0].length || 0) * 6 + 'px' }">{{ row.name.trim() }}</span>
@@ -136,11 +136,11 @@
     <div v-show="activeTab === 'network'" class="tab-pane network-pane" @contextmenu.prevent="showContextMenu($event)">
       <div class="od-toolbar">
         <el-input v-model="netSearch" :placeholder="t('monitor.searchNetwork')" clearable class="od-search" />
-        <el-button size="small" :icon="RefreshRight" :loading="loadingNetCards" @click="fetchNetCards">
+        <el-button :icon="RefreshRight" :loading="loadingNetCards" @click="fetchNetCards">
           {{ t('monitor.refresh') }}
         </el-button>
       </div>
-      <el-table :data="filteredNetCards" v-loading="loadingNetCards" height="calc(100% - 36px)" size="small" class="od-table">
+      <el-table :data="filteredNetCards" v-loading="loadingNetCards" height="calc(100% - 36px)" class="od-table">
         <el-table-column prop="name" :label="t('monitor.net.name')" sortable width="120" />
         <el-table-column prop="state" :label="t('monitor.net.state')" sortable width="90" />
         <el-table-column prop="mac" :label="t('monitor.net.mac')" sortable width="160" />
@@ -174,7 +174,7 @@
     <div class="detail-drawer" :class="{ open: detailDrawerVisible }">
       <div class="detail-drawer-header">
         <span class="detail-drawer-title">{{ t('monitor.processDetail') }}</span>
-        <el-button link size="small" @click="detailDrawerVisible = false">
+        <el-button link @click="detailDrawerVisible = false">
           <el-icon><Close /></el-icon>
         </el-button>
       </div>
@@ -258,9 +258,9 @@
           </div>
         </div>
         <div class="detail-actions">
-          <el-button size="small" @click="detailDrawerVisible = false">{{ t('common.cancel') }}</el-button>
-          <el-dropdown size="small" trigger="click" @command="(cmd: string) => onDetailAction(cmd)">
-            <el-button size="small" type="primary">
+          <el-button @click="detailDrawerVisible = false">{{ t('common.cancel') }}</el-button>
+          <el-dropdown trigger="click" @command="(cmd: string) => onDetailAction(cmd)">
+            <el-button type="primary">
               {{ t('monitor.sendSignal') }}<el-icon class="dropdown-icon"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
@@ -281,8 +281,8 @@
     <el-dialog v-model="killDialogVisible" :title="killType === 'kill' ? t('monitor.forceKill') : t('monitor.kill')" width="360px" align-center>
       <p>{{ killMessage }}</p>
       <template #footer>
-        <el-button size="small" @click="killDialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button size="small" type="danger" @click="confirmKill">{{ t('common.confirm') }}</el-button>
+        <el-button @click="killDialogVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="danger" @click="confirmKill">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 

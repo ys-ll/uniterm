@@ -5,7 +5,7 @@
         v-model="searchQuery"
         :placeholder="t('settings.historySearchPlaceholder')"
         clearable
-        size="small"
+       
         class="qc-search-input"
         @keydown="onListKeydown"
       />

@@ -5,7 +5,7 @@ export const SUPPORTED_LOCALES = [
 export type Locale = typeof SUPPORTED_LOCALES[number]
 export type Language = Locale | 'system'
 export type Theme = 'dark' | 'deep-blue' | 'light' | 'system'
-export type TerminalTheme = 'dark' | 'light' | 'solarized-dark' | 'solarized-light' | 'monokai'
+export type TerminalTheme = 'uniterm-dark' | 'uniterm-light' | 'solarized-dark' | 'solarized-light' | 'monokai' | 'dracula' | 'molokai' | 'tomorrow-night' | 'tomorrow-night-bright' | 'tomorrow' | 'one-dark' | 'one-light' | 'github-dark' | 'github-light' | 'gotham' | 'hybrid' | 'nord' | 'gruvbox-dark' | 'gruvbox-light' | 'catppuccin-mocha' | 'catppuccin-latte' | 'tokyo-night' | 'tokyo-day' | 'rose-pine' | 'rose-pine-dawn' | 'everforest-dark' | 'everforest-light'
 
 export interface TerminalSettings {
   theme: TerminalTheme
@@ -103,7 +103,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   language: 'system',
   terminal: {
-    theme: 'dark',
+    theme: 'uniterm-dark',
     fontFamily: 'Consolas, "Courier New", monospace',
     fontSize: 14,
     selectionAction: 'none',
@@ -129,12 +129,35 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoCheckUpdate: true
 }
 
-export const TERMINAL_THEMES: { label: string; value: TerminalTheme }[] = [
-  { label: 'Dark', value: 'dark' },
-  { label: 'Light', value: 'light' },
-  { label: 'Solarized Dark', value: 'solarized-dark' },
-  { label: 'Solarized Light', value: 'solarized-light' },
-  { label: 'Monokai', value: 'monokai' }
+export interface TerminalThemeEntry { label: string; value: TerminalTheme; type: 'dark' | 'light' }
+export const TERMINAL_THEMES: TerminalThemeEntry[] = [
+  { label: 'uniTerm Dark', value: 'uniterm-dark', type: 'dark' },
+  { label: 'uniTerm Light', value: 'uniterm-light', type: 'light' },
+  { label: 'Solarized Dark', value: 'solarized-dark', type: 'dark' },
+  { label: 'Solarized Light', value: 'solarized-light', type: 'light' },
+  { label: 'Monokai', value: 'monokai', type: 'dark' },
+  { label: 'Dracula', value: 'dracula', type: 'dark' },
+  { label: 'Molokai', value: 'molokai', type: 'dark' },
+  { label: 'Tomorrow Night', value: 'tomorrow-night', type: 'dark' },
+  { label: 'Tomorrow Night Bright', value: 'tomorrow-night-bright', type: 'dark' },
+  { label: 'Tomorrow', value: 'tomorrow', type: 'light' },
+  { label: 'One Dark', value: 'one-dark', type: 'dark' },
+  { label: 'One Light', value: 'one-light', type: 'light' },
+  { label: 'GitHub Dark', value: 'github-dark', type: 'dark' },
+  { label: 'GitHub Light', value: 'github-light', type: 'light' },
+  { label: 'Gotham', value: 'gotham', type: 'dark' },
+  { label: 'Hybrid', value: 'hybrid', type: 'dark' },
+  { label: 'Nord', value: 'nord', type: 'dark' },
+  { label: 'Gruvbox Dark', value: 'gruvbox-dark', type: 'dark' },
+  { label: 'Gruvbox Light', value: 'gruvbox-light', type: 'light' },
+  { label: 'Catppuccin Mocha', value: 'catppuccin-mocha', type: 'dark' },
+  { label: 'Catppuccin Latte', value: 'catppuccin-latte', type: 'light' },
+  { label: 'Tokyo Night', value: 'tokyo-night', type: 'dark' },
+  { label: 'Tokyo Day', value: 'tokyo-day', type: 'light' },
+  { label: 'Rosé Pine', value: 'rose-pine', type: 'dark' },
+  { label: 'Rosé Pine Dawn', value: 'rose-pine-dawn', type: 'light' },
+  { label: 'Everforest Dark', value: 'everforest-dark', type: 'dark' },
+  { label: 'Everforest Light', value: 'everforest-light', type: 'light' }
 ]
 
 export const FONT_OPTIONS: { label: string; value: string }[] = [

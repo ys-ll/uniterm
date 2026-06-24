@@ -10,6 +10,7 @@
       <button class="sidebar-tab" :class="{ active: activeView === 'connections' }" @click="activeView = 'connections'" :title="t('header.connections')"><el-icon><Network :size="14" /></el-icon></button>
       <button class="sidebar-tab" :class="{ active: activeView === 'quickCommands' }" @click="activeView = 'quickCommands'" :title="t('quickCommands.quickCommandsTab')"><el-icon><Zap :size="14" /></el-icon></button>
       <button class="sidebar-tab" :class="{ active: activeView === 'history' }" @click="activeView = 'history'" :title="t('quickCommands.historyTab')"><el-icon><Clock :size="14" /></el-icon></button>
+      <button class="sidebar-tab" :class="{ active: activeView === 'personalization' }" @click="activeView = 'personalization'" :title="t('sidebar.personalization')"><el-icon><Palette :size="14" /></el-icon></button>
       <button class="icon-btn" @click="emit('toggle')" :title="t('sidebar.collapse')"><el-icon><X :size="14" /></el-icon></button>
     </div>
 
@@ -236,6 +237,40 @@
 
     <HistoryPanel v-if="activeView === 'history'" />
 
+    <template v-if="activeView === 'personalization'">
+      <div class="personalization-panel">
+        <div class="persist-section">
+          <div class="persist-label">{{ t('settings.colorScheme') }}</div>
+          <el-select v-model="settingsStore.settings.terminal.theme" @change="settingsStore.save()" popper-class="theme-select-popper">
+            <el-option-group v-for="group in terminalThemeGroups" :key="group.label" :label="group.label">
+              <el-option v-for="th in group.options" :key="th.value" :label="th.label" :value="th.value" />
+            </el-option-group>
+          </el-select>
+        </div>
+        <div class="persist-section">
+          <div class="persist-label">{{ t('settings.font') }}</div>
+          <el-select v-model="settingsStore.settings.terminal.fontFamily" @change="settingsStore.save()">
+            <el-option
+              v-for="f in personalizationFontOptions"
+              :key="f.value"
+              :label="f.label"
+              :value="f.value"
+              :style="{ fontFamily: f.value }"
+            />
+          </el-select>
+        </div>
+        <div class="persist-section">
+          <div class="persist-label">{{ t('settings.fontSize') }}</div>
+          <el-input-number
+            v-model="settingsStore.settings.terminal.fontSize"
+            :min="8"
+            :max="32"
+            @change="settingsStore.save()"
+          />
+        </div>
+      </div>
+    </template>
+
     <ConnectionForm v-model="showForm" :edit-config="editConfig" :default-group-id="newConnGroupId" @save="onSave" @connect="onConnectFromForm" />
 
     <!-- Connection context menu (kept inside sidebar to avoid native RDP occlusion) -->
@@ -384,7 +419,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -393,6 +428,9 @@ import ConnectionForm from './ConnectionForm.vue'
 import QuickCommandsPanel from './QuickCommandsPanel.vue'
 import HistoryPanel from './HistoryPanel.vue'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
+import { FONT_OPTIONS, TERMINAL_THEMES } from '../types/settings'
+import type { TerminalTheme } from '../types/settings'
+import { GetSystemFonts } from '../../wailsjs/go/main/App'
 
 defineProps<{
   visible: boolean
@@ -403,7 +441,21 @@ const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const showForm = ref(false)
 const editConfig = ref<ConnectionConfig | undefined>(undefined)
-const activeView = ref<'connections' | 'quickCommands' | 'history'>('connections')
+const activeView = ref<'connections' | 'quickCommands' | 'history' | 'personalization'>('connections')
+
+// ── Personalization panel ──
+const systemFonts = ref<{ label: string; value: string }[]>([])
+const personalizationFontOptions = computed(() => {
+  if (systemFonts.value.length > 0) {
+    return systemFonts.value
+  }
+  return FONT_OPTIONS
+})
+
+const terminalThemeGroups = computed(() => [
+  { label: 'Dark', options: TERMINAL_THEMES.filter(t => t.type === 'dark') },
+  { label: 'Light', options: TERMINAL_THEMES.filter(t => t.type === 'light') }
+])
 
 // Notify App.vue to hide native RDP window when edit dialog opens
 watch(showForm, (val) => {
@@ -1226,7 +1278,7 @@ function onConnectFromForm(config: ConnectionConfig) {
 }
 
 // ── Lifecycle ──
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('global:close-context-menus', () => {
     closeMenu()
     closeGroupMenu()
@@ -1237,6 +1289,15 @@ onMounted(() => {
     closeGroupMenu()
     closeEmptyAreaMenu()
   })
+  // Load system fonts for personalization panel
+  try {
+    const fonts = await GetSystemFonts()
+    if (fonts && fonts.length > 0) {
+      systemFonts.value = fonts.map(f => ({ label: f, value: f }))
+    }
+  } catch {
+    // Fall back to FONT_OPTIONS
+  }
 })
 
 onUnmounted(() => {
@@ -1544,6 +1605,32 @@ defineExpose({ focusSearch })
   color: var(--accent);
   background: var(--accent-subtle);
 }
+
+/* ── Personalization panel ── */
+.personalization-panel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.persist-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.persist-label {
+  font-size: 11px;
+  font-family: var(--font-ui);
+  color: var(--text-muted);
+  padding-left: 2px;
+}
+
+.persist-section .el-select,
+.persist-section .el-input-number {
+  width: 100%;
+}
 </style>
 
 <style>
@@ -1650,5 +1737,22 @@ defineExpose({ focusSearch })
 .new-conn-popper {
   margin-top: -8px !important;
   margin-left: 4px !important;
+}
+
+.theme-select-popper .el-select-group__title {
+  font-size: 10px;
+  color: var(--text-disabled);
+  text-align: center;
+  padding: 6px 12px 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.theme-select-popper .el-select-group__title::before,
+.theme-select-popper .el-select-group__title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
 }
 </style>
