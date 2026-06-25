@@ -133,6 +133,7 @@
             @dblclick="onItemDblClick(conn)"
             @contextmenu.prevent="onContextMenu($event, conn)"
           >
+            <span class="conn-icon"><component :is="connIcon(conn)" :size="14" /></span>
             <div class="conn-details">
               <span class="name">{{ conn.name }}</span>
               <span class="conn-meta">
@@ -175,6 +176,7 @@
             @dblclick="onItemDblClick(conn)"
             @contextmenu.prevent="onContextMenu($event, conn)"
           >
+            <span class="conn-icon"><component :is="connIcon(conn)" :size="14" /></span>
             <div class="conn-details">
               <span class="name">{{ conn.name }}</span>
               <span class="conn-meta">
@@ -201,6 +203,7 @@
           @dblclick="onItemDblClick(conn)"
           @contextmenu.prevent="onContextMenu($event, conn)"
         >
+          <span class="conn-icon"><component :is="connIcon(conn)" :size="14" /></span>
           <div class="conn-details">
             <span class="name">{{ conn.name }}</span>
             <span class="conn-meta">
@@ -419,7 +422,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, FolderUp, Monitor, MonitorCloud, Database, Activity, Laptop, Cable } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -1219,6 +1222,20 @@ function getShellLabel(path: string): string {
   return path.split(/[\\/]/).pop() || path
 }
 
+function connIcon(conn: ConnectionConfig) {
+  switch (conn.type) {
+    case 'sftp': return FolderUp
+    case 'rdp': return Monitor
+    case 'vnc': return MonitorCloud
+    case 'spice': return MonitorCloud
+    case 'database': return Database
+    case 'monitor': return Activity
+    case 'local': return Laptop
+    case 'serial': return Cable
+    default: return SquareTerminal // ssh, telnet, mosh, ftp
+  }
+}
+
 function onNewConnVisibleChange(visible: boolean) {
   if (!visible) return
   nextTick(() => {
@@ -1509,7 +1526,7 @@ defineExpose({ focusSearch })
 .connection-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -1519,7 +1536,7 @@ defineExpose({ focusSearch })
 }
 
 .connection-item.indented {
-  padding-left: 26px;
+  padding-left: 24px;
 }
 
 .connection-item:hover {
@@ -1535,6 +1552,14 @@ defineExpose({ focusSearch })
   color: var(--accent);
 }
 
+.conn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
 
 .conn-details {
   display: flex;
