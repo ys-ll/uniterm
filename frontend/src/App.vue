@@ -118,7 +118,7 @@ import { useUpdateCheck } from './composables/useUpdateCheck'
 import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../types/settings'
 import { useI18n } from './i18n'
-import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFocus } from '../wailsjs/go/main/App'
+import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFocus, LoadLocalState, SaveLocalState } from '../wailsjs/go/main/App'
 import { EventsOn } from '../wailsjs/runtime'
 import { msg } from './services/message'
 import type { ConnectionConfig } from './types/session'
@@ -200,7 +200,7 @@ function RDPShowForOverlay() {
 
 const showConnectionForm = ref(false)
 const showSerialDialog = ref(false)
-const sidebarVisible = ref(localStorage.getItem('sidebarVisible') !== 'false')
+const sidebarVisible = ref(true)
 const sidebarRef = ref<any>(null)
 const aiSidebarRef = ref<any>(null)
 
@@ -284,10 +284,18 @@ function onWheel(e: WheelEvent) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   connectionStore.load()
   aiStore.init()
   updateCheck.initAutoCheck()
+
+  // Load sidebar visibility from local state
+  try {
+    const state = await LoadLocalState()
+    sidebarVisible.value = state.sidebarVisible ?? true
+  } catch {
+    // keep default
+  }
   // Pre-load quick commands so suggestions can read them immediately
   useQuickCommandStore().load()
   // Pre-load noVNC so VNC tab switches don't pay the dynamic import cost.
@@ -804,10 +812,16 @@ watch(showConnectionForm, (val) => {
   else RDPShowForOverlay()
 })
 
-watch(sidebarVisible, () => {
-  localStorage.setItem('sidebarVisible', String(sidebarVisible.value))
+watch(sidebarVisible, async () => {
   RDPHideForOverlay()
   nextTick(() => RDPShowForOverlay())
+  try {
+    const state = await LoadLocalState()
+    state.sidebarVisible = sidebarVisible.value
+    await SaveLocalState(state)
+  } catch {
+    // ignore save errors
+  }
 })
 
 watch(() => aiStore.visible, () => {

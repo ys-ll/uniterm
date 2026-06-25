@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import type { AIMessage, AIConfig, ExecutionMode, AISession } from '../types/ai'
-import { SaveAIConfig, LoadAIConfig, SaveAISessions, LoadAISessions } from '../../wailsjs/go/main/App'
+import { SaveAIConfig, LoadAIConfig, SaveAISessions, LoadAISessions, SaveLocalState, LoadLocalState } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 import { t } from '../i18n'
 
@@ -140,7 +140,7 @@ async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], curre
 }
 
 export const useAIStore = defineStore('ai', () => {
-  const visible = ref(localStorage.getItem('aiSidebarVisible') !== 'false')
+  const visible = ref(true)
   const messages = ref<AIMessage[]>([])
   const mode = ref<ExecutionMode>('confirm_dangerous')
   const config = ref<AIConfig>({ ...DEFAULT_CONFIG })
@@ -162,6 +162,21 @@ export const useAIStore = defineStore('ai', () => {
   function setLastPanelContext(panelId: string, shellPath: string) {
     lastPanelContext.value = { panelId, shellPath }
   }
+
+  async function saveVisible() {
+    try {
+      const current = await LoadLocalState()
+      current.aiSidebarVisible = visible.value
+      await SaveLocalState(current)
+    } catch {
+      // ignore save errors
+    }
+  }
+
+  // Auto-persist AI sidebar visibility whenever it changes
+  watch(visible, () => {
+    saveVisible()
+  })
 
   function setDebugInfo(request: unknown, error: string) {
     try {
@@ -191,7 +206,6 @@ export const useAIStore = defineStore('ai', () => {
 
   function toggle() {
     visible.value = !visible.value
-    localStorage.setItem('aiSidebarVisible', String(visible.value))
   }
 
   function addMessage(msg: AIMessage): AIMessage {
@@ -233,6 +247,14 @@ export const useAIStore = defineStore('ai', () => {
     // Always start with a fresh session after restart
     currentSessionId.value = null
     initialized.value = true
+
+    // Load sidebar visibility from local state
+    try {
+      const state = await LoadLocalState()
+      visible.value = state.aiSidebarVisible ?? true
+    } catch {
+      // keep default
+    }
 
     // Restore current session or create a new one
     if (currentSessionId.value) {

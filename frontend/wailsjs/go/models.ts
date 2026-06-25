@@ -797,6 +797,20 @@ export namespace store {
 	    }
 	}
 	
+	export class LocalState {
+	    sidebarVisible: boolean;
+	    aiSidebarVisible: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new LocalState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sidebarVisible = source["sidebarVisible"];
+	        this.aiSidebarVisible = source["aiSidebarVisible"];
+	    }
+	}
 	export class QuickCommand {
 	    id: string;
 	    name?: string;

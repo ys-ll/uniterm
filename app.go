@@ -37,6 +37,7 @@ type App struct {
 	connectionStore      *store.ConnectionStore
 	aiSessionStore       *store.AISessionStore
 	settingsStore        *store.SettingsStore
+	localStateStore      *store.LocalStateStore
 	quickCommandsStore   *store.QuickCommandsStore
 	terminalHistoryStore *store.TerminalHistoryStore
 	syncService          *sync.SyncService
@@ -104,6 +105,7 @@ func (a *App) startup(ctx context.Context) {
 	appDir := filepath.Join(configDir, "uniTerm")
 	a.terminalHistoryStore = store.NewTerminalHistoryStore(appDir)
 	a.quickCommandsStore = store.NewQuickCommandsStore(appDir)
+	a.localStateStore = store.NewLocalStateStore(appDir)
 
 	syncSvc, err := sync.NewSyncService()
 	if err != nil {
@@ -190,6 +192,22 @@ func (a *App) SaveAIConfig(config store.AIConfig) error {
 	}
 	a.triggerAutoSync()
 	return nil
+}
+
+// LocalStateStore methods — sidecar visibility that stays local, never synced.
+
+func (a *App) SaveLocalState(state store.LocalState) error {
+	if a.localStateStore == nil {
+		return fmt.Errorf("local state store not initialized")
+	}
+	return a.localStateStore.Save(state)
+}
+
+func (a *App) LoadLocalState() (store.LocalState, error) {
+	if a.localStateStore == nil {
+		return store.LocalState{SidebarVisible: true, AISidebarVisible: true}, nil
+	}
+	return a.localStateStore.Load()
 }
 
 // reloadStoresAfterSync reloads connections and settings from disk and emits
