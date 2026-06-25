@@ -3,8 +3,8 @@ import {
   SessionEndZmodem,
   SessionWriteBinary,
   SessionWrite,
+  AppendFileBase64,
   ReadFileBase64,
-  WriteFileBase64,
   OpenDirectoryDialog,
   OpenMultipleFilesDialog,
 } from '../../wailsjs/go/main/App'
@@ -44,7 +44,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
 
   function sender(octets: number[]) {
     const base64 = arrayBufferToBase64(new Uint8Array(octets))
-    const p = SessionWriteBinary(sessionId, base64).catch((err) => {
+    const p = SessionWriteBinary(sessionId, base64).catch(() => {
       // noop
     })
     pendingWrites.push(p)
@@ -165,7 +165,6 @@ async function handleSend(
 ) {
   const store = useZmodemStore()
   const files: string[] = []
-  const rejected: string[] = []
 
   try {
     for (let i = 0; i < paths.length; i++) {
@@ -298,20 +297,27 @@ async function handleReceive(
         savePath: finalSavePath,
       })
       let received = 0
-      offer.on('input', (payload: number[]) => {
-        received += payload.length
+      let writeChain = Promise.resolve()
+      let writeError: unknown = null
+      const onInput = (payload: number[]) => {
+        const offset = received
+        const chunk = Uint8Array.from(payload)
+        received += chunk.length
         resetIdle()
         store.updateTransfer(sessionId, transferId, { transferred: received })
-      })
+        writeChain = writeChain.then(async () => {
+          if (writeError) return
+          await AppendFileBase64(finalSavePath, arrayBufferToBase64(chunk), offset)
+        }).catch((err) => {
+          writeError = err
+        })
+      }
       try {
-        const chunks: Uint8Array[] = await offer.accept()
-        const totalLen = chunks.reduce((s, c) => s + c.length, 0)
-        const fileData = new Uint8Array(totalLen)
-        let pos = 0
-        for (const c of chunks) { fileData.set(c, pos); pos += c.length }
-        await WriteFileBase64(finalSavePath, arrayBufferToBase64(fileData))
+        await offer.accept({ on_input: onInput })
+        await writeChain
+        if (writeError) throw writeError
         store.updateTransfer(sessionId, transferId, {
-          status: 'completed', transferred: totalLen,
+          status: 'completed', transferred: received,
         })
         files.push(finalSavePath)
       } catch (e: any) {

@@ -11,6 +11,8 @@ export function AddColumn(arg1:string,arg2:string,arg3:string,arg4:database.Colu
 
 export function AddIndex(arg1:string,arg2:string,arg3:string,arg4:database.IndexDef):Promise<void>;
 
+export function AppendFileBase64(arg1:string,arg2:string,arg3:number):Promise<void>;
+
 export function CancelChatStream():Promise<void>;
 
 export function ChatCompletion(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
