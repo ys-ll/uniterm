@@ -735,6 +735,39 @@ func (a *App) WriteFileBase64(path string, base64Data string) error {
 	return os.WriteFile(path, data, 0644)
 }
 
+func (a *App) AppendFileBase64(path string, base64Data string, offset int64) error {
+	data, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return fmt.Errorf("decode base64: %w", err)
+	}
+
+	flag := os.O_CREATE | os.O_WRONLY
+	if offset == 0 {
+		flag |= os.O_TRUNC
+	} else {
+		flag |= os.O_APPEND
+	}
+
+	f, err := os.OpenFile(path, flag, 0644)
+	if err != nil {
+		return fmt.Errorf("open file: %w", err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat file: %w", err)
+	}
+	if info.Size() != offset {
+		return fmt.Errorf("append offset mismatch: expected %d, got %d", offset, info.Size())
+	}
+
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+	return nil
+}
+
 func (a *App) RDPSetPosition(sessionID string, x, y, w, h int) error {
 	if a.sessionManager == nil {
 		return fmt.Errorf("session manager not initialized")
