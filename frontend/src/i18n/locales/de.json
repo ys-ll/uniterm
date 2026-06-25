@@ -162,6 +162,7 @@
   "sftp.dialog.mkdirPrompt": "Name des neuen Verzeichnisses:",
   "sftp.dialog.chmodTitle": "Berechtigung ändern",
   "sftp.dialog.chmodPrompt": "Berechtigung für \"{name}\" ändern (z. B. 755):",
+  "sftp.dialog.chmodOctal": "Oktal",
   "sftp.dialog.deleteTitle": "Löschen",
   "sftp.dialog.deleteConfirmMixed": "{count} Element(e) löschen?",
   "sftp.dialog.deleteConfirmDir": "{count} Verzeichnisse löschen?",

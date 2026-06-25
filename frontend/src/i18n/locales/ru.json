@@ -162,6 +162,7 @@
   "sftp.dialog.mkdirPrompt": "Имя новой папки:",
   "sftp.dialog.chmodTitle": "Изменить права",
   "sftp.dialog.chmodPrompt": "Изменить права для \"{name}\" (например, 755):",
+  "sftp.dialog.chmodOctal": "Восьмеричный",
   "sftp.dialog.deleteTitle": "Удалить",
   "sftp.dialog.deleteConfirmMixed": "Удалить {count} элементов?",
   "sftp.dialog.deleteConfirmDir": "Удалить {count} папок?",

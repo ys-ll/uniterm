@@ -162,6 +162,7 @@
   "sftp.dialog.mkdirPrompt": "新しいディレクトリ名:",
   "sftp.dialog.chmodTitle": "権限を変更",
   "sftp.dialog.chmodPrompt": "「{name}」の権限を変更（例: 755）:",
+  "sftp.dialog.chmodOctal": "数値",
   "sftp.dialog.deleteTitle": "削除",
   "sftp.dialog.deleteConfirmMixed": "{count} 個の項目を削除しますか？",
   "sftp.dialog.deleteConfirmDir": "{count} 個のディレクトリを削除しますか？",

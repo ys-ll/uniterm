@@ -162,6 +162,7 @@
   "sftp.dialog.mkdirPrompt": "Nombre de la nueva carpeta:",
   "sftp.dialog.chmodTitle": "Cambiar Permiso",
   "sftp.dialog.chmodPrompt": "Cambiar permiso de \"{name}\" (p. ej. 755):",
+  "sftp.dialog.chmodOctal": "Octal",
   "sftp.dialog.deleteTitle": "Eliminar",
   "sftp.dialog.deleteConfirmMixed": "¿Eliminar {count} elemento(s)?",
   "sftp.dialog.deleteConfirmDir": "¿Eliminar {count} carpetas?",

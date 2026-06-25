@@ -162,6 +162,7 @@
   "sftp.dialog.mkdirPrompt": "新目錄名稱：",
   "sftp.dialog.chmodTitle": "修改權限",
   "sftp.dialog.chmodPrompt": "修改 \"{name}\" 的權限（如 755）：",
+  "sftp.dialog.chmodOctal": "數值",
   "sftp.dialog.deleteTitle": "刪除",
   "sftp.dialog.deleteConfirmMixed": "確定要刪除 {count} 個項目嗎？",
   "sftp.dialog.deleteConfirmDir": "確定要刪除 {count} 個目錄嗎？",

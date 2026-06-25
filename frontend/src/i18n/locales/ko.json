@@ -162,6 +162,7 @@
   "sftp.dialog.mkdirPrompt": "새 폴터 이름:",
   "sftp.dialog.chmodTitle": "권한 변경",
   "sftp.dialog.chmodPrompt": "\"{name}\"의 권한 변경 (예: 755):",
+  "sftp.dialog.chmodOctal": "숫자",
   "sftp.dialog.deleteTitle": "삭제",
   "sftp.dialog.deleteConfirmMixed": "{count}개 항목을 삭제할까요?",
   "sftp.dialog.deleteConfirmDir": "{count}개 폴터를 삭제할까요?",

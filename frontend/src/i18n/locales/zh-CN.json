@@ -164,6 +164,7 @@
   "sftp.dialog.mkdirPrompt": "新目录名称：",
   "sftp.dialog.chmodTitle": "修改权限",
   "sftp.dialog.chmodPrompt": "修改 \"{name}\" 的权限（如 755）：",
+  "sftp.dialog.chmodOctal": "数值",
   "sftp.dialog.deleteTitle": "删除",
   "sftp.dialog.deleteConfirmMixed": "确定要删除 {count} 个项目吗？",
   "sftp.dialog.deleteConfirmDir": "确定要删除 {count} 个目录吗？",

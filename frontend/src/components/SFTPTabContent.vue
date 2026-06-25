@@ -95,36 +95,32 @@
           <span class="chmod-filename">{{ dialogItem?.name }}</span>
           <span v-if="dialogItem?.owner || dialogItem?.group" class="chmod-ownergroup">{{ dialogItem?.owner || '-' }}:{{ dialogItem?.group || '-' }}</span>
         </div>
-        <table class="chmod-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Read</th>
-              <th>Write</th>
-              <th>Execute</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="chmod-row-label">Owner</td>
-              <td><el-checkbox v-model="chmodOwnerR" /></td>
-              <td><el-checkbox v-model="chmodOwnerW" /></td>
-              <td><el-checkbox v-model="chmodOwnerX" /></td>
-            </tr>
-            <tr>
-              <td class="chmod-row-label">Group</td>
-              <td><el-checkbox v-model="chmodGroupR" /></td>
-              <td><el-checkbox v-model="chmodGroupW" /></td>
-              <td><el-checkbox v-model="chmodGroupX" /></td>
-            </tr>
-            <tr>
-              <td class="chmod-row-label">Other</td>
-              <td><el-checkbox v-model="chmodOtherR" /></td>
-              <td><el-checkbox v-model="chmodOtherW" /></td>
-              <td><el-checkbox v-model="chmodOtherX" /></td>
-            </tr>
-          </tbody>
-        </table>
+        <el-form class="chmod-form" label-width="80px">
+          <el-form-item label="Owner">
+            <el-checkbox v-model="chmodOwnerR">Read</el-checkbox>
+            <el-checkbox v-model="chmodOwnerW">Write</el-checkbox>
+            <el-checkbox v-model="chmodOwnerX">Execute</el-checkbox>
+          </el-form-item>
+          <el-form-item label="Group">
+            <el-checkbox v-model="chmodGroupR">Read</el-checkbox>
+            <el-checkbox v-model="chmodGroupW">Write</el-checkbox>
+            <el-checkbox v-model="chmodGroupX">Execute</el-checkbox>
+          </el-form-item>
+          <el-form-item label="Other">
+            <el-checkbox v-model="chmodOtherR">Read</el-checkbox>
+            <el-checkbox v-model="chmodOtherW">Write</el-checkbox>
+            <el-checkbox v-model="chmodOtherX">Execute</el-checkbox>
+          </el-form-item>
+          <el-form-item :label="t('sftp.dialog.chmodOctal')">
+            <el-input
+              v-model="chmodOctalInput"
+              class="chmod-octal-input"
+              maxlength="3"
+              :placeholder="'644'"
+              @input="onOctalInput"
+            />
+          </el-form-item>
+        </el-form>
       </template>
       <template v-else>
         <el-input v-model="dialogInput" :placeholder="dialogPlaceholder" @keyup.enter="onDialogConfirm" />
@@ -511,6 +507,26 @@ const chmodOctal = computed(() => {
   return String(o) + String(g) + String(t)
 })
 
+// Editable octal input (e.g. "644"); kept in sync with the checkbox grid both ways.
+const chmodOctalInput = ref('000')
+
+function applyOctal(digits: string) {
+  const nums = digits.split('').map(Number)
+  chmodOwnerR.value = !!(nums[0] & 4); chmodOwnerW.value = !!(nums[0] & 2); chmodOwnerX.value = !!(nums[0] & 1)
+  chmodGroupR.value = !!(nums[1] & 4); chmodGroupW.value = !!(nums[1] & 2); chmodGroupX.value = !!(nums[1] & 1)
+  chmodOtherR.value = !!(nums[2] & 4); chmodOtherW.value = !!(nums[2] & 2); chmodOtherX.value = !!(nums[2] & 1)
+}
+
+// User typing in the octal field: strip invalid chars, apply once 3 digits are present.
+function onOctalInput() {
+  chmodOctalInput.value = chmodOctalInput.value.replace(/[^0-7]/g, '').slice(0, 3)
+  if (chmodOctalInput.value.length === 3) applyOctal(chmodOctalInput.value)
+}
+
+// Checkbox grid -> octal field. No feedback loop: when applyOctal sets the grid,
+// the value written back equals what the user typed, so the field is unchanged.
+watch(chmodOctal, (v) => { chmodOctalInput.value = v })
+
 function parseMode(mode: string) {
   // mode example: "drwxr-xr-x" or "-rw-r--r--" — strip leading file type char
   const m = mode.length >= 10 ? mode.slice(1) : mode
@@ -523,6 +539,7 @@ function parseMode(mode: string) {
   chmodOtherR.value = m[6] === 'r'
   chmodOtherW.value = m[7] === 'w'
   chmodOtherX.value = m[8] === 'x' || m[8] === 't'
+  chmodOctalInput.value = chmodOctal.value
 }
 
 let unsubscribe: (() => void) | null = null
@@ -1748,40 +1765,18 @@ async function onDropRemote(e: DragEvent) {
   color: var(--text-disabled);
   margin-top: 2px;
 }
-.chmod-table {
-  width: 100%;
-  border-collapse: collapse;
+.chmod-form {
+  margin-top: 4px;
+}
+.chmod-form .el-form-item {
   margin-bottom: 12px;
 }
-.chmod-table th {
-  font-size: 11px;
-  color: var(--text-disabled);
-  font-weight: 500;
-  text-transform: uppercase;
-  padding: 4px 8px 8px;
-  text-align: center;
+.chmod-octal-input {
+  width: 120px;
 }
-.chmod-table th:first-child {
-  text-align: left;
-  padding-left: 0;
-}
-.chmod-table td {
-  padding: 6px 8px;
-  text-align: center;
-}
-.chmod-table td:first-child {
-  text-align: left;
-  padding-left: 0;
-}
-.chmod-row-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.chmod-octal {
-  text-align: center;
-  font-size: 20px;
-  font-weight: 700;
+.chmod-octal-input :deep(.el-input__inner) {
   font-family: var(--font-mono, monospace);
-  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 2px;
 }
 </style>

@@ -164,6 +164,7 @@
   "sftp.dialog.mkdirPrompt": "New directory name:",
   "sftp.dialog.chmodTitle": "Change Permission",
   "sftp.dialog.chmodPrompt": "Change permission for \"{name}\" (e.g. 755):",
+  "sftp.dialog.chmodOctal": "Octal",
   "sftp.dialog.deleteTitle": "Delete",
   "sftp.dialog.deleteConfirmMixed": "Delete {count} item(s)?",
   "sftp.dialog.deleteConfirmDir": "Delete {count} directories?",
