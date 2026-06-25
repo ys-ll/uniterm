@@ -16,7 +16,7 @@
           mode="local"
           :files="localFiles"
           :loading="loadingLocal"
-          :paste-loading="pasteLoading"
+          :paste-loading="pasteLoadingLocal"
           :cut-item-names="localCutItemNames"
           :clipboard-count="localClipboardCount"
           :clipboard-mode="localClipboard?.mode"
@@ -31,6 +31,7 @@
           @copy-to-clipboard="onLocalCopyToClipboard"
           @cut-to-clipboard="onLocalCutToClipboard"
           @paste="onLocalPaste"
+          @cancel-paste="onLocalCancelPaste"
           @clear-clipboard="onLocalClearClipboard"
           @open="onLocalEditFile"
           @cancel-load="onCancelLoadLocal"
@@ -51,7 +52,7 @@
           mode="remote"
           :files="remoteFiles"
           :loading="loadingRemote"
-          :paste-loading="pasteLoading"
+          :paste-loading="pasteLoadingRemote"
           :cut-item-names="cutItemNames"
           :clipboard-count="clipboardCount"
           :clipboard-mode="clipboard?.mode"
@@ -262,7 +263,8 @@ const loadingLocal = ref(false)
 const loadingRemote = ref(false)
 let loadVersionLocal = 0
 let loadVersionRemote = 0
-const pasteLoading = ref(false)
+const pasteLoadingLocal = ref(false)
+const pasteLoadingRemote = ref(false)
 const dragOverLocal = ref(false)
 const dragOverRemote = ref(false)
 const dragSource = ref<'local' | 'remote' | null>(null)
@@ -821,13 +823,24 @@ async function onResumeTransfer(taskId: string) {
   }
 }
 
-function onSendToRemote(items: FileItem[]) {
+async function onSendToRemote(items: FileItem[]) {
   const sid = panel.value?.sessionId
   if (!sid) return
+
+  const fileNames = items.filter(i => i.name !== '..').map(i => i.name)
+  const action = await checkRemoteConflicts(fileNames)
+  if (action === 'cancel') return
+
+  const existingNames = remoteFiles.value.map(f => f.name)
   for (const item of items) {
     if (item.name === '..') continue
+    let resolvedName = item.name
+    if (action === 'rename' && existingNames.includes(item.name)) {
+      resolvedName = autoRename(item.name, existingNames)
+    }
+    existingNames.push(resolvedName)
     const localPath = joinPath(localCwd.value, item.name)
-    const remotePath = cwd.value + '/' + item.name
+    const remotePath = cwd.value + '/' + resolvedName
     SftpPut(sid, localPath, remotePath, item.isDir)
   }
 }
@@ -849,8 +862,18 @@ async function onUpload() {
   try {
     const files = await OpenMultipleFilesDialog()
     if (!files || files.length === 0) return
+
+    const fileNames = files.map(fp => fp.replace(/\\/g, '/').split('/').pop() || 'upload')
+    const action = await checkRemoteConflicts(fileNames)
+    if (action === 'cancel') return
+
+    const existingNames = remoteFiles.value.map(f => f.name)
     for (const fp of files) {
-      const name = fp.replace(/\\/g, '/').split('/').pop() || 'upload'
+      let name = fp.replace(/\\/g, '/').split('/').pop() || 'upload'
+      if (action === 'rename' && existingNames.includes(name)) {
+        name = autoRename(name, existingNames)
+      }
+      existingNames.push(name)
       SftpPut(sid, fp, cwd.value + '/' + name, false)
     }
   } catch (e) {
@@ -949,6 +972,13 @@ function showConflictDialog(conflicts: string[]): Promise<'overwrite' | 'rename'
   })
 }
 
+async function checkRemoteConflicts(fileNames: string[]): Promise<'overwrite' | 'rename' | 'cancel'> {
+  const existingNames = remoteFiles.value.map(f => f.name)
+  const conflicts = fileNames.filter(n => existingNames.includes(n))
+  if (conflicts.length === 0) return 'overwrite'
+  return showConflictDialog(conflicts)
+}
+
 function onConflictResolve(action: 'overwrite' | 'rename' | 'cancel') {
   conflictVisible.value = false
   if (conflictResolve.value) {
@@ -961,7 +991,7 @@ let pasteCancelled = false
 
 function onCancelPaste() {
   pasteCancelled = true
-  pasteLoading.value = false
+  pasteLoadingRemote.value = false
 }
 
 async function onPaste() {
@@ -969,12 +999,13 @@ async function onPaste() {
   if (!sid || !clipboard.value) return
   const { items, sourceDir, mode } = clipboard.value
   pasteCancelled = false
-  pasteLoading.value = true
+  pasteLoadingRemote.value = true
   const targetDir = cwd.value
 
   // Cut to same directory: error immediately, no conflict dialog
   if (mode === 'cut' && sourceDir === targetDir) {
     ElMessage.warning(t('sftp.paste.cutSameDir'))
+    pasteLoadingRemote.value = false
     return
   }
 
@@ -985,7 +1016,7 @@ async function onPaste() {
   let resolveAction: 'overwrite' | 'rename' | 'cancel' = 'rename'
   if (conflicts.length > 0) {
     resolveAction = await showConflictDialog(conflicts)
-    if (resolveAction === 'cancel') return
+    if (resolveAction === 'cancel') { pasteLoadingRemote.value = false; return }
   }
 
   let success = 0
@@ -1022,7 +1053,7 @@ async function onPaste() {
     }
   }
 
-  pasteLoading.value = false
+  pasteLoadingRemote.value = false
 
   if (pasteCancelled) {
     // keep clipboard so user can retry
@@ -1157,7 +1188,7 @@ let localPasteCancelled = false
 
 function onLocalCancelPaste() {
   localPasteCancelled = true
-  pasteLoading.value = false
+  pasteLoadingLocal.value = false
 }
 
 async function onLocalPaste() {
@@ -1165,11 +1196,11 @@ async function onLocalPaste() {
   if (!sid || !localClipboard.value) return
   const { items, sourceDir, mode } = localClipboard.value
   localPasteCancelled = false
-  pasteLoading.value = true
+  pasteLoadingLocal.value = true
   const targetDir = localCwd.value
   if (mode === 'cut' && sourceDir === targetDir) {
     ElMessage.warning(t('sftp.paste.cutSameDir'))
-    pasteLoading.value = false
+    pasteLoadingLocal.value = false
     return
   }
   const existingNames = localFiles.value.map(f => f.name)
@@ -1177,7 +1208,7 @@ async function onLocalPaste() {
   let resolveAction: 'overwrite' | 'rename' | 'cancel' = 'rename'
   if (conflicts.length > 0) {
     resolveAction = await showConflictDialog(conflicts)
-    if (resolveAction === 'cancel') { pasteLoading.value = false; return }
+    if (resolveAction === 'cancel') { pasteLoadingLocal.value = false; return }
   }
   let success = 0
   const failed: string[] = []
@@ -1199,7 +1230,7 @@ async function onLocalPaste() {
       success++
     } catch (e: any) { failed.push(name + ': ' + (e?.toString() || 'unknown')) }
   }
-  pasteLoading.value = false
+  pasteLoadingLocal.value = false
   if (!localPasteCancelled) {
     if (failed.length > 0) ElMessage.error(`Copied/Moved ${success}/${items.length}, ${failed.length} failed`)
     else ElMessage.success(t('sftp.paste'))
@@ -1367,7 +1398,7 @@ function onChmod(item: FileItem) {
   )
 }
 
-function onDocumentDrop(e: DragEvent) {
+async function onDocumentDrop(e: DragEvent) {
   if (!dragDroppedInternally) {
     // If drop didn't fire on a pane but files are available, handle as external upload
     const files = e.dataTransfer?.files
@@ -1375,9 +1406,22 @@ function onDocumentDrop(e: DragEvent) {
       e.preventDefault()
       const sid = panel.value?.sessionId
       if (sid) {
+        const fileNames: string[] = []
+        for (let i = 0; i < files.length; i++) {
+          fileNames.push(files[i].name)
+        }
+        const action = await checkRemoteConflicts(fileNames)
+        if (action === 'cancel') return
+
+        const existingNames = remoteFiles.value.map(f => f.name)
         for (let i = 0; i < files.length; i++) {
           const f = files[i]
-          const remotePath = cwd.value + '/' + f.name
+          let resolvedName = f.name
+          if (action === 'rename' && existingNames.includes(f.name)) {
+            resolvedName = autoRename(f.name, existingNames)
+          }
+          existingNames.push(resolvedName)
+          const remotePath = cwd.value + '/' + resolvedName
           const nativePath = (f as any).path
           if (nativePath) {
             SftpPut(sid, nativePath, remotePath, false)
@@ -1500,7 +1544,7 @@ function onDropLocal(e: DragEvent) {
   } catch (e) { console.error('onDropLocal:', e) }
 }
 
-function onDropRemote(e: DragEvent) {
+async function onDropRemote(e: DragEvent) {
   e.preventDefault()
   dragDroppedInternally = true
   clearDragState()
@@ -1510,9 +1554,22 @@ function onDropRemote(e: DragEvent) {
   // External files from desktop / file explorer
   const files = e.dataTransfer?.files
   if (files && files.length > 0) {
+    const fileNames: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      fileNames.push(files[i].name)
+    }
+    const action = await checkRemoteConflicts(fileNames)
+    if (action === 'cancel') return
+
+    const existingNames = remoteFiles.value.map(f => f.name)
     for (let i = 0; i < files.length; i++) {
       const f = files[i]
-      const remotePath = cwd.value + '/' + f.name
+      let resolvedName = f.name
+      if (action === 'rename' && existingNames.includes(f.name)) {
+        resolvedName = autoRename(f.name, existingNames)
+      }
+      existingNames.push(resolvedName)
+      const remotePath = cwd.value + '/' + resolvedName
       // Try native path first (WebView2 may expose it), fall back to reading content
       const nativePath = (f as any).path
       if (nativePath) {
@@ -1530,8 +1587,16 @@ function onDropRemote(e: DragEvent) {
   try {
     const item = JSON.parse(data)
     if (item.mode === 'local') {
+      const action = await checkRemoteConflicts([item.name])
+      if (action === 'cancel') return
+
+      let resolvedName = item.name
+      if (action === 'rename') {
+        const existingNames = remoteFiles.value.map(f => f.name)
+        resolvedName = autoRename(item.name, existingNames)
+      }
       const localPath = joinPath(localCwd.value, item.name)
-      const remotePath = cwd.value + '/' + item.name
+      const remotePath = cwd.value + '/' + resolvedName
       SftpPut(panel.value?.sessionId!, localPath, remotePath, item.isDir)
     }
   } catch (e) { console.error('onDropRemote:', e) }
