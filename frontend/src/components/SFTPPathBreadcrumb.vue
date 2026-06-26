@@ -50,6 +50,7 @@
         class="drive-dropdown"
         :style="driveMenuStyle"
         @click.stop
+        @mousedown.stop
       >
         <div
           v-for="drive in drives"
