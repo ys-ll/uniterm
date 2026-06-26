@@ -27,6 +27,8 @@ export interface ConnectionConfig {
   postLoginScript?: string
   // SSH tunnel: reference to an existing SSH connection used as a jump host
   tunnelSSHConnId?: string
+  tunnelSSHUser?: string
+  tunnelSSHPassword?: string
   // SFTP max concurrent transfers (0 = unlimited)
   sftpMaxConcurrency?: number
   // FTP-specific

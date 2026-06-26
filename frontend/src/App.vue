@@ -72,6 +72,15 @@
     </div>
     <ConnectionForm v-model="showConnectionForm" @save="onSaveOnly" @connect="onConnect" />
     <SerialConnectDialog v-model="showSerialDialog" @connect="onConnectSerial" />
+    <CredentialPrompt
+      v-model:visible="credentialVisible"
+      :title="credentialTitle"
+      :subtitle="credentialSubtitle"
+      :fields="credentialFields"
+      :initial-user="credentialInitialUser"
+      :initial-password="credentialInitialPassword"
+      @resolve="onCredentialResolve"
+    />
 
     <!-- Input context menu -->
     <div
@@ -107,6 +116,8 @@ import ConnectionForm from './components/ConnectionForm.vue'
 import AISidebar from './components/AISidebar.vue'
 import SyncConflictDialog from './components/SyncConflictDialog.vue'
 import SerialConnectDialog from './components/SerialConnectDialog.vue'
+import CredentialPrompt from './components/CredentialPrompt.vue'
+import type { CredentialResult } from './components/CredentialPrompt.vue'
 import { useConnectionStore } from './stores/connectionStore'
 import { useTabStore } from './stores/tabStore'
 import { usePanelStore } from './stores/panelStore'
@@ -208,6 +219,107 @@ const aiSidebarRef = ref<any>(null)
 // Input context menu state
 const inputMenuVisible = ref(false)
 const inputMenuPos = ref({ x: 0, y: 0 })
+
+// ── Credential prompt ──────────────────────────────────────────
+const credentialVisible = ref(false)
+const credentialTitle = ref('')
+const credentialSubtitle = ref('')
+const credentialFields = ref<('user' | 'password')[]>([])
+const credentialResolve = ref<((result: CredentialResult | null) => void) | null>(null)
+
+const credentialInitialUser = ref('')
+const credentialInitialPassword = ref('')
+
+function showCredentialDialog(
+  title: string,
+  subtitle: string,
+  fields: ('user' | 'password')[],
+  initialUser = '',
+  initialPassword = ''
+): Promise<CredentialResult | null> {
+  return new Promise((resolve) => {
+    credentialTitle.value = title
+    credentialSubtitle.value = subtitle
+    credentialFields.value = fields
+    credentialInitialUser.value = initialUser
+    credentialInitialPassword.value = initialPassword
+    credentialResolve.value = resolve
+    credentialVisible.value = true
+  })
+}
+
+function onCredentialResolve(result: CredentialResult | null) {
+  credentialVisible.value = false
+  if (credentialResolve.value) {
+    credentialResolve.value(result)
+    credentialResolve.value = null
+  }
+}
+
+function needsCredentialCheck(config: ConnectionConfig): boolean {
+  const inScope = ['ssh', 'mosh', 'sftp', 'ftp'].includes(config.type)
+  if (!inScope) return false
+  if ((config.type === 'ssh' || config.type === 'mosh') && config.authType === 'key') return false
+  return !config.user || !config.password
+}
+
+function getMissingFields(config: ConnectionConfig): ('user' | 'password')[] {
+  const fields: ('user' | 'password')[] = []
+  if (!config.user) fields.push('user')
+  if (!config.password) fields.push('password')
+  return fields
+}
+
+async function ensureCredentials(config: ConnectionConfig): Promise<ConnectionConfig | null> {
+  // 1. Check SSH tunnel connection first
+  if (config.tunnelSSHConnId) {
+    const tunnelConn = connectionStore.connections.find(c => c.id === config.tunnelSSHConnId)
+    if (tunnelConn && needsCredentialCheck(tunnelConn)) {
+      const result = await showCredentialDialog(
+        t('credential.tunnelTitle'),
+        t('credential.tunnelSubtitle', { name: tunnelConn.name }),
+        ['user', 'password'],
+        tunnelConn.user,
+        tunnelConn.password
+      )
+      if (!result) return null
+      // Pass credentials inline so Go can apply them without reading the store
+      config.tunnelSSHUser = result.user || tunnelConn.user
+      config.tunnelSSHPassword = result.password || tunnelConn.password
+      if (result.action === 'save_and_connect') {
+        await connectionStore.update(tunnelConn.id, {
+          user: config.tunnelSSHUser,
+          password: config.tunnelSSHPassword
+        })
+      }
+    }
+  }
+
+  // 2. Check main connection
+  if (!needsCredentialCheck(config)) return config
+
+  const result = await showCredentialDialog(
+    t('credential.title'),
+    '',
+    ['user', 'password'],
+    config.user,
+    config.password
+  )
+  if (!result) return null
+  // Create new object instead of mutating the original (which may be
+  // referenced by the Pinia store). For "save_and_connect" we explicitly
+  // persist via connectionStore.update below.
+  config = {
+    ...config,
+    user: result.user || config.user,
+    password: result.password || config.password
+  }
+  if (result.action === 'save_and_connect') {
+    await connectionStore.update(config.id, { user: config.user, password: config.password })
+  }
+  return config
+}
+
 let inputMenuTarget: HTMLInputElement | HTMLTextAreaElement | null = null
 
 function closeInputMenu() {
@@ -543,6 +655,11 @@ async function onConnect(config: ConnectionConfig) {
   if (config.type === 'database') return onConnectDB(config)
   connectionStore.add(config)
 
+  // Credential check
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
+
   // Create session BEFORE panel so the terminal has a sessionId when it first
   // fires SessionResize. Otherwise the resize is silently dropped because the
   // terminal calls getSessionId() too early and never retries.
@@ -626,6 +743,12 @@ async function createLocalTerminal(shellPath?: string) {
 }
 
 async function onConnectSftp(config: ConnectionConfig) {
+  connectionStore.add(config)
+
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
+
   const panel = panelStore.createPanel(config, 'sftp')
   const displayTitle = config.name || `${config.user}@${config.host}`
   panel.title = displayTitle
@@ -644,6 +767,10 @@ async function onConnectSftp(config: ConnectionConfig) {
 
 async function onConnectFtp(config: ConnectionConfig) {
   connectionStore.add(config)
+
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
   const panel = panelStore.createPanel(config, 'sftp')
   const displayTitle = config.name || `${config.user}@${config.host}`
   panel.title = displayTitle
@@ -662,6 +789,10 @@ async function onConnectFtp(config: ConnectionConfig) {
 
 async function onConnectRDP(config: ConnectionConfig) {
   connectionStore.add(config)
+
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
 
   const displayTitle = config.name || `${config.user}@${config.host}`
 
@@ -684,6 +815,10 @@ async function onConnectRDP(config: ConnectionConfig) {
 async function onConnectVNC(config: ConnectionConfig) {
   connectionStore.add(config)
 
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
+
   const displayTitle = config.name || config.host
 
   const panel = panelStore.createPanel(config, 'vnc')
@@ -705,6 +840,10 @@ async function onConnectVNC(config: ConnectionConfig) {
 async function onConnectSPICE(config: ConnectionConfig) {
   connectionStore.add(config)
 
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
+
   const displayTitle = config.name || config.host
 
   const panel = panelStore.createPanel(config, 'spice')
@@ -724,6 +863,12 @@ async function onConnectSPICE(config: ConnectionConfig) {
 }
 
 async function onConnectMonitor(config: ConnectionConfig) {
+  connectionStore.add(config)
+
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
+
   const panel = panelStore.createPanel(config, 'monitor')
   const displayTitle = config.name || `${config.user}@${config.host}`
   panel.title = displayTitle
@@ -743,6 +888,11 @@ async function onConnectMonitor(config: ConnectionConfig) {
 
 async function onConnectDB(config: ConnectionConfig) {
   connectionStore.add(config)
+
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
+
   if (!config.dbType) {
     config.dbType = 'mysql'
   }

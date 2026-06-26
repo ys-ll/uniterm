@@ -42,7 +42,9 @@ type ConnectionConfig struct {
 	// SSH tunnel: reference to an existing SSH connection used as a jump host.
 	// When set, the connection goes through local port forwarding:
 	//   127.0.0.1:auto-port → tunnel SSH → target Host:Port
-	TunnelSSHConnID string `json:"tunnelSSHConnId,omitempty"`
+	TunnelSSHConnID   string `json:"tunnelSSHConnId,omitempty"`
+	TunnelSSHUser     string `json:"tunnelSSHUser,omitempty"`
+	TunnelSSHPassword string `json:"tunnelSSHPassword,omitempty"`
 	// SFTP max concurrent transfers (0 = unlimited)
 	SftpMaxConcurrency int `json:"sftpMaxConcurrency,omitempty"`
 	// FTP-specific fields

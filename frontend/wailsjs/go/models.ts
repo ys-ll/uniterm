@@ -295,6 +295,8 @@ export namespace session {
 	    dbName?: string;
 	    postLoginScript?: string;
 	    tunnelSSHConnId?: string;
+	    tunnelSSHUser?: string;
+	    tunnelSSHPassword?: string;
 	    sftpMaxConcurrency?: number;
 	    ftpEncryption?: string;
 	    ftpPassive: boolean;
@@ -324,6 +326,8 @@ export namespace session {
 	        this.dbName = source["dbName"];
 	        this.postLoginScript = source["postLoginScript"];
 	        this.tunnelSSHConnId = source["tunnelSSHConnId"];
+	        this.tunnelSSHUser = source["tunnelSSHUser"];
+	        this.tunnelSSHPassword = source["tunnelSSHPassword"];
 	        this.sftpMaxConcurrency = source["sftpMaxConcurrency"];
 	        this.ftpEncryption = source["ftpEncryption"];
 	        this.ftpPassive = source["ftpPassive"];

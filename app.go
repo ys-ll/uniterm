@@ -522,6 +522,15 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 			return nil, fmt.Errorf("tunnel SSH connection not found: %s", config.TunnelSSHConnID)
 		}
 
+		// Apply inline tunnel credentials if the frontend provided them
+		// (e.g. credential prompt "connect" without saving to store).
+		if config.TunnelSSHUser != "" {
+			tunnelSSHConfig.User = config.TunnelSSHUser
+		}
+		if config.TunnelSSHPassword != "" {
+			tunnelSSHConfig.Password = config.TunnelSSHPassword
+		}
+
 		// Resolve actual target port. VNC/SPICE use libvirt display
 		// numbers (port < 100 means display :N → port 5900+N).
 		targetPort := config.Port
