@@ -129,7 +129,6 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { Database, Table2, Eye, ChevronRight, ChevronDown } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, TruncateTable, GetDBCapabilities } from '../../wailsjs/go/main/App'
-import { msg } from '../services/message'
 import type { TableInfo } from '../types/database'
 
 const { t } = useI18n()
@@ -355,7 +354,6 @@ async function onConfirm() {
       await loadTree()
     } catch (e: any) {
       console.error(e)
-      msg.error(e?.message || String(e))
     }
   }
   confirmVisible.value = false
@@ -423,9 +421,8 @@ async function onCreateDatabase() {
     await CreateDatabase(props.sessionId, newDbName.value.trim())
     newDbVisible.value = false
     await loadTree()
-  } catch (e: any) {
+  } catch (e) {
     console.error('Failed to create database:', e)
-    msg.error(e?.message || String(e))
   }
 }
 
@@ -444,14 +441,11 @@ async function onCreateTable() {
     await CreateTable(props.sessionId, ctxDbName.value, newTableName.value.trim())
     newTableVisible.value = false
     const db = databases.value.find(d => d.name === ctxDbName.value)
-    if (db) {
+    if (db && db.loaded) {
       db.tables = await GetTables(props.sessionId, ctxDbName.value)
-      db.loaded = true
-      expandedDbs.value = new Set([...expandedDbs.value, ctxDbName.value])
     }
-  } catch (e: any) {
+  } catch (e) {
     console.error('Failed to create table:', e)
-    msg.error(e?.message || String(e))
   }
 }
 

@@ -57,7 +57,7 @@
               :key="activeTab.id"
               :session-id="getPanelSessionId(activeTab.panelId)"
               :host-name="getPanelConfig(activeTab.panelId)?.host || ''"
-              :default-db-name="treeDefaultDbName(getPanelConfig(activeTab.panelId)?.dbType, getPanelConfig(activeTab.panelId)?.dbName)"
+              :default-db-name="getPanelConfig(activeTab.panelId)?.dbName || ''"
               :db-type="getPanelConfig(activeTab.panelId)?.dbType || 'mysql'"
             />
             <MonitorTabContent
@@ -129,7 +129,6 @@ import { useUpdateCheck } from './composables/useUpdateCheck'
 import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../types/settings'
 import { useI18n } from './i18n'
-import { treeDefaultDbName } from './services/dbTreeDefaults'
 import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFocus, LoadLocalState, SaveLocalState } from '../wailsjs/go/main/App'
 import { EventsOn } from '../wailsjs/runtime'
 import { msg } from './services/message'

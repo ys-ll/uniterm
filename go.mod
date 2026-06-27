@@ -14,7 +14,6 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/pkg/sftp v1.13.10
 	github.com/rqlite/gorqlite v0.0.0-20260504155303-50d445fd0ab9
-	github.com/sijms/go-ora/v2 v2.9.0
 	github.com/unixshells/mosh-go v0.5.2
 	github.com/wailsapp/wails/v2 v2.12.0
 	github.com/zalando/go-keyring v0.2.8

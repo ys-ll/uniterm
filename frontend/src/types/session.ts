@@ -29,7 +29,7 @@ export interface ConnectionConfig {
   rdpSmartSizing?: boolean
   // Local terminal shell path
   shellPath?: string
-  dbType?: string   // "mysql", "postgres", "rqlite", "oracle"
+  dbType?: string   // "mysql", "postgres", "rqlite"
   dbName?: string   // default database name
   postLoginScript?: string
   postLoginExpectSteps?: PostLoginExpectStep[]
