@@ -121,12 +121,12 @@ function recalcOverflow() {
     const el = breadcrumbRef.value
     if (!el) return
     const maxCollapse = Math.max(0, pathParts.value.length - 2)
-    if (el.scrollWidth > el.clientWidth) {
-      if (collapsedCount.value < maxCollapse) {
-        collapsedCount.value++
-      }
-    } else if (collapsedCount.value > 0) {
-      collapsedCount.value--
+    // Only ever collapse more within a layout pass. Expanding is handled by
+    // resetting collapsedCount to 0 on path/size change. Mixing increment and
+    // decrement here causes an infinite flip-flop when a path sits exactly at
+    // the overflow boundary (e.g. a single very long segment), freezing the UI.
+    if (el.scrollWidth > el.clientWidth && collapsedCount.value < maxCollapse) {
+      collapsedCount.value++
     }
   })
 }
@@ -137,6 +137,8 @@ watch(() => props.path, () => {
 })
 
 watch(containerWidth, () => {
+  // Recompute from scratch so a wider container can re-expand collapsed parts.
+  collapsedCount.value = 0
   recalcOverflow()
 })
 
