@@ -617,6 +617,7 @@
   "conn.ftpEncryptionRequired": "必須",
   "conn.ftpPassive": "パッシブモード",
   "conn.ftpEncoding": "文字エンコーディング",
+  "conn.encoding": "エンコーディング",
   "quickCommands.title": "クイックコマンド",
   "quickCommands.connectionsTab": "接続リスト",
   "quickCommands.quickCommandsTab": "クイックコマンド",

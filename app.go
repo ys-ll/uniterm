@@ -498,6 +498,10 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 		return nil, err
 	}
 	log.Writef("[CreateSession] session created, id=%s", s.ID())
+	// Apply terminal character encoding (SSH only). No-op for utf-8/empty.
+	if ssh, ok := s.(*session.SSHSession); ok {
+		ssh.SetEncoding(config.Encoding)
+	}
 
 	// ── SSH Tunnel ──────────────────────────────────────────────
 	if config.TunnelSSHConnID != "" && a.tunnelService != nil {

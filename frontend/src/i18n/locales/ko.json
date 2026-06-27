@@ -617,6 +617,7 @@
   "conn.ftpEncryptionRequired": "Required",
   "conn.ftpPassive": "Passive Mode",
   "conn.ftpEncoding": "Encoding",
+  "conn.encoding": "인코딩",
   "quickCommands.title": "빠른 명령",
   "quickCommands.connectionsTab": "연결 목록",
   "quickCommands.quickCommandsTab": "빠른 명령",

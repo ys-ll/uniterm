@@ -53,6 +53,9 @@ type ConnectionConfig struct {
 	FtpEncryption string `json:"ftpEncryption,omitempty"` // "none"(default) | "auto" | "required"
 	FtpPassive    bool   `json:"ftpPassive"`              // passive mode (default true)
 	FtpEncoding   string `json:"ftpEncoding,omitempty"`   // "utf-8" | "gbk" | "shift-jis" | "latin-1"
+	// Terminal character encoding for ssh/telnet:
+	// "" / "utf-8"(default) | "gbk" | "gb2312" | "gb18030" | "big5" | "shift-jis" | "euc-jp" | "euc-kr"
+	Encoding string `json:"encoding,omitempty"`
 }
 
 // ConnectionStoreData is the top-level structure persisted to connections.json.

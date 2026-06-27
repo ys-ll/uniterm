@@ -43,6 +43,8 @@ export interface ConnectionConfig {
   ftpEncryption?: string  // "none" | "auto" | "required"
   ftpPassive?: boolean
   ftpEncoding?: string    // "utf-8" | "gbk" | "shift-jis" | "latin-1"
+  // Terminal encoding (SSH/Telnet)
+  encoding?: string // "utf-8" | "gbk" | "gb2312" | "gb18030" | "big5" | "shift-jis" | "euc-jp" | "euc-kr"
 }
 
 export interface SessionInfo {

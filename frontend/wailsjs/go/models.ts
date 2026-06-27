@@ -302,7 +302,8 @@ export namespace session {
 	    ftpEncryption?: string;
 	    ftpPassive: boolean;
 	    ftpEncoding?: string;
-	
+	    encoding?: string;
+
 	    static createFrom(source: any = {}) {
 	        return new ConnectionConfig(source);
 	    }

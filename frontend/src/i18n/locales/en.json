@@ -619,6 +619,7 @@
   "conn.ftpEncryptionRequired": "Required",
   "conn.ftpPassive": "Passive Mode",
   "conn.ftpEncoding": "Encoding",
+  "conn.encoding": "Encoding",
   "quickCommands.title": "Quick Commands",
   "quickCommands.connectionsTab": "Connections",
   "quickCommands.quickCommandsTab": "Quick Commands",

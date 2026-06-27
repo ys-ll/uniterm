@@ -11,6 +11,12 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/encoding/korean"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/encoding/traditionalchinese"
+	"golang.org/x/text/transform"
 )
 
 const (
@@ -31,6 +37,10 @@ type SSHSession struct {
 	lastReadTime atomic.Int64
 	authAnswerCh chan []byte
 	expectOutput *postLoginOutputBuffer
+
+	enc            encoding.Encoding // input(write) codec; nil = utf-8 passthrough
+	decoder        *encoding.Decoder // persistent streaming decoder for output(read)
+	decodeLeftover []byte            // trailing partial multibyte bytes between reads
 }
 
 func NewSSHSession(id string) *SSHSession {
@@ -255,6 +265,9 @@ func (s *SSHSession) readStderr() {
 		n, err := s.stderr.Read(buf)
 		if n > 0 {
 			// Prefix stderr output so it can be distinguished in the UI
+			// stderr is emitted raw (not decoded): it is a separate byte stream and
+			// sharing the stdout decoder's leftover buffer could corrupt stdout. In
+			// normal PTY shell sessions stderr is merged into the PTY (stdout) anyway.
 			data := append([]byte("\r\n\x1b[31m[stderr] \x1b[0m"), buf[:n]...)
 			s.emitData(data)
 		}
@@ -278,7 +291,7 @@ func (s *SSHSession) readLoop() {
 				s.SetZmodemMode(true)
 				s.emitBinary(data)
 			} else {
-				s.emitData(data)
+				s.emitData(s.decodeOutput(data))
 			}
 		}
 		if err != nil {
@@ -343,7 +356,7 @@ func (s *SSHSession) runPostLoginExpect(config ConnectionConfig) {
 			if s.stdin == nil {
 				return fmt.Errorf("not connected")
 			}
-			_, err := s.stdin.Write(data)
+			_, err := s.stdin.Write(s.encodeInput(data))
 			return err
 		},
 		IsConnected:    func() bool { return s.Status() == StatusConnected },
@@ -372,7 +385,7 @@ func (s *SSHSession) runPostLoginScript(script string) {
 			return
 		}
 		if s.stdin != nil {
-			_, _ = s.stdin.Write([]byte(line + "\r"))
+			_, _ = s.stdin.Write(s.encodeInput([]byte(line + "\r")))
 		}
 		// Wait for command output to settle before sending the next line.
 		s.waitIdle(3*time.Second, 300*time.Millisecond)
@@ -455,7 +468,7 @@ func (s *SSHSession) Write(data []byte) error {
 	if s.stdin == nil {
 		return fmt.Errorf("not connected")
 	}
-	_, err := s.stdin.Write(data)
+	_, err := s.stdin.Write(s.encodeInput(data))
 	return err
 }
 
@@ -489,4 +502,85 @@ func (s *SSHSession) Resize(cols, rows int) error {
 
 func (s *SSHSession) IsConnected() bool {
 	return s.Status() == StatusConnected
+}
+
+// SetEncoding configures the character encoding for this session.
+// name: "" / "utf-8" (passthrough) | "gbk" | "gb2312" | "gb18030" |
+// "big5" | "shift-jis" | "euc-jp" | "euc-kr".
+func (s *SSHSession) SetEncoding(name string) {
+	enc := encodingByName(name)
+	s.mu.Lock()
+	s.enc = enc
+	if enc == nil {
+		s.decoder = nil
+	} else {
+		s.decoder = enc.NewDecoder()
+	}
+	s.decodeLeftover = nil
+	s.mu.Unlock()
+}
+
+// decodeOutput converts a chunk of remote bytes to UTF-8 using the configured
+// decoder. Partial trailing multibyte sequences are buffered until the next
+// call. Must only be called from the single readLoop goroutine.
+func (s *SSHSession) decodeOutput(data []byte) []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.decoder == nil {
+		return data
+	}
+	src := make([]byte, 0, len(s.decodeLeftover)+len(data))
+	src = append(src, s.decodeLeftover...)
+	src = append(src, data...)
+
+	var out []byte
+	dst := make([]byte, 8192)
+	for {
+		nDst, nSrc, err := s.decoder.Transform(dst, src, false)
+		out = append(out, dst[:nDst]...)
+		src = src[nSrc:]
+		if err == transform.ErrShortDst {
+			continue // dst full but more src consumable; drain
+		}
+		break // nil or ErrShortSrc: remaining src is an incomplete trailing rune
+	}
+	s.decodeLeftover = append([]byte(nil), src...)
+	return out
+}
+
+// encodeInput converts user keystrokes (UTF-8) to the configured encoding
+// before writing to the remote. Each call handles a complete UTF-8 input.
+func (s *SSHSession) encodeInput(data []byte) []byte {
+	s.mu.RLock()
+	enc := s.enc
+	s.mu.RUnlock()
+	if enc == nil {
+		return data
+	}
+	out, err := enc.NewEncoder().Bytes(data)
+	if err != nil {
+		return data
+	}
+	return out
+}
+
+// encodingByName maps a connection's encoding setting to an x/text codec.
+// Returns nil for UTF-8 / empty (no conversion).
+func encodingByName(name string) encoding.Encoding {
+	switch name {
+	case "gbk", "gb2312": // GB2312 is a subset of GBK; decode with GBK
+		return simplifiedchinese.GBK
+	case "gb18030":
+		return simplifiedchinese.GB18030
+	case "big5":
+		return traditionalchinese.Big5
+	case "shift-jis":
+		return japanese.ShiftJIS
+	case "euc-jp":
+		return japanese.EUCJP
+	case "euc-kr":
+		return korean.EUCKR
+	default: // "", "utf-8"
+		return nil
+	}
 }

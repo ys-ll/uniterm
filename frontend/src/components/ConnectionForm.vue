@@ -177,6 +177,21 @@
           </div>
         </div>
       </el-form-item>
+      <el-form-item
+        v-if="form.type === 'ssh'"
+        :label="t('conn.encoding')"
+      >
+        <el-select v-model="form.encoding" placeholder="Unicode (UTF-8)">
+          <el-option label="Unicode (UTF-8)" value="utf-8" />
+          <el-option label="Simplified Chinese (GBK)" value="gbk" />
+          <el-option label="Simplified Chinese (GB2312)" value="gb2312" />
+          <el-option label="Simplified Chinese (GB18030)" value="gb18030" />
+          <el-option label="Traditional Chinese (Big5)" value="big5" />
+          <el-option label="Japanese (Shift-JIS)" value="shift-jis" />
+          <el-option label="Japanese (EUC-JP)" value="euc-jp" />
+          <el-option label="Korean (EUC-KR)" value="euc-kr" />
+        </el-select>
+      </el-form-item>
       <el-form-item v-if="form.type === 'ssh'" :label="t('conn.sftpMaxConcurrency')">
         <el-input-number v-model="form.sftpMaxConcurrency" :min="0" :max="20" />
       </el-form-item>
@@ -349,6 +364,7 @@ const form = reactive<ConnectionConfig>({
   ftpEncryption: 'none',
   ftpPassive: true,
   ftpEncoding: 'utf-8',
+  encoding: 'utf-8',
 })
 
 const rdpResolutions = [
@@ -464,6 +480,7 @@ function resetForm() {
   form.ftpEncryption = 'none'
   form.ftpPassive = true
   form.ftpEncoding = 'utf-8'
+  form.encoding = 'utf-8'
   form.tunnelSSHConnId = undefined
   rdpResolution.value = '1280 × 720 (HD)'
   selectedGroupId.value = undefined

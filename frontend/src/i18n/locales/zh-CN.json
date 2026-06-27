@@ -619,6 +619,7 @@
   "conn.ftpEncryptionRequired": "必须加密",
   "conn.ftpPassive": "被动模式",
   "conn.ftpEncoding": "字符编码",
+  "conn.encoding": "终端编码",
   "quickCommands.title": "快捷命令",
   "quickCommands.connectionsTab": "连接列表",
   "quickCommands.quickCommandsTab": "快捷命令",
