@@ -3,25 +3,70 @@
     <div class="db-main">
       <div class="db-left" :style="{ width: leftWidth + 'px' }">
         <DBTreePanel
+          ref="treeRef"
           :session-id="sessionId"
           :default-db-name="defaultDbName"
+          :active-db="selectedDb"
+          :active-table="selectedTable"
           @select-table="onSelectTable"
-          @select-database="onSelectDatabase"
+          @open-database="onOpenDatabase"
           @view-structure="onViewStructure"
         />
       </div>
       <div class="db-resizer" @mousedown="onResizeStart" />
       <div class="db-right">
-        <div v-if="!selectedTable" class="db-placeholder">
+        <div v-if="!selectedTable && !dbQueryMode" class="db-placeholder">
           <span>{{ t('db.selectTableHint') }}</span>
         </div>
+        <!-- Database-level: query + object list -->
+        <template v-else-if="dbQueryMode">
+          <div class="db-breadcrumb">
+            <span class="crumb crumb-static">{{ hostName }}</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb current">{{ selectedDb }}</span>
+          </div>
+          <div class="db-right-top">
+            <div class="db-tabs">
+              <button
+                class="db-tab"
+                :class="{ active: dbActiveTab === 'query' }"
+                @click="dbActiveTab = 'query'"
+              >
+                {{ t('db.dataQuery') }}
+              </button>
+              <button
+                class="db-tab"
+                :class="{ active: dbActiveTab === 'objects' }"
+                @click="dbActiveTab = 'objects'"
+              >
+                {{ t('db.tableList') }}
+              </button>
+            </div>
+            <div class="db-right-top-content">
+              <DBQueryEditor
+                v-show="dbActiveTab === 'query'"
+                :key="'dbquery-' + selectedDb"
+                :session-id="sessionId"
+                :db-name="selectedDb"
+              />
+              <DBObjectList
+                v-if="dbActiveTab === 'objects'"
+                :session-id="sessionId"
+                :db-name="selectedDb"
+                @open="onSelectTable"
+                @changed="onObjectsChanged"
+              />
+            </div>
+          </div>
+        </template>
+        <!-- Table-level: data query + structure -->
         <template v-else>
           <div class="db-breadcrumb">
-            <span>{{ hostName }}</span>
-            <span class="breadcrumb-sep">&gt;</span>
-            <span>{{ selectedDb }}</span>
-            <span class="breadcrumb-sep">&gt;</span>
-            <span class="breadcrumb-table">{{ selectedTable }}</span>
+            <span class="crumb crumb-static">{{ hostName }}</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb clickable" @click="onOpenDatabase(selectedDb)">{{ selectedDb }}</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb current">{{ selectedTable }}</span>
           </div>
           <div class="db-right-top">
             <div class="db-tabs">
@@ -33,6 +78,7 @@
                 {{ t('db.dataQuery') }}
               </button>
               <button
+                v-if="!selectedIsView"
                 class="db-tab"
                 :class="{ active: activeTab === 'structure' }"
                 @click="onStructureTabClick"
@@ -48,6 +94,7 @@
                 :db-name="selectedDb"
                 :primary-keys="primaryKeys"
                 :table-columns="tableColumns"
+                :is-view="selectedIsView"
               />
               <DBTableStructure
                 v-else
@@ -72,6 +119,7 @@ import { useI18n } from '../i18n'
 import DBTreePanel from './DBTreePanel.vue'
 import DBTableStructure from './DBTableStructure.vue'
 import DBQueryEditor from './DBQueryEditor.vue'
+import DBObjectList from './DBObjectList.vue'
 import { GetTableSchema } from '../../wailsjs/go/main/App'
 import type { ColumnInfo } from '../types/database'
 
@@ -87,8 +135,12 @@ const props = defineProps<{
 }>()
 
 const activeTab = ref<'structure' | 'query'>('query')
+const dbActiveTab = ref<'query' | 'objects'>('query')
+const treeRef = ref<InstanceType<typeof DBTreePanel> | null>(null)
 const selectedDb = ref('')
 const selectedTable = ref('')
+const selectedIsView = ref(false)
+const dbQueryMode = ref(false)
 const primaryKeys = ref<string[]>([])
 const tableColumns = ref<ColumnInfo[]>([])
 const structureLoadTrigger = ref(0)
@@ -98,16 +150,20 @@ let resizeStartX = 0
 let resizeStartWidth = 0
 let resizing = false
 
-function onSelectDatabase(dbName: string) {
+function onOpenDatabase(dbName: string, tab: 'query' | 'objects' = 'query') {
   selectedDb.value = dbName
   selectedTable.value = ''
+  dbQueryMode.value = true
+  dbActiveTab.value = tab
   primaryKeys.value = []
   tableColumns.value = []
 }
 
-async function onSelectTable(dbName: string, tableName: string) {
+async function onSelectTable(dbName: string, tableName: string, isView = false) {
   selectedDb.value = dbName
   selectedTable.value = tableName
+  selectedIsView.value = isView
+  dbQueryMode.value = false
   primaryKeys.value = []
   tableColumns.value = []
   activeTab.value = 'query'
@@ -121,6 +177,8 @@ async function onSelectTable(dbName: string, tableName: string) {
 async function onViewStructure(dbName: string, tableName: string) {
   selectedDb.value = dbName
   selectedTable.value = tableName
+  selectedIsView.value = false
+  dbQueryMode.value = false
   primaryKeys.value = []
   tableColumns.value = []
   activeTab.value = 'structure'
@@ -139,6 +197,10 @@ function onStructureTabClick() {
 
 function onSchemaLoaded(pks: string[]) {
   primaryKeys.value = pks
+}
+
+function onObjectsChanged(dbName: string) {
+  treeRef.value?.refreshDb(dbName)
 }
 
 function onResizeStart(e: MouseEvent) {
@@ -250,21 +312,39 @@ onUnmounted(() => {
   font-size: 14px;
 }
 .db-breadcrumb {
-  padding: 6px 12px;
-  font-family: var(--font-ui);
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
   color: var(--text-secondary);
+  background: var(--bg-elevated);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
-.breadcrumb-sep {
-  margin: 0 6px;
-  color: var(--text-muted);
+.crumb {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
 }
-.breadcrumb-table {
-  font-family: var(--font-ui);
+.crumb.clickable {
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+.crumb.clickable:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.crumb.current {
   color: var(--text-primary);
   font-weight: 600;
+}
+.crumb-sep {
+  color: var(--text-disabled);
+  margin: 0 2px;
+  flex-shrink: 0;
 }
 .db-right-bottom {
   height: 180px;

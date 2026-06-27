@@ -26,10 +26,6 @@ export function CheckForUpdate() {
   return window['go']['main']['App']['CheckForUpdate']();
 }
 
-export function ClearQueryHistory(arg1) {
-  return window['go']['main']['App']['ClearQueryHistory'](arg1);
-}
-
 export function CloseSession(arg1) {
   return window['go']['main']['App']['CloseSession'](arg1);
 }
@@ -68,6 +64,10 @@ export function DropIndexOp(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function DropTable(arg1, arg2, arg3) {
   return window['go']['main']['App']['DropTable'](arg1, arg2, arg3);
+}
+
+export function DropView(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DropView'](arg1, arg2, arg3);
 }
 
 export function ExecuteQuery(arg1, arg2, arg3) {
@@ -132,10 +132,6 @@ export function GetPorts(arg1) {
 
 export function GetProcessDetail(arg1, arg2) {
   return window['go']['main']['App']['GetProcessDetail'](arg1, arg2);
-}
-
-export function GetQueryHistory(arg1) {
-  return window['go']['main']['App']['GetQueryHistory'](arg1);
 }
 
 export function GetSystemFonts() {

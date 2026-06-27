@@ -123,7 +123,7 @@ func (p *mysqlProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*S
 		})
 	}
 
-	idxRows, err := queryStrings(db, fmt.Sprintf("SHOW INDEX FROM `%s`", tableName))
+	idxRows, err := queryStrings(db, fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", dbName, tableName))
 	if err != nil {
 		return nil, fmt.Errorf("get indexes: %w", err)
 	}
@@ -183,6 +183,16 @@ func (p *mysqlProvider) DropTable(db *sql.DB, dbName, tableName string) error {
 		}
 	}
 	_, err := db.Exec(fmt.Sprintf("DROP TABLE `%s`", tableName))
+	return err
+}
+
+func (p *mysqlProvider) DropView(db *sql.DB, dbName, viewName string) error {
+	if dbName != "" {
+		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(fmt.Sprintf("DROP VIEW `%s`", viewName))
 	return err
 }
 

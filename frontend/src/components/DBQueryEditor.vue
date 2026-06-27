@@ -37,7 +37,7 @@
           @cell-dblclick="onCellDblClick"
         >
           <el-table-column
-            v-if="tableName && primaryKeys?.length"
+            v-if="canEditRows"
             :label="t('db.actions')"
             width="120"
             fixed="right"
@@ -77,7 +77,7 @@
         <div class="result-count">{{ queryResult.rows.length }} {{ t('db.rows') }}</div>
       </div>
 
-      <div v-if="queryResult && tableName && primaryKeys?.length" class="insert-row-bar">
+      <div v-if="queryResult && tableName && !isView" class="insert-row-bar">
         <button class="exec-btn" @click="startInsertRow">{{ t('db.insertRow') }}</button>
       </div>
 
@@ -118,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, shallowRef, triggerRef, computed, watch, nextTick, onMounted } from 'vue'
 import { Pencil, Trash2 } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
@@ -133,6 +133,7 @@ const props = defineProps<{
   dbName?: string
   primaryKeys?: string[]
   tableColumns?: ColumnInfo[]
+  isView?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -140,11 +141,18 @@ const emit = defineEmits<{
 }>()
 
 const sql = ref('')
-const queryResult = ref<QueryResult | null>(null)
+const queryResult = shallowRef<QueryResult | null>(null)
 const execResult = ref<ExecResult | null>(null)
 const error = ref('')
 const loading = ref(false)
 let cancelled = false
+
+// Row edit/delete need the primary key(s) present in the result set to build a WHERE clause.
+const canEditRows = computed(() => {
+  if (!props.tableName || !props.primaryKeys?.length || !queryResult.value) return false
+  const resultCols = new Set(queryResult.value.columns.map(c => c.name))
+  return props.primaryKeys.every(pk => resultCols.has(pk))
+})
 
 watch(() => props.tableName, async (name) => {
   insertingRow.value = false
@@ -240,7 +248,7 @@ const editingCell = ref<EditingCell | null>(null)
 const cellInputEl = ref<HTMLInputElement | null>(null)
 
 function onCellDblClick(row: any, column: any, _cell: HTMLElement, _event: MouseEvent) {
-  if (!props.tableName || !props.primaryKeys || props.primaryKeys.length === 0) return
+  if (!canEditRows.value) return
 
   const colName = column.property
   const originalValue = row[colName]
@@ -275,6 +283,7 @@ async function onCellEditConfirm() {
   try {
     await ExecuteStatement(props.sessionId, props.dbName || '', updateSQL)
     queryResult.value!.rows[rowIndex][colName] = value
+    triggerRef(queryResult)
     error.value = ''
     emit('cellUpdated')
   } catch (e: any) {
@@ -312,6 +321,7 @@ async function onDeleteRow(rowIndex: number) {
   try {
     await ExecuteStatement(props.sessionId, props.dbName || '', deleteSQL)
     queryResult.value!.rows.splice(rowIndex, 1)
+    triggerRef(queryResult)
     error.value = ''
     emit('cellUpdated')
   } catch (e: any) {
@@ -476,6 +486,7 @@ async function onEditRowConfirm() {
     for (const col of editRowColumns.value) {
       queryResult.value!.rows[editingRowIndex.value][col] = editNulls.value[col] ? null : editRowValues.value[col]
     }
+    triggerRef(queryResult)
     error.value = ''
     editingRow.value = false
     emit('cellUpdated')

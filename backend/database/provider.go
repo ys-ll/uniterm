@@ -34,6 +34,7 @@ type Provider interface {
 	// DDL: Table
 	CreateTable(db *sql.DB, dbName, tableName string) error
 	DropTable(db *sql.DB, dbName, tableName string) error
+	DropView(db *sql.DB, dbName, viewName string) error
 	TruncateTable(db *sql.DB, dbName, tableName string) error
 
 	// DDL: Column

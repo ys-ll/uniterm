@@ -8,16 +8,18 @@
         :placeholder="t('db.searchTables')"
       />
     </div>
-    <div class="tree-content" @click="closeContextMenu" @contextmenu.prevent="onTreeContextMenu">
+    <div ref="treeContentRef" class="tree-content" @click="closeContextMenu" @contextmenu.prevent="onTreeContextMenu">
       <div v-if="loading" class="tree-loading">{{ t('db.loading') }}</div>
       <template v-for="db in filteredDbs" :key="db.name">
         <div
           class="db-header"
+          :data-db-row="db.name"
           :class="{ selected: selectedDb === db.name && !selectedTable }"
           @click="onDbClick(db.name)"
+          @dblclick="emit('openDatabase', db.name)"
           @contextmenu.prevent="onDbContextMenu($event, db.name)"
         >
-          <span class="db-arrow">
+          <span class="db-arrow" @click.stop="onToggleDb(db.name)">
             <component :is="expandedDbs.has(db.name) ? ChevronDown : ChevronRight" :size="12" />
           </span>
           <Database class="db-icon" :size="14" />
@@ -28,9 +30,10 @@
             v-for="t in db.tables"
             :key="t.name"
             class="table-item"
+            :data-table-row="db.name + '/' + t.name"
             :class="{ selected: selectedTable === t.name && selectedDb === db.name }"
             @click="onTableClick(db.name, t.name)"
-            @dblclick="onTableDblClick(db.name, t.name)"
+            @dblclick="onTableDblClick(db.name, t)"
             @contextmenu.prevent="onTableContextMenu($event, db.name, t)"
           >
             <span class="table-icon-spacer" />
@@ -52,6 +55,9 @@
       @click.stop
     >
       <template v-if="ctxTargetType === 'db'">
+        <div class="ctx-item" @click="onCtxQueryDatabase">{{ t('db.dataQuery') }}</div>
+        <div class="ctx-item" @click="onCtxListDatabase">{{ t('db.tableList') }}</div>
+        <div class="ctx-sep" />
         <div v-if="canCreateDatabase" class="ctx-item" @click="onCtxNewDatabase">{{ t('db.newDatabase') }}</div>
         <div class="ctx-item" @click="onCtxNewTable">{{ t('db.newTable') }}</div>
         <div class="ctx-item danger" @click="onCtxDropDatabase">{{ t('db.dropDatabase') }}</div>
@@ -59,13 +65,18 @@
         <div class="ctx-item" @click="onCtxRefresh">{{ t('db.refreshTables') }}</div>
       </template>
       <template v-else-if="ctxTargetType === 'table'">
-        <div class="ctx-item" @click="onCtxViewData">{{ t('db.viewData') }}</div>
-        <div class="ctx-item" @click="onCtxViewStructure">{{ t('db.viewStructure') }}</div>
+        <div class="ctx-item" @click="onCtxViewData">{{ t('db.dataQuery') }}</div>
+        <div v-if="ctxTableType !== 'view'" class="ctx-item" @click="onCtxViewStructure">{{ t('db.tableStructure') }}</div>
         <div class="ctx-sep" />
         <div class="ctx-item" @click="onCtxCopyName">{{ t('db.copyName') }}</div>
         <div class="ctx-sep" />
-        <div class="ctx-item danger" @click="onCtxTruncateTable">{{ t('db.truncateTable') }}</div>
-        <div class="ctx-item danger" @click="onCtxDropTable">{{ t('db.dropTable') }}</div>
+        <template v-if="ctxTableType === 'view'">
+          <div class="ctx-item danger" @click="onCtxDropView">{{ t('db.dropView') }}</div>
+        </template>
+        <template v-else>
+          <div class="ctx-item danger" @click="onCtxTruncateTable">{{ t('db.truncateTable') }}</div>
+          <div class="ctx-item danger" @click="onCtxDropTable">{{ t('db.dropTable') }}</div>
+        </template>
       </template>
       <template v-else-if="ctxTargetType === 'blank'">
         <div v-if="canCreateDatabase" class="ctx-item" @click="onCtxNewDatabase">{{ t('db.newDatabase') }}</div>
@@ -125,10 +136,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { ref, watch, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Database, Table2, Eye, ChevronRight, ChevronDown } from '@lucide/vue'
 import { useI18n } from '../i18n'
-import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, TruncateTable, GetDBCapabilities } from '../../wailsjs/go/main/App'
+import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, GetDBCapabilities } from '../../wailsjs/go/main/App'
 import type { TableInfo } from '../types/database'
 
 const { t } = useI18n()
@@ -142,6 +153,8 @@ interface DbEntry {
 const props = defineProps<{
   sessionId: string
   defaultDbName?: string
+  activeDb?: string
+  activeTable?: string
 }>()
 
 const caps = ref<Record<string, any> | null>(null)
@@ -160,8 +173,8 @@ watch(() => props.sessionId, () => {
 }, { immediate: true })
 
 const emit = defineEmits<{
-  selectTable: [dbName: string, tableName: string]
-  selectDatabase: [dbName: string]
+  selectTable: [dbName: string, tableName: string, isView?: boolean]
+  openDatabase: [dbName: string, tab?: 'query' | 'objects']
   viewStructure: [dbName: string, tableName: string]
 }>()
 
@@ -171,6 +184,7 @@ const selectedDb = ref('')
 const selectedTable = ref('')
 const searchQuery = ref('')
 const loading = ref(false)
+const treeContentRef = ref<HTMLElement | null>(null)
 
 async function loadTree() {
   if (!props.sessionId) return
@@ -196,10 +210,43 @@ watch(() => props.sessionId, (newId) => {
   if (newId) loadTree()
 }, { immediate: true })
 
-async function onDbClick(dbName: string) {
-  emit('selectDatabase', dbName)
+// Sync tree highlight/position when the active db/table changes from outside
+// (breadcrumb navigation, object list, etc.)
+watch(() => [props.activeDb, props.activeTable], async ([db, table]) => {
+  if (!db) return
+  selectedDb.value = db
+  selectedTable.value = table || ''
+  if (table && !expandedDbs.value.has(db)) {
+    expandedDbs.value.add(db)
+    const entry = databases.value.find(d => d.name === db)
+    if (entry && !entry.loaded) {
+      try {
+        entry.tables = await GetTables(props.sessionId, db)
+        entry.loaded = true
+      } catch { /* ignore */ }
+    }
+    expandedDbs.value = new Set(expandedDbs.value)
+  }
+  await nextTick()
+  scrollActiveIntoView()
+})
+
+function scrollActiveIntoView() {
+  const root = treeContentRef.value
+  if (!root || !selectedDb.value) return
+  const key = selectedTable.value ? `${selectedDb.value}/${selectedTable.value}` : selectedDb.value
+  const attr = selectedTable.value ? 'data-table-row' : 'data-db-row'
+  const esc = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const el = root.querySelector(`[${attr}="${esc}"]`) as HTMLElement | null
+  el?.scrollIntoView({ block: 'nearest' })
+}
+
+function onDbClick(dbName: string) {
   selectedDb.value = dbName
   selectedTable.value = ''
+}
+
+async function onToggleDb(dbName: string) {
   if (expandedDbs.value.has(dbName)) {
     expandedDbs.value.delete(dbName)
   } else {
@@ -222,8 +269,8 @@ function onTableClick(dbName: string, tableName: string) {
   selectedTable.value = tableName
 }
 
-function onTableDblClick(dbName: string, tableName: string) {
-  emit('selectTable', dbName, tableName)
+function onTableDblClick(dbName: string, table: TableInfo) {
+  emit('selectTable', dbName, table.name, table.type === 'view')
 }
 
 const filteredDbs = computed(() => {
@@ -258,13 +305,14 @@ const ctxY = ref(0)
 const ctxTargetType = ref('')
 const ctxDbName = ref('')
 const ctxTableName = ref('')
+const ctxTableType = ref('')
 
 function closeContextMenu() {
   ctxVisible.value = false
 }
 
 function fitContextMenu(x: number, y: number, type: string) {
-  const heights: Record<string, number> = { db: 145, table: 180, blank: 60 }
+  const heights: Record<string, number> = { db: 210, table: 180, blank: 60 }
   const menuW = 160
   const menuH = heights[type] || 150
 
@@ -295,6 +343,7 @@ function onTableContextMenu(e: MouseEvent, dbName: string, table: TableInfo) {
   ctxTargetType.value = 'table'
   ctxDbName.value = dbName
   ctxTableName.value = table.name
+  ctxTableType.value = table.type || ''
   const pos = fitContextMenu(e.clientX, e.clientY, 'table')
   ctxX.value = pos.left
   ctxY.value = pos.top
@@ -313,8 +362,18 @@ function onTreeContextMenu(e: MouseEvent) {
   ctxVisible.value = true
 }
 
+function onCtxQueryDatabase() {
+  emit('openDatabase', ctxDbName.value, 'query')
+  ctxVisible.value = false
+}
+
+function onCtxListDatabase() {
+  emit('openDatabase', ctxDbName.value, 'objects')
+  ctxVisible.value = false
+}
+
 function onCtxViewData() {
-  emit('selectTable', ctxDbName.value, ctxTableName.value)
+  emit('selectTable', ctxDbName.value, ctxTableName.value, ctxTableType.value === 'view')
   ctxVisible.value = false
 }
 
@@ -377,6 +436,15 @@ function onCtxDropTable() {
   )
 }
 
+function onCtxDropView() {
+  showConfirm(
+    t('db.dropView'),
+    t('db.dropViewConfirm', { name: ctxTableName.value }),
+    ctxTableName.value,
+    async () => { await DropView(props.sessionId, ctxDbName.value, ctxTableName.value) }
+  )
+}
+
 function onCtxTruncateTable() {
   showConfirm(
     t('db.truncateTable'),
@@ -403,6 +471,21 @@ async function onCtxRefreshDatabases() {
   ctxVisible.value = false
   await loadTree()
 }
+
+// Refresh a single database's tables (called from parent after external mutations)
+async function refreshDb(dbName: string) {
+  const db = databases.value.find(d => d.name === dbName)
+  if (db) {
+    try {
+      db.tables = await GetTables(props.sessionId, dbName)
+      db.loaded = true
+    } catch (e) {
+      console.error('Failed to refresh db:', e)
+    }
+  }
+}
+
+defineExpose({ refreshDb })
 
 // ── New Database / Table dialogs ──
 
@@ -529,6 +612,10 @@ onUnmounted(() => {
   color: var(--text-muted);
   display: flex;
   align-items: center;
+  cursor: pointer;
+}
+.db-arrow:hover {
+  color: var(--text-primary);
 }
 .db-icon {
   flex-shrink: 0;

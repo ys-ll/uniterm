@@ -182,6 +182,12 @@ func (p *postgresProvider) DropTable(db *sql.DB, dbName, tableName string) error
 	return err
 }
 
+func (p *postgresProvider) DropView(db *sql.DB, dbName, viewName string) error {
+	q := p.Quote
+	_, err := db.Exec(fmt.Sprintf("DROP VIEW %s", q(viewName)))
+	return err
+}
+
 func (p *postgresProvider) TruncateTable(db *sql.DB, dbName, tableName string) error {
 	q := p.Quote
 	_, err := db.Exec(fmt.Sprintf("TRUNCATE TABLE %s", q(tableName)))

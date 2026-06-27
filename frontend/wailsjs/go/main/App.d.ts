@@ -19,8 +19,6 @@ export function ChatCompletion(arg1:string,arg2:string,arg3:string,arg4:string,a
 
 export function CheckForUpdate():Promise<update.UpdateInfo>;
 
-export function ClearQueryHistory(arg1:string):Promise<void>;
-
 export function CloseSession(arg1:string):Promise<void>;
 
 export function ConnectSerial(arg1:string,arg2:number,arg3:number,arg4:number,arg5:string):Promise<session.SessionInfo>;
@@ -40,6 +38,8 @@ export function DropDatabase(arg1:string,arg2:string):Promise<void>;
 export function DropIndexOp(arg1:string,arg2:string,arg3:string,arg4:string,arg5:boolean,arg6:Array<string>):Promise<void>;
 
 export function DropTable(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function DropView(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function ExecuteQuery(arg1:string,arg2:string,arg3:string):Promise<database.QueryResult>;
 
@@ -72,8 +72,6 @@ export function GetPlatform():Promise<string>;
 export function GetPorts(arg1:string):Promise<Array<session.PortInfo>>;
 
 export function GetProcessDetail(arg1:string,arg2:number):Promise<Record<string, any>>;
-
-export function GetQueryHistory(arg1:string):Promise<Array<database.HistoryEntry>>;
 
 export function GetSystemFonts():Promise<Array<string>>;
 

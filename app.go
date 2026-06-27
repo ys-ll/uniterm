@@ -2199,6 +2199,14 @@ func (a *App) DropTable(sessionID string, dbName string, tableName string) error
 	return p.DropTable(ds.DB(), dbName, tableName)
 }
 
+func (a *App) DropView(sessionID string, dbName string, viewName string) error {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return err
+	}
+	return p.DropView(ds.DB(), dbName, viewName)
+}
+
 func (a *App) TruncateTable(sessionID string, dbName string, tableName string) error {
 	ds, p, err := a.dbProvider(sessionID)
 	if err != nil {
@@ -2212,20 +2220,7 @@ func (a *App) ExecuteQuery(sessionID string, dbName string, sql string) (*databa
 	if err != nil {
 		return nil, err
 	}
-
-	start := time.Now()
-	qr, qErr := database.ExecuteQuery(p, ds.DB(), dbName, sql)
-	elapsed := time.Since(start).Milliseconds()
-
-	entry := database.HistoryEntry{SQL: sql, Duration: elapsed}
-	if qErr != nil {
-		entry.Error = qErr.Error()
-	} else {
-		entry.RowCount = len(qr.Rows)
-	}
-	_ = database.SaveHistory(ds.ID(), entry)
-
-	return qr, qErr
+	return database.ExecuteQuery(p, ds.DB(), dbName, sql)
 }
 
 func (a *App) ExecuteStatement(sessionID string, dbName string, sql string) (*database.ExecResult, error) {
@@ -2233,20 +2228,7 @@ func (a *App) ExecuteStatement(sessionID string, dbName string, sql string) (*da
 	if err != nil {
 		return nil, err
 	}
-
-	start := time.Now()
-	er, sErr := database.ExecuteStatement(p, ds.DB(), dbName, sql)
-	elapsed := time.Since(start).Milliseconds()
-
-	entry := database.HistoryEntry{SQL: sql, Duration: elapsed}
-	if sErr != nil {
-		entry.Error = sErr.Error()
-	} else {
-		entry.RowCount = int(er.Affected)
-	}
-	_ = database.SaveHistory(ds.ID(), entry)
-
-	return er, sErr
+	return database.ExecuteStatement(p, ds.DB(), dbName, sql)
 }
 
 func (a *App) AddColumn(sessionID string, dbName string, tableName string, col database.ColumnDef) error {
@@ -2295,12 +2277,4 @@ func (a *App) GetDBCapabilities(sessionID string) (database.DBCapabilities, erro
 		return nil, err
 	}
 	return database.MergeCapabilities(p.GetCapabilities()), nil
-}
-
-func (a *App) GetQueryHistory(sessionID string) ([]database.HistoryEntry, error) {
-	return database.LoadHistory(sessionID)
-}
-
-func (a *App) ClearQueryHistory(sessionID string) error {
-	return database.ClearHistory(sessionID)
 }
