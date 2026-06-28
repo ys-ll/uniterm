@@ -43,7 +43,8 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
     try {
       const buffer = (terminal as any).buffer?.active
       if (!buffer) return null
-      const PROMPT_RE = /(.+?[$#>\]])(?:\s+|$)(.*)/
+      // Prompt endings: $ # > ] plus common zsh/oh-my-zsh/powerline glyphs
+      const PROMPT_RE = /(.+?[$#>\]❯➜→»λ])(?:\s+|$)(.*)/
       // Scan entire visible area from bottom to top to find the prompt
       const rows = (terminal as any).rows || 24
       for (let dy = 0; dy < rows; dy++) {
@@ -57,8 +58,13 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
         const match = cleanText.match(PROMPT_RE)
         if (!match) continue
         const promptPart = match[1]
+        // Accept: user@host patterns, tilde-path patterns, bare $/#, or
+        // lines ending with a Unicode prompt glyph (❯➜→»λ) which are
+        // rare in normal output so false positives are minimal.
+        const lastChar = promptPart.charAt(promptPart.length - 1)
+        const isUnicodePrompt = /[❯➜→»λ]/.test(lastChar)
         if (!promptPart.includes('@') && !promptPart.includes('~') &&
-            promptPart !== '$' && promptPart !== '#') continue
+            promptPart !== '$' && promptPart !== '#' && !isUnicodePrompt) continue
         const command = match[2].trim()
         if (command && !command.includes('__AI_DONE_') && command.length <= MAX_COMMAND_LENGTH) {
           return command
