@@ -35,7 +35,7 @@ type ConnectionConfig struct {
 	// Local terminal shell path
 	ShellPath string `json:"shellPath,omitempty"`
 	// Database-specific fields
-	DBType string `json:"dbType,omitempty"` // "mysql", "postgres", "rqlite"
+	DBType string `json:"dbType,omitempty"` // "mysql", "postgres", "rqlite", "oracle"
 	DBName string `json:"dbName,omitempty"` // default database name
 	// SSH post-login script: commands to execute after successful login
 	PostLoginScript string `json:"postLoginScript,omitempty"`

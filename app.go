@@ -2231,6 +2231,38 @@ func (a *App) ExecuteStatement(sessionID string, dbName string, sql string) (*da
 	return database.ExecuteStatement(p, ds.DB(), dbName, sql)
 }
 
+func (a *App) DBDefaultTableQuery(sessionID string, dbName string, tableName string) (string, error) {
+	_, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return "", err
+	}
+	return p.DefaultTableQuery(dbName, tableName, 100), nil
+}
+
+func (a *App) DBInsertRow(sessionID string, dbName string, tableName string, values map[string]any) error {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return err
+	}
+	return p.InsertRow(ds.DB(), dbName, tableName, values)
+}
+
+func (a *App) DBUpdateRow(sessionID string, dbName string, tableName string, set map[string]any, where map[string]any) error {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return err
+	}
+	return p.UpdateRow(ds.DB(), dbName, tableName, set, where)
+}
+
+func (a *App) DBDeleteRow(sessionID string, dbName string, tableName string, where map[string]any) error {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return err
+	}
+	return p.DeleteRow(ds.DB(), dbName, tableName, where)
+}
+
 func (a *App) AddColumn(sessionID string, dbName string, tableName string, col database.ColumnDef) error {
 	ds, p, err := a.dbProvider(sessionID)
 	if err != nil {

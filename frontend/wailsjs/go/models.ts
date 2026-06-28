@@ -68,47 +68,6 @@ export namespace database {
 	        this.lastInsertId = source["lastInsertId"];
 	    }
 	}
-	export class HistoryEntry {
-	    id: string;
-	    sql: string;
-	    // Go type: time
-	    executedAt: any;
-	    durationMs: number;
-	    error?: string;
-	    rowCount?: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new HistoryEntry(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.sql = source["sql"];
-	        this.executedAt = this.convertValues(source["executedAt"], null);
-	        this.durationMs = source["durationMs"];
-	        this.error = source["error"];
-	        this.rowCount = source["rowCount"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class IndexDef {
 	    name: string;
 	    columns: string[];
@@ -276,6 +235,24 @@ export namespace main {
 
 export namespace session {
 	
+	export class PostLoginExpectStep {
+	    expect: string;
+	    send: string;
+	    enter: boolean;
+	    timeoutSecond?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PostLoginExpectStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.expect = source["expect"];
+	        this.send = source["send"];
+	        this.enter = source["enter"];
+	        this.timeoutSecond = source["timeoutSecond"];
+	    }
+	}
 	export class ConnectionConfig {
 	    id: string;
 	    name: string;
@@ -303,7 +280,7 @@ export namespace session {
 	    ftpPassive: boolean;
 	    ftpEncoding?: string;
 	    encoding?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ConnectionConfig(source);
 	    }
@@ -327,7 +304,7 @@ export namespace session {
 	        this.dbType = source["dbType"];
 	        this.dbName = source["dbName"];
 	        this.postLoginScript = source["postLoginScript"];
-	        this.postLoginExpectSteps = source["postLoginExpectSteps"]?.map((item: any) => new PostLoginExpectStep(item));
+	        this.postLoginExpectSteps = this.convertValues(source["postLoginExpectSteps"], PostLoginExpectStep);
 	        this.tunnelSSHConnId = source["tunnelSSHConnId"];
 	        this.tunnelSSHUser = source["tunnelSSHUser"];
 	        this.tunnelSSHPassword = source["tunnelSSHPassword"];
@@ -335,25 +312,26 @@ export namespace session {
 	        this.ftpEncryption = source["ftpEncryption"];
 	        this.ftpPassive = source["ftpPassive"];
 	        this.ftpEncoding = source["ftpEncoding"];
+	        this.encoding = source["encoding"];
 	    }
-	}
-	export class PostLoginExpectStep {
-	    expect: string;
-	    send: string;
-	    enter: boolean;
-	    timeoutSecond?: number;
-
-	    static createFrom(source: any = {}) {
-	        return new PostLoginExpectStep(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.expect = source["expect"];
-	        this.send = source["send"];
-	        this.enter = source["enter"];
-	        this.timeoutSecond = source["timeoutSecond"];
-	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ConnectionGroup {
 	    id: string;
@@ -535,6 +513,7 @@ export namespace session {
 	        this.process = source["process"];
 	    }
 	}
+	
 	export class SessionInfo {
 	    id: string;
 	    type: string;

@@ -57,8 +57,7 @@
               :key="activeTab.id"
               :session-id="getPanelSessionId(activeTab.panelId)"
               :host-name="getPanelConfig(activeTab.panelId)?.host || ''"
-              :default-db-name="getPanelConfig(activeTab.panelId)?.dbName || ''"
-              :db-type="getPanelConfig(activeTab.panelId)?.dbType || 'mysql'"
+              :default-db-name="getPanelConfig(activeTab.panelId)?.dbName"
             />
             <MonitorTabContent
               v-else-if="activeTab.type === 'monitor'"

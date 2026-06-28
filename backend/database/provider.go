@@ -4,7 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 )
+
+// sortedKeys returns the sorted keys of a map; deterministic ordering makes
+// generated SQL stable and easier to test.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 // execer is the common interface for sql.DB, sql.Conn, and sql.Tx.
 type execer interface {
@@ -26,6 +38,14 @@ type Provider interface {
 	GetDatabases(db *sql.DB) ([]string, error)
 	GetTables(db *sql.DB, dbName string) ([]TableInfo, error)
 	GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error)
+
+	// DefaultTableQuery returns the default SELECT statement used when opening a table.
+	DefaultTableQuery(dbName, tableName string, limit int) string
+
+	// Row-level CRUD helpers for the result-grid inline actions.
+	InsertRow(db *sql.DB, dbName, tableName string, values map[string]any) error
+	UpdateRow(db *sql.DB, dbName, tableName string, set, where map[string]any) error
+	DeleteRow(db *sql.DB, dbName, tableName string, where map[string]any) error
 
 	// DDL: Database
 	CreateDatabase(db *sql.DB, dbName string) error
@@ -51,6 +71,24 @@ type Provider interface {
 
 	// PrepareExec executes any per-database setup before running user SQL.
 	PrepareExec(db execer, dbName string) error
+}
+
+// execPrepared executes a parameterized statement on a dedicated connection
+// after running the provider's per-database setup (PrepareExec).
+func execPrepared(p Provider, db *sql.DB, dbName, sql string, args []any) error {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if err := p.PrepareExec(conn, dbName); err != nil {
+		return err
+	}
+
+	_, err = conn.ExecContext(ctx, sql, args...)
+	return err
 }
 
 var providers = map[string]Provider{}

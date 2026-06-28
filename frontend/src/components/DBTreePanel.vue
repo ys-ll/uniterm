@@ -140,6 +140,7 @@ import { ref, watch, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { Database, Table2, Eye, ChevronRight, ChevronDown } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, GetDBCapabilities } from '../../wailsjs/go/main/App'
+import { msg } from '../services/message'
 import type { TableInfo } from '../types/database'
 
 const { t } = useI18n()
@@ -190,12 +191,22 @@ async function loadTree() {
   if (!props.sessionId) return
   loading.value = true
   try {
-    if (props.defaultDbName) {
+    const dbs = await GetDatabases(props.sessionId)
+    // Auto-expand the connection's default db only when it's actually a real
+    // entry in the list. For databases where the configured "dbName" is not a
+    // browsable namespace (e.g. Oracle's service name), it won't match and we
+    // just list the available schemas collapsed.
+    if (props.defaultDbName && dbs.includes(props.defaultDbName)) {
       const tables = await GetTables(props.sessionId, props.defaultDbName)
       databases.value = [{ name: props.defaultDbName, tables, loaded: true }]
       expandedDbs.value = new Set([props.defaultDbName])
+    } else if (dbs.length === 1) {
+      // Single schema/db (e.g. Oracle showing only the current schema) — expand it.
+      const only = dbs[0]
+      const tables = await GetTables(props.sessionId, only)
+      databases.value = [{ name: only, tables, loaded: true }]
+      expandedDbs.value = new Set([only])
     } else {
-      const dbs = await GetDatabases(props.sessionId)
       databases.value = dbs.map((db: string) => ({ name: db, tables: [], loaded: false }))
       expandedDbs.value = new Set()
     }
@@ -413,6 +424,7 @@ async function onConfirm() {
       await loadTree()
     } catch (e: any) {
       console.error(e)
+      msg.error(e?.message || String(e))
     }
   }
   confirmVisible.value = false
@@ -504,8 +516,9 @@ async function onCreateDatabase() {
     await CreateDatabase(props.sessionId, newDbName.value.trim())
     newDbVisible.value = false
     await loadTree()
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to create database:', e)
+    msg.error(e?.message || String(e))
   }
 }
 
@@ -524,11 +537,14 @@ async function onCreateTable() {
     await CreateTable(props.sessionId, ctxDbName.value, newTableName.value.trim())
     newTableVisible.value = false
     const db = databases.value.find(d => d.name === ctxDbName.value)
-    if (db && db.loaded) {
+    if (db) {
       db.tables = await GetTables(props.sessionId, ctxDbName.value)
+      db.loaded = true
+      expandedDbs.value = new Set([...expandedDbs.value, ctxDbName.value])
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to create table:', e)
+    msg.error(e?.message || String(e))
   }
 }
 

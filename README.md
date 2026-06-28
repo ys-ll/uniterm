@@ -51,7 +51,7 @@ Local terminal, SSH / Telnet / Mosh, file transfer (SFTP / FTP), RDP / VNC / SPI
 - **Serial Terminal** — Scan available serial ports and connect with configurable baud rate, data bits, stop bits, and parity. Supports local echo and CR→CRLF normalization.
 - **File Transfer** — Supports SFTP / FTP / FTPS / Zmodem. Dual-pane browser for local and remote files; Zmodem (`rz`/`sz`) supported in SSH terminals.
 - **Remote Desktop** — Supports RDP / VNC / SPICE. Connect to Windows Remote Desktop, VNC, and SPICE.
-- **Database Client** — Connect to MySQL, PostgreSQL, and rqlite databases. Execute SQL queries, browse table structures, and edit data rows inline — all from a unified interface.
+- **Database Client** — Connect to MySQL, PostgreSQL, Oracle Database, and rqlite databases. Execute SQL queries, browse table structures, and edit data rows inline — all from a unified interface.
 - **SSH Tunnel** — Port forwarding. Any connection can use an existing SSH connection as a jump host. Auto-assigns local port, tunnels TCP through SSH to the target. Supports all TCP protocol connection types.
 - **Server Monitor** — Real-time monitoring for connected servers. View performance metrics (CPU, memory, disk, network), process list with detail panel, listening ports, disk usage with mountpoint info, and network interfaces with bond/bridge detection.
 
@@ -71,8 +71,11 @@ Local terminal, SSH / Telnet / Mosh, file transfer (SFTP / FTP), RDP / VNC / SPI
 | Remote Desktop | SPICE | KVM/QEMU VM management |
 | Database | MySQL | MySQL protocol: MySQL, MariaDB, TiDB, and more |
 | Database | PostgreSQL | PostgreSQL protocol: PostgreSQL, CockroachDB, and more |
+| Database | Oracle Database | Oracle Database connections through a pure Go driver |
 | Database | rqlite | Lightweight distributed DB built on SQLite with Raft consensus |
 | Monitoring | Monitor | SSH-based real-time CPU, memory, disk monitoring |
+
+Oracle Database support is implemented with a pure Go driver. uniTerm does not bundle Oracle Database, Oracle Instant Client, OJDBC, wallet files, or Oracle brand assets; users are responsible for their own Oracle licenses, credentials, and database access.
 
 ### Customization
 

@@ -122,7 +122,7 @@ import { ref, shallowRef, triggerRef, computed, watch, nextTick, onMounted } fro
 import { Pencil, Trash2 } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
-import { ExecuteQuery, ExecuteStatement, GetTableSchema } from '../../wailsjs/go/main/App'
+import { ExecuteQuery, ExecuteStatement, GetTableSchema, DBDefaultTableQuery, DBInsertRow, DBUpdateRow, DBDeleteRow } from '../../wailsjs/go/main/App'
 import type { QueryResult, ExecResult, ColumnInfo } from '../types/database'
 
 const { t } = useI18n()
@@ -158,13 +158,13 @@ watch(() => props.tableName, async (name) => {
   insertingRow.value = false
   editingRow.value = false
   if (!name) return
-  sql.value = `SELECT * FROM \`${name}\` LIMIT 100`
+  sql.value = await DBDefaultTableQuery(props.sessionId, props.dbName || '', name)
   await onExecute()
 })
 
 onMounted(async () => {
   if (!props.tableName) return
-  sql.value = `SELECT * FROM \`${props.tableName}\` LIMIT 100`
+  sql.value = await DBDefaultTableQuery(props.sessionId, props.dbName || '', props.tableName)
   await onExecute()
 })
 
@@ -274,14 +274,13 @@ async function onCellEditConfirm() {
   }
 
   const row = queryResult.value!.rows[rowIndex]
-  const whereParts = props.primaryKeys.map(
-    pk => `\`${pk}\` = '${String(row[pk] ?? '').replace(/'/g, "''")}'`
-  )
-  const whereClause = whereParts.join(' AND ')
-  const updateSQL = `UPDATE \`${props.tableName}\` SET \`${colName}\` = '${value.replace(/'/g, "''")}' WHERE ${whereClause}`
+  const where: Record<string, any> = {}
+  for (const pk of props.primaryKeys) {
+    where[pk] = row[pk] ?? null
+  }
 
   try {
-    await ExecuteStatement(props.sessionId, props.dbName || '', updateSQL)
+    await DBUpdateRow(props.sessionId, props.dbName || '', props.tableName, { [colName]: value }, where)
     queryResult.value!.rows[rowIndex][colName] = value
     triggerRef(queryResult)
     error.value = ''
@@ -312,14 +311,13 @@ async function onDeleteRow(rowIndex: number) {
   }
 
   const row = queryResult.value!.rows[rowIndex]
-  const whereParts = props.primaryKeys.map(
-    pk => `\`${pk}\` = '${String(row[pk] ?? '').replace(/'/g, "''")}'`
-  )
-  const whereClause = whereParts.join(' AND ')
-  const deleteSQL = `DELETE FROM \`${props.tableName}\` WHERE ${whereClause}`
+  const where: Record<string, any> = {}
+  for (const pk of props.primaryKeys) {
+    where[pk] = row[pk] ?? null
+  }
 
   try {
-    await ExecuteStatement(props.sessionId, props.dbName || '', deleteSQL)
+    await DBDeleteRow(props.sessionId, props.dbName || '', props.tableName, where)
     queryResult.value!.rows.splice(rowIndex, 1)
     triggerRef(queryResult)
     error.value = ''
@@ -369,16 +367,13 @@ async function onInsertConfirm() {
   if (!props.tableName) return
 
   const includedCols = insertColumns.value.filter(c => !insertAutoIncrement.value[c])
-  const cols = includedCols.map(c => `\`${c}\``).join(', ')
-  const vals = includedCols.map(c => {
-    if (insertNulls.value[c]) return 'NULL'
-    const v = insertValues.value[c] ?? ''
-    return `'${v.replace(/'/g, "''")}'`
-  }).join(', ')
-  const insertSQL = `INSERT INTO \`${props.tableName}\` (${cols}) VALUES (${vals})`
+  const values: Record<string, any> = {}
+  for (const col of includedCols) {
+    values[col] = insertNulls.value[col] ? null : (insertValues.value[col] ?? '')
+  }
 
   try {
-    await ExecuteStatement(props.sessionId, props.dbName || '', insertSQL)
+    await DBInsertRow(props.sessionId, props.dbName || '', props.tableName, values)
     error.value = ''
     insertingRow.value = false
     emit('cellUpdated')
@@ -457,32 +452,32 @@ async function onEditRowConfirm() {
   if (editingRowIndex.value < 0) return
 
   const row = queryResult.value!.rows[editingRowIndex.value]
-  const sets: string[] = []
+  const set: Record<string, any> = {}
   for (const col of editRowColumns.value) {
     if (editNulls.value[col]) {
       if (row[col] !== null) {
-        sets.push(`\`${col}\` = NULL`)
+        set[col] = null
       }
     } else {
       const newVal = editRowValues.value[col] ?? ''
       const oldVal = String(row[col] ?? '')
       if (newVal !== oldVal) {
-        sets.push(`\`${col}\` = '${newVal.replace(/'/g, "''")}'`)
+        set[col] = newVal
       }
     }
   }
-  if (sets.length === 0) {
+  if (Object.keys(set).length === 0) {
     editingRow.value = false
     return
   }
 
-  const whereParts = props.primaryKeys.map(
-    pk => `\`${pk}\` = '${String(row[pk] ?? '').replace(/'/g, "''")}'`
-  )
-  const sql = `UPDATE \`${props.tableName}\` SET ${sets.join(', ')} WHERE ${whereParts.join(' AND ')}`
+  const where: Record<string, any> = {}
+  for (const pk of props.primaryKeys) {
+    where[pk] = row[pk] ?? null
+  }
 
   try {
-    await ExecuteStatement(props.sessionId, props.dbName || '', sql)
+    await DBUpdateRow(props.sessionId, props.dbName || '', props.tableName, set, where)
     for (const col of editRowColumns.value) {
       queryResult.value!.rows[editingRowIndex.value][col] = editNulls.value[col] ? null : editRowValues.value[col]
     }

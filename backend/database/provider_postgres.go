@@ -34,6 +34,79 @@ func (p *postgresProvider) PrepareExec(db execer, dbName string) error {
 	return nil
 }
 
+func (p *postgresProvider) DefaultTableQuery(dbName, tableName string, limit int) string {
+	return fmt.Sprintf("SELECT * FROM %s LIMIT %d", p.Quote(tableName), limit)
+}
+
+func (p *postgresProvider) InsertRow(db *sql.DB, dbName, tableName string, values map[string]any) error {
+	cols := sortedKeys(values)
+	quotedCols := make([]string, len(cols))
+	placeholders := make([]string, len(cols))
+	args := make([]any, 0, len(cols))
+	for i, c := range cols {
+		quotedCols[i] = p.Quote(c)
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args = append(args, values[c])
+	}
+	sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+		p.Quote(tableName), strings.Join(quotedCols, ", "), strings.Join(placeholders, ", "))
+	return execPrepared(p, db, dbName, sql, args)
+}
+
+func (p *postgresProvider) UpdateRow(db *sql.DB, dbName, tableName string, set, where map[string]any) error {
+	args := make([]any, 0, len(set)+len(where))
+	phIdx := 1
+
+	setParts := make([]string, 0, len(set))
+	for _, c := range sortedKeys(set) {
+		if set[c] == nil {
+			setParts = append(setParts, fmt.Sprintf("%s = NULL", p.Quote(c)))
+		} else {
+			setParts = append(setParts, fmt.Sprintf("%s = $%d", p.Quote(c), phIdx))
+			args = append(args, set[c])
+			phIdx++
+		}
+	}
+
+	whereParts := make([]string, 0, len(where))
+	for _, c := range sortedKeys(where) {
+		if where[c] == nil {
+			whereParts = append(whereParts, fmt.Sprintf("%s IS NULL", p.Quote(c)))
+		} else {
+			whereParts = append(whereParts, fmt.Sprintf("%s = $%d", p.Quote(c), phIdx))
+			args = append(args, where[c])
+			phIdx++
+		}
+	}
+
+	sql := fmt.Sprintf("UPDATE %s SET %s", p.Quote(tableName), strings.Join(setParts, ", "))
+	if len(whereParts) > 0 {
+		sql += " WHERE " + strings.Join(whereParts, " AND ")
+	}
+	return execPrepared(p, db, dbName, sql, args)
+}
+
+func (p *postgresProvider) DeleteRow(db *sql.DB, dbName, tableName string, where map[string]any) error {
+	args := make([]any, 0, len(where))
+	phIdx := 1
+	whereParts := make([]string, 0, len(where))
+	for _, c := range sortedKeys(where) {
+		if where[c] == nil {
+			whereParts = append(whereParts, fmt.Sprintf("%s IS NULL", p.Quote(c)))
+		} else {
+			whereParts = append(whereParts, fmt.Sprintf("%s = $%d", p.Quote(c), phIdx))
+			args = append(args, where[c])
+			phIdx++
+		}
+	}
+
+	sql := fmt.Sprintf("DELETE FROM %s", p.Quote(tableName))
+	if len(whereParts) > 0 {
+		sql += " WHERE " + strings.Join(whereParts, " AND ")
+	}
+	return execPrepared(p, db, dbName, sql, args)
+}
+
 func (p *postgresProvider) GetCapabilities() DBCapabilities {
 	return DBCapabilities{
 		"supportsAutoIncrement":      false,

@@ -29,6 +29,14 @@ export function CreateSession(arg1:string,arg2:session.ConnectionConfig):Promise
 
 export function CreateTable(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function DBDefaultTableQuery(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function DBDeleteRow(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>):Promise<void>;
+
+export function DBInsertRow(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>):Promise<void>;
+
+export function DBUpdateRow(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>,arg5:Record<string, any>):Promise<void>;
+
 export function DeleteTerminalHistoryEntry(arg1:Array<string>):Promise<void>;
 
 export function DropColumn(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;

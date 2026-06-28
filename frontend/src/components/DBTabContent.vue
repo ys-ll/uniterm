@@ -101,7 +101,6 @@
                 :session-id="sessionId"
                 :db-name="selectedDb"
                 :table-name="selectedTable"
-                :db-type="props.dbType || 'mysql'"
                 :load-trigger="structureLoadTrigger"
                 @schema-loaded="onSchemaLoaded"
               />
@@ -131,7 +130,6 @@ const props = defineProps<{
   sessionId: string
   hostName?: string
   defaultDbName?: string
-  dbType?: string
 }>()
 
 const activeTab = ref<'structure' | 'query'>('query')

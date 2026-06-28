@@ -51,7 +51,7 @@
 - **串口终端** — 扫描可用串口并配置波特率、数据位、停止位、校验位后连接，支持本地回显和 CR→CRLF 换行规范化。
 - **文件传输** — 支持 SFTP / FTP / FTPS / Zmodem。双栏浏览本地与远程文件，SSH 终端内支持 Zmodem 协议（`rz`/`sz`）传输。
 - **远程桌面** — 支持 RDP / VNC / SPICE。可连接 Windows 远程桌面、VNC 和 SPICE。
-- **数据库客户端** — 连接 MySQL / PostgreSQL / rqlite 数据库，支持 SQL 查询执行、表结构浏览、数据行在线编辑，统一界面管理全部数据源。
+- **数据库客户端** — 连接 MySQL / PostgreSQL / Oracle Database / rqlite 数据库，支持 SQL 查询执行、表结构浏览、数据行在线编辑，统一界面管理全部数据源。
 - **SSH 隧道** — 端口转发。任何连接可选择已有 SSH 连接作为跳板，自动分配本地端口通过隧道访问目标，支持所有 TCP 协议连接类型。
 - **服务器监控** — 实时监看已连接服务器的运行状态。支持性能指标（CPU、内存、磁盘、网络）、进程列表及详情、监听端口、磁盘用量与挂载信息、网卡列表及 bond/bridge 识别。
 
@@ -71,8 +71,11 @@
 | 远程桌面 | SPICE | KVM/QEMU 虚拟机管理 |
 | 数据库 | MySQL | 兼容 MySQL 协议：MySQL、MariaDB、TiDB 等 |
 | 数据库 | PostgreSQL | 兼容 PostgreSQL 协议：PostgreSQL、CockroachDB 等 |
+| 数据库 | Oracle Database | 通过纯 Go 驱动连接 Oracle Database |
 | 数据库 | rqlite | 基于 SQLite、Raft 共识的轻量分布式数据库 |
 | 监控 | Monitor | 基于 SSH 的服务器 CPU、内存、磁盘实时监控 |
+
+Oracle Database 支持基于纯 Go 驱动实现。uniTerm 不随安装包分发 Oracle Database、Oracle Instant Client、OJDBC、Wallet 文件或 Oracle 品牌素材；用户需自行确保其 Oracle 授权、凭据和数据库访问权限合规。
 
 ### 自定义能力
 

@@ -216,7 +216,6 @@ const props = defineProps<{
   sessionId: string
   tableName: string
   dbName: string
-  dbType?: string
   loadTrigger: number
 }>()
 

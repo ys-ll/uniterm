@@ -46,6 +46,22 @@ export function CreateTable(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateTable'](arg1, arg2, arg3);
 }
 
+export function DBDefaultTableQuery(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DBDefaultTableQuery'](arg1, arg2, arg3);
+}
+
+export function DBDeleteRow(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['DBDeleteRow'](arg1, arg2, arg3, arg4);
+}
+
+export function DBInsertRow(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['DBInsertRow'](arg1, arg2, arg3, arg4);
+}
+
+export function DBUpdateRow(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['DBUpdateRow'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function DeleteTerminalHistoryEntry(arg1) {
   return window['go']['main']['App']['DeleteTerminalHistoryEntry'](arg1);
 }
