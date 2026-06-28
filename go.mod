@@ -12,6 +12,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/jlaffaye/ftp v0.2.1
 	github.com/lib/pq v1.12.3
+	github.com/microsoft/go-mssqldb v1.10.0
 	github.com/pkg/sftp v1.13.10
 	github.com/rqlite/gorqlite v0.0.0-20260504155303-50d445fd0ab9
 	github.com/sijms/go-ora/v2 v2.9.0
@@ -48,6 +49,8 @@ require (
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
+	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
@@ -70,6 +73,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/samber/lo v1.49.1 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.0 // indirect
 	github.com/tkrajina/go-reflector v0.5.8 // indirect
 	github.com/unixshells/vt-go v0.1.0 // indirect
