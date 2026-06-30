@@ -1,7 +1,6 @@
 {
   "header.connections": "連線列表",
   "header.newConnection": "新增連線",
-  "header.newLocalTerminal": "本機終端機",
   "header.settings": "設定",
   "header.ai": "AI",
   "sidebar.title": "連線",
@@ -45,6 +44,8 @@
   "conn.hostRequired": "主機位址不能為空",
   "conn.advanced": "進階設定",
   "conn.postLoginScript": "登入後執行",
+  "conn.localTerminal": "本地終端",
+  "conn.shell": "終端類型",
   "conn.postLoginScriptPlaceholder": "每行一條命令，連線成功後依序執行",
   "conn.postLoginModeScript": "腳本",
   "conn.postLoginModeExpect": "Expect/Send",

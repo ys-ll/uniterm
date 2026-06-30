@@ -73,7 +73,7 @@
                 @mouseleave="showShellSubmenu = false"
               >
                 <el-dropdown-item class="submenu-trigger">
-                  {{ t('header.newLocalTerminal') }} <ChevronRight :size="12" />
+                  {{ t('conn.localTerminal') }} <ChevronRight :size="12" />
                 </el-dropdown-item>
               </div>
               <el-dropdown-item command="new-serial">{{ t('sidebar.connectSerial') }}</el-dropdown-item>
@@ -137,7 +137,7 @@
             <div class="conn-details">
               <span class="name">{{ conn.name }}</span>
               <span class="conn-meta">
-                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
               </span>
             </div>
           </div>
@@ -180,7 +180,7 @@
             <div class="conn-details">
               <span class="name">{{ conn.name }}</span>
               <span class="conn-meta">
-                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
               </span>
             </div>
           </div>
@@ -207,7 +207,7 @@
           <div class="conn-details">
             <span class="name">{{ conn.name }}</span>
             <span class="conn-meta">
-              <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+              <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
             </span>
           </div>
         </div>
@@ -1236,6 +1236,7 @@ function onShellSelect(sh: string) {
 }
 
 function getShellLabel(path: string): string {
+  if (!path) return 'Local'
   const lower = path.toLowerCase()
   if (lower.startsWith('wsl://')) {
     const distro = path.slice(6)

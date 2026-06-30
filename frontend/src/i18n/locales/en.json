@@ -1,7 +1,6 @@
 {
   "header.connections": "Connections",
   "header.newConnection": "New Connection",
-  "header.newLocalTerminal": "Local Terminal",
   "header.settings": "Settings",
   "header.ai": "AI",
   "sidebar.title": "Connections",
@@ -46,6 +45,8 @@
   "conn.hostRequired": "Host is required",
   "conn.advanced": "Advanced",
   "conn.postLoginScript": "Post-login Script",
+  "conn.localTerminal": "Local Terminal",
+  "conn.shell": "Terminal Type",
   "conn.postLoginScriptPlaceholder": "One command per line, executed sequentially after login",
   "conn.postLoginModeScript": "Script",
   "conn.postLoginModeExpect": "Expect/Send",

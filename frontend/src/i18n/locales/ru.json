@@ -1,7 +1,6 @@
 {
   "header.connections": "Подключения",
   "header.newConnection": "Новое подключение",
-  "header.newLocalTerminal": "Локальный терминал",
   "header.settings": "Настройки",
   "header.ai": "ИИ",
   "sidebar.title": "Подключения",
@@ -45,6 +44,8 @@
   "conn.hostRequired": "Укажите хост",
   "conn.advanced": "Дополнительно",
   "conn.postLoginScript": "Скрипт после входа",
+  "conn.localTerminal": "Локальный терминал",
+  "conn.shell": "Тип терминала",
   "conn.postLoginScriptPlaceholder": "По одной команде на строку, выполняются последовательно после входа",
   "conn.postLoginModeScript": "Скрипт",
   "conn.postLoginModeExpect": "Expect/Send",

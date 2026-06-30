@@ -99,6 +99,14 @@ func (s *MoshSession) Connect(config ConnectionConfig) error {
 	return nil
 }
 
+func (s *MoshSession) runPostLoginScript(ctx context.Context, script string) {
+	s.baseSession.RunPostLoginScript(ctx, script, func(data []byte) {
+		if s.moshClient != nil {
+			s.moshClient.Send(data)
+		}
+	}, s.IsConnected)
+}
+
 func startMoshServer(client *ssh.Client) (key string, udpPort int, err error) {
 	session, err := client.NewSession()
 	if err != nil {
@@ -169,35 +177,13 @@ func (s *MoshSession) readLoop(ctx context.Context) {
 
 		data := s.moshClient.Recv(100 * time.Millisecond)
 		if len(data) > 0 {
+			s.RecordReadActivity()
 			s.emitData(append([]byte(nil), data...))
 		}
 
 		if s.moshClient == nil {
 			return
 		}
-	}
-}
-
-func (s *MoshSession) runPostLoginScript(ctx context.Context, script string) {
-	if strings.TrimSpace(script) == "" {
-		return
-	}
-	time.Sleep(2 * time.Second)
-	lines := strings.Split(script, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		if s.moshClient != nil {
-			s.moshClient.Send([]byte(line + "\r"))
-		}
-		time.Sleep(500 * time.Millisecond)
 	}
 }
 

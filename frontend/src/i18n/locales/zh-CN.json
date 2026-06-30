@@ -1,7 +1,6 @@
 {
   "header.connections": "连接列表",
   "header.newConnection": "新建连接",
-  "header.newLocalTerminal": "本地终端",
   "header.settings": "设置",
   "header.ai": "AI",
   "sidebar.title": "连接",
@@ -46,6 +45,8 @@
   "conn.hostRequired": "主机地址不能为空",
   "conn.advanced": "高级配置",
   "conn.postLoginScript": "登录后执行",
+  "conn.localTerminal": "本地终端",
+  "conn.shell": "终端类型",
   "conn.postLoginScriptPlaceholder": "每行一条命令，连接成功后依次执行",
   "conn.postLoginModeScript": "脚本",
   "conn.postLoginModeExpect": "Expect/Send",

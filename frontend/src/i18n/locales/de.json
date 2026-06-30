@@ -1,7 +1,6 @@
 {
   "header.connections": "Verbindungen",
   "header.newConnection": "Neue Verbindung",
-  "header.newLocalTerminal": "Lokales Terminal",
   "header.settings": "Einstellungen",
   "header.ai": "KI",
   "sidebar.title": "Verbindungen",
@@ -45,6 +44,8 @@
   "conn.hostRequired": "Host ist erforderlich",
   "conn.advanced": "Erweitert",
   "conn.postLoginScript": "Post-Login-Skript",
+  "conn.localTerminal": "Lokales Terminal",
+  "conn.shell": "Shell-Typ",
   "conn.postLoginScriptPlaceholder": "Ein Befehl pro Zeile, werden nach dem Login nacheinander ausgeführt",
   "conn.postLoginModeScript": "Skript",
   "conn.postLoginModeExpect": "Expect/Send",

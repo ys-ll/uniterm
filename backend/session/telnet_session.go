@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
 	"time"
 )
@@ -102,6 +101,7 @@ func (s *TelnetSession) readLoop(ctx context.Context) {
 
 		n, err := s.conn.Read(buf)
 		if n > 0 {
+			s.RecordReadActivity()
 			filtered := s.filterIAC(buf[:n])
 			if len(filtered) > 0 {
 				s.emitData(filtered)
@@ -253,26 +253,11 @@ func (s *TelnetSession) sendAutoLogin(ctx context.Context, user, password string
 }
 
 func (s *TelnetSession) runPostLoginScript(ctx context.Context, script string) {
-	if strings.TrimSpace(script) == "" {
-		return
-	}
-	time.Sleep(1 * time.Second)
-	lines := strings.Split(script, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
+	s.baseSession.RunPostLoginScript(ctx, script, func(data []byte) {
 		if s.conn != nil {
-			s.conn.Write([]byte(line + "\r\n"))
+			s.conn.Write(data)
 		}
-		time.Sleep(500 * time.Millisecond)
-	}
+	}, s.IsConnected)
 }
 
 func (s *TelnetSession) Write(data []byte) error {

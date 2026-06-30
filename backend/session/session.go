@@ -1,6 +1,12 @@
 package session
 
-import "sync"
+import (
+	"context"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+)
 
 type SessionStatus string
 
@@ -102,6 +108,7 @@ type baseSession struct {
 	pendingCols      int
 	pendingRows      int
 	zmodemMode       bool
+	lastReadTime     atomic.Int64
 }
 
 func (s *baseSession) ID() string            { return s.id }
@@ -221,4 +228,57 @@ func looksLikeZmodemHeader(data []byte) bool {
 
 func isHexDigit(c byte) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+// RecordReadActivity updates the last-read timestamp for idle detection.
+// Each session's readLoop should call this whenever data is received.
+func (s *baseSession) RecordReadActivity() {
+	s.lastReadTime.Store(time.Now().UnixNano())
+}
+
+// waitIdle blocks until no read activity has occurred for the given idle
+// duration, or the overall timeout expires. It returns true on idle detection.
+func (s *baseSession) waitIdle(timeout, idle time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		last := time.Unix(0, s.lastReadTime.Load())
+		if !last.IsZero() && time.Since(last) >= idle {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
+}
+
+// RunPostLoginScript sends each non-empty line of script after the terminal
+// output goes idle, and waits for idle between commands. Stops early if ctx
+// is cancelled or isConnected returns false.
+func (s *baseSession) RunPostLoginScript(ctx context.Context, script string, send func([]byte), isConnected func() bool) {
+	if strings.TrimSpace(script) == "" {
+		return
+	}
+	// Wait for shell to finish initialization.
+	if !s.waitIdle(5*time.Second, 300*time.Millisecond) {
+		return
+	}
+	lines := strings.Split(script, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		if !isConnected() {
+			return
+		}
+		send([]byte(line + "\r"))
+		// Wait for command output to settle.
+		if !s.waitIdle(3*time.Second, 300*time.Millisecond) {
+			return
+		}
+	}
 }

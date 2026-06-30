@@ -36,6 +36,7 @@
             <el-radio-button label="ssh">SSH (SFTP)</el-radio-button>
             <el-radio-button label="telnet">Telnet</el-radio-button>
             <el-radio-button label="mosh">Mosh</el-radio-button>
+            <el-radio-button label="local">{{ t('conn.localTerminal') }}</el-radio-button>
           </el-radio-group>
         </template>
         <template v-if="category === 'filetransfer'">
@@ -62,13 +63,13 @@
           </el-radio-group>
         </template>
       </el-form-item>
-      <el-form-item :label="t('conn.host')" required>
+      <el-form-item :label="t('conn.host')" required v-if="form.type !== 'local'">
         <el-input v-model="form.host" :placeholder="t('conn.hostPlaceholder')" />
       </el-form-item>
-      <el-form-item :label="t('conn.port')">
+      <el-form-item :label="t('conn.port')" v-if="form.type !== 'local'">
         <el-input-number v-model="form.port" :min="0" :max="65535" />
       </el-form-item>
-      <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite')" :label="t('conn.user')">
+      <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local'" :label="t('conn.user')">
         <el-input v-model="form.user" :placeholder="t('conn.userPlaceholder')" />
       </el-form-item>
       <el-form-item v-if="form.type === 'ssh' || form.type === 'mosh'" :label="t('conn.authType')">
@@ -77,7 +78,7 @@
           <el-radio-button label="key">{{ t('conn.keyPath') }}</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      <el-form-item v-if="(form.authType === 'password' || form.type === 'rdp' || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="t('conn.password')">
+      <el-form-item v-if="form.type !== 'local' && (form.authType === 'password' || form.type === 'rdp' || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="t('conn.password')">
         <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" />
       </el-form-item>
       <el-form-item v-if="form.authType === 'key' && (form.type === 'ssh' || form.type === 'mosh')" :label="t('conn.keyPath')">
@@ -93,6 +94,16 @@
       </el-form-item>
       <el-form-item v-if="form.type === 'database' && form.dbType !== 'rqlite' && form.dbType !== 'redis'" :label="t('db.databases')">
         <el-input v-model="form.dbName" :placeholder="t('db.databases')" />
+      </el-form-item>
+      <el-form-item v-if="form.type === 'local'" :label="t('conn.shell')">
+        <el-select v-model="form.shellPath" filterable>
+          <el-option
+            v-for="sh in shellOptions"
+            :key="sh.value"
+            :label="sh.label"
+            :value="sh.value"
+          />
+        </el-select>
       </el-form-item>
       <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
         <el-icon class="advanced-arrow" :class="{ expanded: showAdvanced }"><ChevronRight :size="14" /></el-icon>
@@ -114,7 +125,7 @@
           <el-switch v-model="form.rdpSmartSizing" />
         </el-form-item>
       </template>
-      <el-form-item v-if="form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh'" :label="t('conn.postLoginScript')">
+      <el-form-item v-if="form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local'" :label="t('conn.postLoginScript')">
         <div class="post-login-config">
           <el-radio-group v-model="postLoginMode" size="small">
             <el-radio-button label="script">{{ t('conn.postLoginModeScript') }}</el-radio-button>
@@ -263,6 +274,7 @@
 <script setup lang="ts">
 import { reactive, computed, watch, ref, onMounted } from 'vue'
 import { useConnectionStore } from '../stores/connectionStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import type { ConnectionConfig, PostLoginExpectStep } from '../types/session'
 import { GetPlatform, OpenFileDialog } from '../../wailsjs/go/main/App'
@@ -270,6 +282,25 @@ import { Plus, Trash2, ChevronRight, FolderOpen } from '@lucide/vue'
 
 const { t } = useI18n()
 const connectionStore = useConnectionStore()
+const settingsStore = useSettingsStore()
+
+function getShellLabel(path: string): string {
+  if (!path) return ''
+  const lower = path.toLowerCase()
+  if (lower.startsWith('wsl://')) {
+    const distro = path.slice(6)
+    return distro ? `WSL - ${distro}` : 'WSL'
+  }
+  if (lower.includes('pwsh')) return 'PowerShell'
+  if (lower.includes('powershell')) return 'Windows PowerShell'
+  if (lower.includes('bash')) return 'Git Bash'
+  if (lower.includes('cmd')) return 'Command Prompt'
+  return path.split(/[\\/]/).pop() || path
+}
+
+const shellOptions = computed(() =>
+  settingsStore.availableShells.map(sh => ({ label: getShellLabel(sh), value: sh }))
+)
 
 const isWindows = ref(true)
 const passwordInputKey = ref(0)
@@ -305,7 +336,7 @@ watch(visible, (val) => {
 
 const isEdit = computed(() => !!props.editConfig?.id)
 
-const TERMINAL_TYPES = ['ssh', 'telnet', 'mosh']
+const TERMINAL_TYPES = ['ssh', 'telnet', 'mosh', 'local']
 const REMOTE_TYPES = ['rdp', 'vnc', 'spice']
 const FILETRANSFER_TYPES = ['ftp', 'ssh']
 
@@ -368,6 +399,7 @@ const form = reactive<ConnectionConfig>({
   ftpPassive: true,
   ftpEncoding: 'utf-8',
   encoding: 'utf-8',
+  shellPath: '',
 })
 
 const rdpResolutions = [
@@ -435,6 +467,9 @@ watch(() => form.type, (newType) => {
   if (REMOTE_TYPES.includes(newType) || newType === 'database') {
     form.authType = 'password'
   }
+  if (newType === 'local' && !form.shellPath && settingsStore.availableShells.length > 0) {
+    form.shellPath = settingsStore.availableShells[0]
+  }
 })
 
 watch(postLoginMode, (mode) => {
@@ -487,6 +522,7 @@ function resetForm() {
   form.ftpPassive = true
   form.ftpEncoding = 'utf-8'
   form.encoding = 'utf-8'
+  form.shellPath = ''
   form.tunnelSSHConnId = undefined
   rdpResolution.value = '1280 × 720 (HD)'
   selectedGroupId.value = undefined
@@ -550,7 +586,7 @@ function normalizeForm(): ConnectionConfig {
   } else {
     normalized.postLoginScript = ''
   }
-  if (!normalized.host.trim()) {
+  if (normalized.type !== 'local' && !normalized.host.trim()) {
     throw new Error(t('conn.hostRequired'))
   }
   if (!normalized.name.trim()) {

@@ -1,7 +1,6 @@
 {
   "header.connections": "연결",
   "header.newConnection": "새 연결",
-  "header.newLocalTerminal": "로컬 터미널",
   "header.settings": "설정",
   "header.ai": "AI",
   "sidebar.title": "연결",
@@ -45,6 +44,8 @@
   "conn.hostRequired": "호스트를 입력해 주세요",
   "conn.advanced": "고급 설정",
   "conn.postLoginScript": "로그인 후 스크립트",
+  "conn.localTerminal": "로컬 터미널",
+  "conn.shell": "터미널 유형",
   "conn.postLoginScriptPlaceholder": "한 줄에 하나의 명령어를 입력하면 로그인 후 순차적으로 실행됩니다",
   "conn.postLoginModeScript": "스크립트",
   "conn.postLoginModeExpect": "Expect/Send",

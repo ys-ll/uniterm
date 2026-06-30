@@ -4,6 +4,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -71,6 +72,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 	}
 
 	go s.readLoop()
+	go s.runPostLoginScript(config.PostLoginScript)
 
 	return nil
 }
@@ -86,6 +88,7 @@ func (s *LocalSession) readLoop() {
 
 		n, err := s.pty.Read(buf)
 		if n > 0 {
+			s.RecordReadActivity()
 			s.emitData(append([]byte(nil), buf[:n]...))
 		}
 		if err != nil {
@@ -130,6 +133,25 @@ func (s *LocalSession) Resize(cols, rows int) error {
 
 func (s *LocalSession) IsConnected() bool {
 	return s.Status() == StatusConnected
+}
+
+func (s *LocalSession) runPostLoginScript(script string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-s.quit:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	send := func(data []byte) {
+		if s.pty != nil {
+			s.pty.Write(data)
+		}
+	}
+	s.baseSession.RunPostLoginScript(ctx, script, send, s.IsConnected)
 }
 
 func defaultShell() string {

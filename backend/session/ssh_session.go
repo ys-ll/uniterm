@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -34,7 +32,6 @@ type SSHSession struct {
 	stderr       io.Reader
 	quit         chan struct{}
 	quitOnce     sync.Once
-	lastReadTime atomic.Int64
 	authAnswerCh chan []byte
 	expectOutput *postLoginOutputBuffer
 
@@ -282,7 +279,7 @@ func (s *SSHSession) readLoop() {
 	for {
 		n, err := s.stdout.Read(buf)
 		if n > 0 {
-			s.lastReadTime.Store(time.Now().UnixNano())
+			s.RecordReadActivity()
 			data := append([]byte(nil), buf[:n]...)
 			s.offerExpectOutput(data)
 			if s.IsZmodemMode() {
@@ -368,42 +365,11 @@ func (s *SSHSession) runPostLoginExpect(config ConnectionConfig) {
 }
 
 func (s *SSHSession) runPostLoginScript(script string) {
-	if strings.TrimSpace(script) == "" {
-		return
-	}
-	// Wait for shell to finish initialization (first idle period).
-	if !s.waitIdle(5*time.Second, 300*time.Millisecond) {
-		return
-	}
-	lines := strings.Split(script, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if s.Status() != StatusConnected {
-			return
-		}
+	s.baseSession.RunPostLoginScript(context.Background(), script, func(data []byte) {
 		if s.stdin != nil {
-			_, _ = s.stdin.Write(s.encodeInput([]byte(line + "\r")))
+			s.stdin.Write(s.encodeInput(data))
 		}
-		// Wait for command output to settle before sending the next line.
-		s.waitIdle(3*time.Second, 300*time.Millisecond)
-	}
-}
-
-// waitIdle blocks until stdout has been idle for the given duration,
-// or until the overall timeout expires. It returns true on idle detection.
-func (s *SSHSession) waitIdle(timeout, idle time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		last := time.Unix(0, s.lastReadTime.Load())
-		if !last.IsZero() && time.Since(last) >= idle {
-			return true
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	return false
+	}, s.IsConnected)
 }
 
 func (s *SSHSession) startKeepAlive() {

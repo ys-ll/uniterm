@@ -685,7 +685,9 @@ async function onConnect(config: ConnectionConfig) {
   }
 
   const panel = panelStore.createPanel(config, config.type)
-  const displayTitle = config.name || (config.type === 'telnet'
+  const displayTitle = config.name || (config.type === 'local'
+    ? getShellLabel(config.shellPath)
+    : config.type === 'telnet'
     ? `${config.host}:${config.port}`
     : `${config.user}@${config.host}`)
   panel.title = displayTitle

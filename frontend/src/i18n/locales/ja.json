@@ -1,7 +1,6 @@
 {
   "header.connections": "接続",
   "header.newConnection": "新規接続",
-  "header.newLocalTerminal": "ローカルターミナル",
   "header.settings": "設定",
   "header.ai": "AI",
   "sidebar.title": "接続",
@@ -45,6 +44,8 @@
   "conn.hostRequired": "ホストは必須です",
   "conn.advanced": "詳細設定",
   "conn.postLoginScript": "ログイン後スクリプト",
+  "conn.localTerminal": "ローカル端末",
+  "conn.shell": "端末タイプ",
   "conn.postLoginScriptPlaceholder": "1行に1コマンド、ログイン後に順次実行されます",
   "conn.postLoginModeScript": "スクリプト",
   "conn.postLoginModeExpect": "Expect/Send",
