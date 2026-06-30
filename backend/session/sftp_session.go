@@ -673,8 +673,9 @@ func shellEscape(str string) string {
 	return "'" + strings.ReplaceAll(str, "'", "'\\''") + "'"
 }
 
-// Copy copies a file or directory on the remote server using ssh exec cp.
-// Zero data transfer to local — the server handles the copy directly.
+// Copy copies a file or directory on the remote server.
+// Tries shell cp -r first (zero data transfer on Linux), falls back to
+// SFTP-level copy for servers without cp (Windows, etc.).
 func (s *SFTPSession) Copy(oldPath, newPath string) error {
 	if err := s.requireClient(); err != nil {
 		return err
@@ -687,12 +688,77 @@ func (s *SFTPSession) Copy(oldPath, newPath string) error {
 	if !path.IsAbs(n) {
 		n = path.Join(s.cwd, n)
 	}
+	// Try shell cp -r first (server-side copy, zero data transfer)
 	session, err := s.sshClient.NewSession()
 	if err != nil {
 		return err
 	}
-	defer session.Close()
-	return session.Run(fmt.Sprintf("cp -r -- %s %s", shellEscape(old), shellEscape(n)))
+	err = session.Run(fmt.Sprintf("cp -r -- %s %s", shellEscape(old), shellEscape(n)))
+	session.Close()
+	if err == nil {
+		return nil
+	}
+	// Fallback: SFTP-level copy (compatible with Windows and servers without cp)
+	return s.sftpCopy(old, n)
+}
+
+// sftpCopy copies a file or directory using SFTP operations only.
+// Works on any SFTP server regardless of the remote shell environment.
+func (s *SFTPSession) sftpCopy(oldPath, newPath string) error {
+	srcInfo, err := s.sftpClient.Stat(oldPath)
+	if err != nil {
+		return err
+	}
+	if srcInfo.IsDir() {
+		return s.sftpCopyDir(oldPath, newPath)
+	}
+	return s.sftpCopyFile(oldPath, newPath)
+}
+
+func (s *SFTPSession) sftpCopyFile(oldPath, newPath string) error {
+	src, err := s.sftpClient.Open(oldPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	parentDir := path.Dir(newPath)
+	if err := s.sftpClient.MkdirAll(parentDir); err != nil {
+		return err
+	}
+
+	dst, err := s.sftpClient.Create(newPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	_, err = io.Copy(dst, src)
+	return err
+}
+
+func (s *SFTPSession) sftpCopyDir(oldPath, newPath string) error {
+	if err := s.sftpClient.MkdirAll(newPath); err != nil {
+		return err
+	}
+	entries, err := s.sftpClient.ReadDir(oldPath)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		oldEntry := path.Join(oldPath, entry.Name())
+		newEntry := path.Join(newPath, entry.Name())
+		if entry.IsDir() {
+			if err := s.sftpCopyDir(oldEntry, newEntry); err != nil {
+				return err
+			}
+		} else {
+			if err := s.sftpCopyFile(oldEntry, newEntry); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // Move moves a file or directory on the remote server.
