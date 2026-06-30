@@ -107,6 +107,30 @@ export const useSettingsStore = defineStore('settings', () => {
     save()
   }
 
+  const sftpBookmarks = computed(() => settings.value.sftpBookmarks)
+
+  function addSftpBookmark(mode: 'local' | 'remote', path: string) {
+    const key = mode === 'local' ? 'localPaths' : 'remotePaths'
+    const paths = settings.value.sftpBookmarks[key]
+    if (!paths.includes(path)) {
+      if (paths.length >= 50) {
+        paths.shift()
+      }
+      paths.push(path)
+      save()
+    }
+  }
+
+  function removeSftpBookmark(mode: 'local' | 'remote', path: string) {
+    const key = mode === 'local' ? 'localPaths' : 'remotePaths'
+    const paths = settings.value.sftpBookmarks[key]
+    const idx = paths.indexOf(path)
+    if (idx >= 0) {
+      paths.splice(idx, 1)
+      save()
+    }
+  }
+
   // Auto-save when AI models change
   watch(() => settings.value.ai, save, { deep: true })
 
@@ -149,7 +173,10 @@ export const useSettingsStore = defineStore('settings', () => {
     addModel,
     updateModel,
     removeModel,
-    setActiveModel
+    setActiveModel,
+    sftpBookmarks,
+    addSftpBookmark,
+    removeSftpBookmark
   }
 })
 
@@ -173,5 +200,9 @@ function mergeSettings(loaded: AppSettings): AppSettings {
       ...(loaded.keyboard || {})
     },
     autoCheckUpdate: loaded.autoCheckUpdate ?? DEFAULT_SETTINGS.autoCheckUpdate,
+    sftpBookmarks: {
+      localPaths: loaded.sftpBookmarks?.localPaths || [],
+      remotePaths: loaded.sftpBookmarks?.remotePaths || []
+    }
   }
 }

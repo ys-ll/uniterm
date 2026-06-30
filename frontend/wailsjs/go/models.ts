@@ -780,6 +780,20 @@ export namespace store {
 		    return a;
 		}
 	}
+	export class SFTPBookmarks {
+	    localPaths: string[];
+	    remotePaths: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SFTPBookmarks(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.localPaths = source["localPaths"];
+	        this.remotePaths = source["remotePaths"];
+	    }
+	}
 	export class KeyBinding {
 	    ctrl: boolean;
 	    shift: boolean;
@@ -831,6 +845,7 @@ export namespace store {
 	    ai: AISettings;
 	    keyboard: Record<string, KeyBinding>;
 	    autoCheckUpdate?: boolean;
+	    sftpBookmarks: SFTPBookmarks;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -844,6 +859,7 @@ export namespace store {
 	        this.ai = this.convertValues(source["ai"], AISettings);
 	        this.keyboard = this.convertValues(source["keyboard"], KeyBinding, true);
 	        this.autoCheckUpdate = source["autoCheckUpdate"];
+	        this.sftpBookmarks = this.convertValues(source["sftpBookmarks"], SFTPBookmarks);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -963,6 +979,7 @@ export namespace store {
 		    return a;
 		}
 	}
+	
 	
 
 }

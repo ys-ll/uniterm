@@ -11,7 +11,7 @@
         <div v-if="dragOverLocal" class="drop-overlay">
           <span>{{ t('sftp.dropHere') }}</span>
         </div>
-        <SFTPPathBreadcrumb :label="t('sftp.local')" :path="localCwd" :drives="localDrives" @navigate="onLocalNavigate" />
+        <SFTPPathBreadcrumb :label="t('sftp.local')" :path="localCwd" :drives="localDrives" bookmark-mode="local" :saved-paths="settingsStore.sftpBookmarks.localPaths" @navigate="onLocalNavigate" @save-bookmark="onSaveBookmark('local', $event)" @remove-bookmark="onRemoveBookmark('local', $event)" />
         <SFTPFileList
           mode="local"
           :files="localFiles"
@@ -47,7 +47,7 @@
         <div v-if="dragOverRemote" class="drop-overlay">
           <span>{{ t('sftp.dropHere') }}</span>
         </div>
-        <SFTPPathBreadcrumb :label="panel?.config?.host || t('sftp.remote')" :path="cwd" @navigate="onRemoteNavigate" />
+        <SFTPPathBreadcrumb :label="panel?.config?.host || t('sftp.remote')" :path="cwd" bookmark-mode="remote" :saved-paths="settingsStore.sftpBookmarks.remotePaths" @navigate="onRemoteNavigate" @save-bookmark="onSaveBookmark('remote', $event)" @remove-bookmark="onRemoveBookmark('remote', $event)" />
         <SFTPFileList
           mode="remote"
           :files="remoteFiles"
@@ -223,6 +223,7 @@ import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watc
 import { ElMessage } from 'element-plus'
 import { msg } from '../services/message'
 import { usePanelStore } from '../stores/panelStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import {
   SftpListRemote, SftpListLocal, SftpListLocalDrives,
@@ -246,6 +247,7 @@ const props = defineProps<{
 }>()
 
 const panelStore = usePanelStore()
+const settingsStore = useSettingsStore()
 const transferTasks = panelStore.getTransferTasks(props.panelId)
 const { t } = useI18n()
 const panel = computed(() => panelStore.getPanel(props.panelId))
@@ -794,6 +796,14 @@ async function onRemoteNavigate(path: string) {
   } finally {
     if (version === loadVersionRemote) loadingRemote.value = false
   }
+}
+
+function onSaveBookmark(mode: 'local' | 'remote', path: string) {
+  settingsStore.addSftpBookmark(mode, path)
+}
+
+function onRemoveBookmark(mode: 'local' | 'remote', path: string) {
+  settingsStore.removeSftpBookmark(mode, path)
 }
 
 function formatSpeed(bytesPerSec: number): string {

@@ -90,6 +90,11 @@ export const DEFAULT_KEYBOARD: KeyboardSettings = {
   openSettings: { ctrl: true, shift: true, alt: false, key: 'c' },
 }
 
+export interface SFTPBookmarks {
+  localPaths: string[]
+  remotePaths: string[]
+}
+
 export interface AppSettings {
   theme: Theme
   language: Language
@@ -97,6 +102,7 @@ export interface AppSettings {
   ai: AISettings
   keyboard: KeyboardSettings
   autoCheckUpdate: boolean
+  sftpBookmarks: SFTPBookmarks
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -126,7 +132,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     activeModelId: 'model-default'
   },
   keyboard: { ...DEFAULT_KEYBOARD },
-  autoCheckUpdate: true
+  autoCheckUpdate: true,
+  sftpBookmarks: {
+    localPaths: [],
+    remotePaths: []
+  }
 }
 
 export interface TerminalThemeEntry { label: string; value: TerminalTheme; type: 'dark' | 'light' }

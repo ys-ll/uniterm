@@ -57,6 +57,12 @@ type AppSettings struct {
 	AI               AISettings            `json:"ai"`
 	Keyboard         map[string]KeyBinding `json:"keyboard"`
 	AutoCheckUpdate  *bool                 `json:"autoCheckUpdate"`
+	SFTPBookmarks    SFTPBookmarks         `json:"sftpBookmarks"`
+}
+
+type SFTPBookmarks struct {
+	LocalPaths  []string `json:"localPaths"`
+	RemotePaths []string `json:"remotePaths"`
 }
 
 type SettingsStore struct {
@@ -176,6 +182,10 @@ func defaultSettings() AppSettings {
 		},
 		Keyboard:        defaultKeyboard(),
 		AutoCheckUpdate: boolPtr(true),
+		SFTPBookmarks: SFTPBookmarks{
+			LocalPaths:  []string{},
+			RemotePaths: []string{},
+		},
 	}
 }
 

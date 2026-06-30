@@ -41,6 +41,15 @@
         </span>
         <span v-if="idx < visibleParts.length - 1" class="separator" @click.stop>&gt;</span>
       </template>
+      <button
+        v-if="bookmarkMode"
+        ref="bookmarkBtnRef"
+        class="bookmark-btn"
+        :title="t('sftp.bookmark.title')"
+        @click.stop="toggleBookmarkMenu"
+      >
+        <Bookmark :size="14" :class="{ 'bookmark-active': hasCurrentPathBookmarked }" />
+      </button>
     </template>
 
     <!-- Drive dropdown -->
@@ -63,20 +72,81 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Bookmark dropdown -->
+    <Teleport to="body">
+      <div
+        v-show="bookmarkMenuVisible"
+        class="bookmark-dropdown"
+        :style="bookmarkMenuStyle"
+        @click.stop
+        @mousedown.stop
+      >
+        <div
+          v-if="!hasCurrentPathBookmarked"
+          class="bookmark-item bookmark-save"
+          @click="onSaveBookmark"
+        >
+          <BookmarkPlus :size="14" />
+          <span>{{ t('sftp.bookmark.saveCurrent') }}</span>
+        </div>
+        <div
+          v-else
+          class="bookmark-item bookmark-saved-hint"
+        >
+          <BookmarkCheck :size="14" />
+          <span>{{ t('sftp.bookmark.saved') }}</span>
+        </div>
+        <div v-if="savedPaths.length > 0" class="bookmark-divider"></div>
+        <div
+          v-for="(savedPath, idx) in savedPaths"
+          :key="idx"
+          class="bookmark-item bookmark-path-item"
+          :class="{ active: savedPath === currentPath }"
+          @click="onBookmarkClick(savedPath)"
+          @mouseenter="hoveredBookmarkIdx = idx"
+          @mouseleave="hoveredBookmarkIdx = -1"
+        >
+          <span class="bookmark-path-text" :title="savedPath">{{ savedPath }}</span>
+          <button
+            v-show="hoveredBookmarkIdx === idx"
+            class="bookmark-remove-btn"
+            @click.stop="onRemoveBookmark(savedPath)"
+            :title="t('sftp.bookmark.remove')"
+          >
+            <Trash2 :size="12" />
+          </button>
+        </div>
+        <div
+          v-if="savedPaths.length === 0"
+          class="bookmark-item bookmark-empty"
+        >
+          {{ t('sftp.bookmark.empty') }}
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { Bookmark, BookmarkPlus, BookmarkCheck, Trash2 } from '@lucide/vue'
+import { useI18n } from '../i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   path: string
   label?: string
   drives?: string[]
+  savedPaths?: string[]
+  bookmarkMode?: 'local' | 'remote'
 }>()
 
 const emit = defineEmits<{
   navigate: [path: string]
+  saveBookmark: [path: string]
+  removeBookmark: [path: string]
 }>()
 
 const isWindowsPath = computed(() => {
@@ -232,11 +302,14 @@ function onGlobalContextMenu(e: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('contextmenu', onGlobalContextMenu)
+  document.addEventListener('contextmenu', onGlobalBookmarkContextMenu)
 })
 
 onUnmounted(() => {
   document.removeEventListener('contextmenu', onGlobalContextMenu)
+  document.removeEventListener('contextmenu', onGlobalBookmarkContextMenu)
   document.removeEventListener('mousedown', closeDriveMenu)
+  document.removeEventListener('mousedown', closeBookmarkMenu)
 })
 
 function onDriveSelect(drive: string) {
@@ -279,6 +352,66 @@ function onBreadcrumbClick(part: string) {
   let target = selected.join('/').replace(/\/+/g, '/')
   if (!target.startsWith('/')) target = '/' + target
   emit('navigate', target)
+}
+
+// Bookmark menu
+const bookmarkMenuVisible = ref(false)
+const bookmarkMenuStyle = ref({ left: '0px', top: '0px' })
+const bookmarkBtnRef = ref<HTMLElement>()
+const hoveredBookmarkIdx = ref(-1)
+
+const currentPath = computed(() => props.path)
+const hasCurrentPathBookmarked = computed(() => {
+  return (props.savedPaths || []).includes(props.path)
+})
+
+function toggleBookmarkMenu(event?: MouseEvent) {
+  if (bookmarkMenuVisible.value) {
+    bookmarkMenuVisible.value = false
+    return
+  }
+  if (event) {
+    const rect = (event.target as HTMLElement).closest('.bookmark-btn')?.getBoundingClientRect()
+    if (rect) {
+      bookmarkMenuStyle.value = {
+        left: (rect.right - 200) + 'px',
+        top: (rect.bottom + 4) + 'px'
+      }
+    }
+  }
+  closeBookmarkMenu()
+  bookmarkMenuVisible.value = true
+  nextTick(() => {
+    document.addEventListener('mousedown', closeBookmarkMenu, { once: true })
+  })
+}
+
+function closeBookmarkMenu() {
+  bookmarkMenuVisible.value = false
+  hoveredBookmarkIdx.value = -1
+}
+
+function onGlobalBookmarkContextMenu(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  if (!target.closest('.sftp-breadcrumb')) {
+    closeBookmarkMenu()
+  }
+}
+
+function onSaveBookmark() {
+  emit('saveBookmark', props.path)
+  bookmarkMenuVisible.value = false
+}
+
+function onRemoveBookmark(path: string) {
+  emit('removeBookmark', path)
+}
+
+function onBookmarkClick(path: string) {
+  closeBookmarkMenu()
+  if (path !== props.path) {
+    emit('navigate', path)
+  }
 }
 </script>
 
@@ -334,6 +467,28 @@ function onBreadcrumbClick(part: string) {
   margin: 0 2px;
   flex-shrink: 0;
 }
+.bookmark-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+.bookmark-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.bookmark-btn .bookmark-active {
+  color: var(--accent);
+}
 </style>
 
 <style>
@@ -361,5 +516,78 @@ function onBreadcrumbClick(part: string) {
 }
 .drive-item.active {
   color: var(--accent);
+}
+
+.bookmark-dropdown {
+  position: fixed;
+  z-index: 99999;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  min-width: 200px;
+  max-width: 320px;
+  padding: 4px;
+}
+.bookmark-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+.bookmark-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.bookmark-item.active {
+  color: var(--accent);
+}
+.bookmark-save,
+.bookmark-saved-hint {
+  color: var(--accent);
+  font-family: var(--font-ui);
+}
+.bookmark-path-item {
+  justify-content: space-between;
+}
+.bookmark-path-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.bookmark-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+.bookmark-remove-btn:hover {
+  background: var(--bg-hover);
+  color: var(--error);
+}
+.bookmark-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 6px;
+}
+.bookmark-empty {
+  font-family: var(--font-ui);
+  color: var(--text-disabled);
+  cursor: default;
 }
 </style>
