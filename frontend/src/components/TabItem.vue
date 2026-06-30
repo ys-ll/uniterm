@@ -13,11 +13,16 @@
       class="tab-close"
       @click.stop="$emit('close', tab.id)"
     ><X /></button>
-    <component
+    <span
       v-else
-      :is="tabIcon"
-      class="tab-type-icon"
-    />
+      class="tab-icon-wrapper"
+    >
+      <component
+        :is="tabIcon"
+        class="tab-type-icon"
+      />
+      <span v-if="!isActive && hasNotification" class="tab-notification-dot" />
+    </span>
     <span v-if="!editing" class="tab-name" @dblclick.stop="startEdit">
       <ArrowDownUp v-if="hasActiveTransfers" class="transfer-indicator" :size="14" title="Transferring..." />
       {{ tab.name }}
@@ -85,6 +90,7 @@ import { SquareTerminal, Laptop, FolderUp, Monitor, MonitorCloud, Settings, Spar
 const props = defineProps<{
   tab: TerminalTab | SettingsTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | WorkspaceTab
   isActive: boolean
+  hasNotification?: boolean
   showClose?: boolean
 }>()
 
@@ -327,6 +333,12 @@ onUnmounted(() => {
   margin-right: 4px;
   font-weight: 500;
 }
+.tab-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
 .tab-type-icon {
   flex-shrink: 0;
   display: flex;
@@ -334,8 +346,17 @@ onUnmounted(() => {
   justify-content: center;
   width: 14px;
   height: 14px;
-  margin-right: 4px;
   color: var(--text-muted);
+}
+.tab-notification-dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--bg-base);
 }
 .tab-item.active .tab-type-icon {
   color: var(--accent);

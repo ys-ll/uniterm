@@ -9,6 +9,7 @@
       <TabItem
         :tab="tab"
         :is-active="tab.id === activeTabId"
+        :has-notification="tabStore.hasTabNotification(tab.id)"
         @activate="setActiveTab"
         @close="(id: string) => $emit('close-tab', id)"
         @toggle-ai-lock="(panelId: string) => $emit('toggle-ai-lock', panelId)"

@@ -809,7 +809,30 @@ onMounted(() => {
 
   // Session data
   unsubscribe = EventsOn('session:data', (payload: { id: string; data: string }) => {
-    if (!isActive.value) return
+    if (!isActive.value) {
+      // Mark notification dot on the tab when inactive terminal receives output
+      // Only process events for this instance's session (events are global)
+      if (payload.id === props.sessionId && props.sessionId) {
+        // Find the panel by sessionId (panels Map is keyed by panelId)
+        let panelId: string | null = null
+        for (const [id, p] of panelStore.panels) {
+          if (p.sessionId === props.sessionId) {
+            panelId = id
+            break
+          }
+        }
+        if (panelId) {
+          const tab = tabStore.tabs.find(t =>
+            (t.type === 'terminal' && t.panelId === panelId) ||
+            (t.type === 'workspace' && t.panelIds.includes(panelId))
+          )
+          if (tab && tab.id !== tabStore.activeTabId) {
+            tabStore.markTabNotification(tab.id)
+          }
+        }
+      }
+      return
+    }
     if (payload.id !== props.sessionId || !terminal) return
 
     // 取消后 2 秒内吞掉所有数据，防止残余二进制乱码

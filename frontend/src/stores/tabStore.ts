@@ -9,11 +9,13 @@ const tabState = reactive<{
   activeTabId: string | null
   aiLockedPanelId: string | null
   broadcastWorkspaceId: string | null
+  tabNotifications: Record<string, boolean>
 }>({
   tabs: [],
   activeTabId: null,
   aiLockedPanelId: null,
-  broadcastWorkspaceId: null
+  broadcastWorkspaceId: null,
+  tabNotifications: {}
 })
 
 let idCounter = 0
@@ -212,6 +214,22 @@ export const useTabStore = defineStore('tab', () => {
 
   function setActiveTab(id: string) {
     tabState.activeTabId = id
+    // Clear notification dot when user switches to this tab
+    tabState.tabNotifications[id] = false
+  }
+
+  // ── Notification dots ──
+
+  function markTabNotification(tabId: string) {
+    tabState.tabNotifications[tabId] = true
+  }
+
+  function clearTabNotification(tabId: string) {
+    tabState.tabNotifications[tabId] = false
+  }
+
+  function hasTabNotification(tabId: string): boolean {
+    return !!tabState.tabNotifications[tabId]
   }
 
   function nextTab() {
@@ -543,6 +561,9 @@ export const useTabStore = defineStore('tab', () => {
     broadcastWorkspaceId,
     toggleBroadcast,
     isBroadcasting,
+    markTabNotification,
+    clearTabNotification,
+    hasTabNotification,
     // Expose helpers for components
     collectPanelIds,
     insertPanelIntoLayout,
