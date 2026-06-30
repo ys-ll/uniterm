@@ -38,7 +38,7 @@ export function watchOutput(
       if (payload.id !== sessionId || resolved) return
 
       output += payload.data
-      const clean = stripAnsi(output)
+      const clean = stripAnsi(output).trim()
 
       const scanStart = Math.max(0, lastScanPos - marker.length)
       lastScanPos = clean.length
@@ -207,10 +207,23 @@ export function captureTerminal(tailLines: number = 200): CaptureResult {
     return { output: '' }
   }
 
-  const effectiveTail = Math.min(tailLines, totalLines)
+  // Find the last non-blank line — skip trailing empty space at the bottom of the terminal
+  let lastContentLine = totalLines - 1
+  while (lastContentLine >= 0) {
+    const line = buffer.getLine(lastContentLine)
+    if (line && line.translateToString().trim() !== '') break
+    lastContentLine--
+  }
+
+  if (lastContentLine < 0) {
+    return { output: '' }
+  }
+
+  // Capture up to tailLines lines, ending at the last non-blank line
+  const startLine = Math.max(0, lastContentLine - tailLines + 1)
   const lines: string[] = []
 
-  for (let i = totalLines - effectiveTail; i < totalLines; i++) {
+  for (let i = startLine; i <= lastContentLine; i++) {
     const line = buffer.getLine(i)
     if (line) lines.push(line.translateToString())
   }
@@ -253,9 +266,10 @@ interface SendKeyResult {
 
 export async function sendTerminalKey(
   input?: string,
-  control?: 'ctrl_c' | 'ctrl_d' | 'enter'
+  control?: 'ctrl_c' | 'ctrl_d' | 'enter',
+  sendEnter: boolean = true
 ): Promise<SendKeyResult> {
-  const { sessionId } = resolveActiveSession()
+  const { sessionId, shellPath } = resolveActiveSession()
 
   let data: string
   if (control) {
@@ -272,6 +286,11 @@ export async function sendTerminalKey(
     data = input
   } else {
     throw new Error('Either input or control must be provided')
+  }
+
+  // Append shell-appropriate newline when send_enter is true and input was provided
+  if (sendEnter && !control && input !== undefined && input !== '') {
+    data += getShellNewline(shellPath)
   }
 
   await SessionWrite(sessionId, data)

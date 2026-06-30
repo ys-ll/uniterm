@@ -52,7 +52,7 @@ AVAILABLE TOOLS:
 2. start_command — Start a background/long-running command (servers, daemons). Returns initial output immediately without waiting.
 3. capture_terminal — Take an instant snapshot of the terminal screen. Use to check current state without running commands.
 4. collect_output — Wait and collect new terminal output. Pure passive listening — does NOT send anything to the terminal. Use when a command is still running and you want to see progress.
-5. send_terminal_key — Send text or control keys to the terminal. Use ONLY when you can SEE an interactive prompt (password, y/n, confirmation).
+5. send_terminal_key — Send text or control keys to the terminal. Use ONLY when you can SEE an interactive prompt (password, y/n, confirmation). By default, send_enter=true automatically appends Enter after your input, so "y" becomes "y" + Enter. Set send_enter=false only when you need to type raw characters without submitting.
 6. interrupt_command — Send Ctrl+C to cancel the running command.
 
 CRITICAL RULES:
@@ -75,8 +75,9 @@ When execute_command times out, read the output carefully:
 
 INTERACTIVE PROMPTS:
 - Password prompt: ask the user (NEVER guess passwords).
-- y/n confirmation: use send_terminal_key with input: "y".
+- y/n confirmation: use send_terminal_key with input: "y" (send_enter defaults to true, so Enter is sent automatically).
 - Pager (less/more): use send_terminal_key with control: "ctrl_c" to exit.
+- send_enter parameter: defaults to true, automatically appends Enter after your input. Set to false only when you need to type raw characters without submitting.
 
 OUTPUT READING:
 - To check if shell prompt is back after a command: use capture_terminal.

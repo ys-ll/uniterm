@@ -438,10 +438,12 @@ export async function runAgent(userInput: string) {
     } else if (tu.name === 'send_terminal_key') {
       const input = tu.input.input as string | undefined
       const control = tu.input.control as string | undefined
+      const sendEnter = (tu.input.send_enter as boolean) ?? true
       try {
         const result = await sendTerminalKey(
           input,
-          control as 'ctrl_c' | 'ctrl_d' | 'enter' | undefined
+          control as 'ctrl_c' | 'ctrl_d' | 'enter' | undefined,
+          sendEnter
         )
         store.addMessage({
           id: `msg-${Date.now()}`,

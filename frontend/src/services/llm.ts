@@ -194,6 +194,10 @@ export const AVAILABLE_TOOLS = [
           type: 'string',
           enum: ['ctrl_c', 'ctrl_d', 'enter'],
           description: 'Send a control character instead of text. "ctrl_c" interrupts/cancels the running command. "ctrl_d" sends EOF. "enter" sends a newline/Enter key.'
+        },
+        send_enter: {
+          type: 'boolean',
+          description: 'Whether to send an Enter/Return key after the input text to submit it. Default true. Set to false only when you need to send partial input without submitting (e.g., typing a password character by character). Ignored when using control.'
         }
       }
     }
