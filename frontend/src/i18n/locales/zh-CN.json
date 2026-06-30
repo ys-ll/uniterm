@@ -427,6 +427,7 @@
   "serial.parity": "校验位",
   "serial.connect": "连接",
   "serial.noPorts": "未检测到串口设备",
+  "serial.scan": "扫描",
   "serial.scanning": "扫描中...",
   "serial.parityNone": "无",
   "serial.parityOdd": "奇校验",

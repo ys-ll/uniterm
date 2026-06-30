@@ -425,6 +425,7 @@
   "serial.parity": "パリティ",
   "serial.connect": "接続",
   "serial.noPorts": "シリアルポートが見つかりません",
+  "serial.scan": "スキャン",
   "serial.scanning": "スキャン中...",
   "serial.parityNone": "なし",
   "serial.parityOdd": "奇数",

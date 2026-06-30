@@ -17,19 +17,13 @@
         </el-select>
       </el-form-item>
       <el-form-item :label="t('serial.baudRate')">
-        <el-select
-          v-model="baudRate"
-          filterable
-          allow-create
-          default-first-option
-        >
-          <el-option
-            v-for="rate in baudRatePresets"
-            :key="rate"
-            :label="String(rate)"
-            :value="rate"
-          />
-        </el-select>
+        <el-autocomplete
+          v-model="baudRateInput"
+          :fetch-suggestions="queryBaudSuggestions"
+          :placeholder="t('serial.baudRate')"
+          clearable
+          style="width:100%"
+        />
       </el-form-item>
       <el-form-item :label="t('serial.dataBits')">
         <el-select v-model="dataBits">
@@ -102,7 +96,7 @@ const scanning = ref(false)
 
 // Form state
 const selectedPort = ref('')
-const baudRate = ref<number>(115200)
+const baudRateInput = ref('')
 const dataBits = ref<number>(8)
 const stopBits = ref<number>(1)
 const parity = ref<string>('none')
@@ -112,6 +106,13 @@ const connecting = ref(false)
 const baudRatePresets = [300, 1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
 const dataBitsOptions = [5, 6, 7, 8]
 const stopBitsOptions = [1, 1.5, 2]
+
+function queryBaudSuggestions(queryString: string, cb: (results: { value: string }[]) => void) {
+  const suggestions = baudRatePresets
+    .filter(r => String(r).includes(queryString))
+    .map(r => ({ value: String(r) }))
+  cb(suggestions)
+}
 
 const portPlaceholder = computed(() => {
   if (scanning.value) return t('serial.scanning')
@@ -134,14 +135,15 @@ async function onConnect() {
   if (!selectedPort.value || connecting.value) return
   connecting.value = true
   try {
+    const baud = parseInt(baudRateInput.value, 10) || 115200
     const session = await ConnectSerial(
       selectedPort.value,
-      baudRate.value,
+      baud,
       dataBits.value,
       stopBits.value,
       parity.value
     )
-    emit('connect', session.id, selectedPort.value, baudRate.value)
+    emit('connect', session.id, selectedPort.value, baud)
     visible.value = false
   } catch {
     // Connection failed, keep dialog open so user can retry
@@ -154,7 +156,7 @@ async function onConnect() {
 watch(visible, (val) => {
   if (val) {
     selectedPort.value = ''
-    baudRate.value = 115200
+    baudRateInput.value = ''
     dataBits.value = 8
     stopBits.value = 1
     parity.value = 'none'

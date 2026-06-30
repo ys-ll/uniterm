@@ -425,6 +425,7 @@
   "serial.parity": "Чётность",
   "serial.connect": "Подключиться",
   "serial.noPorts": "Последовательные порты не обнаружены",
+  "serial.scan": "Сканировать",
   "serial.scanning": "Сканирование...",
   "serial.parityNone": "Нет",
   "serial.parityOdd": "Нечёт",

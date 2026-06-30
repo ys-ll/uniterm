@@ -503,6 +503,49 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 		ssh.SetEncoding(config.Encoding)
 	}
 
+	// Apply serial config and connect for serial sessions.
+	if serialSess, ok := s.(*session.SerialSession); ok {
+		var sb serial.StopBits
+		switch config.SerialStopBits {
+		case 1.5:
+			sb = serial.OnePointFiveStopBits
+		case 2:
+			sb = serial.TwoStopBits
+		default:
+			sb = serial.OneStopBit
+		}
+
+		parityMap := map[string]serial.Parity{
+			"none":  serial.NoParity,
+			"odd":   serial.OddParity,
+			"even":  serial.EvenParity,
+			"mark":  serial.MarkParity,
+			"space": serial.SpaceParity,
+		}
+		par, ok := parityMap[strings.ToLower(config.SerialParity)]
+		if !ok {
+			par = serial.NoParity
+		}
+
+		dataBits := config.SerialDataBits
+		if dataBits == 0 {
+			dataBits = 8
+		}
+
+		serialCfg := session.SerialConfig{
+			PortName: config.SerialPort,
+			BaudRate: config.SerialBaudRate,
+			DataBits: dataBits,
+			StopBits: sb,
+			Parity:   par,
+		}
+		serialSess.SetSerialConfig(serialCfg)
+		if err := serialSess.Connect(config); err != nil {
+			_ = a.sessionManager.Close(s.ID())
+			return nil, fmt.Errorf("serial connect %s: %w", config.SerialPort, err)
+		}
+	}
+
 	// ── SSH Tunnel ──────────────────────────────────────────────
 	if config.TunnelSSHConnID != "" && a.tunnelService != nil {
 		if a.connectionStore == nil {

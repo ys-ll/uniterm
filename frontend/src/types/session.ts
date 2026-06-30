@@ -15,7 +15,7 @@ export interface PostLoginExpectStep {
 export interface ConnectionConfig {
   id: string
   name: string
-  type: 'ssh' | 'telnet' | 'mosh' | 'rdp' | 'vnc' | 'spice' | 'database' | 'local' | 'sftp' | 'monitor' | 'ftp'
+  type: 'ssh' | 'telnet' | 'mosh' | 'rdp' | 'vnc' | 'spice' | 'database' | 'local' | 'sftp' | 'monitor' | 'ftp' | 'serial'
   host: string
   port: number
   user: string
@@ -29,6 +29,12 @@ export interface ConnectionConfig {
   rdpSmartSizing?: boolean
   // Local terminal shell path
   shellPath?: string
+  // Serial port
+  serialPort?: string
+  serialBaudRate?: number
+  serialDataBits?: number
+  serialStopBits?: number
+  serialParity?: string
   dbType?: string   // database type key
   dbName?: string   // default database name
   postLoginScript?: string

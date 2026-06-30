@@ -425,6 +425,7 @@
   "serial.parity": "校驗位",
   "serial.connect": "連線",
   "serial.noPorts": "未偵測到序列埠裝置",
+  "serial.scan": "掃描",
   "serial.scanning": "掃描中...",
   "serial.parityNone": "無",
   "serial.parityOdd": "奇校驗",

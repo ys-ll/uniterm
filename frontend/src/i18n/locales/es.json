@@ -425,6 +425,7 @@
   "serial.parity": "Paridad",
   "serial.connect": "Conectar",
   "serial.noPorts": "No se detectaron puertos serie",
+  "serial.scan": "Escanear",
   "serial.scanning": "Escaneando...",
   "serial.parityNone": "Ninguna",
   "serial.parityOdd": "Impar",

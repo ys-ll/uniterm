@@ -40,6 +40,12 @@ type ConnectionConfig struct {
 	RdpSmartSizing bool `json:"rdpSmartSizing"`
 	// Local terminal shell path
 	ShellPath string `json:"shellPath,omitempty"`
+	// Serial port configuration
+	SerialPort     string  `json:"serialPort,omitempty"`
+	SerialBaudRate int     `json:"serialBaudRate,omitempty"`
+	SerialDataBits int     `json:"serialDataBits,omitempty"`
+	SerialStopBits float64 `json:"serialStopBits,omitempty"`
+	SerialParity   string  `json:"serialParity,omitempty"`
 	// Database-specific fields
 	DBType string `json:"dbType,omitempty"` // "mysql", "postgres", "rqlite", "oracle"
 	DBName string `json:"dbName,omitempty"` // default database name

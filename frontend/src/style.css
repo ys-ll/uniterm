@@ -439,6 +439,35 @@ body::before {
   background: var(--accent-subtle) !important;
 }
 
+/* Autocomplete suggestions - cover all Element Plus v2.x selectors */
+.el-autocomplete-suggestion,
+.el-autocomplete-suggestion__wrap,
+.el-autocomplete-suggestion__list {
+  overflow: hidden;
+  font-size: 12px !important;
+  background: var(--bg-surface) !important;
+}
+.el-autocomplete-suggestion__item,
+.el-autocomplete-suggestion__list .el-autocomplete-suggestion__item {
+  font-family: var(--font-ui);
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+  padding: 6px 12px !important;
+  color: var(--text-secondary) !important;
+}
+.el-autocomplete-suggestion__item:hover,
+.el-autocomplete-suggestion__item.highlighted {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+.el-autocomplete__popper,
+.el-autocomplete-suggestion {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
 .el-radio-button__original-radio:checked + .el-radio-button__inner {
   background-color: var(--accent-dim) !important;
   border-color: var(--accent-dim) !important;
@@ -622,4 +651,55 @@ body.drag-active .zone {
   flex: 1;
   height: 1px;
   background: var(--border-subtle);
+}
+
+/* ============================================================
+   Autocomplete suggestion dropdown
+   Target every possible selector so the item font matches
+   the rest of the UI (12px). The popper is teleported to body
+   so scoped styles cannot reach it.
+   ============================================================ */
+/* Container */
+.el-autocomplete-suggestion,
+.el-autocomplete__popper,
+.el-popper.is-pure:has(.el-autocomplete-suggestion) {
+  font-size: 12px !important;
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+/* Force every child to 12px */
+.el-autocomplete-suggestion *,
+.el-autocomplete-suggestion__wrap,
+.el-autocomplete-suggestion__list,
+.el-autocomplete-suggestion__item {
+  font-size: 12px !important;
+}
+/* Ensure scrollbar wrap handles mouse wheel */
+.el-autocomplete-suggestion__wrap {
+  overflow: auto !important;
+  overflow-y: auto !important;
+  max-height: 280px;
+}
+/* Specific item styling */
+.el-autocomplete-suggestion__item {
+  font-family: var(--font-ui) !important;
+  line-height: 1.4 !important;
+  padding: 5px 12px !important;
+  color: var(--text-secondary) !important;
+  height: auto !important;
+  min-height: unset !important;
+}
+.el-autocomplete-suggestion__item:hover,
+.el-autocomplete-suggestion__item.highlighted,
+.el-autocomplete-suggestion__item.is-hovered,
+.el-autocomplete-suggestion li:hover,
+.el-autocomplete-suggestion li.is-hovered {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+/* Cover the case where autocomplete reuses select-dropdown */
+.el-autocomplete-suggestion .el-select-dropdown__item {
+  font-size: 12px !important;
 }

@@ -268,6 +268,11 @@ export namespace session {
 	    rdpFixedHeight?: number;
 	    rdpSmartSizing: boolean;
 	    shellPath?: string;
+	    serialPort?: string;
+	    serialBaudRate?: number;
+	    serialDataBits?: number;
+	    serialStopBits?: number;
+	    serialParity?: string;
 	    dbType?: string;
 	    dbName?: string;
 	    postLoginScript?: string;
@@ -301,6 +306,11 @@ export namespace session {
 	        this.rdpFixedHeight = source["rdpFixedHeight"];
 	        this.rdpSmartSizing = source["rdpSmartSizing"];
 	        this.shellPath = source["shellPath"];
+	        this.serialPort = source["serialPort"];
+	        this.serialBaudRate = source["serialBaudRate"];
+	        this.serialDataBits = source["serialDataBits"];
+	        this.serialStopBits = source["serialStopBits"];
+	        this.serialParity = source["serialParity"];
 	        this.dbType = source["dbType"];
 	        this.dbName = source["dbName"];
 	        this.postLoginScript = source["postLoginScript"];

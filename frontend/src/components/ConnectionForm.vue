@@ -37,6 +37,7 @@
             <el-radio-button label="telnet">Telnet</el-radio-button>
             <el-radio-button label="mosh">Mosh</el-radio-button>
             <el-radio-button label="local">{{ t('conn.localTerminal') }}</el-radio-button>
+            <el-radio-button label="serial">{{ t('serial.title') }}</el-radio-button>
           </el-radio-group>
         </template>
         <template v-if="category === 'filetransfer'">
@@ -63,13 +64,13 @@
           </el-radio-group>
         </template>
       </el-form-item>
-      <el-form-item :label="t('conn.host')" required v-if="form.type !== 'local'">
+      <el-form-item :label="t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial'">
         <el-input v-model="form.host" :placeholder="t('conn.hostPlaceholder')" />
       </el-form-item>
-      <el-form-item :label="t('conn.port')" v-if="form.type !== 'local'">
+      <el-form-item :label="t('conn.port')" v-if="form.type !== 'local' && form.type !== 'serial'">
         <el-input-number v-model="form.port" :min="0" :max="65535" />
       </el-form-item>
-      <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local'" :label="t('conn.user')">
+      <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local' && form.type !== 'serial'" :label="t('conn.user')">
         <el-input v-model="form.user" :placeholder="t('conn.userPlaceholder')" />
       </el-form-item>
       <el-form-item v-if="form.type === 'ssh' || form.type === 'mosh'" :label="t('conn.authType')">
@@ -78,7 +79,7 @@
           <el-radio-button label="key">{{ t('conn.keyPath') }}</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      <el-form-item v-if="form.type !== 'local' && (form.authType === 'password' || form.type === 'rdp' || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="t('conn.password')">
+      <el-form-item v-if="form.type !== 'local' && form.type !== 'serial' && (form.authType === 'password' || form.type === 'rdp' || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="t('conn.password')">
         <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" />
       </el-form-item>
       <el-form-item v-if="form.authType === 'key' && (form.type === 'ssh' || form.type === 'mosh')" :label="t('conn.keyPath')">
@@ -105,7 +106,47 @@
           />
         </el-select>
       </el-form-item>
-      <div class="advanced-toggle" @click="showAdvanced = !showAdvanced">
+      <template v-if="form.type === 'serial'">
+        <el-form-item :label="t('serial.portLabel')" required>
+          <div style="display:flex;gap:8px;width:100%">
+            <el-select v-model="form.serialPort" :placeholder="portPlaceholder" :disabled="serialPorts.length === 0 || serialScanning" :loading="serialScanning" style="flex:1">
+              <el-option v-for="p in serialPorts" :key="p" :label="p" :value="p" />
+            </el-select>
+            <el-button :icon="RefreshCw" :loading="serialScanning" @click="scanSerialPorts">
+              {{ t('serial.scan') }}
+            </el-button>
+          </div>
+        </el-form-item>
+        <el-form-item :label="t('serial.baudRate')">
+          <el-autocomplete
+            v-model="serialBaudRateInput"
+            :fetch-suggestions="queryBaudRateSuggestions"
+            :placeholder="t('serial.baudRate')"
+            clearable
+            style="width:100%"
+          />
+        </el-form-item>
+        <el-form-item :label="t('serial.dataBits')">
+          <el-select v-model="serialDataBitsValue">
+            <el-option v-for="b in [5,6,7,8]" :key="b" :label="String(b)" :value="b" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('serial.stopBits')">
+          <el-select v-model="serialStopBitsValue">
+            <el-option v-for="b in [1,1.5,2]" :key="b" :label="String(b)" :value="b" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('serial.parity')">
+          <el-select v-model="serialParityValue">
+            <el-option :label="t('serial.parityNone')" value="none" />
+            <el-option :label="t('serial.parityOdd')" value="odd" />
+            <el-option :label="t('serial.parityEven')" value="even" />
+            <el-option :label="t('serial.parityMark')" value="mark" />
+            <el-option :label="t('serial.paritySpace')" value="space" />
+          </el-select>
+        </el-form-item>
+      </template>
+      <div v-if="form.type !== 'serial' && form.type !== 'spice'" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
         <el-icon class="advanced-arrow" :class="{ expanded: showAdvanced }"><ChevronRight :size="14" /></el-icon>
         <span>{{ t('conn.advanced') }}</span>
       </div>
@@ -278,7 +319,8 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import type { ConnectionConfig, PostLoginExpectStep } from '../types/session'
 import { GetPlatform, OpenFileDialog } from '../../wailsjs/go/main/App'
-import { Plus, Trash2, ChevronRight, FolderOpen } from '@lucide/vue'
+import { Plus, Trash2, ChevronRight, FolderOpen, RefreshCw } from '@lucide/vue'
+import { ListSerialPorts } from '../../wailsjs/go/main/App'
 
 const { t } = useI18n()
 const connectionStore = useConnectionStore()
@@ -306,6 +348,40 @@ const isWindows = ref(true)
 const passwordInputKey = ref(0)
 const postLoginMode = ref<'script' | 'expect'>('script')
 const showAdvanced = ref(false)
+
+// Serial port config (separate refs so allow-create doesn't produce strings)
+const serialPorts = ref<string[]>([])
+const serialScanning = ref(false)
+const serialBaudRateInput = ref('')
+const serialDataBitsValue = ref(8)
+const serialStopBitsValue = ref(1)
+const serialParityValue = ref('none')
+
+const portPlaceholder = computed(() => {
+  if (serialScanning.value) return t('serial.scanning')
+  if (serialPorts.value.length === 0) return t('serial.noPorts')
+  return t('serial.portLabel')
+})
+
+async function scanSerialPorts() {
+  serialScanning.value = true
+  try {
+    serialPorts.value = await ListSerialPorts()
+  } catch {
+    serialPorts.value = []
+  } finally {
+    serialScanning.value = false
+  }
+}
+
+const baudRatePresets = [300, 1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
+
+function queryBaudRateSuggestions(queryString: string, cb: (results: { value: string }[]) => void) {
+  const suggestions = baudRatePresets
+    .filter(r => String(r).includes(queryString))
+    .map(r => ({ value: String(r) }))
+  cb(suggestions)
+}
 
 onMounted(async () => {
   try { isWindows.value = (await GetPlatform()) === 'windows' } catch (_) {}
@@ -336,7 +412,7 @@ watch(visible, (val) => {
 
 const isEdit = computed(() => !!props.editConfig?.id)
 
-const TERMINAL_TYPES = ['ssh', 'telnet', 'mosh', 'local']
+const TERMINAL_TYPES = ['ssh', 'telnet', 'mosh', 'local', 'serial']
 const REMOTE_TYPES = ['rdp', 'vnc', 'spice']
 const FILETRANSFER_TYPES = ['ftp', 'ssh']
 
@@ -354,7 +430,7 @@ const sshConnections = computed(() =>
   )
 )
 
-const TUNNEL_UNSUPPORTED = ['spice', 'mosh', 'local']
+const TUNNEL_UNSUPPORTED = ['spice', 'mosh', 'local', 'serial']
 const showTunnel = computed(() =>
   !TUNNEL_UNSUPPORTED.includes(form.type)
 )
@@ -431,6 +507,12 @@ watch(() => props.editConfig, (config) => {
     Object.assign(form, { ...config, postLoginExpectSteps: cloneExpectSteps(config.postLoginExpectSteps || []) })
     postLoginMode.value = (config.postLoginExpectSteps?.length || 0) > 0 ? 'expect' : 'script'
     selectedGroupId.value = config.groupId || undefined
+    // Sync serial refs from config
+    if (config.serialBaudRate) serialBaudRateInput.value = String(config.serialBaudRate)
+    if (config.serialDataBits) serialDataBitsValue.value = config.serialDataBits
+    if (config.serialStopBits) serialStopBitsValue.value = config.serialStopBits
+    if (config.serialParity) serialParityValue.value = config.serialParity
+    if (config.type === 'serial') scanSerialPorts()
     // Sync resolution dropdown to the config's fixed size
     const match = rdpResolutions.find(r => r.w === config.rdpFixedWidth && r.h === config.rdpFixedHeight)
     if (match) rdpResolution.value = match.label
@@ -469,6 +551,9 @@ watch(() => form.type, (newType) => {
   }
   if (newType === 'local' && !form.shellPath && settingsStore.availableShells.length > 0) {
     form.shellPath = settingsStore.availableShells[0]
+  }
+  if (newType === 'serial') {
+    scanSerialPorts()
   }
 })
 
@@ -523,6 +608,12 @@ function resetForm() {
   form.ftpEncoding = 'utf-8'
   form.encoding = 'utf-8'
   form.shellPath = ''
+  form.serialPort = ''
+  form.serialBaudRate = 115200
+  form.serialDataBits = 8
+  form.serialStopBits = 1
+  form.serialParity = 'none'
+  serialBaudRateInput.value = ''
   form.tunnelSSHConnId = undefined
   rdpResolution.value = '1280 × 720 (HD)'
   selectedGroupId.value = undefined
@@ -579,6 +670,14 @@ function generateUniqueName(name: string): string {
 }
 
 function normalizeForm(): ConnectionConfig {
+  // Sync serial refs into form before normalization
+  if (form.type === 'serial') {
+    form.serialBaudRate = parseInt(serialBaudRateInput.value, 10) || 115200
+    serialBaudRateInput.value = String(form.serialBaudRate)
+    form.serialDataBits = serialDataBitsValue.value
+    form.serialStopBits = serialStopBitsValue.value
+    form.serialParity = serialParityValue.value
+  }
   const normalized = { ...form }
   normalized.postLoginExpectSteps = normalizeExpectSteps(form.postLoginExpectSteps || [])
   if (postLoginMode.value === 'script') {
@@ -586,11 +685,13 @@ function normalizeForm(): ConnectionConfig {
   } else {
     normalized.postLoginScript = ''
   }
-  if (normalized.type !== 'local' && !normalized.host.trim()) {
+  if (normalized.type !== 'local' && normalized.type !== 'serial' && !normalized.host.trim()) {
     throw new Error(t('conn.hostRequired'))
   }
   if (!normalized.name.trim()) {
-    normalized.name = generateUniqueName(normalized.host.trim())
+    normalized.name = generateUniqueName(
+      normalized.type === 'serial' ? (normalized.serialPort || 'Serial') : normalized.host.trim()
+    )
   }
   return normalized
 }
