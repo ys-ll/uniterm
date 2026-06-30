@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, watch, computed, nextTick, onMounted, onUnmounted, inject } from 'vue'
 import { Radio, Sparkles, MoreHorizontal, X } from '@lucide/vue'
 import BaseTerminal from './BaseTerminal.vue'
 import { useTabStore } from '../stores/tabStore'
@@ -80,6 +80,7 @@ import { CreateSession } from '../../wailsjs/go/main/App'
 import { useI18n } from '../i18n'
 import type { Panel } from '../types/workspace'
 import type { ConnectionConfig } from '../types/session'
+import type { CredentialResult } from './CredentialPrompt.vue'
 
 const { t } = useI18n()
 
@@ -105,6 +106,8 @@ const tabStore = useTabStore()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
 const settingsStore = useSettingsStore()
+
+const showCredentialDialog = inject<(title: string, subtitle: string, fields: ('user' | 'password')[], initialUser?: string, initialPassword?: string) => Promise<CredentialResult | null>>('showCredentialDialog', () => Promise.resolve(null))
 
 const isAILocked = computed(() =>
   tabStore.aiLockedPanelId === props.panel.id
@@ -163,13 +166,18 @@ function cancelEdit() {
   editing.value = false
 }
 
+let retryAttempt = 0
+
 function onSessionStatus(status: string) {
   if (status === 'retry') {
     retryConnection()
+  } else if (status === 'connected') {
+    retryAttempt = 0
   }
 }
 
 async function retryConnection() {
+  retryAttempt++
   if (props.panel.type === 'local') {
     // Local terminal: reconnect with the same shell used when created
     baseTerminalRef.value?.write('\r\n\x1b[33mRestarting local shell...\x1b[0m\r\n')
@@ -179,6 +187,7 @@ async function retryConnection() {
       const info = await CreateSession('local', config)
       panelStore.bindSession(props.panel.id, info.id)
       sessionStore.initSession(info.id)
+      retryAttempt = 0
     } catch (e: any) {
       baseTerminalRef.value?.write(`\r\n\x1b[31mFailed to start local shell: ${e}\x1b[0m\r\n`)
       baseTerminalRef.value?.setRetryOnEnter(true)
@@ -186,6 +195,26 @@ async function retryConnection() {
     return
   }
   if (!props.panel.config) return
+
+  // On first retry, try with existing credentials; on subsequent retries, re-prompt
+  const credTypes = ['ssh', 'mosh', 'sftp', 'ftp', 'telnet']
+  if (credTypes.includes(props.panel.type) && props.panel.config.authType !== 'key' && retryAttempt > 1) {
+    const result = await showCredentialDialog(
+      t('credential.title'),
+      props.panel.config.user || props.panel.config.host ? `${props.panel.config.user}@${props.panel.config.host}` : '',
+      ['user', 'password'],
+      props.panel.config.user,
+      props.panel.config.password || ''
+    )
+    if (!result) {
+      baseTerminalRef.value?.write('\r\n\x1b[33mRetry cancelled.\x1b[0m\r\n')
+      baseTerminalRef.value?.setRetryOnEnter(true)
+      return
+    }
+    props.panel.config.user = result.user || props.panel.config.user
+    props.panel.config.password = result.password
+  }
+
   baseTerminalRef.value?.write('\r\n\x1b[33mReconnecting...\x1b[0m\r\n')
   try {
     const info = await CreateSession(props.panel.config.type, props.panel.config)

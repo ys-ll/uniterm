@@ -5,6 +5,7 @@
     :title="title"
     width="400px"
     :close-on-click-modal="false"
+    @opened="onDialogOpened"
   >
     <p v-if="subtitle" class="credential-subtitle">{{ subtitle }}</p>
     <div class="credential-fields">
@@ -20,6 +21,7 @@
       <div v-if="fields.includes('password')" class="credential-field">
         <label class="credential-label">{{ t('conn.password') }}</label>
         <el-input
+          ref="passwordInputRef"
           v-model="inputPassword"
           type="password"
           show-password
@@ -37,8 +39,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from '../i18n'
+import type { InputInstance } from 'element-plus'
 
 export interface CredentialResult {
   action: 'connect' | 'save_and_connect'
@@ -64,18 +67,28 @@ const { t } = useI18n()
 
 const inputUser = ref('')
 const inputPassword = ref('')
-const userInputRef = ref<InstanceType<typeof import('element-plus').ElInput> | null>(null)
+const userInputRef = ref<InputInstance | null>(null)
+const passwordInputRef = ref<InputInstance | null>(null)
 
-watch(() => props.visible, async (v) => {
+watch(() => props.visible, (v) => {
   if (v) {
     inputUser.value = props.initialUser || ''
     inputPassword.value = props.initialPassword || ''
-    await nextTick()
-    if (props.fields.includes('user')) {
-      userInputRef.value?.focus()
-    }
   }
 })
+
+function onDialogOpened() {
+  // Focus the first empty field, or username if both are filled
+  if (props.fields.includes('password') && !inputPassword.value) {
+    passwordInputRef.value?.focus()
+  } else if (props.fields.includes('user') && !inputUser.value) {
+    userInputRef.value?.focus()
+  } else if (props.fields.includes('user')) {
+    userInputRef.value?.focus()
+  } else if (props.fields.includes('password')) {
+    passwordInputRef.value?.focus()
+  }
+}
 
 function onCancel() {
   emit('resolve', null)

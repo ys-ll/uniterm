@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, provide } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import Sidebar from './components/Sidebar.vue'
 import TerminalTabContent from './components/TerminalTabContent.vue'
@@ -252,6 +252,8 @@ function showCredentialDialog(
     credentialVisible.value = true
   })
 }
+
+provide('showCredentialDialog', showCredentialDialog)
 
 function onCredentialResolve(result: CredentialResult | null) {
   credentialVisible.value = false
