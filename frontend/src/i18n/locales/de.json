@@ -189,6 +189,7 @@
   "sftp.cancelled": "Abgebrochen",
   "sftp.done": "Fertig",
   "sftp.error": "Fehler",
+  "sftp.connectError": "SFTP-Verbindung fehlgeschlagen",
   "sftp.dropHere": "Dateien hier ablegen",
   "sftp.upload": "Hochladen",
   "sftp.downloadTo": "Herunterladen nach...",

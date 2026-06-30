@@ -189,6 +189,7 @@
   "sftp.cancelled": "Отменено",
   "sftp.done": "Готово",
   "sftp.error": "Ошибка",
+  "sftp.connectError": "Ошибка подключения SFTP",
   "sftp.dropHere": "Перетащите файлы сюда",
   "sftp.upload": "Загрузить",
   "sftp.downloadTo": "Скачать в...",

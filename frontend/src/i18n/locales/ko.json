@@ -189,6 +189,7 @@
   "sftp.cancelled": "취소됨",
   "sftp.done": "완료",
   "sftp.error": "오류",
+  "sftp.connectError": "SFTP 연결 실패",
   "sftp.dropHere": "여기에 파일을 놓으세요",
   "sftp.upload": "업로드",
   "sftp.downloadTo": "다운로드 위치...",

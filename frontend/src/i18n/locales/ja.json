@@ -189,6 +189,7 @@
   "sftp.cancelled": "キャンセルしました",
   "sftp.done": "完了",
   "sftp.error": "エラー",
+  "sftp.connectError": "SFTP 接続に失敗しました",
   "sftp.dropHere": "ここにファイルをドロップ",
   "sftp.upload": "アップロード",
   "sftp.downloadTo": "ダウンロード先...",

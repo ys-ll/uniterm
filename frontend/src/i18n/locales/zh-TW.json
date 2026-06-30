@@ -189,6 +189,7 @@
   "sftp.cancelled": "已取消",
   "sftp.done": "完成",
   "sftp.error": "失敗",
+  "sftp.connectError": "SFTP 連線失敗",
   "sftp.dropHere": "拖曳檔案到此處",
   "sftp.upload": "上傳",
   "sftp.downloadTo": "下載到...",

@@ -549,14 +549,24 @@ let unsubscribeStatus: (() => void) | null = null
 
 onMounted(async () => {
   unsubscribeStatus = EventsOn('session:status', (payload: { id: string; status: string }) => {
-    if (payload.id === panel.value?.sessionId && payload.status === 'connected') {
-      onRefreshLocal()
-      onRefreshRemote()
+    if (payload.id === panel.value?.sessionId) {
+      if (payload.status === 'connected') {
+        onRefreshLocal()
+        onRefreshRemote()
+      } else if (payload.status === 'error') {
+        ElMessage.error(t('sftp.connectError'))
+      }
     }
   })
 
   unsubscribe = EventsOn('session:data', (payload: { id: string; data: string }) => {
     if (payload.id !== panel.value?.sessionId) return
+    // Connection failed messages from backend (SFTP/FTP async connect errors)
+    const connMatch = payload.data.match(/\[Connection failed: ([^\]]+)\]/)
+    if (connMatch) {
+      ElMessage.error(connMatch[1])
+      return
+    }
     const match = payload.data.match(/\x1b\]633;S([^\x07]*)\x07/)
     if (!match) return
     try {

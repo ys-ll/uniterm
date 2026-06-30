@@ -191,6 +191,7 @@
   "sftp.cancelled": "Cancelled",
   "sftp.done": "Done",
   "sftp.error": "Error",
+  "sftp.connectError": "SFTP connection failed",
   "sftp.dropHere": "Drop files here",
   "sftp.upload": "Upload",
   "sftp.downloadTo": "Download to...",
