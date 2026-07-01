@@ -28,6 +28,13 @@
       v-if="dragOverContainer"
       class="tab-drop-indicator tab-drop-indicator-end"
     ></div>
+    <button
+      class="tab-add-btn"
+      :title="t('startTab.defaultName')"
+      @click="onAddStartTab"
+    >
+      <el-icon><Plus :size="14" /></el-icon>
+    </button>
   </div>
   <div class="tab-more" v-if="showMore">
     <el-dropdown trigger="click" @command="setActiveTab" @visible-change="onMoreDropdownVisibleChange">
@@ -52,7 +59,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { MoreHorizontal } from '@lucide/vue'
+import { MoreHorizontal, Plus } from '@lucide/vue'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useI18n } from '../i18n'
@@ -103,6 +110,10 @@ defineEmits<{
   'toggle-ai-lock': [panelId: string]
   'tab-dragstart': [e: DragEvent, tabId: string]
 }>()
+
+function onAddStartTab() {
+  tabStore.createStartTab()
+}
 
 function onWheel(e: WheelEvent) {
   if (!tabsListRef.value) return
@@ -315,5 +326,25 @@ function onTabDrop(e: DragEvent, targetTabId: string, index: number) {
 }
 .tab-drop-indicator-end {
   margin-left: auto;
+}
+
+.tab-add-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #888);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  margin-left: 2px;
+}
+.tab-add-btn:hover {
+  background: var(--bg-hover, #3a3b44);
+  color: var(--text-primary, #e0e0e0);
 }
 </style>

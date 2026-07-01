@@ -69,12 +69,22 @@
               :key="activeTab.id"
               :session-id="getPanelSessionId(activeTab.panelId) || ''"
             />
+            <StartTabContent
+              v-else-if="activeTab.type === 'start'"
+              :key="activeTab.id"
+              :tab="activeTab"
+              @connect="onConnect"
+              @new-connection="onNewConnectionFromStart"
+              @local-terminal="createLocalTerminalWithShell"
+              @connect-serial="showSerialDialog = true"
+              @close-self="(tabId: string) => closeTab(tabId)"
+            />
           </KeepAlive>
         </template>
       </div>
       <AISidebar ref="aiSidebarRef" />
     </div>
-    <ConnectionForm v-model="showConnectionForm" @save="onSaveOnly" @connect="onConnect" />
+    <ConnectionForm v-model="showConnectionForm" :default-group-id="pendingGroupId" @save="onSaveOnly" @connect="onConnect" />
     <SerialConnectDialog v-model="showSerialDialog" @connect="onConnectSerial" />
     <CredentialPrompt
       v-model:visible="credentialVisible"
@@ -117,6 +127,7 @@ import SPICETabContent from './components/SPICETabContent.vue'
 import DBTabContent from './components/DBTabContent.vue'
 import RedisTabContent from './components/RedisTabContent.vue'
 import MonitorTabContent from './components/MonitorTabContent.vue'
+import StartTabContent from './components/StartTabContent.vue'
 import ConnectionForm from './components/ConnectionForm.vue'
 import AISidebar from './components/AISidebar.vue'
 import SyncConflictDialog from './components/SyncConflictDialog.vue'
@@ -134,7 +145,7 @@ import { useUpdateCheck } from './composables/useUpdateCheck'
 import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../types/settings'
 import { useI18n } from './i18n'
-import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFocus, LoadLocalState, SaveLocalState } from '../wailsjs/go/main/App'
+import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFocus, LoadLocalState, SaveLocalState, RecordRecentConnection } from '../wailsjs/go/main/App'
 import { EventsOn } from '../wailsjs/runtime'
 import { msg } from './services/message'
 import type { ConnectionConfig } from './types/session'
@@ -417,6 +428,10 @@ onMounted(async () => {
   }
   // Pre-load quick commands so suggestions can read them immediately
   useQuickCommandStore().load()
+  // Auto-open start tab if no tabs are open
+  if (tabStore.tabs.length === 0) {
+    tabStore.createStartTab()
+  }
   // Pre-load noVNC so VNC tab switches don't pay the dynamic import cost.
   import('@novnc/novnc').then((m: any) => {
     ;(window as any).__novnc_RFB = m.default || m
@@ -448,14 +463,27 @@ onMounted(async () => {
   EventsOn('rdp:move-resize-start', () => RDPHideForOverlay())
   EventsOn('rdp:move-resize-end', () => RDPShowForOverlay())
 
-  // Panel/Tab menu actions: connect SFTP / Monitor
+  // Panel/Tab/StartTab menu actions
   window.addEventListener('app:connect-sftp', ((e: CustomEvent) => {
-    const panel = e.detail
-    if (panel?.config) onConnectSftp(panel.config)
+    const d = e.detail; const c = d?.config || d; if (c) onConnectSftp(c)
   }) as EventListener)
   window.addEventListener('app:connect-monitor', ((e: CustomEvent) => {
-    const panel = e.detail
-    if (panel?.config) onConnectMonitor(panel.config)
+    const d = e.detail; const c = d?.config || d; if (c) onConnectMonitor(c)
+  }) as EventListener)
+  window.addEventListener('app:connect-rdp', ((e: CustomEvent) => {
+    const d = e.detail; const c = d?.config || d; if (c) onConnectRDP(c)
+  }) as EventListener)
+  window.addEventListener('app:connect-vnc', ((e: CustomEvent) => {
+    const d = e.detail; const c = d?.config || d; if (c) onConnectVNC(c)
+  }) as EventListener)
+  window.addEventListener('app:connect-spice', ((e: CustomEvent) => {
+    const d = e.detail; const c = d?.config || d; if (c) onConnectSPICE(c)
+  }) as EventListener)
+  window.addEventListener('app:connect-db', ((e: CustomEvent) => {
+    const d = e.detail; const c = d?.config || d; if (c) onConnectDB(c)
+  }) as EventListener)
+  window.addEventListener('app:connect-ftp', ((e: CustomEvent) => {
+    const d = e.detail; const c = d?.config || d; if (c) onConnectFtp(c)
   }) as EventListener)
 
 })
@@ -593,6 +621,15 @@ function openSettings() {
 async function closeTab(tabId: string) {
   // Close session before removing panel to clean up Go-side resources
   const tab = tabStore.tabs.find(t => t.id === tabId)
+  if (tab && tab.type === 'start') {
+    tabStore.closeTab(tabId)
+    nextTick(() => {
+      if (tabStore.tabs.length === 0) {
+        tabStore.createStartTab()
+      }
+    })
+    return
+  }
   if (tab && tab.type === 'rdp') {
     const p = panelStore.getPanel(tab.panelId)
     if (p?.sessionId) {
@@ -647,6 +684,11 @@ async function closeTab(tabId: string) {
   }
   const panelIds = tabStore.closeTab(tabId)
   panelIds.forEach(pid => panelStore.removePanel(pid))
+  nextTick(() => {
+    if (tabStore.tabs.length === 0) {
+      tabStore.createStartTab()
+    }
+  })
 }
 
 function getPanelConfig(panelId: string): ConnectionConfig | null {
@@ -697,8 +739,11 @@ async function onConnect(config: ConnectionConfig) {
   panel.title = displayTitle
   panelStore.bindSession(panel.id, sessionId)
   sessionStore.initSession(sessionId)
+  const prev = tabStore.activeTab
   const tab = tabStore.createTerminalTab(displayTitle, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
+  if (prev?.type === 'start') closeTab(prev.id)
 }
 
 function getShellLabel(path: string): string {
@@ -717,6 +762,13 @@ function getShellLabel(path: string): string {
 
 async function createLocalTerminalWithShell(shellPath: string) {
   await createLocalTerminal(shellPath)
+}
+
+const pendingGroupId = ref<string | undefined>(undefined)
+
+function onNewConnectionFromStart(payload?: { host?: string; groupId?: string }) {
+  pendingGroupId.value = payload?.groupId
+  showConnectionForm.value = true
 }
 
 function onToggleAiLock(panelId: string) {
@@ -748,6 +800,8 @@ async function createLocalTerminal(shellPath?: string) {
       shellPath: shellPath || undefined
     }
     panel.config = config
+    connectionStore.add(config)
+    RecordRecentConnection(config.id)
     const info = await CreateSession('local', config)
     panelStore.bindSession(panel.id, info.id)
     sessionStore.initSession(info.id)
@@ -772,6 +826,7 @@ async function onConnectSftp(config: ConnectionConfig) {
   panel.title = displayTitle
   const tab = tabStore.createSFPTab(displayTitle, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 
   try {
     const info = await CreateSession('sftp', config)
@@ -794,6 +849,7 @@ async function onConnectFtp(config: ConnectionConfig) {
   panel.title = displayTitle
   const tab = tabStore.createFtpTab(displayTitle, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 
   try {
     const info = await CreateSession('ftp', config)
@@ -818,6 +874,7 @@ async function onConnectRDP(config: ConnectionConfig) {
   panel.title = displayTitle
   const tab = tabStore.createRDPTab(displayTitle, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 
   try {
     const info = await CreateSession('rdp', config)
@@ -843,6 +900,7 @@ async function onConnectVNC(config: ConnectionConfig) {
   panel.title = displayTitle
   const tab = tabStore.createVNCTab(displayTitle, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 
   try {
     const info = await CreateSession('vnc', config)
@@ -868,6 +926,7 @@ async function onConnectSPICE(config: ConnectionConfig) {
   panel.title = displayTitle
   const tab = tabStore.createSPICETab(displayTitle, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 
   try {
     const info = await CreateSession('spice', config)
@@ -892,6 +951,7 @@ async function onConnectMonitor(config: ConnectionConfig) {
   panel.title = displayTitle
   const tab = tabStore.createMonitorTab(displayTitle, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 
   try {
     const info = await CreateSession('monitor', config)
@@ -923,6 +983,7 @@ async function onConnectDB(config: ConnectionConfig) {
     tab.type = 'redis' as any
   }
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 
   try {
     const sessionType = config.dbType === 'redis' ? 'redis' : 'database'
@@ -932,8 +993,7 @@ async function onConnectDB(config: ConnectionConfig) {
   } catch (e: any) {
     const errMsg = e?.message || String(e)
     console.error('Failed to create database session:', errMsg)
-    tabStore.closeTab(tab.id)
-    panelStore.removePanel(panel.id)
+    panelStore.updateStatus(panel.id, 'error')
     msg.error(`${t('db.connectFailed')}: ${errMsg}`)
   }
 }
@@ -954,6 +1014,7 @@ async function onConnectSerial(sessionId: string, portName: string, baudRate: nu
   sessionStore.initSession(sessionId)
   const tab = tabStore.createTerminalTab(panel.title, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 }
 
 // Show/hide native RDP window on tab switch.

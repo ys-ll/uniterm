@@ -663,5 +663,6 @@
   "redis.confirmDelete": "Удалить ключ \"{key}\"?",
   "redis.delete": "Удалить",
   "redis.saved": "Сохранено",
-  "redis.ttlUpdated": "TTL обновлён"
+  "redis.ttlUpdated": "TTL обновлён",
+  "startTab.defaultName": "Новая вкладка"
 }

@@ -663,5 +663,6 @@
   "redis.confirmDelete": "確認刪除 \"{key}\"？",
   "redis.delete": "刪除",
   "redis.saved": "已儲存",
-  "redis.ttlUpdated": "TTL 已更新"
+  "redis.ttlUpdated": "TTL 已更新",
+  "startTab.defaultName": "新標籤頁"
 }

@@ -150,6 +150,10 @@ export function GetProcessDetail(arg1, arg2) {
   return window['go']['main']['App']['GetProcessDetail'](arg1, arg2);
 }
 
+export function GetRecentConnections() {
+  return window['go']['main']['App']['GetRecentConnections']();
+}
+
 export function GetSystemFonts() {
   return window['go']['main']['App']['GetSystemFonts']();
 }
@@ -244,6 +248,10 @@ export function ReadFileBase64(arg1) {
 
 export function ReadFileChunkBase64(arg1, arg2, arg3) {
   return window['go']['main']['App']['ReadFileChunkBase64'](arg1, arg2, arg3);
+}
+
+export function RecordRecentConnection(arg1) {
+  return window['go']['main']['App']['RecordRecentConnection'](arg1);
 }
 
 export function RedisDBSize(arg1) {

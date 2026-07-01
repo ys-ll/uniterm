@@ -663,5 +663,6 @@
   "redis.confirmDelete": "¿Eliminar clave \"{key}\"?",
   "redis.delete": "Eliminar",
   "redis.saved": "Guardado",
-  "redis.ttlUpdated": "TTL actualizado"
+  "redis.ttlUpdated": "TTL actualizado",
+  "startTab.defaultName": "Nueva pestaña"
 }

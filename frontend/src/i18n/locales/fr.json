@@ -663,5 +663,6 @@
   "redis.confirmDelete": "Supprimer la clé \"{key}\" ?",
   "redis.delete": "Supprimer",
   "redis.saved": "Enregistré",
-  "redis.ttlUpdated": "TTL mis à jour"
+  "redis.ttlUpdated": "TTL mis à jour",
+  "startTab.defaultName": "Nouvel onglet"
 }

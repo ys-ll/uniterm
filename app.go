@@ -40,6 +40,7 @@ type App struct {
 	localStateStore      *store.LocalStateStore
 	quickCommandsStore   *store.QuickCommandsStore
 	terminalHistoryStore *store.TerminalHistoryStore
+	recentStore          *store.RecentStore
 	syncService          *sync.SyncService
 	tunnelService        *session.TunnelService
 	mainHwnd             uintptr
@@ -106,6 +107,10 @@ func (a *App) startup(ctx context.Context) {
 	a.terminalHistoryStore = store.NewTerminalHistoryStore(appDir)
 	a.quickCommandsStore = store.NewQuickCommandsStore(appDir)
 	a.localStateStore = store.NewLocalStateStore(appDir)
+	a.recentStore = store.NewRecentStore(appDir)
+	if _, err := a.recentStore.Load(); err != nil {
+		log.Writef("recentStore.Load: %v", err)
+	}
 
 	syncSvc, err := sync.NewSyncService()
 	if err != nil {
@@ -1045,6 +1050,22 @@ func (a *App) DeleteTerminalHistoryEntry(ids []string) error {
 		return fmt.Errorf("terminal history store not initialized")
 	}
 	return a.terminalHistoryStore.DeleteByIDs(ids)
+}
+
+// RecentStore methods
+
+func (a *App) RecordRecentConnection(connId string) {
+	if a.recentStore == nil {
+		return
+	}
+	a.recentStore.Record(connId)
+}
+
+func (a *App) GetRecentConnections() []string {
+	if a.recentStore == nil {
+		return []string{}
+	}
+	return a.recentStore.GetAll()
 }
 
 // ChatCompletion streams the Anthropic API response via SSE, emitting Wails

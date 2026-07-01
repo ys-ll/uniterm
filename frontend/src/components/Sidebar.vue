@@ -310,6 +310,8 @@
       <div v-if="selectedConn && selectedConn.type === 'ssh'" class="menu-item" @click="doConnect">{{ t('sidebar.connectSSH') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'telnet'" class="menu-item" @click="doConnect">{{ t('sidebar.connectTelnet') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'mosh'" class="menu-item" @click="doConnect">{{ t('sidebar.connectMosh') }}</div>
+      <div v-if="selectedConn && selectedConn.type === 'local'" class="menu-item" @click="doConnect">{{ t('sidebar.connectLocal') }}</div>
+      <div v-if="selectedConn && selectedConn.type === 'serial'" class="menu-item" @click="emit('connectSerial')">{{ t('sidebar.connectSerial') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'ssh'" class="menu-item" @click="doConnectSFTP">{{ t('sidebar.connectSftp') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'ftp'" class="menu-item" @click="doConnectFTP">{{ t('sidebar.connectFtp') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'ssh'" class="menu-item" @click="doConnectMonitor">{{ t('sidebar.connectMonitor') }}</div>

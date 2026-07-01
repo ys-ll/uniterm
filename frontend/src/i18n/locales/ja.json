@@ -663,5 +663,6 @@
   "redis.confirmDelete": "キー \"{key}\" を削除しますか？",
   "redis.delete": "削除",
   "redis.saved": "保存しました",
-  "redis.ttlUpdated": "有効期限を更新しました"
+  "redis.ttlUpdated": "有効期限を更新しました",
+  "startTab.defaultName": "新しいタブ"
 }

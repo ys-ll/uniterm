@@ -663,5 +663,6 @@
   "redis.confirmDelete": "Schlüssel \"{key}\" löschen?",
   "redis.delete": "Löschen",
   "redis.saved": "Gespeichert",
-  "redis.ttlUpdated": "TTL aktualisiert"
+  "redis.ttlUpdated": "TTL aktualisiert",
+  "startTab.defaultName": "Neuer Tab"
 }

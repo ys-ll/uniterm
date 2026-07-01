@@ -1,0 +1,1104 @@
+<template>
+  <div ref="startTabRef" class="start-tab">
+    <div class="start-content" :style="contentStyle">
+    <!-- Search row -->
+    <div class="start-search-row">
+      <el-dropdown trigger="click" placement="bottom-start" :teleported="false">
+        <span class="start-filter-btn" :class="{ active: selectedTypeFilter !== 'all' }">
+          <el-icon><Filter :size="14" /></el-icon>
+          <span>{{ selectedTypeFilter === 'all' ? t('sidebar.filterAll') : (TYPE_LABELS[selectedTypeFilter] || selectedTypeFilter) }}</span>
+        </span>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item
+              :class="{ 'is-active': selectedTypeFilter === 'all' }"
+              @click="selectedTypeFilter = 'all'"
+            >
+              {{ t('sidebar.filterAll') }}
+            </el-dropdown-item>
+            <el-dropdown-item divided v-if="availableTypes.length > 0" />
+            <el-dropdown-item
+              v-for="typeOpt in availableTypes"
+              :key="typeOpt.value"
+              :class="{ 'is-active': selectedTypeFilter === typeOpt.value }"
+              @click="selectedTypeFilter = typeOpt.value"
+            >
+              {{ typeOpt.label }}
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <input
+        ref="searchInputRef"
+        v-model="searchQuery"
+        class="start-search-input"
+        :placeholder="t('sidebar.searchPlaceholder')"
+        @keydown="onSearchKeydown"
+      />
+    </div>
+
+    <!-- Action buttons -->
+    <div class="start-action-btns">
+      <button class="start-action-btn primary" @click="emit('new-connection', tab.viewMode === 'group' ? { groupId: tab.groupId } : undefined)">
+        <el-icon><Plus :size="14" /></el-icon>
+        {{ t('header.newConnection') }}
+      </button>
+      <el-dropdown trigger="click" placement="bottom-start" :teleported="false">
+        <button class="start-action-btn">
+          <el-icon><Laptop :size="14" /></el-icon>
+          {{ t('conn.localTerminal') }}
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item
+              v-for="sh in settingsStore.availableShells"
+              :key="sh"
+              @click="emit('local-terminal', sh)"
+            >
+              {{ getShellLabel(sh) }}
+            </el-dropdown-item>
+            <el-dropdown-item v-if="settingsStore.availableShells.length === 0" disabled>
+              No shells available
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+      <button class="start-action-btn" @click="emit('connect-serial')">
+        <el-icon><Cable :size="14" /></el-icon>
+        {{ t('sidebar.connectSerial') }}
+      </button>
+    </div>
+
+    <!-- Breadcrumb for group view -->
+    <div v-if="tab.viewMode === 'group'" class="start-breadcrumb">
+      <span class="link" @click="goHome">{{ t('startTab.backToStart') }}</span>
+      <span class="sep">/</span>
+      <span class="current">{{ getGroupName(tab.groupId || '') }}</span>
+    </div>
+
+    <!-- Home view sections -->
+    <template v-if="tab.viewMode === 'home'">
+      <!-- Recent connections -->
+      <template v-if="recentConfigs.length > 0">
+        <div class="start-section-label">{{ t('startTab.recentConnections') }}</div>
+        <div class="start-cards-grid">
+          <div
+            v-for="config in recentConfigs"
+            :key="config.id"
+            class="start-card"
+            :class="{ focused: isCardFocused('recent:' + config.id) }"
+            @click="onCardClick(config, 'recent:')"
+            @dblclick="onCardDblClick(config)"
+            @contextmenu.prevent="onContextMenu($event, config)"
+          >
+            <div class="start-card-top">
+              <div class="start-card-icon" :class="config.type">
+                <el-icon v-if="config.type === 'ssh' || config.type === 'telnet' || config.type === 'mosh'"><SquareTerminal :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'local'"><Laptop :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'database'"><Database :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'rdp' || config.type === 'vnc' || config.type === 'spice'"><Monitor :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'serial'"><Cable :size="28" /></el-icon>
+                <el-icon v-else><Server :size="28" /></el-icon>
+              </div>
+              <div>
+                <div class="start-card-name">{{ config.name }}</div>
+                <div class="start-card-meta">{{ getCardSubtitle(config) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Groups -->
+      <div class="start-section-label">
+        {{ t('startTab.groups') }}
+        <span class="start-add-group-btn" @click="showNewGroupDialog = true" :title="t('conn.newGroupTitle')"><el-icon><Plus :size="12" /></el-icon></span>
+      </div>
+      <div class="start-cards-grid">
+        <div
+          v-for="group in groupCards.groups"
+          :key="group.id"
+          class="start-card"
+          :class="{ focused: isCardFocused('group:' + group.id) }"
+          @click="onGroupClick(group.id)"
+          @dblclick="enterGroup(group.id)"
+          @contextmenu.prevent="onGroupContextMenu($event, group.id, group.name)"
+        >
+          <div class="start-card-top">
+            <div class="start-card-icon group"><el-icon><Folder :size="22" /></el-icon></div>
+            <div>
+              <div class="start-card-name">{{ group.name }}</div>
+              <div class="start-card-meta">{{ t('startTab.connectionsCount', { count: group.count }) }}</div>
+            </div>
+          </div>
+        </div>
+        <div
+          v-if="groupCards.ungroupedCount > 0"
+          class="start-card"
+          :class="{ focused: isCardFocused('group:__ungrouped__') }"
+          @click="onGroupClick('__ungrouped__')"
+          @dblclick="enterGroup('__ungrouped__')"
+        >
+          <div class="start-card-top">
+            <div class="start-card-icon ungrouped"><el-icon><FolderOpen :size="22" /></el-icon></div>
+            <div>
+              <div class="start-card-name">{{ t('conn.noGroup') }}</div>
+              <div class="start-card-meta">{{ t('startTab.connectionsCount', { count: groupCards.ungroupedCount }) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- All connections -->
+      <div class="start-section-label">{{ t('startTab.allConnections') }}</div>
+      <div class="start-cards-grid">
+        <div
+          v-for="{ config } in filteredConnections"
+          :key="config.id"
+          class="start-card"
+          :class="{ focused: isCardFocused('conn:' + config.id) }"
+          @click="onCardClick(config)"
+          @dblclick="onCardDblClick(config)"
+          @contextmenu.prevent="onContextMenu($event, config)"
+        >
+          <div class="start-card-top">
+            <div class="start-card-icon" :class="config.type">
+              <el-icon v-if="config.type === 'ssh' || config.type === 'telnet' || config.type === 'mosh'"><SquareTerminal :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'local'"><Laptop :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'database'"><Database :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'rdp' || config.type === 'vnc' || config.type === 'spice'"><Monitor :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'serial'"><Cable :size="28" /></el-icon>
+              <el-icon v-else><Server :size="28" /></el-icon>
+            </div>
+            <div>
+              <div class="start-card-name">{{ config.name }}</div>
+              <div class="start-card-meta">{{ getCardSubtitle(config) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="filteredConnections.length === 0 && connectionStore.connections.length > 0 && !searchQuery.trim()" class="start-empty-hint">
+        {{ t('startTab.noConnections') }}
+      </div>
+    </template>
+
+    <!-- Group detail view -->
+    <template v-if="tab.viewMode === 'group'">
+      <div class="start-cards-grid">
+        <div
+          v-for="{ config } in filteredConnections"
+          :key="config.id"
+          class="start-card"
+          :class="{ focused: isCardFocused('conn:' + config.id) }"
+          @click="onCardClick(config)"
+          @dblclick="onCardDblClick(config)"
+	          @contextmenu.prevent="onContextMenu($event, config)"
+        >
+          <div class="start-card-top">
+            <div class="start-card-icon" :class="config.type">
+              <el-icon v-if="config.type === 'ssh' || config.type === 'telnet' || config.type === 'mosh'"><SquareTerminal :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'local'"><Laptop :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'database'"><Database :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'rdp' || config.type === 'vnc' || config.type === 'spice'"><Monitor :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'serial'"><Cable :size="28" /></el-icon>
+              <el-icon v-else><Server :size="28" /></el-icon>
+            </div>
+            <div>
+              <div class="start-card-name">{{ config.name }}</div>
+              <div class="start-card-meta">{{ getCardSubtitle(config) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="filteredConnections.length === 0" class="start-empty-hint">
+        {{ t('startTab.emptyGroup') }}
+      </div>
+    </template>
+
+    <!-- Quick connect virtual card -->
+    <div
+      v-if="searchQuery.trim()"
+      class="start-quick-card"
+      :class="{ focused: isCardFocused('quick') }"
+      @click="onQuickClick"
+      @dblclick="emit('new-connection', { host: searchQuery.trim() })"
+    >
+      <div class="start-card-top">
+        <div class="start-card-icon quick"><el-icon><Zap :size="22" /></el-icon></div>
+        <div>
+          <div class="start-card-name quick-name">{{ t('startTab.quickConnect', { host: searchQuery.trim() }) }}</div>
+          <div class="start-card-meta">{{ t('startTab.quickConnectDesc') }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div v-if="connectionStore.connections.length === 0" class="start-empty-state">
+      <span class="empty-icon">📋</span>
+      <p>{{ t('startTab.noConnections') }}</p>
+    </div>
+
+    <!-- Context menu -->
+    <div
+      v-show="contextMenuVisible"
+      class="start-context-menu"
+      :style="contextMenuStyle"
+      @click.stop
+    >
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'ssh'" class="menu-item" @click="doConnect(contextMenuConfig)">{{ t('sidebar.connectSSH') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'telnet'" class="menu-item" @click="doConnect(contextMenuConfig)">{{ t('sidebar.connectTelnet') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'mosh'" class="menu-item" @click="doConnect(contextMenuConfig)">{{ t('sidebar.connectMosh') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'local'" class="menu-item" @click="doConnect(contextMenuConfig)">{{ t('sidebar.connectLocal') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'serial'" class="menu-item" @click="doConnectSerial(contextMenuConfig)">{{ t('sidebar.connectSerial') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'ssh'" class="menu-item" @click="doConnectSftp(contextMenuConfig)">{{ t('sidebar.connectSftp') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'ssh'" class="menu-item" @click="doConnectMonitor(contextMenuConfig)">{{ t('sidebar.connectMonitor') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'rdp'" class="menu-item" @click="doConnectRdp(contextMenuConfig)">{{ t('sidebar.connectRDP') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'vnc'" class="menu-item" @click="doConnectVnc(contextMenuConfig)">{{ t('sidebar.connectVNC') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'spice'" class="menu-item" @click="doConnectSpice(contextMenuConfig)">{{ t('sidebar.connectSPICE') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'database'" class="menu-item" @click="doConnectDb(contextMenuConfig)">{{ t('db.connectDB') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'ftp'" class="menu-item" @click="doConnectFtp(contextMenuConfig)">{{ t('sidebar.connectFtp') }}</div>
+      <div class="menu-divider" />
+      <div class="menu-item" @click="doDuplicate(contextMenuConfig)">{{ t('sidebar.duplicate') }}</div>
+      <div class="menu-divider" />
+      <div class="menu-item danger" @click="doDelete(contextMenuConfig)">{{ t('sidebar.delete') }}</div>
+    </div>
+
+    <!-- Group context menu -->
+    <div
+      v-show="groupContextVisible"
+      class="start-context-menu"
+      :style="contextMenuStyle"
+      @click.stop
+    >
+      <div class="menu-item" @click="doRenameGroup">{{ t('sidebar.edit') }}</div>
+      <div class="menu-divider" />
+      <div class="menu-item danger" @click="doDeleteGroup">{{ t('sidebar.delete') }}</div>
+    </div>
+    </div>
+
+    <!-- New group dialog -->
+    <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="360px">
+      <el-input v-model="newGroupDialogName" :placeholder="t('conn.newGroupTitle')" @keyup.enter="doAddGroup" />
+      <template #footer>
+        <el-button @click="showNewGroupDialog = false">{{ t('conn.deleteGroupCancel') }}</el-button>
+        <el-button type="primary" @click="doAddGroup">{{ t('conn.newGroupTitle') }}</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ElMessageBox } from 'element-plus'
+import type { StartTab } from '../types/workspace'
+import type { ConnectionConfig } from '../types/session'
+import { useConnectionStore } from '../stores/connectionStore'
+import { useTabStore } from '../stores/tabStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { useI18n } from '../i18n'
+import { GetRecentConnections } from '../../wailsjs/go/main/App'
+import { Filter, Plus, Laptop, Cable, SquareTerminal, Database, Monitor, Server, Folder, FolderOpen, Zap } from '@lucide/vue'
+
+const props = defineProps<{
+  tab: StartTab
+}>()
+
+const emit = defineEmits<{
+  connect: [config: ConnectionConfig]
+  'new-connection': [payload?: { host?: string; groupId?: string }]
+  'local-terminal': [shellPath: string]
+  'connect-serial': []
+  'close-self': [tabId: string]
+}>()
+
+const { t } = useI18n()
+const connectionStore = useConnectionStore()
+const tabStore = useTabStore()
+const settingsStore = useSettingsStore()
+
+// ── Card subtitle (matches sidebar display format) ──
+function getCardSubtitle(config: ConnectionConfig): string {
+  const typeLabel = config.type === 'database' ? (config.dbType || config.type) : config.type
+  const detail = config.type === 'local'
+    ? getShellLabel(config.shellPath || '')
+    : config.user
+      ? `${config.user}@${config.host}:${config.port}`
+      : `${config.host}:${config.port}`
+  return typeLabel + ' ' + detail
+}
+
+// ── Search & filter ──
+const searchQuery = ref('')
+const selectedTypeFilter = ref('all')
+const searchInputRef = ref<HTMLInputElement>()
+
+const TYPE_LABELS: Record<string, string> = {
+  ssh: 'SSH', telnet: 'Telnet', mosh: 'Mosh', rdp: 'RDP', vnc: 'VNC', spice: 'SPICE',
+  local: 'Local', sftp: 'SFTP', ftp: 'FTP', monitor: 'Monitor',
+  'database:mysql': 'MySQL', 'database:postgres': 'PostgreSQL', 'database:rqlite': 'rqlite',
+  'database:oracle': 'Oracle', 'database:sqlserver': 'SQL Server', 'database:redis': 'Redis',
+}
+
+const availableTypes = computed(() => {
+  const types = new Set<string>()
+  for (const c of connectionStore.connections) {
+    if (c.type === 'database' && c.dbType) {
+      types.add(`database:${c.dbType}`)
+    } else {
+      types.add(c.type)
+    }
+  }
+  return [...types].sort().map(value => ({
+    value,
+    label: TYPE_LABELS[value] || value
+  }))
+})
+
+function matchTypeFilter(conn: ConnectionConfig, filter: string): boolean {
+  if (filter === 'all') return true
+  if (filter.startsWith('database:')) {
+    return conn.type === 'database' && conn.dbType === filter.slice(9)
+  }
+  return conn.type === filter
+}
+
+// ── Shell label helper ──
+function getShellLabel(path: string): string {
+  if (!path) return 'Local'
+  const lower = path.toLowerCase()
+  if (lower.startsWith('wsl://')) {
+    const distro = path.slice(6)
+    return distro ? `WSL - ${distro}` : 'WSL'
+  }
+  if (lower.includes('pwsh')) return 'PowerShell'
+  if (lower.includes('powershell')) return 'Windows PowerShell'
+  if (lower.includes('bash')) return 'Git Bash'
+  if (lower.includes('cmd')) return 'Command Prompt'
+  return path.split(/[\\/]/).pop() || path
+}
+
+// ── Recent connections ──
+const recentConnectionIds = ref<string[]>([])
+
+async function loadRecent() {
+  try {
+    recentConnectionIds.value = await GetRecentConnections()
+  } catch {
+    recentConnectionIds.value = []
+  }
+}
+loadRecent()
+
+const recentConfigs = computed(() => {
+  return recentConnectionIds.value
+    .map(id => connectionStore.connections.find(c => c.id === id))
+    .filter(Boolean) as ConnectionConfig[]
+})
+
+// ── Filtered connections ──
+const filteredConnections = computed(() => {
+  let conns = connectionStore.connections
+
+  if (props.tab.viewMode === 'group' && props.tab.groupId) {
+    if (props.tab.groupId === '__ungrouped__') {
+      conns = conns.filter(c => !c.groupId)
+    } else {
+      conns = conns.filter(c => c.groupId === props.tab.groupId)
+    }
+  }
+
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return conns
+    .filter(c => matchTypeFilter(c, selectedTypeFilter.value))
+    .filter(c => !query ||
+      c.name.toLowerCase().includes(query) ||
+      (c.host || '').toLowerCase().includes(query) ||
+      c.type.toLowerCase().includes(query))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(c => ({ config: c }))
+})
+
+// ── Groups ──
+const groupCards = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  const matchFilter = (c: ConnectionConfig) =>
+    matchTypeFilter(c, selectedTypeFilter.value) &&
+    (!query || c.name.toLowerCase().includes(query) || (c.host || '').toLowerCase().includes(query) || c.type.toLowerCase().includes(query))
+  const groups = [...connectionStore.groups]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(g => ({
+      ...g,
+      count: connectionStore.connections.filter(c => c.groupId === g.id && matchFilter(c)).length
+    }))
+  const ungroupedCount = connectionStore.connections.filter(c => !c.groupId && matchFilter(c)).length
+  return { groups, ungroupedCount }
+})
+
+function getGroupName(groupId: string): string {
+  if (groupId === '__ungrouped__') return t('conn.noGroup')
+  return connectionStore.groups.find(g => g.id === groupId)?.name || ''
+}
+
+// ── Navigation ──
+function onCardClick(config: ConnectionConfig, prefix = 'conn:') {
+  const idx = focusableIndexMap.value.get(prefix + config.id)
+  if (idx !== undefined) {
+    focusedCardIndex.value = idx
+    focusInGrid.value = true
+  }
+}
+
+function onGroupClick(groupId: string) {
+  const idx = focusableIndexMap.value.get('group:' + groupId)
+  if (idx !== undefined) {
+    focusedCardIndex.value = idx
+    focusInGrid.value = true
+    startTabRef.value?.focus()
+  }
+}
+
+function onQuickClick() {
+  const idx = focusableIndexMap.value.get('quick')
+  if (idx !== undefined) {
+    focusedCardIndex.value = idx
+    focusInGrid.value = true
+    startTabRef.value?.focus()
+  }
+}
+
+function onCardDblClick(config: ConnectionConfig) {
+  emit('connect', config)
+}
+
+function enterGroup(groupId: string) {
+  props.tab.viewMode = 'group'
+  props.tab.groupId = groupId
+  focusedCardIndex.value = 0
+  focusInGrid.value = true
+  searchQuery.value = ''
+}
+
+function goHome() {
+  const returnGroupId = props.tab.groupId
+  props.tab.viewMode = 'home'
+  props.tab.groupId = undefined
+  focusInGrid.value = true
+  nextTick(() => {
+    if (returnGroupId) {
+      const idx = focusableIndexMap.value.get('group:' + returnGroupId)
+      focusedCardIndex.value = idx ?? 0
+    } else {
+      focusedCardIndex.value = 0
+    }
+  })
+}
+
+
+// ── Content area centering ──
+const startTabRef = ref<HTMLElement | null>(null)
+const contentWidth = ref(0)
+
+const CARD_WIDTH = 240
+const CARD_GAP = 12
+const PADDING = 32 // .start-tab padding on each side
+
+function updateContentWidth() {
+  const el = startTabRef.value
+  if (!el) return
+  const available = el.clientWidth - PADDING * 2
+  const cols = Math.max(2, Math.min(6, Math.floor((available + CARD_GAP) / (CARD_WIDTH + CARD_GAP))))
+  contentWidth.value = cols * CARD_WIDTH + (cols - 1) * CARD_GAP
+}
+
+const contentStyle = computed(() => ({
+  width: contentWidth.value + 'px',
+  margin: '0 auto'
+}))
+
+let resizeObserver: ResizeObserver | null = null
+
+// ── Keyboard navigation ──
+const focusedCardIndex = ref(-1)
+const focusInGrid = ref(false)
+
+type FocusableItem =
+  | { kind: 'recent'; config: ConnectionConfig }
+  | { kind: 'group'; groupId: string; name: string }
+  | { kind: 'connection'; config: ConnectionConfig }
+  | { kind: 'quick' }
+
+const focusableItems = computed<FocusableItem[]>(() => {
+  if (props.tab.viewMode === 'group') {
+    const items: FocusableItem[] = filteredConnections.value.map(({ config }) => ({ kind: 'connection' as const, config }))
+    if (searchQuery.value.trim()) items.push({ kind: 'quick' })
+    return items
+  }
+  const items: FocusableItem[] = []
+  for (const config of recentConfigs.value) items.push({ kind: 'recent', config })
+  for (const group of groupCards.value.groups) items.push({ kind: 'group', groupId: group.id, name: group.name })
+  if (groupCards.value.ungroupedCount > 0) items.push({ kind: 'group', groupId: '__ungrouped__', name: t('conn.noGroup') })
+  for (const { config } of filteredConnections.value) items.push({ kind: 'connection', config })
+  if (searchQuery.value.trim()) items.push({ kind: 'quick' })
+  return items
+})
+
+const focusableIndexMap = computed(() => {
+  const map = new Map<string, number>()
+  focusableItems.value.forEach((item, idx) => {
+    if (item.kind === 'recent') map.set('recent:' + item.config.id, idx)
+    else if (item.kind === 'connection') map.set('conn:' + item.config.id, idx)
+    else if (item.kind === 'group') map.set('group:' + item.groupId, idx)
+    else if (item.kind === 'quick') map.set('quick', idx)
+  })
+  return map
+})
+
+function isCardFocused(key: string): boolean {
+  if (!focusInGrid.value) return false
+  const idx = focusableIndexMap.value.get(key)
+  return idx === focusedCardIndex.value
+}
+
+function getGridColumns(): number {
+  if (contentWidth.value === 0) return 3
+  return Math.max(1, Math.floor((contentWidth.value + CARD_GAP) / (CARD_WIDTH + CARD_GAP)))
+}
+
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.key === 'Tab' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    e.stopPropagation()
+    searchInputRef.value?.blur()
+    focusInGrid.value = true
+    focusedCardIndex.value = 0
+    return
+  }
+}
+
+function onKeydown(e: KeyboardEvent) {
+  // Only handle when this component is mounted and this tab is active
+  if (!startTabRef.value) return
+  if (tabStore.activeTabId !== props.tab.id) return
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    if (focusInGrid.value) {
+      focusInGrid.value = false
+      focusedCardIndex.value = -1
+      searchInputRef.value?.focus()
+    } else {
+      focusInGrid.value = true
+      focusedCardIndex.value = 0
+    }
+    return
+  }
+
+  if ((e.key === 'Escape' || e.key === 'Backspace') && props.tab.viewMode === 'group') {
+    goHome()
+    focusedCardIndex.value = 0
+    focusInGrid.value = true
+    return
+  }
+
+  if (!focusInGrid.value) return
+
+  const cols = getGridColumns()
+  const items = focusableItems.value
+  const total = items.length
+  if (total === 0) return
+
+  // Section boundaries: indices where kind changes
+  const sectionStarts: number[] = [0]
+  for (let i = 1; i < total; i++) {
+    if (items[i].kind !== items[i - 1].kind) sectionStarts.push(i)
+  }
+
+  function sectionOf(idx: number) {
+    for (let s = sectionStarts.length - 1; s >= 0; s--) {
+      if (idx >= sectionStarts[s]) return s
+    }
+    return 0
+  }
+
+  if (e.key === 'ArrowRight') {
+    e.preventDefault()
+    focusedCardIndex.value = Math.min(focusedCardIndex.value + 1, total - 1)
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    focusedCardIndex.value = Math.max(focusedCardIndex.value - 1, 0)
+  } else if (e.key === 'ArrowUp' && focusedCardIndex.value === 0) {
+    e.preventDefault()
+    focusInGrid.value = false
+    focusedCardIndex.value = -1
+    searchInputRef.value?.focus()
+    return
+  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault()
+    const cur = focusedCardIndex.value
+    const curSection = sectionOf(cur)
+    const curStart = sectionStarts[curSection]
+    const curEnd = curSection + 1 < sectionStarts.length ? sectionStarts[curSection + 1] : total
+    const visualCol = (cur - curStart) % cols
+    const dir = e.key === 'ArrowDown' ? 1 : -1
+
+    // Stay in current section if possible
+    const sameSectionTarget = cur + dir * cols
+    if (sameSectionTarget >= curStart && sameSectionTarget < curEnd) {
+      focusedCardIndex.value = sameSectionTarget
+    } else {
+      // Cross to next/prev section, align to same visual column
+      const nextSection = curSection + dir
+      if (nextSection < 0) {
+        focusedCardIndex.value = Math.max(cur - cols, 0)
+      } else if (nextSection >= sectionStarts.length) {
+        focusedCardIndex.value = Math.min(cur + cols, total - 1)
+      } else {
+        const secStart = sectionStarts[nextSection]
+        const secEnd = nextSection + 1 < sectionStarts.length ? sectionStarts[nextSection + 1] : total
+        const secLen = secEnd - secStart
+        const lastRowStart = secStart + Math.floor((secLen - 1) / cols) * cols
+        const rowTarget = dir === 1 ? secStart : lastRowStart
+        const target = Math.min(rowTarget + visualCol, secEnd - 1)
+        focusedCardIndex.value = target
+      }
+    }
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    const item = focusableItems.value[focusedCardIndex.value]
+    if (!item) return
+    if (item.kind === 'recent' || item.kind === 'connection') {
+      onCardDblClick(item.config)
+    } else if (item.kind === 'group') {
+      enterGroup(item.groupId)
+    } else if (item.kind === 'quick') {
+      emit('new-connection', { host: searchQuery.value.trim() })
+    }
+  }
+}
+
+// ── Context menu ──
+const contextMenuVisible = ref(false)
+const contextMenuStyle = ref<Record<string, string>>({})
+const contextMenuConfig = ref<ConnectionConfig | null>(null)
+
+function onContextMenu(e: MouseEvent, config: ConnectionConfig) {
+  contextMenuConfig.value = config
+  contextMenuStyle.value = {
+    position: 'fixed',
+    left: e.clientX + 'px',
+    top: e.clientY + 'px',
+    zIndex: '10000'
+  }
+  contextMenuVisible.value = true
+}
+
+function closeContextMenu() {
+  contextMenuVisible.value = false
+  groupContextVisible.value = false
+}
+
+// ── Group context menu ──
+const groupContextVisible = ref(false)
+const groupContextTarget = ref<{ id: string; name: string } | null>(null)
+
+function onGroupContextMenu(e: MouseEvent, groupId: string, groupName: string) {
+  closeContextMenu()
+  groupContextTarget.value = { id: groupId, name: groupName }
+  contextMenuStyle.value = {
+    position: 'fixed',
+    left: e.clientX + 'px',
+    top: e.clientY + 'px',
+    zIndex: '10000'
+  }
+  groupContextVisible.value = true
+}
+
+function doRenameGroup() {
+  if (!groupContextTarget.value) return
+  const name = prompt('Rename group:', groupContextTarget.value.name)
+  if (name) connectionStore.renameGroup(groupContextTarget.value.id, name)
+  closeContextMenu()
+}
+
+const showNewGroupDialog = ref(false)
+const newGroupDialogName = ref('')
+
+async function doAddGroup() {
+  if (!newGroupDialogName.value.trim()) return
+  await connectionStore.addGroup(newGroupDialogName.value.trim())
+  newGroupDialogName.value = ''
+  showNewGroupDialog.value = false
+}
+
+async function doDeleteGroup() {
+  if (!groupContextTarget.value) return
+  closeContextMenu()
+  try {
+    await ElMessageBox.confirm(
+      `Delete group "${groupContextTarget.value.name}" and all its connections?`,
+      '',
+      { confirmButtonText: t('sidebar.delete'), cancelButtonText: 'Cancel', type: 'warning' }
+    )
+    connectionStore.deleteGroup(groupContextTarget.value.id, 'delete-connections')
+  } catch { /* cancelled */ }
+}
+
+function onDocumentClick() {
+  contextMenuVisible.value = false
+  groupContextVisible.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+  window.addEventListener('keydown', onKeydown)
+  updateContentWidth()
+  if (startTabRef.value) {
+    resizeObserver = new ResizeObserver(() => updateContentWidth())
+    resizeObserver.observe(startTabRef.value)
+  }
+})
+
+watch(focusedCardIndex, () => {
+  nextTick(() => {
+    const el = document.querySelector('.start-card.focused') as HTMLElement | null
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  })
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
+  window.removeEventListener('keydown', onKeydown)
+  resizeObserver?.disconnect()
+})
+
+// Context menu actions
+function doConnect(config: ConnectionConfig) { closeContextMenu(); emit('connect', config) }
+function doConnectSerial(_config: ConnectionConfig) { closeContextMenu(); emit('connect-serial') }
+function doConnectSftp(config: ConnectionConfig) { closeContextMenu(); window.dispatchEvent(new CustomEvent('app:connect-sftp', { detail: config })) }
+function doConnectMonitor(config: ConnectionConfig) { closeContextMenu(); window.dispatchEvent(new CustomEvent('app:connect-monitor', { detail: config })) }
+function doConnectRdp(config: ConnectionConfig) { closeContextMenu(); window.dispatchEvent(new CustomEvent('app:connect-rdp', { detail: config })) }
+function doConnectVnc(config: ConnectionConfig) { closeContextMenu(); window.dispatchEvent(new CustomEvent('app:connect-vnc', { detail: config })) }
+function doConnectSpice(config: ConnectionConfig) { closeContextMenu(); window.dispatchEvent(new CustomEvent('app:connect-spice', { detail: config })) }
+function doConnectDb(config: ConnectionConfig) { closeContextMenu(); window.dispatchEvent(new CustomEvent('app:connect-db', { detail: config })) }
+function doConnectFtp(config: ConnectionConfig) { closeContextMenu(); window.dispatchEvent(new CustomEvent('app:connect-ftp', { detail: config })) }
+function doDuplicate(config: ConnectionConfig | null) {
+  if (!config) return
+  closeContextMenu()
+  const newConfig = { ...config, id: '', name: config.name + ' (Copy)' }
+  connectionStore.add(newConfig)
+}
+async function doDelete(config: ConnectionConfig | null) {
+  if (!config) return
+  closeContextMenu()
+  try {
+    await ElMessageBox.confirm(
+      `${t('sidebar.deleteConfirm', { count: 1 })}`,
+      '',
+      { confirmButtonText: t('sidebar.delete'), cancelButtonText: 'Cancel', type: 'warning' }
+    )
+    connectionStore.remove(config.id)
+  } catch { /* cancelled */ }
+}
+</script>
+
+<style scoped>
+.start-tab {
+  padding: 32px;
+  height: 100%;
+  overflow-y: auto;
+  outline: none;
+}
+
+.start-content {
+  margin: 0 auto;
+}
+
+.start-search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.start-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  user-select: none;
+}
+.start-filter-btn:hover,
+.start-filter-btn.active {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+.start-search-input {
+  flex: 1;
+  padding: 8px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+.start-search-input:focus {
+  border-color: var(--accent);
+}
+.start-search-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.start-action-btns {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 28px;
+  align-items: flex-start;
+}
+
+.start-action-btn {
+  padding: 8px 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+.start-action-btn:hover {
+  background: var(--bg-hover);
+}
+.start-action-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-base);
+}
+.start-action-btn.primary:hover {
+  filter: brightness(0.9);
+}
+
+.start-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--text-disabled);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.start-breadcrumb .link {
+  color: var(--accent);
+  cursor: pointer;
+}
+.start-breadcrumb .link:hover {
+  text-decoration: underline;
+}
+.start-breadcrumb .sep {
+  color: var(--text-disabled);
+}
+.start-breadcrumb .current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.start-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-disabled);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 24px;
+  margin-bottom: 10px;
+}
+.start-add-group-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-disabled);
+  transition: background 0.15s, color 0.15s;
+}
+.start-add-group-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.start-divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 20px 0;
+}
+
+.start-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 240px);
+  gap: 12px;
+}
+
+.start-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  width: 240px;
+}
+.start-card:hover {
+  border-color: var(--accent);
+}
+.start-card.dimmed {
+  opacity: 0.35;
+}
+.start-card.focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.start-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.start-card-top > div:last-child {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+}
+
+.start-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: var(--bg-overlay);
+  color: var(--text-secondary);
+}
+.start-card-icon.ssh,
+.start-card-icon.telnet,
+.start-card-icon.mosh { color: var(--accent); }
+.start-card-icon.local { color: var(--success); }
+.start-card-icon.database { color: var(--warning); }
+.start-card-icon.rdp,
+.start-card-icon.vnc,
+.start-card-icon.spice { color: var(--accent-dim); }
+.start-card-icon.serial { color: var(--success-dim); }
+.start-card-icon.group { color: var(--text-secondary); }
+.start-card-icon.ungrouped { color: var(--text-muted); }
+.start-card-icon.quick { background: var(--accent-subtle); color: var(--accent); }
+
+.start-card-name {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 172px;
+}
+.start-card-meta {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.start-quick-card {
+  background: transparent;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 12px;
+  width: 240px;
+}
+.start-quick-card.focused {
+  border-style: solid;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.start-quick-card:hover {
+  background: var(--accent-subtle);
+}
+.quick-name {
+  color: var(--accent);
+}
+
+.start-empty-hint,
+.start-empty-state {
+  text-align: center;
+  color: var(--text-disabled);
+  font-size: 14px;
+  margin-top: 48px;
+}
+.empty-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 16px;
+  opacity: 0.3;
+}
+
+.start-context-menu {
+  position: fixed;
+  z-index: 99999;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  min-width: 140px;
+  padding: 4px;
+  backdrop-filter: blur(8px);
+}
+.start-context-menu .menu-item {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--radius-sm);
+  transition: all 0.1s ease;
+}
+.start-context-menu .menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.start-context-menu .menu-item.danger {
+  color: var(--error);
+}
+.start-context-menu .menu-item.danger:hover {
+  background: var(--bg-hover);
+  color: var(--error);
+}
+.start-context-menu .menu-divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 4px;
+}
+</style>

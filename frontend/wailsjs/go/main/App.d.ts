@@ -81,6 +81,8 @@ export function GetPorts(arg1:string):Promise<Array<session.PortInfo>>;
 
 export function GetProcessDetail(arg1:string,arg2:number):Promise<Record<string, any>>;
 
+export function GetRecentConnections():Promise<Array<string>>;
+
 export function GetSystemFonts():Promise<Array<string>>;
 
 export function GetTableSchema(arg1:string,arg2:string,arg3:string):Promise<database.SchemaResult>;
@@ -128,6 +130,8 @@ export function RDPShow(arg1:string):Promise<void>;
 export function ReadFileBase64(arg1:string):Promise<string>;
 
 export function ReadFileChunkBase64(arg1:string,arg2:number,arg3:number):Promise<string>;
+
+export function RecordRecentConnection(arg1:string):Promise<void>;
 
 export function RedisDBSize(arg1:string):Promise<number>;
 

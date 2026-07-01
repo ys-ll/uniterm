@@ -392,6 +392,7 @@
   "sidebar.connectMonitor": "服务器监控",
   "sidebar.connectTelnet": "连接 Telnet",
   "sidebar.connectMosh": "连接 Mosh",
+  "sidebar.connectLocal": "连接本地",
   "serial.title": "串口",
   "serial.portLabel": "端口",
   "serial.baudRate": "波特率",
@@ -663,5 +664,15 @@
   "redis.confirmDelete": "确认删除 \"{key}\"？",
   "redis.delete": "删除",
   "redis.saved": "已保存",
-  "redis.ttlUpdated": "TTL 已更新"
+  "redis.ttlUpdated": "TTL 已更新",
+  "startTab.defaultName": "新标签页",
+  "startTab.recentConnections": "最近连接",
+  "startTab.groups": "分组",
+  "startTab.allConnections": "全部连接",
+  "startTab.quickConnect": "快速连接 {host}",
+  "startTab.quickConnectDesc": "新建连接到该地址",
+  "startTab.noConnections": "暂无连接，点击上方按钮开始",
+  "startTab.emptyGroup": "此分组暂无连接",
+  "startTab.backToStart": "开始页",
+  "startTab.connectionsCount": "{count} 个连接"
 }

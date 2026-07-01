@@ -24,7 +24,7 @@ export type LayoutNode =
 
 // ── Tab types ──
 
-export type Tab = TerminalTab | SettingsTab | WorkspaceTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab
+export type Tab = TerminalTab | SettingsTab | WorkspaceTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | StartTab
 
 export interface TerminalTab {
   type: 'terminal'
@@ -89,4 +89,12 @@ export interface MonitorTab {
   id: string
   panelId: string
   name: string
+}
+
+export interface StartTab {
+  type: 'start'
+  id: string
+  name: string
+  viewMode: 'home' | 'group'
+  groupId?: string
 }

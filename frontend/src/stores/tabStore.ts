@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive, computed } from 'vue'
-import type { Tab, TerminalTab, SettingsTab, WorkspaceTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, PanelLayout, LayoutNode } from '../types/workspace'
+import type { Tab, TerminalTab, SettingsTab, WorkspaceTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, StartTab, PanelLayout, LayoutNode } from '../types/workspace'
 import { usePanelStore } from './panelStore'
 import { t } from '../i18n'
 
@@ -163,6 +163,18 @@ export const useTabStore = defineStore('tab', () => {
     return tab
   }
 
+  function createStartTab(): StartTab {
+    const tab: StartTab = {
+      type: 'start',
+      id: genId('start-tab'),
+      name: t('startTab.defaultName'),
+      viewMode: 'home'
+    }
+    tabState.tabs.push(tab)
+    tabState.activeTabId = tab.id
+    return tab
+  }
+
   function createWorkspaceTab(name: string, panelIds: string[], layout: PanelLayout): WorkspaceTab {
     const tab: WorkspaceTab = {
       type: 'workspace',
@@ -195,13 +207,11 @@ export const useTabStore = defineStore('tab', () => {
     }
 
     // Clear AI lock if locked panel was in this tab
-    const removedPanelIds = removed.type === 'terminal' || removed.type === 'settings' || removed.type === 'rdp' || removed.type === 'vnc' || removed.type === 'spice' || removed.type === 'database' || removed.type === 'redis' || removed.type === 'monitor'
-      ? [removed.panelId]
-      : removed.type === 'workspace'
-        ? removed.panelIds
-        : removed.type === 'sftp' || removed.type === 'ftp'
-          ? [removed.panelId]
-          : []
+    const removedPanelIds: string[] = (() => {
+      if (removed.type === 'start') return []
+      if (removed.type === 'workspace') return removed.panelIds
+      return [removed.panelId]
+    })()
 
     if (tabState.aiLockedPanelId && removedPanelIds.includes(tabState.aiLockedPanelId)) {
       tabState.aiLockedPanelId = null
@@ -542,6 +552,7 @@ export const useTabStore = defineStore('tab', () => {
     createSPICETab,
     createDBTab,
     createMonitorTab,
+    createStartTab,
     createWorkspaceTab,
     closeTab,
     setActiveTab,

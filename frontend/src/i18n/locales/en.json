@@ -392,6 +392,7 @@
   "sidebar.connectMonitor": "Server Monitor",
   "sidebar.connectTelnet": "Connect Telnet",
   "sidebar.connectMosh": "Connect Mosh",
+  "sidebar.connectLocal": "Connect Local",
   "serial.title": "Serial",
   "serial.portLabel": "Port",
   "serial.baudRate": "Baud Rate",
@@ -663,5 +664,15 @@
   "redis.confirmDelete": "Delete key \"{key}\"?",
   "redis.delete": "Delete",
   "redis.saved": "Saved",
-  "redis.ttlUpdated": "TTL updated"
+  "redis.ttlUpdated": "TTL updated",
+  "startTab.defaultName": "New Tab",
+  "startTab.recentConnections": "Recent Connections",
+  "startTab.groups": "Groups",
+  "startTab.allConnections": "All Connections",
+  "startTab.quickConnect": "Quick Connect {host}",
+  "startTab.quickConnectDesc": "New connection to this address",
+  "startTab.noConnections": "No connections yet, use the buttons above to get started",
+  "startTab.emptyGroup": "No connections in this group",
+  "startTab.backToStart": "Start Page",
+  "startTab.connectionsCount": "{count} connection(s)"
 }

@@ -663,5 +663,6 @@
   "redis.confirmDelete": "키 \"{key}\"을(를) 삭제하시겠습니까?",
   "redis.delete": "삭제",
   "redis.saved": "저장되었습니다",
-  "redis.ttlUpdated": "만료 시간이 업데이트되었습니다"
+  "redis.ttlUpdated": "만료 시간이 업데이트되었습니다",
+  "startTab.defaultName": "새 탭"
 }
