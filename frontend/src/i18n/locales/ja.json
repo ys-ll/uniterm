@@ -664,5 +664,14 @@
   "redis.delete": "削除",
   "redis.saved": "保存しました",
   "redis.ttlUpdated": "有効期限を更新しました",
-  "startTab.defaultName": "新しいタブ"
+  "startTab.defaultName": "新しいタブ",
+  "startTab.recentConnections": "最近の接続",
+  "startTab.groups": "グループ",
+  "startTab.allConnections": "すべての接続",
+  "startTab.quickConnect": "クイック接続 {host}",
+  "startTab.quickConnectDesc": "このアドレスに新規接続",
+  "startTab.noConnections": "接続がありません",
+  "startTab.emptyGroup": "このグループに接続がありません",
+  "startTab.backToStart": "スタートページ",
+  "startTab.connectionsCount": "{count} 件の接続"
 }

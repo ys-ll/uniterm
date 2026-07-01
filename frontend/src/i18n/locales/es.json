@@ -664,5 +664,14 @@
   "redis.delete": "Eliminar",
   "redis.saved": "Guardado",
   "redis.ttlUpdated": "TTL actualizado",
-  "startTab.defaultName": "Nueva pestaña"
+  "startTab.defaultName": "Nueva pestaña",
+  "startTab.recentConnections": "Conexiones recientes",
+  "startTab.groups": "Grupos",
+  "startTab.allConnections": "Todas las conexiones",
+  "startTab.quickConnect": "Conexión rápida {host}",
+  "startTab.quickConnectDesc": "Nueva conexión a esta dirección",
+  "startTab.noConnections": "Sin conexiones aún",
+  "startTab.emptyGroup": "Sin conexiones en este grupo",
+  "startTab.backToStart": "Página de inicio",
+  "startTab.connectionsCount": "{count} conexión(es)"
 }

@@ -664,5 +664,14 @@
   "redis.delete": "Удалить",
   "redis.saved": "Сохранено",
   "redis.ttlUpdated": "TTL обновлён",
-  "startTab.defaultName": "Новая вкладка"
+  "startTab.defaultName": "Новая вкладка",
+  "startTab.recentConnections": "Недавние подключения",
+  "startTab.groups": "Группы",
+  "startTab.allConnections": "Все подключения",
+  "startTab.quickConnect": "Быстрое подключение {host}",
+  "startTab.quickConnectDesc": "Новое подключение к этому адресу",
+  "startTab.noConnections": "Подключений пока нет",
+  "startTab.emptyGroup": "В этой группе нет подключений",
+  "startTab.backToStart": "Главная страница",
+  "startTab.connectionsCount": "{count} подключений(я)"
 }
