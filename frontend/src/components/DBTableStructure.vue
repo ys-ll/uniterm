@@ -6,13 +6,13 @@
         <div class="loading-box">
           <div class="spinner" />
           <span class="loading-text">{{ t('db.loading') }}</span>
-          <button class="cancel-btn" @click="onCancelLoad">{{ t('common.cancel') }}</button>
+          <button class="btn btn-default" @click="onCancelLoad">{{ t('common.cancel') }}</button>
         </div>
       </div>
       <div class="section">
         <div class="section-header">
           <div class="section-title">{{ t('db.columns') }}</div>
-          <button class="exec-btn" @click="startAddColumn">{{ t('db.addColumn') }}</button>
+          <button class="btn btn-primary" @click="startAddColumn">{{ t('db.addColumn') }}</button>
         </div>
         <el-table :data="schema?.columns || []" border size="small" style="width:100%">
           <el-table-column prop="name" :label="t('db.colName')" />
@@ -35,8 +35,8 @@
           </el-table-column>
           <el-table-column :label="t('db.actions')" width="80">
             <template #default="{ row }">
-              <button v-if="caps?.['supportsModifyColumn']" class="action-icon-btn" title="Edit" @click="startEditColumn(row)"><Pencil :size="14" /></button>
-              <button class="action-icon-btn danger" title="Delete" @click="onDropColumn(row.name)"><Trash2 :size="14" /></button>
+              <button v-if="caps?.['supportsModifyColumn']" class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="startEditColumn(row)"><Pencil :size="14" /></button>
+              <button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="onDropColumn(row.name)"><Trash2 :size="14" /></button>
             </template>
           </el-table-column>
         </el-table>
@@ -45,7 +45,7 @@
       <div class="section">
         <div class="section-header">
           <div class="section-title">{{ t('db.indexes') }}</div>
-          <button class="exec-btn" @click="startAddIndex">{{ t('db.addIndex') }}</button>
+          <button class="btn btn-primary" @click="startAddIndex">{{ t('db.addIndex') }}</button>
         </div>
         <el-table :data="schema?.indexes || []" border size="small" style="width:100%">
           <el-table-column prop="name" :label="t('db.idxName')" />
@@ -63,7 +63,7 @@
           </el-table-column>
           <el-table-column :label="t('db.actions')" width="80">
             <template #default="{ row }">
-              <button class="action-icon-btn danger" title="Delete" @click="onDropIndex(row)"><Trash2 :size="14" /></button>
+              <button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="onDropIndex(row)"><Trash2 :size="14" /></button>
             </template>
           </el-table-column>
         </el-table>
@@ -565,21 +565,6 @@ async function onAddIndex() {
   font-size: 13px;
   color: var(--text-secondary);
 }
-.cancel-btn {
-  padding: 4px 16px;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  transition: all 0.15s ease;
-}
-.cancel-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
-}
 .section {
   margin-bottom: 16px;
 }
@@ -624,43 +609,14 @@ async function onAddIndex() {
 }
 .toggle-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .toggle-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-.action-icon-btn {
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.12s ease;
-}
-.action-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
-.action-icon-btn.danger:hover { color: var(--error); }
-.exec-btn {
-  padding: 4px 16px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  margin-top: 4px;
-  transition: all 0.15s ease;
-}
-.exec-btn:hover {
-  background: var(--accent-dim);
-  box-shadow: 0 0 12px var(--accent-glow);
-}
+.exec-btn { margin-top: 4px; }
 .idx-type {
   font-size: 11px;
   font-weight: 600;
@@ -668,7 +624,7 @@ async function onAddIndex() {
   border-radius: var(--radius-sm);
 }
 .idx-type-pk { color: var(--accent); }
-.idx-type-uq { color: var(--info, #409eff); }
+.idx-type-uq { color: var(--info); }
 .idx-type-idx { color: var(--text-secondary); }
 </style>
 

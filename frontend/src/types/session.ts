@@ -15,7 +15,7 @@ export interface PostLoginExpectStep {
 export interface ConnectionConfig {
   id: string
   name: string
-  type: 'ssh' | 'telnet' | 'mosh' | 'rdp' | 'vnc' | 'spice' | 'database' | 'local' | 'sftp' | 'monitor' | 'ftp' | 'serial'
+  type: 'ssh' | 'telnet' | 'mosh' | 'rdp' | 'vnc' | 'spice' | 'database' | 'local' | 'sftp' | 'monitor' | 'ftp' | 'serial' | 'smb' | 'webdav' | 's3'
   host: string
   port: number
   user: string
@@ -49,6 +49,15 @@ export interface ConnectionConfig {
   ftpEncryption?: string  // "none" | "auto" | "required"
   ftpPassive?: boolean
   ftpEncoding?: string    // "utf-8" | "gbk" | "shift-jis" | "latin-1"
+  // SMB-specific
+  smbDomain?: string
+  smbShare?: string
+  // WebDAV-specific
+  webdavURL?: string
+  webdavUseSSL?: boolean
+  // S3-specific
+  s3Region?: string
+  s3Bucket?: string
   // Terminal encoding (SSH/Telnet)
   encoding?: string // "utf-8" | "gbk" | "gb2312" | "gb18030" | "big5" | "shift-jis" | "euc-jp" | "euc-kr"
 }

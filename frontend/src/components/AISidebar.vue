@@ -699,7 +699,7 @@ defineExpose({ focusInput })
   opacity: 1;
 }
 :deep(.el-dropdown-menu__item.active) {
-  background: rgba(52, 211, 153, 0.08);
+  background: var(--success-subtle);
   color: var(--success);
 }
 
@@ -783,7 +783,7 @@ defineExpose({ focusInput })
   height: 26px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent-dim), var(--accent));
-  color: #fff;
+  color: var(--on-accent);
   font-size: 9px;
   font-family: var(--font-ui);
   font-weight: 600;

@@ -316,12 +316,12 @@ onUnmounted(() => {
   box-shadow: inset 0 0 0 1px var(--accent-dim);
 }
 .tab-item.ai-locked {
-  box-shadow: inset 2px 0 0 var(--warning, #f59e0b);
+  box-shadow: inset 2px 0 0 var(--warning);
 }
 .tab-item.active.ai-locked {
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--accent-dim), inset 2px 0 0 var(--warning, #f59e0b);
+  box-shadow: inset 0 0 0 1px var(--accent-dim), inset 2px 0 0 var(--warning);
 }
 .tab-name {
   font-size: 12px;
@@ -399,7 +399,7 @@ onUnmounted(() => {
   background: var(--bg-hover);
 }
 .tab-ai-lock.locked {
-  color: var(--warning, #f59e0b);
+  color: var(--warning);
 }
 .tab-close {
   display: flex;

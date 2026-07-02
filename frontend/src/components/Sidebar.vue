@@ -126,7 +126,7 @@
             <div class="conn-details">
               <span class="name">{{ conn.name }}</span>
               <span class="conn-meta">
-                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 's3' ? conn.host : conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
               </span>
             </div>
           </div>
@@ -169,7 +169,7 @@
             <div class="conn-details">
               <span class="name">{{ conn.name }}</span>
               <span class="conn-meta">
-                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 's3' ? conn.host : conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
               </span>
             </div>
           </div>
@@ -196,7 +196,7 @@
           <div class="conn-details">
             <span class="name">{{ conn.name }}</span>
             <span class="conn-meta">
-              <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+              <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 's3' ? conn.host : conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
             </span>
           </div>
         </div>
@@ -303,6 +303,9 @@
       <div v-if="selectedConn && selectedConn.type === 'serial'" class="menu-item" @click="emit('connectSerial')">{{ t('sidebar.connectSerial') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'ssh'" class="menu-item" @click="doConnectSFTP">{{ t('sidebar.connectSftp') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'ftp'" class="menu-item" @click="doConnectFTP">{{ t('sidebar.connectFtp') }}</div>
+      <div v-if="selectedConn && selectedConn.type === 'smb'" class="menu-item" @click="doConnectSMB">{{ t('sidebar.connectSmb') }}</div>
+      <div v-if="selectedConn && selectedConn.type === 'webdav'" class="menu-item" @click="doConnectWebDAV">{{ t('sidebar.connectWebdav') }}</div>
+      <div v-if="selectedConn && selectedConn.type === 's3'" class="menu-item" @click="doConnectS3">{{ t('sidebar.connectS3') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'ssh'" class="menu-item" @click="doConnectMonitor">{{ t('sidebar.connectMonitor') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'rdp'" class="menu-item" @click="doConnectRDP">{{ t('sidebar.connectRDP') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'vnc'" class="menu-item" @click="doConnectVNC">{{ t('sidebar.connectVNC') }}</div>
@@ -452,7 +455,7 @@ import { GetSystemFonts } from '../../wailsjs/go/main/App'
 defineProps<{
   visible: boolean
 }>()
-const emit = defineEmits(['connect', 'connectSftp', 'connectFtp', 'connectRdp', 'connectVnc', 'connectSpice', 'connectDB', 'connectMonitor', 'connectSerial', 'toggle', 'new-local-terminal-with-shell'])
+const emit = defineEmits(['connect', 'connectSftp', 'connectFtp', 'connectSmb', 'connectWebdav', 'connectS3', 'connectRdp', 'connectVnc', 'connectSpice', 'connectDB', 'connectMonitor', 'connectSerial', 'toggle', 'new-local-terminal-with-shell'])
 const connectionStore = useConnectionStore()
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
@@ -918,6 +921,36 @@ function doConnectFTP() {
   closeMenu()
   for (const c of conns) {
     emit('connectFtp', c)
+  }
+}
+
+function doConnectSMB() {
+  const ids = getSelectedConnectionIds()
+  const conns = ids.map(id => connectionStore.connections.find(c => c.id === id)).filter(Boolean) as ConnectionConfig[]
+  selectedIds.value = new Set()
+  closeMenu()
+  for (const c of conns) {
+    emit('connectSmb', c)
+  }
+}
+
+function doConnectWebDAV() {
+  const ids = getSelectedConnectionIds()
+  const conns = ids.map(id => connectionStore.connections.find(c => c.id === id)).filter(Boolean) as ConnectionConfig[]
+  selectedIds.value = new Set()
+  closeMenu()
+  for (const c of conns) {
+    emit('connectWebdav', c)
+  }
+}
+
+function doConnectS3() {
+  const ids = getSelectedConnectionIds()
+  const conns = ids.map(id => connectionStore.connections.find(c => c.id === id)).filter(Boolean) as ConnectionConfig[]
+  selectedIds.value = new Set()
+  closeMenu()
+  for (const c of conns) {
+    emit('connectS3', c)
   }
 }
 
@@ -1487,7 +1520,7 @@ defineExpose({ focusSearch })
 }
 
 .sidebar-tab.active {
-  color: var(--accent-color);
+  color: var(--accent);
   background: var(--accent-subtle);
 }
 
@@ -1603,7 +1636,7 @@ defineExpose({ focusSearch })
 .host {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1725,7 +1758,7 @@ defineExpose({ focusSearch })
 }
 
 .conn-context-menu .menu-item.danger:hover {
-  background: rgba(248, 113, 113, 0.1);
+  background: var(--error-subtle);
   color: var(--error);
 }
 
@@ -1773,7 +1806,7 @@ defineExpose({ focusSearch })
   position: fixed;
   z-index: 10001;
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   box-shadow: var(--shadow-lg);
   padding: 4px;

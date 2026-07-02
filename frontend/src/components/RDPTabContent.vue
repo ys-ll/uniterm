@@ -156,24 +156,24 @@ watch(() => props.sessionId, (newId) => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #999;
+  color: var(--text-muted);
   z-index: 10;
 }
-.rdp-error-text { color: #f56c6c; }
+.rdp-error-text { color: var(--error); }
 .rdp-statusbar {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 4px 12px;
-  background: #1e1e1e;
-  color: #999;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   font-size: 12px;
   flex-shrink: 0;
 }
 .rdp-status-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #67c23a;
+  background: var(--success);
 }
-.rdp-status-sep { color: #444; }
+.rdp-status-sep { color: var(--text-disabled); }
 </style>

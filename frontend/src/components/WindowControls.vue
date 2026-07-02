@@ -69,7 +69,7 @@ const restoreMaskId = `rm-${Math.random().toString(36).slice(2, 9)}`
 
 .wc-btn.win.close:hover {
   background: #e81123;
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .wc-btn.win.close:active {

@@ -147,7 +147,7 @@ function resetForm() {
   font-family: var(--font-mono, 'Consolas', 'Courier New', monospace);
 }
 .form-error {
-  color: var(--danger-color, #f56c6c);
+  color: var(--error);
   font-size: 12px;
   margin-top: -8px;
   margin-bottom: 8px;

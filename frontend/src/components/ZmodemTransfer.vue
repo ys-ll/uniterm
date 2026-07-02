@@ -100,8 +100,8 @@ function cancelTransfer(t: ReturnType<typeof store.getTransfers>[number]) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.transfer-status.success { color: #34d399; }
-.transfer-status.error { color: #f87171; }
+.transfer-status.success { color: var(--success); }
+.transfer-status.error { color: var(--error); }
 .transfer-status.cancelled { color: var(--text-muted); }
 .transfer-progress {
   margin-top: 6px;
@@ -140,12 +140,12 @@ function cancelTransfer(t: ReturnType<typeof store.getTransfers>[number]) {
   cursor: pointer;
 }
 .cancel-btn:hover {
-  border-color: #f87171;
-  color: #f87171;
+  border-color: var(--error);
+  color: var(--error);
 }
 .transfer-complete {
   margin-top: 4px;
   font-size: 11px;
-  color: #34d399;
+  color: var(--success);
 }
 </style>

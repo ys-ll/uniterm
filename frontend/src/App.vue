@@ -9,7 +9,7 @@
       @tab-dragstart="onTabDragStart"
     />
     <div class="main-content">
-      <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onConnect" @connect-serial="showSerialDialog = true" @connect-sftp="(c: any) => { const p = tabStore.activeTab; onConnectSftp(c, p?.type === 'start' ? p : undefined) }" @connect-ftp="(c: any) => { const p = tabStore.activeTab; onConnectFtp(c, p?.type === 'start' ? p : undefined) }" @connect-rdp="(c: any) => { const p = tabStore.activeTab; onConnectRDP(c, p?.type === 'start' ? p : undefined) }" @connect-vnc="(c: any) => { const p = tabStore.activeTab; onConnectVNC(c, p?.type === 'start' ? p : undefined) }" @connect-spice="(c: any) => { const p = tabStore.activeTab; onConnectSPICE(c, p?.type === 'start' ? p : undefined) }" @connect-d-b="(c: any) => { const p = tabStore.activeTab; onConnectDB(c, p?.type === 'start' ? p : undefined) }" @connect-monitor="(c: any) => { const p = tabStore.activeTab; onConnectMonitor(c, p?.type === 'start' ? p : undefined) }" @new-local-terminal-with-shell="createLocalTerminalWithShell" />
+      <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onConnect" @connect-serial="showSerialDialog = true" @connect-sftp="(c: any) => { const p = tabStore.activeTab; onConnectSftp(c, p?.type === 'start' ? p : undefined) }" @connect-ftp="(c: any) => { const p = tabStore.activeTab; onConnectFtp(c, p?.type === 'start' ? p : undefined) }" @connect-smb="(c: any) => { const p = tabStore.activeTab; onConnectSmb(c, p?.type === 'start' ? p : undefined) }" @connect-webdav="(c: any) => { const p = tabStore.activeTab; onConnectWebdav(c, p?.type === 'start' ? p : undefined) }" @connect-s3="(c: any) => { const p = tabStore.activeTab; onConnectS3(c, p?.type === 'start' ? p : undefined) }" @connect-rdp="(c: any) => { const p = tabStore.activeTab; onConnectRDP(c, p?.type === 'start' ? p : undefined) }" @connect-vnc="(c: any) => { const p = tabStore.activeTab; onConnectVNC(c, p?.type === 'start' ? p : undefined) }" @connect-spice="(c: any) => { const p = tabStore.activeTab; onConnectSPICE(c, p?.type === 'start' ? p : undefined) }" @connect-d-b="(c: any) => { const p = tabStore.activeTab; onConnectDB(c, p?.type === 'start' ? p : undefined) }" @connect-monitor="(c: any) => { const p = tabStore.activeTab; onConnectMonitor(c, p?.type === 'start' ? p : undefined) }" @new-local-terminal-with-shell="createLocalTerminalWithShell" />
       <div class="tab-area">
         <template v-if="activeTab">
           <KeepAlive>
@@ -742,6 +742,9 @@ async function onConnect(config: ConnectionConfig, keepOpen?: boolean) {
   const prev = tabStore.activeTab
   const prevStart = (prev?.type === 'start' && !keepOpen) ? prev : undefined
   if (config.type === 'ftp') { await onConnectFtp(config, prevStart); return }
+  if (config.type === 'smb') { await onConnectSmb(config, prevStart); return }
+  if (config.type === 'webdav') { await onConnectWebdav(config, prevStart); return }
+  if (config.type === 's3') { await onConnectS3(config, prevStart); return }
   if (config.type === 'rdp') { await onConnectRDP(config, prevStart); return }
   if (config.type === 'vnc') { await onConnectVNC(config, prevStart); return }
   if (config.type === 'spice') { await onConnectSPICE(config, prevStart); return }
@@ -944,6 +947,78 @@ async function onConnectFtp(config: ConnectionConfig, prevStart?: any) {
     panelStore.bindSession(panel.id, info.id)
   } catch (e) {
     console.error('Failed to create FTP session:', e)
+    tabStore.closeTab(tab.id)
+    panelStore.removePanel(panel.id)
+  }
+}
+
+async function onConnectSmb(config: ConnectionConfig, prevStart?: any) {
+  connectionStore.add(config)
+
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
+  const panel = panelStore.createPanel(config, 'sftp')
+  const displayTitle = config.name || `${config.user}@${config.host}`
+  panel.title = displayTitle
+  const reposition = prevStart ? closeStartAndReposition(prevStart) : null
+  const tab = tabStore.createFtpTab(displayTitle, panel.id)
+  if (reposition) reposition(tab.id)
+  panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
+
+  try {
+    const info = await CreateSession('smb', config)
+    panelStore.bindSession(panel.id, info.id)
+  } catch (e) {
+    console.error('Failed to create SMB session:', e)
+    tabStore.closeTab(tab.id)
+    panelStore.removePanel(panel.id)
+  }
+}
+
+async function onConnectWebdav(config: ConnectionConfig, prevStart?: any) {
+  connectionStore.add(config)
+
+  const resolved = await ensureCredentials(config)
+  if (!resolved) return
+  config = resolved
+  const panel = panelStore.createPanel(config, 'sftp')
+  const displayTitle = config.name || `${config.user}@${config.host}`
+  panel.title = displayTitle
+  const reposition = prevStart ? closeStartAndReposition(prevStart) : null
+  const tab = tabStore.createFtpTab(displayTitle, panel.id)
+  if (reposition) reposition(tab.id)
+  panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
+
+  try {
+    const info = await CreateSession('webdav', config)
+    panelStore.bindSession(panel.id, info.id)
+  } catch (e) {
+    console.error('Failed to create WebDAV session:', e)
+    tabStore.closeTab(tab.id)
+    panelStore.removePanel(panel.id)
+  }
+}
+
+async function onConnectS3(config: ConnectionConfig, prevStart?: any) {
+  connectionStore.add(config)
+
+  const panel = panelStore.createPanel(config, 'sftp')
+  const displayTitle = config.name || (config.s3Bucket ? `s3://${config.s3Bucket}` : config.host)
+  panel.title = displayTitle
+  const reposition = prevStart ? closeStartAndReposition(prevStart) : null
+  const tab = tabStore.createFtpTab(displayTitle, panel.id)
+  if (reposition) reposition(tab.id)
+  panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
+
+  try {
+    const info = await CreateSession('s3', config)
+    panelStore.bindSession(panel.id, info.id)
+  } catch (e) {
+    console.error('Failed to create S3 session:', e)
     tabStore.closeTab(tab.id)
     panelStore.removePanel(panel.id)
   }

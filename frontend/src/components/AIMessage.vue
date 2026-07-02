@@ -509,7 +509,7 @@ function escapeHtml(text: string): string {
   height: 26px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent-dim), var(--accent));
-  color: #fff;
+  color: var(--on-accent);
   font-size: 9px;
   font-family: var(--font-ui);
   font-weight: 600;
@@ -625,10 +625,10 @@ function escapeHtml(text: string): string {
 
 /* Links */
 .text :deep(a) {
-  color: #6db3f8;
+  color: var(--info);
 }
 .text :deep(a:hover) {
-  color: #93cbf9;
+  color: var(--info);
 }
 
 /* Strikethrough */
@@ -739,11 +739,11 @@ function escapeHtml(text: string): string {
 
 /* IN box - success themed */
 .in-box {
-  background: rgba(52, 211, 153, 0.04);
-  border: 1px solid rgba(52, 211, 153, 0.15);
+  background: var(--success-subtle);
+  border: 1px solid var(--success-glow);
 }
 .in-box .tool-box-header {
-  background: rgba(52, 211, 153, 0.08);
+  background: var(--success-subtle);
 }
 .in-box .tool-box-label {
   background: var(--success);
@@ -795,7 +795,7 @@ function escapeHtml(text: string): string {
 }
 .out-box .tool-box-label {
   background: var(--accent-dim);
-  color: #fff;
+  color: var(--on-accent);
 }
 .tool-pairs {
   display: flex;
@@ -831,7 +831,7 @@ function escapeHtml(text: string): string {
 }
 .pending-tool.dangerous {
   border-color: var(--error);
-  background: rgba(248, 113, 113, 0.04);
+  background: var(--error-subtle);
 }
 .danger-badge {
   margin-left: 8px;
@@ -840,7 +840,7 @@ function escapeHtml(text: string): string {
   padding: 1px 6px;
   border-radius: 3px;
   background: var(--error);
-  color: #fff;
+  color: var(--on-accent);
   text-transform: uppercase;
 }
 .pending-tool {

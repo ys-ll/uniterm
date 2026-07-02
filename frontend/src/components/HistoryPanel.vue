@@ -25,10 +25,10 @@
       >
         <span class="history-command">{{ entry.command }}</span>
         <div v-if="selectedIds.size <= 1 && (selectedIds.has(entry.id) || hoveredId === entry.id)" class="qc-item-actions">
-          <button class="qc-action-btn run" @click.stop="runCommand(entry)" :title="t('quickCommands.run')">
+          <button class="btn btn-ghost btn-icon btn-sm run" @click.stop="runCommand(entry)" :title="t('quickCommands.run')">
             <Play :size="14" />
           </button>
-          <button class="qc-action-btn paste" @click.stop="pasteCommand(entry)" :title="t('quickCommands.paste')">
+          <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(entry)" :title="t('quickCommands.paste')">
             <Clipboard :size="14" />
           </button>
         </div>
@@ -288,7 +288,7 @@ watch(searchQuery, () => {
   font-size: 12px;
   color: var(--text-primary);
   background: var(--bg-overlay);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
   box-shadow: var(--shadow-md);
   pointer-events: none;
@@ -301,7 +301,7 @@ watch(searchQuery, () => {
   flex: 1;
   font-family: var(--font-mono, 'Consolas', 'Courier New', monospace);
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -351,23 +351,6 @@ watch(searchQuery, () => {
   flex-shrink: 0;
 }
 
-.qc-action-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--text-muted);
-  background: transparent;
-}
-
-.qc-action-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
-.qc-action-btn.run:hover { color: var(--success-color, #22c55e); }
-.qc-action-btn.paste:hover { color: var(--accent-color, #22d3ee); }
-
 .qc-empty {
   padding: 24px 12px;
   text-align: center;
@@ -379,7 +362,7 @@ watch(searchQuery, () => {
   position: fixed;
   z-index: 9999;
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   box-shadow: var(--shadow-lg);
   padding: 4px;
@@ -395,12 +378,12 @@ watch(searchQuery, () => {
 }
 
 .qc-context-menu .menu-item:hover { background: var(--bg-hover); }
-.qc-context-menu .menu-item.danger { color: var(--danger-color, #f56c6c); }
+.qc-context-menu .menu-item.danger { color: var(--error); }
 .qc-context-menu .menu-item.disabled { color: var(--text-disabled); pointer-events: none; }
 
 .qc-context-menu .menu-divider {
   height: 1px;
-  background: var(--border-color);
+  background: var(--border-subtle);
   margin: 4px 6px;
 }
 </style>

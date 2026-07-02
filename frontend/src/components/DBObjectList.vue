@@ -6,7 +6,7 @@
         class="object-search"
         :placeholder="t('db.searchTables')"
       />
-      <button class="exec-btn" @click="openNewTable">{{ t('db.newTable') }}</button>
+      <button class="btn btn-primary" @click="openNewTable">{{ t('db.newTable') }}</button>
     </div>
     <el-table
       :data="filtered"
@@ -32,17 +32,17 @@
         <template #default="{ row }">
           <button
             v-if="row.type === 'view'"
-            class="action-icon-btn danger"
+            class="btn btn-ghost btn-icon btn-sm danger"
             :title="t('db.dropView')"
             @click.stop="askDropView(row)"
           >
             <Trash2 :size="14" />
           </button>
           <template v-else>
-            <button class="action-icon-btn" :title="t('db.truncateTable')" @click.stop="askTruncate(row)">
+            <button class="btn btn-ghost btn-icon btn-sm" :title="t('db.truncateTable')" @click.stop="askTruncate(row)">
               <Eraser :size="14" />
             </button>
-            <button class="action-icon-btn danger" :title="t('db.dropTable')" @click.stop="askDrop(row)">
+            <button class="btn btn-ghost btn-icon btn-sm danger" :title="t('db.dropTable')" @click.stop="askDrop(row)">
               <Trash2 :size="14" />
             </button>
           </template>
@@ -251,21 +251,7 @@ async function onCreateTable() {
 .object-search::placeholder {
   color: var(--text-muted);
 }
-.exec-btn {
-  padding: 4px 16px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  transition: all 0.15s ease;
-}
-.exec-btn:hover {
-  background: var(--accent-dim);
-  box-shadow: 0 0 12px var(--accent-glow);
-}
+
 .object-table {
   flex: 1;
   min-height: 0;
@@ -283,22 +269,6 @@ async function onCreateTable() {
 .object-icon {
   color: var(--text-muted);
   flex-shrink: 0;
-}
-.action-icon-btn {
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s ease, background 0.15s ease;
-}
-.action-icon-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-.action-icon-btn.danger:hover {
-  color: var(--error);
 }
 .confirm-body {
   display: flex;

@@ -277,8 +277,8 @@ watch(() => props.isActive, (active) => {
   border-bottom-color: var(--accent-dim);
 }
 .panel-header.ai-locked {
-  border-left: 3px solid var(--warning, #f59e0b);
-  box-shadow: inset 0 0 12px rgba(245, 158, 11, 0.12);
+  border-left: 3px solid var(--warning);
+  box-shadow: inset 0 0 12px var(--warning-subtle);
 }
 .panel-title {
   font-size: 12px;
@@ -322,7 +322,7 @@ watch(() => props.isActive, (active) => {
   background: var(--bg-hover);
 }
 .panel-broadcast.active {
-  color: var(--accent, #22d3ee);
+  color: var(--accent);
   background: var(--accent-subtle);
 }
 .broadcast-icon {
@@ -347,7 +347,7 @@ watch(() => props.isActive, (active) => {
   background: var(--bg-hover);
 }
 .panel-ai-lock.locked {
-  color: var(--warning, #f59e0b);
+  color: var(--warning);
 }
 .panel-duplicate {
   background: none;

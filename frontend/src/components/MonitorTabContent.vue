@@ -377,28 +377,28 @@ const perfItems = computed(() => [
     label: t('monitor.cpu'),
     value: currentCpu.value.usage + '%',
     percent: Math.min(currentCpu.value.usage, 100),
-    color: '#4ade80'
+    color: 'var(--chart-1)'
   },
   {
     key: 'memory',
     label: t('monitor.memory'),
     value: currentMem.value.usage + '%',
     percent: Math.min(currentMem.value.usage, 100),
-    color: '#60a5fa'
+    color: 'var(--chart-2)'
   },
   {
     key: 'disk',
     label: t('monitor.disk'),
     value: currentDisk.value.usage + '%',
     percent: Math.min(currentDisk.value.usage, 100),
-    color: '#fbbf24'
+    color: 'var(--chart-3)'
   },
   {
     key: 'network',
     label: t('monitor.network'),
     value: formatBytes(currentNet.value.rx + currentNet.value.tx) + '/s',
     percent: Math.min((currentNet.value.rx + currentNet.value.tx) / 1048576 * 100, 100),
-    color: '#a78bfa'
+    color: 'var(--chart-4)'
   }
 ])
 
@@ -407,7 +407,7 @@ const currentPerf = computed(() => {
     case 'cpu':
       return {
         bigValue: currentCpu.value.usage + '%',
-        color: '#4ade80',
+        color: 'var(--chart-1)',
         history: cpuHistory.value,
         yMin: 0,
         yMax: 100,
@@ -423,7 +423,7 @@ const currentPerf = computed(() => {
     case 'memory':
       return {
         bigValue: currentMem.value.usage + '%',
-        color: '#60a5fa',
+        color: 'var(--chart-2)',
         history: memHistory.value,
         yMin: 0,
         yMax: 100,
@@ -438,7 +438,7 @@ const currentPerf = computed(() => {
     case 'disk':
       return {
         bigValue: currentDisk.value.usage + '%',
-        color: '#fbbf24',
+        color: 'var(--chart-3)',
         history: diskHistory.value,
         yMin: 0,
         yMax: 100,
@@ -450,8 +450,8 @@ const currentPerf = computed(() => {
     case 'network':
       return {
         bigValue: formatBytes(currentNet.value.rx + currentNet.value.tx) + '/s',
-        color: '#a78bfa',
-        color2: '#c4b5fd',
+        color: 'var(--chart-4)',
+        color2: 'var(--chart-4-alt)',
         history: netRxHistory.value,
         history2: netTxHistory.value,
         yMin: 0,
@@ -461,7 +461,7 @@ const currentPerf = computed(() => {
         ]
       }
     default:
-      return { bigValue: '', color: '#fff', history: [] as number[], details: [] }
+      return { bigValue: '', color: 'var(--text-primary)', history: [] as number[], details: [] }
   }
 })
 
@@ -1105,7 +1105,7 @@ watch(activeTab, (tab) => {
   align-items: baseline;
   padding: 8px 0;
   gap: 40px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .system-row:last-child {
@@ -1222,7 +1222,7 @@ watch(activeTab, (tab) => {
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-md);
   padding: 4px 0;
   min-width: 100px;
 }

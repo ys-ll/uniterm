@@ -9,8 +9,8 @@
             <el-option v-for="n in 16" :key="n-1" :label="`${n-1} (${dbSizes[n-1] ?? '?'})`" :value="n-1" />
           </el-select>
           <el-input v-model="scanPattern" size="small" placeholder="*" style="flex: 1; min-width: 80px" @keyup.enter="onScan" />
-          <button class="action-icon-btn" title="Refresh" @click="onScan" style="flex-shrink: 0"><RefreshCw :size="14" /></button>
-          <button class="action-icon-btn" :title="t('redis.newKey')" @click="onShowNewKeyDialog" style="flex-shrink: 0"><Plus :size="14" /></button>
+          <button class="btn btn-ghost btn-icon btn-sm" title="Refresh" @click="onScan" style="flex-shrink: 0"><RefreshCw :size="14" /></button>
+          <button class="btn btn-ghost btn-icon btn-sm" :title="t('redis.newKey')" @click="onShowNewKeyDialog" style="flex-shrink: 0"><Plus :size="14" /></button>
         </div>
 
         <!-- Key list -->
@@ -81,7 +81,7 @@
                 </el-table-column>
                 <el-table-column width="50">
                   <template #default="{ $index }">
-                    <button class="action-icon-btn danger" title="Delete" @click="hashEntries.splice($index, 1)"><Trash2 :size="14" /></button>
+                    <button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="hashEntries.splice($index, 1)"><Trash2 :size="14" /></button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -104,7 +104,7 @@
                 </el-table-column>
                 <el-table-column width="50">
                   <template #default="{ $index }">
-                    <button class="action-icon-btn danger" title="Delete" @click="listEntries.splice($index, 1)"><Trash2 :size="14" /></button>
+                    <button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="listEntries.splice($index, 1)"><Trash2 :size="14" /></button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -122,7 +122,7 @@
                 </el-table-column>
                 <el-table-column width="50">
                   <template #default="{ $index }">
-                    <button class="action-icon-btn danger" title="Delete" @click="setEntries.splice($index, 1)"><Trash2 :size="14" /></button>
+                    <button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="setEntries.splice($index, 1)"><Trash2 :size="14" /></button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -145,7 +145,7 @@
                 </el-table-column>
                 <el-table-column width="50">
                   <template #default="{ $index }">
-                    <button class="action-icon-btn danger" title="Delete" @click="zsetEntries.splice($index, 1)"><Trash2 :size="14" /></button>
+                    <button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="zsetEntries.splice($index, 1)"><Trash2 :size="14" /></button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -198,7 +198,7 @@
                 <template #default="{ $index }"><el-input v-model="newHashEntries[$index].value" size="small" type="textarea" :rows="1" autosize /></template>
               </el-table-column>
               <el-table-column width="50">
-                <template #default="{ $index }"><button class="action-icon-btn danger" title="Delete" @click="newHashEntries.splice($index, 1)"><Trash2 :size="14" /></button></template>
+                <template #default="{ $index }"><button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="newHashEntries.splice($index, 1)"><Trash2 :size="14" /></button></template>
               </el-table-column>
             </el-table>
             <el-button size="small" style="margin-top: 4px" @click="newHashEntries.push({ field: '', value: '' })"><Plus :size="14" /></el-button>
@@ -218,7 +218,7 @@
                 <template #default="{ $index }"><el-input v-model="newListEntries[$index]" size="small" type="textarea" :rows="1" autosize /></template>
               </el-table-column>
               <el-table-column width="50">
-                <template #default="{ $index }"><button class="action-icon-btn danger" title="Delete" @click="newListEntries.splice($index, 1)"><Trash2 :size="14" /></button></template>
+                <template #default="{ $index }"><button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="newListEntries.splice($index, 1)"><Trash2 :size="14" /></button></template>
               </el-table-column>
             </el-table>
             <el-button size="small" style="margin-top: 4px" @click="newListEntries.push('')"><Plus :size="14" /></el-button>
@@ -233,7 +233,7 @@
                 <template #default="{ $index }"><el-input v-model="newSetEntries[$index]" size="small" type="textarea" :rows="1" autosize /></template>
               </el-table-column>
               <el-table-column width="50">
-                <template #default="{ $index }"><button class="action-icon-btn danger" title="Delete" @click="newSetEntries.splice($index, 1)"><Trash2 :size="14" /></button></template>
+                <template #default="{ $index }"><button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="newSetEntries.splice($index, 1)"><Trash2 :size="14" /></button></template>
               </el-table-column>
             </el-table>
             <el-button size="small" style="margin-top: 4px" @click="newSetEntries.push('')"><Plus :size="14" /></el-button>
@@ -250,7 +250,7 @@
                 <template #default="{ $index }"><el-input-number v-model="newZSetEntries[$index].score" size="small" controls-position="right" style="width: 100%" /></template>
               </el-table-column>
               <el-table-column width="50">
-                <template #default="{ $index }"><button class="action-icon-btn danger" title="Delete" @click="newZSetEntries.splice($index, 1)"><Trash2 :size="14" /></button></template>
+                <template #default="{ $index }"><button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="newZSetEntries.splice($index, 1)"><Trash2 :size="14" /></button></template>
               </el-table-column>
             </el-table>
             <el-button size="small" style="margin-top: 4px" @click="newZSetEntries.push({ member: '', score: 0 })"><Plus :size="14" /></el-button>
@@ -767,24 +767,12 @@ watch(() => props.sessionId, async (newId) => {
   align-items: center;
   justify-content: center;
 }
-.action-icon-btn {
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-.action-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
-.action-icon-btn:disabled { opacity: 0.3; cursor: default; }
-.action-icon-btn:disabled:hover { color: var(--text-secondary); background: none; }
-.action-icon-btn.danger:hover { color: var(--error); }
-:deep(.el-table .action-icon-btn) { background: none; }
+/* .btn.btn-ghost.btn-icon(.danger) now supplies the base look; keep only
+   Redis-specific overrides here (font-size for icon glyphs, table-cell reset). */
+.btn-icon.is-disabled,
+.btn-icon:disabled { opacity: 0.3; cursor: default; }
+.btn-icon:disabled:hover { color: var(--text-secondary); background: none; }
+:deep(.el-table .btn-icon) { background: none; }
 .drag-handle {
   cursor: grab;
   color: var(--text-muted);

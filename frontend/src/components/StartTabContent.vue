@@ -334,11 +334,13 @@ const settingsStore = useSettingsStore()
 // ── Card subtitle (matches sidebar display format) ──
 function getCardSubtitle(config: ConnectionConfig): string {
   const typeLabel = config.type === 'database' ? (config.dbType || config.type) : config.type
-  const detail = config.type === 'local'
-    ? getShellLabel(config.shellPath || '')
-    : config.user
-      ? `${config.user}@${config.host}:${config.port}`
-      : `${config.host}:${config.port}`
+  const detail = config.type === 's3'
+    ? config.host
+    : config.type === 'local'
+      ? getShellLabel(config.shellPath || '')
+      : config.user
+        ? `${config.user}@${config.host}:${config.port}`
+        : `${config.host}:${config.port}`
   return typeLabel + ' ' + detail
 }
 

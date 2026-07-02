@@ -122,6 +122,6 @@ const { t } = useI18n()
   color: var(--accent);
 }
 .status-text.error {
-  color: var(--danger, #f56c6c);
+  color: var(--error);
 }
 </style>

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	osUser "os/user"
 	"path"
 	"path/filepath"
 	"strings"
@@ -19,9 +18,9 @@ import (
 
 type FTPSession struct {
 	baseSession
+	localFSOps
 	conn      *ftp.ServerConn
 	cwd       string
-	localCwd  string
 	mu        sync.RWMutex
 	transfers map[string]*TransferTask
 	taskSeq   int64
@@ -29,16 +28,15 @@ type FTPSession struct {
 }
 
 func NewFTPSession(id string) *FTPSession {
-	homeDir, _ := os.UserHomeDir()
 	return &FTPSession{
 		baseSession: baseSession{
 			id:          id,
 			sessionType: "ftp",
 			status:      StatusDisconnected,
 		},
-		cwd:       "/",
-		localCwd:  homeDir,
-		transfers: make(map[string]*TransferTask),
+		localFSOps: newLocalFSOps(),
+		cwd:        "/",
+		transfers:  make(map[string]*TransferTask),
 	}
 }
 
@@ -190,70 +188,6 @@ func ftpEntryMode(e *ftp.Entry) string {
 	}
 }
 
-func (s *FTPSession) ListLocal(dir string) (FileListResult, error) {
-	if dir == "" {
-		dir = s.localCwd
-	} else if !filepath.IsAbs(dir) {
-		dir = filepath.Join(s.localCwd, dir)
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return FileListResult{}, err
-	}
-	files := make([]FileItem, 0, len(entries))
-	for _, e := range entries {
-		fi, _ := e.Info()
-		var size int64
-		var mode os.FileMode
-		var modTime time.Time
-		if fi != nil {
-			size = fi.Size()
-			mode = fi.Mode()
-			modTime = fi.ModTime()
-		}
-		owner := ""
-		if currentUser, err := osUser.Current(); err == nil {
-			owner = currentUser.Username
-		}
-		isDir := e.IsDir()
-		if fi != nil && fi.Mode()&os.ModeSymlink != 0 {
-			if target, err := os.Stat(filepath.Join(dir, e.Name())); err == nil {
-				isDir = target.IsDir()
-			}
-		}
-		files = append(files, FileItem{
-			Name:    e.Name(),
-			Size:    size,
-			ModTime: modTime.Format(time.RFC3339),
-			Mode:    mode.String(),
-			IsDir:   isDir,
-			Owner:   owner,
-		})
-	}
-	return FileListResult{Files: files, Dir: dir}, nil
-}
-
-func (s *FTPSession) ListLocalDrives() ([]FileItem, error) {
-	var drives []FileItem
-	for _, letter := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
-		root := string(letter) + ":\\"
-		fi, err := os.Stat(root)
-		if err != nil {
-			continue
-		}
-		if fi.IsDir() {
-			drives = append(drives, FileItem{
-				Name:    root,
-				Size:    0,
-				ModTime: fi.ModTime().Format(time.RFC3339),
-				Mode:    fi.Mode().String(),
-				IsDir:   true,
-			})
-		}
-	}
-	return drives, nil
-}
-
 func (s *FTPSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 	if err := s.requireClient(); err != nil {
 		return FileListResult{}, err
@@ -288,24 +222,6 @@ func (s *FTPSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 	return FileListResult{Files: files, Dir: target}, nil
 }
 
-func (s *FTPSession) ChangeLocalDir(dir string) (FileListResult, error) {
-	target := dir
-	if !filepath.IsAbs(dir) {
-		target = filepath.Join(s.localCwd, dir)
-	}
-	fi, err := os.Stat(target)
-	if err != nil {
-		return FileListResult{}, fmt.Errorf("no such directory: %s", target)
-	}
-	if !fi.IsDir() {
-		return FileListResult{}, fmt.Errorf("not a directory: %s", target)
-	}
-	abs, _ := filepath.Abs(target)
-	s.mu.Lock()
-	s.localCwd = abs
-	s.mu.Unlock()
-	return s.ListLocal(abs)
-}
 
 func (s *FTPSession) MakeDir(dir string) error {
 	if err := s.requireClient(); err != nil {
@@ -480,98 +396,6 @@ func (s *FTPSession) Put(localPath, remotePath string, recursive bool) (string, 
 	}
 	s.startTransfer(task)
 	return task.ID, nil
-}
-
-// --- Local file operations ---
-
-func (s *FTPSession) LocalRemove(p string, recursive bool) error {
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.localCwd, p)
-	}
-	if recursive {
-		return os.RemoveAll(p)
-	}
-	fi, err := os.Stat(p)
-	if err != nil {
-		return err
-	}
-	if fi.IsDir() {
-		entries, err := os.ReadDir(p)
-		if err != nil {
-			return err
-		}
-		if len(entries) > 0 {
-			return fmt.Errorf("directory not empty (%d items)", len(entries))
-		}
-	}
-	return os.Remove(p)
-}
-
-func (s *FTPSession) LocalRename(oldName, newName string) error {
-	old := oldName
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(s.localCwd, old)
-	}
-	newPath := newName
-	if !filepath.IsAbs(newPath) {
-		newPath = filepath.Join(s.localCwd, newPath)
-	}
-	return os.Rename(old, newPath)
-}
-
-func (s *FTPSession) LocalMkdir(dir string) error {
-	p := dir
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.localCwd, p)
-	}
-	return os.MkdirAll(p, 0755)
-}
-
-// LocalGetContent reads a local file's full content.
-func (s *FTPSession) LocalGetContent(localPath string) ([]byte, error) {
-	p := localPath
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.localCwd, p)
-	}
-	return os.ReadFile(p)
-}
-
-// LocalPutContent writes content to a local file, creating parent directories as needed.
-func (s *FTPSession) LocalPutContent(localPath string, content []byte) error {
-	p := localPath
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.localCwd, p)
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-		return err
-	}
-	return os.WriteFile(p, content, 0644)
-}
-
-// LocalCopy copies a local file or directory.
-func (s *FTPSession) LocalCopy(oldPath, newPath string) error {
-	old := oldPath
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(s.localCwd, old)
-	}
-	n := newPath
-	if !filepath.IsAbs(n) {
-		n = filepath.Join(s.localCwd, n)
-	}
-	return localCopyRecursive(old, n)
-}
-
-// LocalMove moves a local file or directory (rename, same filesystem only).
-func (s *FTPSession) LocalMove(oldPath, newPath string) error {
-	old := oldPath
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(s.localCwd, old)
-	}
-	n := newPath
-	if !filepath.IsAbs(n) {
-		n = filepath.Join(s.localCwd, n)
-	}
-	return os.Rename(old, n)
 }
 
 // PutContent writes raw content directly to a remote file via FTP.
@@ -862,6 +686,7 @@ type progressReader struct {
 }
 
 func (pr *progressReader) Read(p []byte) (int, error) {
+	pr.task.waitIfPaused()
 	n, err := pr.r.Read(p)
 	if n > 0 {
 		pr.task.Progress += int64(n)
@@ -949,6 +774,7 @@ func (s *FTPSession) transferFile(task *TransferTask, localPath, remotePath, tfT
 				return task.ctx.Err()
 			default:
 			}
+			task.waitIfPaused()
 			n, e := resp.Read(buf)
 			if n > 0 {
 				dst.Write(buf[:n])
@@ -978,6 +804,7 @@ func (s *FTPSession) transferFile(task *TransferTask, localPath, remotePath, tfT
 				return task.ctx.Err()
 			default:
 			}
+			task.waitIfPaused()
 			n, e := src.Read(buf)
 			if n > 0 {
 				_, we := pw.Write(buf[:n])

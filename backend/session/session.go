@@ -65,6 +65,15 @@ type ConnectionConfig struct {
 	FtpEncryption string `json:"ftpEncryption,omitempty"` // "none"(default) | "auto" | "required"
 	FtpPassive    bool   `json:"ftpPassive"`              // passive mode (default true)
 	FtpEncoding   string `json:"ftpEncoding,omitempty"`   // "utf-8" | "gbk" | "shift-jis" | "latin-1"
+	// SMB-specific fields
+	SmbDomain string `json:"smbDomain,omitempty"`
+	SmbShare  string `json:"smbShare,omitempty"`
+	// WebDAV-specific fields
+	WebdavURL   string `json:"webdavUrl,omitempty"`
+	WebdavUseSSL bool  `json:"webdavUseSSL"` // default true
+	// S3-specific fields
+	S3Region string `json:"s3Region,omitempty"`
+	S3Bucket string `json:"s3Bucket,omitempty"`
 	// Terminal character encoding for ssh/telnet:
 	// "" / "utf-8"(default) | "gbk" | "gb2312" | "gb18030" | "big5" | "shift-jis" | "euc-jp" | "euc-kr"
 	Encoding string `json:"encoding,omitempty"`

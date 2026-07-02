@@ -38,7 +38,7 @@
       <el-switch
         v-model="scaleViewport"
        
-        style="--el-switch-on-color: #67c23a; --el-switch-off-color: #606266"
+        style="--el-switch-on-color: var(--success); --el-switch-off-color: var(--text-disabled)"
       />
     </div>
   </div>
@@ -309,10 +309,10 @@ watch(() => props.sessionId, (newId) => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #999;
+  color: var(--text-muted);
   z-index: 10;
 }
-.spice-error-text { color: #f56c6c; }
+.spice-error-text { color: var(--error); }
 .spice-statusbar {
   flex-shrink: 0;
   height: 24px;
@@ -320,8 +320,8 @@ watch(() => props.sessionId, (newId) => {
   align-items: center;
   gap: 8px;
   padding: 0 12px;
-  background: #1e1e1e;
-  color: #999;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   font-size: 12px;
   box-sizing: border-box;
   z-index: 5;
@@ -329,10 +329,10 @@ watch(() => props.sessionId, (newId) => {
 .spice-status-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #67c23a;
+  background: var(--success);
   flex-shrink: 0;
 }
-.spice-status-sep { color: #444; }
+.spice-status-sep { color: var(--text-disabled); }
 .spice-scale-label {
   margin-left: auto;
   font-size: 11px;

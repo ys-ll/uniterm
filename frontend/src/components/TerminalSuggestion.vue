@@ -270,7 +270,7 @@ function onRemove(id: string) {
 }
 
 .suggestion-item.ai-result {
-  border-left: 3px solid #34d399;
+  border-left: 3px solid var(--success);
 }
 
 .suggestion-item.ai-preview {
@@ -353,8 +353,8 @@ function onRemove(id: string) {
 }
 
 .delete-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ef4444;
+  background: var(--error-subtle);
+  color: var(--error);
 }
 
 .history-list::-webkit-scrollbar {

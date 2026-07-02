@@ -62,10 +62,10 @@
               <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
             </div>
             <div v-if="selectedId === cmd.id || hoveredId === cmd.id" class="qc-item-actions">
-              <button class="qc-action-btn run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
+              <button class="btn btn-ghost btn-icon btn-sm run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
                 <Play :size="14" />
               </button>
-              <button class="qc-action-btn paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
+              <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
                 <Clipboard :size="14" />
               </button>
             </div>
@@ -93,10 +93,10 @@
             <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
           </div>
           <div v-if="selectedId === cmd.id || hoveredId === cmd.id" class="qc-item-actions">
-            <button class="qc-action-btn run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
+            <button class="btn btn-ghost btn-icon btn-sm run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
               <Play :size="14" />
             </button>
-            <button class="qc-action-btn paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
+            <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
               <Clipboard :size="14" />
             </button>
           </div>
@@ -138,10 +138,10 @@
               <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
             </div>
             <div v-if="selectedId === cmd.id || hoveredId === cmd.id" class="qc-item-actions">
-              <button class="qc-action-btn run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
+              <button class="btn btn-ghost btn-icon btn-sm run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
                 <Play :size="14" />
               </button>
-              <button class="qc-action-btn paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
+              <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
                 <Clipboard :size="14" />
               </button>
             </div>
@@ -551,7 +551,7 @@ watch(searchQuery, (q) => {
   gap: 4px;
   padding: 0 10px 6px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .qc-search-input {
@@ -666,7 +666,7 @@ watch(searchQuery, (q) => {
 
 .qc-item-cmd {
   font-size: 12px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-family: var(--font-mono, 'Consolas', 'Courier New', monospace);
   white-space: nowrap;
   overflow: hidden;
@@ -683,32 +683,6 @@ watch(searchQuery, (q) => {
   flex-shrink: 0;
 }
 
-.qc-action-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--text-muted);
-  background: transparent;
-}
-
-.qc-action-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.qc-action-btn.run:hover {
-  color: var(--success-color, #22c55e);
-}
-
-.qc-action-btn.paste:hover {
-  color: var(--accent-color, #22d3ee);
-}
-
 .qc-empty {
   padding: 24px 12px;
   text-align: center;
@@ -720,7 +694,7 @@ watch(searchQuery, (q) => {
   position: fixed;
   z-index: 9999;
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   box-shadow: var(--shadow-lg);
   padding: 4px;
@@ -740,12 +714,12 @@ watch(searchQuery, (q) => {
 }
 
 .qc-context-menu .menu-item.danger {
-  color: var(--danger-color, #f56c6c);
+  color: var(--error);
 }
 
 .qc-context-menu .menu-divider {
   height: 1px;
-  background: var(--border-color);
+  background: var(--border-subtle);
   margin: 4px 6px;
 }
 

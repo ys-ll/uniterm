@@ -188,11 +188,11 @@ function onDrop(e: DragEvent) {
 }
 .dz {
   position: absolute;
-  background: rgba(34, 211, 238, 0.06);
+  background: var(--accent-subtle);
   transition: background 0.12s;
 }
 .dz.active {
-  background: rgba(34, 211, 238, 0.18);
+  background: var(--accent-glow);
 }
 .dz-left { left: 0; top: 0; width: 50%; height: 100%; }
 .dz-right { right: 0; top: 0; width: 50%; height: 100%; }

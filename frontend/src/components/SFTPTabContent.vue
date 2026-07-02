@@ -1675,7 +1675,7 @@ async function onDropRemote(e: DragEvent) {
 }
 .drop-overlay span {
   font-size: 14px;
-  color: #fff;
+  color: var(--on-accent);
   padding: 12px 24px;
   border: 2px dashed rgba(255, 255, 255, 0.6);
   border-radius: var(--radius-md);

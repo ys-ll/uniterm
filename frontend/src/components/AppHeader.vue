@@ -229,7 +229,7 @@ onUnmounted(() => {
 
 .header-btn.accent {
   background: linear-gradient(135deg, var(--accent-dim), var(--accent));
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 0 0 1px var(--accent-glow), 0 2px 8px var(--accent-glow);
 }
 

@@ -1,0 +1,746 @@
+package session
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/cloudsoda/go-smb2"
+)
+
+type SMBSession struct {
+	baseSession
+	localFSOps
+	conn      *smb2.Session
+	share     *smb2.Share
+	cwd       string
+	mu        sync.RWMutex
+	transfers map[string]*TransferTask
+	taskSeq   int64
+}
+
+func NewSMBSession(id string) *SMBSession {
+	return &SMBSession{
+		baseSession: baseSession{
+			id:          id,
+			sessionType: "smb",
+			status:      StatusDisconnected,
+		},
+		localFSOps: newLocalFSOps(),
+		cwd:        "/",
+		transfers:  make(map[string]*TransferTask),
+	}
+}
+
+func (s *SMBSession) Connect(config ConnectionConfig) error {
+	s.setStatus(StatusConnecting)
+	s.title = fmt.Sprintf("%s@%s", config.User, config.Host)
+
+	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	if config.Port <= 0 {
+		addr = fmt.Sprintf("%s:445", config.Host)
+	}
+
+	conn, err := net.DialTimeout("tcp", addr, 30*time.Second)
+	if err != nil {
+		s.setStatus(StatusError)
+		return fmt.Errorf("smb dial: %w", err)
+	}
+
+	d := &smb2.Dialer{
+		Initiator: &smb2.NTLMInitiator{
+			User:     config.User,
+			Password: config.Password,
+			Domain:   config.SmbDomain,
+		},
+	}
+
+	smbConn, err := d.DialConn(context.Background(), conn, addr)
+	if err != nil {
+		conn.Close()
+		s.setStatus(StatusError)
+		return fmt.Errorf("smb handshake: %w", err)
+	}
+
+	shareName := config.SmbShare
+	if shareName == "" {
+		shares, err := smbConn.ListSharenames()
+		if err != nil {
+			smbConn.Logoff()
+			s.setStatus(StatusError)
+			return fmt.Errorf("smb list shares: %w", err)
+		}
+		if len(shares) == 0 {
+			smbConn.Logoff()
+			s.setStatus(StatusError)
+			return fmt.Errorf("no shares available on %s", config.Host)
+		}
+		shareName = shares[0]
+	}
+
+	share, err := smbConn.Mount(shareName)
+	if err != nil {
+		smbConn.Logoff()
+		s.setStatus(StatusError)
+		return fmt.Errorf("smb mount share %s: %w", shareName, err)
+	}
+
+	s.conn = smbConn
+	s.share = share
+	s.cwd = ""
+	s.setStatus(StatusConnected)
+	return nil
+}
+
+func (s *SMBSession) Write(data []byte) error  { return nil }
+func (s *SMBSession) Resize(cols, rows int) error { return nil }
+
+func (s *SMBSession) Disconnect() error {
+	if s.share != nil {
+		s.share.Umount()
+		s.share = nil
+	}
+	if s.conn != nil {
+		s.conn.Logoff()
+		s.conn = nil
+	}
+	s.setStatus(StatusDisconnected)
+	return nil
+}
+
+func (s *SMBSession) IsConnected() bool {
+	return s.Status() == StatusConnected && s.conn != nil
+}
+
+func (s *SMBSession) requireShare() error {
+	if s.share == nil {
+		return fmt.Errorf("SMB session not connected")
+	}
+	return nil
+}
+
+// smbDir returns the parent directory for an SMB path.
+func smbDir(p string) string {
+	p = strings.TrimSuffix(p, "/")
+	i := strings.LastIndex(p, "/")
+	if i < 0 {
+		return ""
+	}
+	return p[:i]
+}
+
+// smbJoin joins two SMB path elements with a forward slash.
+func smbJoin(base, p string) string {
+	if base == "" {
+		return p
+	}
+	return base + "/" + p
+}
+
+func (s *SMBSession) resolveRemote(p string) (string, error) {
+	// "" means "list current directory" (used by refresh), return current cwd.
+	// "/" means "go to root directory".
+	if p == "" {
+		return s.cwd, nil
+	}
+	if p == "/" {
+		return "", nil
+	}
+	// Absolute path from frontend: strip leading slash.
+	p = strings.TrimPrefix(p, "/")
+	if p == "" {
+		return "", nil
+	}
+	return p, nil
+}
+
+func (s *SMBSession) nextTaskID(prefix string) string {
+	return fmt.Sprintf("%s-%d", prefix, atomic.AddInt64(&s.taskSeq, 1))
+}
+
+func (s *SMBSession) readRemoteFile(remotePath string) ([]byte, error) {
+	f, err := s.share.Open(remotePath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+func (s *SMBSession) writeRemoteFile(remotePath string, content []byte) error {
+	f, err := s.share.Create(remotePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(content)
+	return err
+}
+
+func (s *SMBSession) mkdirAllRemote(dir string) error {
+	if dir == "" || dir == "." || dir == "/" {
+		return nil
+	}
+	fi, err := s.share.Stat(dir)
+	if err == nil && fi.IsDir() {
+		return nil
+	}
+	if err := s.mkdirAllRemote(smbDir(dir)); err != nil {
+		return err
+	}
+	return s.share.Mkdir(dir, 0755)
+}
+
+func (s *SMBSession) ListRemote(dir string) (FileListResult, error) {
+	if err := s.requireShare(); err != nil {
+		return FileListResult{}, err
+	}
+	target, err := s.resolveRemote(dir)
+	if err != nil {
+		return FileListResult{}, err
+	}
+	entries, err := s.share.ReadDir(target)
+	if err != nil {
+		return FileListResult{}, err
+	}
+	files := make([]FileItem, 0, len(entries))
+	for _, e := range entries {
+		modTime := ""
+		if !e.ModTime().IsZero() {
+			modTime = e.ModTime().Format(time.RFC3339)
+		}
+		files = append(files, FileItem{
+			Name:    e.Name(),
+			Size:    e.Size(),
+			ModTime: modTime,
+			Mode:    e.Mode().String(),
+			IsDir:   e.IsDir(),
+		})
+	}
+	return FileListResult{Files: files, Dir: target}, nil
+}
+
+func (s *SMBSession) ChangeRemoteDir(dir string) (FileListResult, error) {
+	if err := s.requireShare(); err != nil {
+		return FileListResult{}, err
+	}
+	target, err := s.resolveRemote(dir)
+	if err != nil {
+		return FileListResult{}, err
+	}
+	// Root directory: skip Stat (SMB can't stat empty path)
+	if target != "" {
+		fi, err := s.share.Stat(target)
+		if err != nil {
+			return FileListResult{}, fmt.Errorf("no such directory: %s", target)
+		}
+		if !fi.IsDir() {
+			return FileListResult{}, fmt.Errorf("not a directory: %s", target)
+		}
+	}
+	s.mu.Lock()
+	s.cwd = target
+	s.mu.Unlock()
+	return s.ListRemote(target)
+}
+
+func (s *SMBSession) MakeDir(dir string) error {
+	if err := s.requireShare(); err != nil {
+		return err
+	}
+	p, err := s.resolveRemote(dir)
+	if err != nil {
+		return err
+	}
+	return s.share.Mkdir(p, 0755)
+}
+
+func (s *SMBSession) Remove(p string, recursive bool) error {
+	if err := s.requireShare(); err != nil {
+		return err
+	}
+	target, err := s.resolveRemote(p)
+	if err != nil {
+		return err
+	}
+	if recursive {
+		return s.share.RemoveAll(target)
+	}
+	fi, err := s.share.Stat(target)
+	if err != nil {
+		return err
+	}
+	if fi.IsDir() {
+		entries, err := s.share.ReadDir(target)
+		if err != nil {
+			return err
+		}
+		if len(entries) > 0 {
+			return fmt.Errorf("directory not empty (%d items)", len(entries))
+		}
+	}
+	return s.share.Remove(target)
+}
+
+func (s *SMBSession) Rename(oldName, newName string) error {
+	if err := s.requireShare(); err != nil {
+		return err
+	}
+	old, err := s.resolveRemote(oldName)
+	if err != nil {
+		return err
+	}
+	n, err := s.resolveRemote(newName)
+	if err != nil {
+		return err
+	}
+	return s.share.Rename(old, n)
+}
+
+func (s *SMBSession) Chmod(p string, mode os.FileMode) error {
+	if err := s.requireShare(); err != nil {
+		return err
+	}
+	target, err := s.resolveRemote(p)
+	if err != nil {
+		return err
+	}
+	return s.share.Chmod(target, mode)
+}
+
+func (s *SMBSession) Copy(oldPath, newPath string) error {
+	if err := s.requireShare(); err != nil {
+		return err
+	}
+	old, err := s.resolveRemote(oldPath)
+	if err != nil {
+		return err
+	}
+	n, err := s.resolveRemote(newPath)
+	if err != nil {
+		return err
+	}
+	fi, err := s.share.Stat(old)
+	if err != nil {
+		return err
+	}
+	if fi.IsDir() {
+		return fmt.Errorf("cannot copy directory via SMB: %s", old)
+	}
+	data, err := s.readRemoteFile(old)
+	if err != nil {
+		return err
+	}
+	return s.writeRemoteFile(n, data)
+}
+
+func (s *SMBSession) Move(oldPath, newPath string) error {
+	return s.Rename(oldPath, newPath)
+}
+
+func (s *SMBSession) GetContent(remotePath string) ([]byte, error) {
+	if err := s.requireShare(); err != nil {
+		return nil, err
+	}
+	p, err := s.resolveRemote(remotePath)
+	if err != nil {
+		return nil, err
+	}
+	return s.readRemoteFile(p)
+}
+
+func (s *SMBSession) PutContent(remotePath string, content []byte) error {
+	if err := s.requireShare(); err != nil {
+		return err
+	}
+	p, err := s.resolveRemote(remotePath)
+	if err != nil {
+		return err
+	}
+	parentDir := smbDir(p)
+	if err := s.mkdirAllRemote(parentDir); err != nil {
+		return err
+	}
+	return s.writeRemoteFile(p, content)
+}
+
+func (s *SMBSession) Get(remotePath, localPath string, recursive bool) (string, error) {
+	if err := s.requireShare(); err != nil {
+		return "", err
+	}
+	rp, err := s.resolveRemote(remotePath)
+	if err != nil {
+		return "", err
+	}
+	lp := localPath
+	if !filepath.IsAbs(lp) {
+		lp = filepath.Join(s.localCwd, lp)
+	}
+	task := &TransferTask{
+		ID:         s.nextTaskID("dl"),
+		Type:       "download",
+		LocalPath:  lp,
+		RemotePath: rp,
+		Status:     "running",
+	}
+	task.start()
+	s.mu.Lock()
+	s.transfers[task.ID] = task
+	s.mu.Unlock()
+	s.emitTransferStart(task)
+	go func() {
+		defer func() {
+			task.done()
+			s.mu.Lock()
+			delete(s.transfers, task.ID)
+			s.mu.Unlock()
+		}()
+		var err error
+		if recursive {
+			err = s.downloadDir(rp, lp, task)
+		} else {
+			err = s.downloadFile(task, rp, lp)
+		}
+		if err != nil {
+			task.Status = "error"
+			s.emitTransferEvent(task, err)
+			return
+		}
+		task.Status = "done"
+		s.emitTransferComplete(task)
+	}()
+	return task.ID, nil
+}
+
+func (s *SMBSession) Put(localPath, remotePath string, recursive bool) (string, error) {
+	if err := s.requireShare(); err != nil {
+		return "", err
+	}
+	lp := localPath
+	if !filepath.IsAbs(lp) {
+		lp = filepath.Join(s.localCwd, lp)
+	}
+	rp, err := s.resolveRemote(remotePath)
+	if err != nil {
+		return "", err
+	}
+	task := &TransferTask{
+		ID:         s.nextTaskID("ul"),
+		Type:       "upload",
+		LocalPath:  lp,
+		RemotePath: rp,
+		Status:     "running",
+	}
+	task.start()
+	s.mu.Lock()
+	s.transfers[task.ID] = task
+	s.mu.Unlock()
+	s.emitTransferStart(task)
+	go func() {
+		defer func() {
+			task.done()
+			s.mu.Lock()
+			delete(s.transfers, task.ID)
+			s.mu.Unlock()
+		}()
+		var err error
+		if recursive {
+			err = s.uploadDir(lp, rp, task)
+		} else {
+			err = s.uploadFile(task, lp, rp)
+		}
+		if err != nil {
+			task.Status = "error"
+			s.emitTransferEvent(task, err)
+			return
+		}
+		task.Status = "done"
+		s.emitTransferComplete(task)
+	}()
+	return task.ID, nil
+}
+
+func (s *SMBSession) CancelTransfer(taskID string) error {
+	s.mu.Lock()
+	task, ok := s.transfers[taskID]
+	s.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("task not found: %s", taskID)
+	}
+	if task.cancel != nil {
+		task.cancel()
+	}
+	return nil
+}
+
+func (s *SMBSession) PauseTransfer(taskID string) error {
+	s.mu.Lock()
+	task, ok := s.transfers[taskID]
+	s.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("task not found: %s", taskID)
+	}
+	task.paused = true
+	task.Status = "paused"
+	s.emitTransferComplete(task)
+	return nil
+}
+
+func (s *SMBSession) ResumeTransfer(taskID string) error {
+	s.mu.Lock()
+	task, ok := s.transfers[taskID]
+	s.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("task not found: %s", taskID)
+	}
+	task.paused = false
+	task.Status = "running"
+	close(task.pauseCh)
+	task.pauseCh = make(chan struct{})
+	s.emitTransferStart(task)
+	return nil
+}
+
+// calcSmbRemoteDirSize recursively sums up all file sizes under a remote SMB directory.
+func (s *SMBSession) calcSmbRemoteDirSize(remoteDir string) (int64, error) {
+	var total int64
+	entries, err := s.share.ReadDir(remoteDir)
+	if err != nil {
+		return 0, err
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			sub, err := s.calcSmbRemoteDirSize(smbJoin(remoteDir, e.Name()))
+			if err != nil {
+				return 0, err
+			}
+			total += sub
+		} else {
+			total += e.Size()
+		}
+	}
+	return total, nil
+}
+
+func (s *SMBSession) downloadDir(remoteDir, localDir string, task *TransferTask) error {
+	// Calculate total size for progress tracking
+	if task.Total <= 0 {
+		if total, err := s.calcSmbRemoteDirSize(remoteDir); err == nil {
+			task.Total = total
+		}
+	}
+
+	if err := os.MkdirAll(localDir, 0755); err != nil {
+		return err
+	}
+	entries, err := s.share.ReadDir(remoteDir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		select {
+		case <-task.ctx.Done():
+			return task.ctx.Err()
+		default:
+		}
+		rp := smbJoin(remoteDir, e.Name())
+		lp := filepath.Join(localDir, e.Name())
+		if e.IsDir() {
+			if err := s.downloadDir(rp, lp, task); err != nil {
+				return err
+			}
+		} else {
+			if err := s.downloadFile(task, rp, lp); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *SMBSession) downloadFile(task *TransferTask, remotePath, localPath string) error {
+	// Get file size first for progress tracking
+	if task.Total <= 0 {
+		if fi, err := s.share.Stat(remotePath); err == nil {
+			if fi.Size() > 0 {
+				task.Total = fi.Size()
+			}
+		}
+	}
+
+	f, err := s.share.Open(remotePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	dst, err := os.Create(localPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	buf := make([]byte, 64*1024)
+	for {
+		select {
+		case <-task.ctx.Done():
+			return task.ctx.Err()
+		default:
+		}
+		task.waitIfPaused()
+		n, e := f.Read(buf)
+		if n > 0 {
+			dst.Write(buf[:n])
+			task.Progress += int64(n)
+			s.emitTransferProgress(task)
+		}
+		if e != nil {
+			if e == io.EOF {
+				return nil
+			}
+			return e
+		}
+	}
+}
+
+func (s *SMBSession) uploadDir(localDir, remoteDir string, task *TransferTask) error {
+	// Calculate total size for progress tracking
+	if task.Total <= 0 {
+		if total, err := calcLocalDirSize(localDir); err == nil {
+			task.Total = total
+		}
+	}
+
+	if err := s.mkdirAllRemote(remoteDir); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(localDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		select {
+		case <-task.ctx.Done():
+			return task.ctx.Err()
+		default:
+		}
+		lp := filepath.Join(localDir, entry.Name())
+		rp := remoteDir + "/" + entry.Name()
+		if entry.IsDir() {
+			if err := s.uploadDir(lp, rp, task); err != nil {
+				return err
+			}
+		} else {
+			if err := s.uploadFile(task, lp, rp); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *SMBSession) uploadFile(task *TransferTask, localPath, remotePath string) error {
+	// Get local file size first for progress tracking
+	if task.Total <= 0 {
+		if fi, err := os.Stat(localPath); err == nil {
+			if fi.Size() > 0 {
+				task.Total = fi.Size()
+			}
+		}
+	}
+
+	src, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	dst, err := s.share.Create(remotePath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	buf := make([]byte, 64*1024)
+	for {
+		select {
+		case <-task.ctx.Done():
+			return task.ctx.Err()
+		default:
+		}
+		task.waitIfPaused()
+		n, e := src.Read(buf)
+		if n > 0 {
+			if _, we := dst.Write(buf[:n]); we != nil {
+				return we
+			}
+			task.Progress += int64(n)
+			s.emitTransferProgress(task)
+		}
+		if e != nil {
+			if e == io.EOF {
+				return nil
+			}
+			return e
+		}
+	}
+}
+
+// --- Transfer event emitters ---
+
+func (s *SMBSession) emitTransferStart(task *TransferTask) {
+	name := filepath.Base(task.LocalPath)
+	if task.Type == "download" {
+		name = path.Base(task.RemotePath)
+	}
+	payload := map[string]interface{}{
+		"type":   "sftp:transfer",
+		"taskId": task.ID,
+		"event":  "start",
+		"tfType": task.Type,
+		"name":   name,
+		"total":  task.Total,
+	}
+	jsonBytes, _ := json.Marshal(payload)
+	s.emitData([]byte("\x1b]633;S" + string(jsonBytes) + "\x07"))
+}
+
+func (s *SMBSession) emitTransferProgress(task *TransferTask) {
+	payload := map[string]interface{}{
+		"type":     "sftp:transfer",
+		"taskId":   task.ID,
+		"event":    "progress",
+		"progress": task.Progress,
+		"total":    task.Total,
+	}
+	jsonBytes, _ := json.Marshal(payload)
+	s.emitData([]byte("\x1b]633;S" + string(jsonBytes) + "\x07"))
+}
+
+func (s *SMBSession) emitTransferComplete(task *TransferTask) {
+	payload := map[string]interface{}{
+		"type":   "sftp:transfer",
+		"taskId": task.ID,
+		"event":  "complete",
+		"status": task.Status,
+	}
+	jsonBytes, _ := json.Marshal(payload)
+	s.emitData([]byte("\x1b]633;S" + string(jsonBytes) + "\x07"))
+}
+
+func (s *SMBSession) emitTransferEvent(task *TransferTask, err error) {
+	payload := map[string]interface{}{
+		"type":   "sftp:transfer",
+		"taskId": task.ID,
+		"event":  "complete",
+		"status": "error",
+		"error":  err.Error(),
+	}
+	jsonBytes, _ := json.Marshal(payload)
+	s.emitData([]byte("\x1b]633;S" + string(jsonBytes) + "\x07"))
+}

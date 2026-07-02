@@ -57,6 +57,15 @@ func (sm *SessionManager) Create(sessionType string, config ConnectionConfig) (S
 	case "ftp":
 		s = NewFTPSession(config.ID)
 
+	case "smb":
+		s = NewSMBSession(config.ID)
+
+	case "webdav":
+		s = NewWebDAVSession(config.ID)
+
+	case "s3":
+		s = NewS3Session(config.ID)
+
 	case "serial":
 		s = NewSerialSession(config.ID)
 

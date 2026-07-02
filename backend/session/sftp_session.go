@@ -1124,6 +1124,7 @@ func (s *SFTPSession) transferFile(task *TransferTask, localPath, remotePath, tf
 				return task.ctx.Err()
 			default:
 			}
+			task.waitIfPaused()
 			n, e := src.Read(buf)
 			if n > 0 {
 				dst.Write(buf[:n])
@@ -1152,6 +1153,7 @@ func (s *SFTPSession) transferFile(task *TransferTask, localPath, remotePath, tf
 				return task.ctx.Err()
 			default:
 			}
+			task.waitIfPaused()
 			n, e := src.Read(buf)
 			if n > 0 {
 				dst.Write(buf[:n])

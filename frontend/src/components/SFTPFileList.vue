@@ -562,7 +562,7 @@ function onDragStart(event: DragEvent, row: FileItem) {
   background: var(--bg-surface) !important;
 }
 .el-message--error .el-message__content {
-  color: #f56c6c !important;
+  color: var(--error) !important;
 }
 .el-table tr.cut-item-row {
   opacity: 0.4;

@@ -447,7 +447,7 @@
           <span v-if="testResult != null" :class="testResult ? 'test-ok' : 'test-fail'" style="margin-left: 8px; font-size: 13px;">
             {{ testResult ? t('settings.testSuccess') : t('settings.testFailed') }}
           </span>
-          <span v-if="testError" style="margin-left: 8px; font-size: 12px; color: #e5534b; word-break: break-all;">{{ testError }}</span>
+          <span v-if="testError" style="margin-left: 8px; font-size: 12px; color: var(--error); word-break: break-all;">{{ testError }}</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -1193,8 +1193,8 @@ function getShellLabel(path: string): string {
 .kb-key {
   display: inline-block;
   padding: 2px 8px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1210,7 +1210,7 @@ function getShellLabel(path: string): string {
 .kb-table th, .kb-table td {
   padding: 10px 12px;
   text-align: left;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .kb-table th {

@@ -40,7 +40,7 @@
         :active-text="t('vnc.scaleOn')"
         :inactive-text="t('vnc.scaleOff')"
         inline-prompt
-        style="--el-switch-on-color: #67c23a; --el-switch-off-color: #606266"
+        style="--el-switch-on-color: var(--success); --el-switch-off-color: var(--text-disabled)"
       />
     </div>
   </div>
@@ -312,10 +312,10 @@ watch(scaleViewport, (val) => {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #999;
+  color: var(--text-muted);
   z-index: 10;
 }
-.vnc-error-text { color: #f56c6c; }
+.vnc-error-text { color: var(--error); }
 .vnc-statusbar {
   position: absolute;
   bottom: 0;
@@ -326,8 +326,8 @@ watch(scaleViewport, (val) => {
   align-items: center;
   gap: 8px;
   padding: 0 12px;
-  background: #1e1e1e;
-  color: #999;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   font-size: 12px;
   box-sizing: border-box;
   z-index: 5;
@@ -335,10 +335,10 @@ watch(scaleViewport, (val) => {
 .vnc-status-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: #67c23a;
+  background: var(--success);
   flex-shrink: 0;
 }
-.vnc-status-sep { color: #444; }
+.vnc-status-sep { color: var(--text-disabled); }
 .vnc-scale-label {
   margin-left: auto;
   font-size: 11px;

@@ -44,6 +44,9 @@
           <el-radio-group v-model="form.type">
             <el-radio-button label="ftp">FTP</el-radio-button>
             <el-radio-button label="ssh">SSH (SFTP)</el-radio-button>
+            <el-radio-button label="smb">SMB</el-radio-button>
+            <el-radio-button label="webdav">WebDAV</el-radio-button>
+            <el-radio-button label="s3">S3</el-radio-button>
           </el-radio-group>
         </template>
         <template v-if="category === 'remote'">
@@ -64,13 +67,13 @@
           </el-radio-group>
         </template>
       </el-form-item>
-      <el-form-item :label="t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial'">
+      <el-form-item :label="form.type === 's3' ? 'Endpoint' : t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial'">
         <el-input v-model="form.host" :placeholder="t('conn.hostPlaceholder')" />
       </el-form-item>
-      <el-form-item :label="t('conn.port')" v-if="form.type !== 'local' && form.type !== 'serial'">
+      <el-form-item :label="t('conn.port')" v-if="form.type !== 'local' && form.type !== 'serial' && form.type !== 's3'">
         <el-input-number v-model="form.port" :min="0" :max="65535" />
       </el-form-item>
-      <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local' && form.type !== 'serial'" :label="t('conn.user')">
+      <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local' && form.type !== 'serial'" :label="form.type === 's3' ? 'Access Key' : t('conn.user')">
         <el-input v-model="form.user" :placeholder="t('conn.userPlaceholder')" />
       </el-form-item>
       <el-form-item v-if="form.type === 'ssh' || form.type === 'mosh'" :label="t('conn.authType')">
@@ -79,7 +82,7 @@
           <el-radio-button label="key">{{ t('conn.keyPath') }}</el-radio-button>
         </el-radio-group>
       </el-form-item>
-      <el-form-item v-if="form.type !== 'local' && form.type !== 'serial' && (form.authType === 'password' || form.type === 'rdp' || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="t('conn.password')">
+      <el-form-item v-if="form.type !== 'local' && form.type !== 'serial' && (form.authType === 'password' || form.type === 'rdp' || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="form.type === 's3' ? 'Secret Key' : t('conn.password')">
         <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" />
       </el-form-item>
       <el-form-item v-if="form.authType === 'key' && (form.type === 'ssh' || form.type === 'mosh')" :label="t('conn.keyPath')">
@@ -146,7 +149,28 @@
           </el-select>
         </el-form-item>
       </template>
-      <div v-if="form.type !== 'serial' && form.type !== 'spice'" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
+      <template v-if="form.type === 'smb'">
+        <el-form-item label="Domain" required>
+          <el-input v-model="form.smbDomain" placeholder="e.g. WORKGROUP" />
+        </el-form-item>
+        <el-form-item label="Share">
+          <el-input v-model="form.smbShare" placeholder="Share name (leave empty to browse)" />
+        </el-form-item>
+      </template>
+      <template v-if="form.type === 'webdav'">
+        <el-form-item label="SSL">
+          <el-switch v-model="form.webdavUseSSL" />
+        </el-form-item>
+      </template>
+      <template v-if="form.type === 's3'">
+        <el-form-item label="Region" required>
+          <el-input v-model="form.s3Region" placeholder="us-east-1" />
+        </el-form-item>
+        <el-form-item label="Bucket">
+          <el-input v-model="form.s3Bucket" placeholder="my-bucket (leave empty to list all buckets)" />
+        </el-form-item>
+      </template>
+      <div v-if="form.type !== 'serial' && form.type !== 'spice' && form.type !== 's3'" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
         <el-icon class="advanced-arrow" :class="{ expanded: showAdvanced }"><ChevronRight :size="14" /></el-icon>
         <span>{{ t('conn.advanced') }}</span>
       </div>
@@ -414,7 +438,7 @@ const isEdit = computed(() => !!props.editConfig?.id)
 
 const TERMINAL_TYPES = ['ssh', 'telnet', 'mosh', 'local', 'serial']
 const REMOTE_TYPES = ['rdp', 'vnc', 'spice']
-const FILETRANSFER_TYPES = ['ftp', 'ssh']
+const FILETRANSFER_TYPES = ['ftp', 'ssh', 'smb', 'webdav', 's3']
 
 const category = computed(() => {
   if (TERMINAL_TYPES.includes(form.type)) return 'terminal'
@@ -476,6 +500,12 @@ const form = reactive<ConnectionConfig>({
   ftpEncoding: 'utf-8',
   encoding: 'utf-8',
   shellPath: '',
+  smbDomain: 'WORKGROUP',
+  smbShare: '',
+  webdavURL: '',
+  webdavUseSSL: true,
+  s3Region: 'us-east-1',
+  s3Bucket: '',
 })
 
 const rdpResolutions = [
@@ -546,6 +576,8 @@ watch(() => form.type, (newType) => {
   else if (newType === 'spice') form.port = 5900
   else if (newType === 'database') form.port = 3306
   else if (newType === 'ftp') form.port = 21
+  else if (newType === 'smb') form.port = 445
+  else if (newType === 'webdav') form.port = 443
   if (REMOTE_TYPES.includes(newType) || newType === 'database') {
     form.authType = 'password'
   }
@@ -688,6 +720,10 @@ function normalizeForm(): ConnectionConfig {
   if (normalized.type !== 'local' && normalized.type !== 'serial' && !normalized.host.trim()) {
     throw new Error(t('conn.hostRequired'))
   }
+  if (normalized.type === 's3') {
+    if (!normalized.user?.trim()) throw new Error('S3: Access Key is required')
+    if (!normalized.password?.trim()) throw new Error('S3: Secret Key is required')
+  }
   if (!normalized.name.trim()) {
     normalized.name = generateUniqueName(
       normalized.type === 'serial' ? (normalized.serialPort || 'Serial') : normalized.host.trim()
@@ -763,15 +799,15 @@ function onConnect() {
   margin-bottom: 4px;
   cursor: pointer;
   user-select: none;
-  color: var(--text-secondary, #909399);
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
-  border-bottom: 1px solid var(--border-subtle, #e4e7ed);
+  border-bottom: 1px solid var(--border-subtle);
   transition: color 0.15s;
 }
 
 .advanced-toggle:hover {
-  color: var(--accent, #409eff);
+  color: var(--accent);
 }
 
 .advanced-arrow {

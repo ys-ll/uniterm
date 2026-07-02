@@ -1,5 +1,5 @@
 :root {
-  /* Core palette - professional dark */
+  /* Core palette - professional dark, slight blue undertone (kept from before) */
   --bg-base: #14171d;
   --bg-elevated: #191c24;
   --bg-surface: #1f222b;
@@ -11,7 +11,7 @@
   --text-primary: #e6e8ed;
   --text-secondary: #9ea3ae;
   --text-muted: #949aa5;
-  --text-disabled: #525760;
+  --text-disabled: #6b7280;
 
   /* Accent - electric cyan */
   --accent: #22d3ee;
@@ -19,11 +19,32 @@
   --accent-glow: rgba(34, 211, 238, 0.15);
   --accent-subtle: rgba(34, 211, 238, 0.08);
 
+  /* Info - secondary link/informational blue, distinct from --accent */
+  --info: #4c9df0;
+  --info-subtle: rgba(76, 157, 240, 0.1);
+
+  /* Text/icon color to place on top of a solid --accent fill */
+  --on-accent: #ffffff;
+
+  /* Chart series palette - for multi-series data viz (e.g. system monitor
+     CPU/memory/disk/network) where each series needs a distinct, stable hue
+     independent of the semantic success/warning/error colors. */
+  --chart-1: #4ade80;
+  --chart-2: #60a5fa;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-4-alt: #c4b5fd;
+
   /* Semantic */
   --success: #34d399;
   --success-dim: #059669;
+  --success-subtle: rgba(52, 211, 153, 0.06);
+  --success-glow: rgba(52, 211, 153, 0.15);
   --warning: #f59e0b;
+  --warning-subtle: rgba(245, 158, 11, 0.1);
   --error: #f87171;
+  --error-subtle: rgba(248, 113, 113, 0.06);
+  --error-glow: rgba(248, 113, 113, 0.15);
 
   /* Borders */
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -57,7 +78,7 @@
   --el-text-color-primary: #e6e8ed;
   --el-text-color-regular: #9ea3ae;
   --el-text-color-secondary: #737984;
-  --el-text-color-placeholder: #525760;
+  --el-text-color-placeholder: #6b7280;
   --el-border-color: rgba(255, 255, 255, 0.14);
   --el-border-color-light: rgba(255, 255, 255, 0.1);
   --el-border-color-lighter: rgba(255, 255, 255, 0.08);
@@ -81,17 +102,32 @@
   --text-primary: #e2e8f4;
   --text-secondary: #94a3b8;
   --text-muted: #8e97a8;
-  --text-disabled: #4a5468;
+  --text-disabled: #64708a;
 
   --accent: #38bdf8;
   --accent-dim: #0284c7;
   --accent-glow: rgba(56, 189, 248, 0.18);
   --accent-subtle: rgba(56, 189, 248, 0.08);
 
+  --info: #5eb3f5;
+  --info-subtle: rgba(94, 179, 245, 0.1);
+  --on-accent: #ffffff;
+
+  --chart-1: #4ade80;
+  --chart-2: #60a5fa;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-4-alt: #c4b5fd;
+
   --success: #34d399;
   --success-dim: #059669;
+  --success-subtle: rgba(52, 211, 153, 0.06);
+  --success-glow: rgba(52, 211, 153, 0.15);
   --warning: #f59e0b;
+  --warning-subtle: rgba(245, 158, 11, 0.1);
   --error: #f87171;
+  --error-subtle: rgba(248, 113, 113, 0.06);
+  --error-glow: rgba(248, 113, 113, 0.15);
 
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-hover: rgba(255, 255, 255, 0.14);
@@ -109,7 +145,7 @@
   --el-text-color-primary: #e2e8f4;
   --el-text-color-regular: #94a3b8;
   --el-text-color-secondary: #6b7590;
-  --el-text-color-placeholder: #4a5468;
+  --el-text-color-placeholder: #64708a;
   --el-border-color: rgba(255, 255, 255, 0.14);
   --el-border-color-light: rgba(255, 255, 255, 0.1);
   --el-border-color-lighter: rgba(255, 255, 255, 0.08);
@@ -131,7 +167,7 @@
   --text-primary: #1a1a1a;
   --text-secondary: #5a5a5a;
   --text-muted: #6e6e6e;
-  --text-disabled: #b0b0b0;
+  --text-disabled: #909090;
 
   /* Accent - Windows-style blue */
   --accent: #0078d4;
@@ -139,11 +175,28 @@
   --accent-glow: rgba(0, 120, 212, 0.22);
   --accent-subtle: rgba(0, 120, 212, 0.08);
 
+  --info: #006ab1;
+  --info-subtle: rgba(0, 106, 177, 0.08);
+  --on-accent: #ffffff;
+
+  /* Chart series palette - darker/more saturated than the dark theme's for
+     sufficient contrast against a white background */
+  --chart-1: #16a34a;
+  --chart-2: #2563eb;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-4-alt: #a78bfa;
+
   /* Semantic */
   --success: #107c41;
   --success-dim: #0b5e30;
+  --success-subtle: rgba(16, 124, 65, 0.06);
+  --success-glow: rgba(16, 124, 65, 0.15);
   --warning: #e07b00;
+  --warning-subtle: rgba(224, 123, 0, 0.08);
   --error: #d13438;
+  --error-subtle: rgba(209, 52, 56, 0.06);
+  --error-glow: rgba(209, 52, 56, 0.15);
 
   /* Borders - cool light grays */
   --border-subtle: rgba(0, 0, 0, 0.06);
@@ -164,7 +217,7 @@
   --el-text-color-primary: #1a1a1a;
   --el-text-color-regular: #5a5a5a;
   --el-text-color-secondary: #8a8a8a;
-  --el-text-color-placeholder: #b0b0b0;
+  --el-text-color-placeholder: #909090;
   --el-border-color: rgba(0, 0, 0, 0.12);
   --el-border-color-light: rgba(0, 0, 0, 0.08);
   --el-border-color-lighter: rgba(0, 0, 0, 0.06);
@@ -312,6 +365,118 @@ body::before {
   border-radius: var(--radius-sm);
   transition: all 0.15s ease;
 }
+
+/* ============================================================
+   Unified button system
+   Replaces the ~25 one-off "*-btn" classes that had grown across
+   components (action-icon-btn, toggle-btn, qc-action-btn, ...).
+   Compose from a single .btn base + modifiers, all theme-aware.
+   New/refactored buttons should use these instead of ad-hoc CSS.
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+.btn:disabled,
+.btn.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Neutral/default - subtle bordered surface, for secondary actions */
+.btn-default {
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+.btn-default:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+/* Primary - the one accent-filled action per view */
+.btn-primary {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+  color: var(--on-accent);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* Ghost - no border/fill until hover; the common case for toolbar/inline actions
+   (covers what most one-off "action-icon-btn"/"toggle-btn" classes were doing) */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.btn-ghost.is-active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+/* Ghost variant that turns red on hover instead of neutral - the common
+   pattern for a delete/remove icon sitting among other row-level actions */
+.btn-ghost.danger:hover:not(:disabled) {
+  background: var(--error-subtle);
+  color: var(--error);
+}
+
+/* Danger - destructive actions (delete/disconnect/etc.) */
+.btn-danger {
+  background: transparent;
+  color: var(--error);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--error-subtle);
+  color: var(--error);
+}
+
+/* Icon-only - square, no label; pair with an 14-16px icon child */
+.btn-icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: none;
+}
+
+/* Compact sizing for dense toolbars */
+.btn-sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.btn-sm.btn-icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+/* Ghost hover-tint modifiers for a row of mixed-purpose icon actions
+   (e.g. run/paste/copy sitting next to a plain delete) */
+.btn-ghost.run:hover:not(:disabled) { color: var(--success); }
+.btn-ghost.paste:hover:not(:disabled) { color: var(--accent); }
 
 .el-radio-button__inner {
   height: 28px !important;

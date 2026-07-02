@@ -335,7 +335,7 @@ function onTabDrop(e: DragEvent, targetTabId: string, index: number) {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--text-secondary, #888);
+  color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -344,7 +344,7 @@ function onTabDrop(e: DragEvent, targetTabId: string, index: number) {
   margin-left: 2px;
 }
 .tab-add-btn:hover {
-  background: var(--bg-hover, #3a3b44);
-  color: var(--text-primary, #e0e0e0);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 </style>

@@ -4,7 +4,7 @@
       <div class="loading-box">
         <div class="spinner" />
         <span class="loading-text">{{ t('db.loading') }}</span>
-        <button class="cancel-btn" @click="onCancelQuery">{{ t('common.cancel') }}</button>
+        <button class="btn btn-default" @click="onCancelQuery">{{ t('common.cancel') }}</button>
       </div>
     </div>
     <div class="editor-top" :style="{ height: topHeight + 'px' }">
@@ -16,7 +16,7 @@
           @keydown="onKeydown"
         />
         <div class="exec-btn-wrapper">
-          <button class="exec-btn exec-btn-overlay" @click="onExecute">{{ t('db.execute') }}</button>
+          <button class="btn btn-primary exec-btn-overlay" @click="onExecute">{{ t('db.execute') }}</button>
           <span class="shortcut-hint">Ctrl+Enter</span>
         </div>
       </div>
@@ -43,8 +43,8 @@
             fixed="right"
           >
             <template #default="{ $index }">
-              <button class="action-icon-btn" title="Edit" @click="startEditRow($index)"><Pencil :size="14" /></button>
-              <button class="action-icon-btn danger" title="Delete" @click="onDeleteRow($index)"><Trash2 :size="14" /></button>
+              <button class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="startEditRow($index)"><Pencil :size="14" /></button>
+              <button class="btn btn-ghost btn-icon btn-sm danger" title="Delete" @click="onDeleteRow($index)"><Trash2 :size="14" /></button>
             </template>
           </el-table-column>
           <el-table-column
@@ -78,7 +78,7 @@
       </div>
 
       <div v-if="queryResult && tableName && !isView" class="insert-row-bar">
-        <button class="exec-btn" @click="startInsertRow">{{ t('db.insertRow') }}</button>
+        <button class="btn btn-primary" @click="startInsertRow">{{ t('db.insertRow') }}</button>
       </div>
 
       <div v-if="insertingRow" class="insert-row-form">
@@ -93,8 +93,8 @@
           </div>
         </div>
         <div class="insert-actions">
-          <button class="exec-btn" @click="onInsertConfirm">{{ t('common.confirm') }}</button>
-          <button class="cancel-btn" @click="onInsertCancel">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" @click="onInsertConfirm">{{ t('common.confirm') }}</button>
+          <button class="btn btn-default" @click="onInsertCancel">{{ t('common.cancel') }}</button>
         </div>
       </div>
 
@@ -109,8 +109,8 @@
           </div>
         </div>
         <div class="insert-actions">
-          <button class="exec-btn" @click="onEditRowConfirm">{{ t('common.save') }}</button>
-          <button class="cancel-btn" @click="onEditRowCancel">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" @click="onEditRowConfirm">{{ t('common.save') }}</button>
+          <button class="btn btn-default" @click="onEditRowCancel">{{ t('common.cancel') }}</button>
         </div>
       </div>
     </div>
@@ -548,21 +548,6 @@ function onEditRowCancel() {
   font-size: 13px;
   color: var(--text-secondary);
 }
-.cancel-btn {
-  padding: 4px 16px;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  transition: all 0.15s ease;
-}
-.cancel-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
-}
 .editor-top {
   flex-shrink: 0;
   display: flex;
@@ -630,25 +615,10 @@ function onEditRowCancel() {
   flex-direction: column;
   min-height: 0;
 }
-.exec-btn {
-  padding: 4px 16px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  transition: all 0.15s ease;
-}
-.exec-btn:hover {
-  background: var(--accent-dim);
-  box-shadow: 0 0 12px var(--accent-glow);
-}
 .error-msg {
   color: var(--error);
   padding: 8px;
-  background: rgba(248, 113, 113, 0.1);
+  background: var(--error-subtle);
   border-radius: var(--radius-sm);
   margin-bottom: 8px;
   user-select: text;
@@ -687,20 +657,6 @@ function onEditRowCancel() {
   font-size: 13px;
   outline: none;
 }
-.action-icon-btn {
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.12s ease;
-}
-.action-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
-.action-icon-btn.danger:hover { color: var(--error); }
 .insert-row-bar { padding: 4px 0; }
 .insert-row-form {
   border: 1px solid var(--accent);
