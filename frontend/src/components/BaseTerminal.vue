@@ -266,6 +266,29 @@ function onDragDrop(e: DragEvent) {
   handleDroppedFiles(props.sessionId, Array.from(files))
 }
 
+// Convert a Windows native path to the format expected by the active shell.
+// - PowerShell / cmd: keep C:\foo\bar (native)
+// - Git Bash / MSYS2 / Cygwin / MinGW: /c/foo/bar
+// - WSL: /mnt/c/foo/bar
+function toShellPath(nativePath: string, shellPath?: string): string {
+  const isWinPath = /^[A-Za-z]:\\/.test(nativePath)
+  if (!isWinPath) return nativePath.replace(/\\/g, '/')
+
+  const lower = (shellPath || '').toLowerCase()
+  let converted: string
+  if (lower.includes('wsl')) {
+    const drive = nativePath.charAt(0).toLowerCase()
+    converted = '/mnt/' + drive + nativePath.slice(2).replace(/\\/g, '/')
+  } else if (lower.includes('bash') || lower.includes('git') || lower.includes('msys') || lower.includes('cygwin') || lower.includes('mingw')) {
+    const drive = nativePath.charAt(0).toLowerCase()
+    converted = '/' + drive + nativePath.slice(2).replace(/\\/g, '/')
+  } else {
+    converted = nativePath
+  }
+  // Quote paths with spaces so the shell treats them as a single argument
+  return converted.includes(' ') ? `"${converted}"` : converted
+}
+
 async function handleDroppedFiles(sessionId: string, files: File[]) {
   const paths: string[] = []
   for (const f of files) {
@@ -288,6 +311,16 @@ async function handleDroppedFiles(sessionId: string, files: File[]) {
   }
   if (paths.length === 0) return
 
+  // Local terminal: paste file paths as input, adapting format to the shell
+  if (props.mode === 'local') {
+    const panel = panelStore.getPanel(props.panelId || '')
+    const shellPath = panel?.config?.shellPath
+    const text = paths.map(p => toShellPath(p, shellPath)).join(' ')
+    SessionWrite(sessionId, text)
+    return
+  }
+
+  // Remote terminal: trigger zmodem upload
   zmodemStore.setPendingUploadFiles(sessionId, paths)
   SessionWrite(sessionId, 'rz -be\n')
 }
