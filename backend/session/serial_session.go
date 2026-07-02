@@ -121,11 +121,6 @@ func (s *SerialSession) Write(data []byte) error {
 		return fmt.Errorf("serial port not connected")
 	}
 	_, err := s.port.Write(data)
-	if err == nil && !s.IsZmodemMode() {
-		// Local echo: serial devices typically don't echo, so we
-		// echo input back to the terminal so the user can see typing.
-		s.emitData(data)
-	}
 	return err
 }
 
