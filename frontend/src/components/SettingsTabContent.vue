@@ -13,7 +13,7 @@ import SettingsTab from './SettingsTab.vue'
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
   background: var(--bg-base);
 }
 </style>

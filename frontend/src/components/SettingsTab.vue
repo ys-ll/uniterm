@@ -789,6 +789,7 @@ function getShellLabel(path: string): string {
 .settings-tab {
   display: flex;
   width: 100%;
+  min-width: 680px;
   max-width: 960px;
   height: 100%;
   margin: 0 auto;
