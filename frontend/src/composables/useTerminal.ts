@@ -58,25 +58,25 @@ export function getXtermTheme(name: string): any {
     case 'uniterm-light':
       return {
         background: '#fafafa',
-        foreground: '#1f1f1f',
-        cursor: '#007acc',
-        selectionBackground: 'rgba(0, 122, 204, 0.2)',
+        foreground: '#2c2c2c',
+        cursor: '#1976d2',
+        selectionBackground: 'rgba(25, 118, 210, 0.15)',
         black: '#1e1e22',
         red: '#d32f2f',
         green: '#388e3c',
-        yellow: '#f9a825',
+        yellow: '#c68600',
         blue: '#1976d2',
         magenta: '#7b1fa2',
         cyan: '#00838f',
-        white: '#e0e0e0',
-        brightBlack: '#616161',
-        brightRed: '#e57373',
-        brightGreen: '#81c784',
-        brightYellow: '#fff176',
-        brightBlue: '#64b5f6',
-        brightMagenta: '#ba68c8',
-        brightCyan: '#4dd0e1',
-        brightWhite: '#ffffff'
+        white: '#9e9e9e',
+        brightBlack: '#555555',
+        brightRed: '#c62828',
+        brightGreen: '#2e7d32',
+        brightYellow: '#b87a00',
+        brightBlue: '#1565c0',
+        brightMagenta: '#6a1b9a',
+        brightCyan: '#006064',
+        brightWhite: '#424242'
       }
     case 'solarized-dark':
       return {

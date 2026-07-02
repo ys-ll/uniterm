@@ -28,21 +28,24 @@ function segmentText(text: string): { text: string; isCSI: boolean }[] {
 }
 
 // ── Color palette ──
-// 256-color SGR codes: \x1b[38;5;{n}m for foreground
-// Add '4;' prefix for underline, e.g. \x1b[4;38;5;{n}m
-const FG = (n: number) => `\x1b[38;5;${n}m`
-const UNDERLINE_FG = (n: number) => `\x1b[4;38;5;${n}m`
+// Use ANSI standard SGR codes (30-37 / 90-97) instead of 256-color palette
+// indices so that highlight colors follow the terminal theme's ANSI color
+// definitions and always match the background.
+//
+// Standard: 30=black 31=red 32=green 33=yellow 34=blue 35=magenta 36=cyan 37=white
+// Bright:   90=brightBlack 91=brightRed 92=brightGreen 93=brightYellow
+//           94=brightBlue 95=brightMagenta 96=brightCyan 97=brightWhite
 const C = {
-  url:       UNDERLINE_FG(39),
-  ip:        FG(82),
-  path:      FG(177),
-  datetime:  FG(39),
-  string:    FG(215),
-  error:     FG(203),
-  warning:   FG(221),
-  info:      FG(75),
-  brace:     FG(223),
-  number:    FG(152),
+  url:       '\x1b[4;34m',   // blue + underline
+  ip:        '\x1b[32m',     // green
+  path:      '\x1b[35m',     // magenta
+  datetime:  '\x1b[94m',     // bright blue
+  string:    '\x1b[33m',     // yellow
+  error:     '\x1b[31m',     // red
+  warning:   '\x1b[93m',     // bright yellow
+  info:      '\x1b[36m',     // cyan
+  brace:     '\x1b[95m',     // bright magenta
+  number:    '\x1b[96m',     // bright cyan
 } as const
 
 // Patterns grouped by color type, ordered longest-first
