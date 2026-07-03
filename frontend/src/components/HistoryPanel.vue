@@ -31,6 +31,9 @@
           <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(entry)" :title="t('quickCommands.paste')">
             <Clipboard :size="14" />
           </button>
+          <button class="btn btn-ghost btn-icon btn-sm" @click.stop="copyCommand(entry)" :title="t('quickCommands.copy')">
+            <Copy :size="14" />
+          </button>
         </div>
       </div>
 
@@ -48,6 +51,7 @@
     >
       <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && runCommand(menuTarget!)">{{ t('quickCommands.run') }}</div>
       <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && pasteCommand(menuTarget!)">{{ t('quickCommands.paste') }}</div>
+      <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && copyCommand(menuTarget!); closeMenu()">{{ t('quickCommands.copy') }}</div>
       <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && saveAsQuickCommand(menuTarget!)">{{ t('quickCommands.saveAs') }}</div>
       <div class="menu-divider" />
       <div class="menu-item danger" @click="deleteSelected(); closeMenu()">{{ t('sidebar.delete') }}</div>
@@ -66,13 +70,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { Play, Clipboard } from '@lucide/vue'
+import { Play, Clipboard, Copy } from '@lucide/vue'
 import { useSuggestions, type HistoryEntry } from '../composables/useSuggestions'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useQuickCommandStore } from '../stores/quickCommandStore'
 import { SessionWrite } from '../../wailsjs/go/main/App'
 import { useI18n } from '../i18n'
+import { msg } from '../services/message'
 import QuickCommandEditDialog from './QuickCommandEditDialog.vue'
 
 const { t } = useI18n()
@@ -218,6 +223,15 @@ function pasteCommand(entry: HistoryEntry) {
   if (sids.length === 0) return
   for (const sid of sids) {
     SessionWrite(sid, entry.command)
+  }
+}
+
+async function copyCommand(entry: HistoryEntry) {
+  try {
+    await navigator.clipboard.writeText(entry.command)
+    msg.success(t('quickCommands.copied'))
+  } catch {
+    msg.error(t('quickCommands.copyFailed'))
   }
 }
 

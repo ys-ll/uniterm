@@ -65,20 +65,33 @@
               <div class="setting-desc">{{ t('settings.colorSchemeDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.theme" @change="settingsStore.save()" popper-class="theme-select-popper">
-                <el-option-group
-                  v-for="group in terminalThemeGroups"
-                  :key="group.label"
-                  :label="group.label"
+              <div class="theme-select-row">
+                <el-select v-model="settingsStore.settings.terminal.theme" @change="settingsStore.save()" popper-class="theme-select-popper">
+                  <el-option-group
+                    v-for="group in terminalThemeGroups"
+                    :key="group.label"
+                    :label="group.label"
+                  >
+                    <el-option
+                      v-for="th in group.options"
+                      :key="th.value"
+                      :label="th.label"
+                      :value="th.value"
+                    />
+                  </el-option-group>
+                </el-select>
+                <button class="btn btn-ghost btn-icon btn-sm" :title="t('theme.newTitle')" @click="openThemeEditor()">
+                  <Plus :size="14" />
+                </button>
+                <button
+                  v-if="isCustomTheme(settingsStore.settings.terminal.theme)"
+                  class="btn btn-ghost btn-icon btn-sm"
+                  :title="t('theme.editTitle')"
+                  @click="openThemeEditor(settingsStore.settings.terminal.theme)"
                 >
-                  <el-option
-                    v-for="th in group.options"
-                    :key="th.value"
-                    :label="th.label"
-                    :value="th.value"
-                  />
-                </el-option-group>
-              </el-select>
+                  <Pencil :size="14" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -461,12 +474,13 @@
     <EditRepoDialog />
     <ChangePasswordDialog />
     <DeleteRepoDialog />
+    <CustomThemeEditor v-model="themeEditorVisible" :source-theme-id="themeEditorSourceId" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, watch, computed, onMounted } from 'vue'
-import { Settings, Monitor, MessageCircleMore, Info, RefreshCw, Pencil, Trash2, Globe, Keyboard } from '@lucide/vue'
+import { Settings, Monitor, MessageCircleMore, Info, RefreshCw, Pencil, Trash2, Globe, Keyboard, Plus } from '@lucide/vue'
 import { msg } from '../services/message'
 import { FetchModels, ChatCompletion, GetSystemFonts } from '../../wailsjs/go/main/App'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -474,13 +488,15 @@ import { useSyncStore } from '../stores/syncStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { useI18n } from '../i18n'
 import { BrowserOpenURL } from '../../wailsjs/runtime'
-import { TERMINAL_THEMES, FONT_OPTIONS, LANGUAGE_OPTIONS, DEFAULT_KEYBOARD, SHORTCUT_LABELS, USER_AGENT_PRESETS } from '../types/settings'
-import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings, TerminalTheme } from '../types/settings'
+import { FONT_OPTIONS, LANGUAGE_OPTIONS, DEFAULT_KEYBOARD, SHORTCUT_LABELS, USER_AGENT_PRESETS } from '../types/settings'
+import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings } from '../types/settings'
+import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
 import { uninstallGlobalListener, installGlobalListener } from '../composables/useKeyboardShortcuts'
 import AddRepoDialog from './AddRepoDialog.vue'
 import EditRepoDialog from './EditRepoDialog.vue'
 import ChangePasswordDialog from './ChangePasswordDialog.vue'
 import DeleteRepoDialog from './DeleteRepoDialog.vue'
+import CustomThemeEditor from './CustomThemeEditor.vue'
 
 const settingsStore = useSettingsStore()
 const syncStore = useSyncStore()
@@ -526,10 +542,14 @@ const fontOptions = computed(() => {
   return FONT_OPTIONS
 })
 
-const terminalThemeGroups = computed(() => [
-  { label: 'Dark', options: TERMINAL_THEMES.filter(t => t.type === 'dark') },
-  { label: 'Light', options: TERMINAL_THEMES.filter(t => t.type === 'light') }
-])
+const { terminalThemeGroups, isCustomTheme } = useTerminalThemeOptions()
+
+const themeEditorVisible = ref(false)
+const themeEditorSourceId = ref<string | undefined>(undefined)
+function openThemeEditor(sourceThemeId?: string) {
+  themeEditorSourceId.value = sourceThemeId
+  themeEditorVisible.value = true
+}
 
 onMounted(async () => {
   try {
@@ -904,6 +924,19 @@ function getShellLabel(path: string): string {
 .setting-control .el-select,
 .setting-control .el-input-number {
   width: 100%;
+}
+
+.theme-select-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.theme-select-row .el-select {
+  flex: 1;
+  min-width: 0;
+  width: auto;
 }
 
 /* Model cards */

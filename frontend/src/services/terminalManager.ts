@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { SearchAddon } from '@xterm/addon-search'
 import { getXtermTheme } from '../composables/useTerminal'
+import type { CustomTerminalTheme } from '../types/settings'
 
 export interface TerminalOptions {
   fontSize?: number
@@ -49,7 +50,8 @@ function getHolding(sessionId: string): HTMLDivElement {
 export function acquireTerminal(
   sessionId: string,
   ref: string,
-  options: TerminalOptions
+  options: TerminalOptions,
+  customThemes?: CustomTerminalTheme[]
 ): Terminal {
   let managed = terminals.get(sessionId)
 
@@ -64,7 +66,7 @@ export function acquireTerminal(
     const terminal = new Terminal({
       fontSize: options.fontSize ?? 13,
       fontFamily: options.fontFamily ?? 'Consolas, "Courier New", monospace',
-      theme: getXtermTheme(options.themeName ?? 'dark'),
+      theme: getXtermTheme(options.themeName ?? 'dark', customThemes),
       cursorBlink: true,
       rightClickSelectsWord: false,
       scrollback: options.scrollback ?? 2500,

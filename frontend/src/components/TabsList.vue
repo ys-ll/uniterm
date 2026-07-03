@@ -33,7 +33,7 @@
       :title="t('startTab.defaultName')"
       @click="onAddStartTab"
     >
-      <el-icon><Plus :size="14" /></el-icon>
+      <Plus :size="18" />
     </button>
   </div>
   <div class="tab-more" v-if="showMore">

@@ -11,14 +11,49 @@ const settingsFileName = "settings.json"
 func boolPtr(b bool) *bool { return &b }
 
 type TerminalSettings struct {
-	Theme             string `json:"theme"`
-	FontFamily        string `json:"fontFamily"`
-	FontSize          int    `json:"fontSize"`
-	SelectionAction   string `json:"selectionAction"`
-	RightClickAction  string `json:"rightClickAction"`
-	MaxHistoryLines   int    `json:"maxHistoryLines"`
-	SmartCompletion   *bool  `json:"smartCompletion"`
-		HighlightEnabled  *bool  `json:"highlightEnabled"`
+	Theme            string `json:"theme"`
+	FontFamily       string `json:"fontFamily"`
+	FontSize         int    `json:"fontSize"`
+	SelectionAction  string `json:"selectionAction"`
+	RightClickAction string `json:"rightClickAction"`
+	MaxHistoryLines  int    `json:"maxHistoryLines"`
+	SmartCompletion  *bool  `json:"smartCompletion"`
+	HighlightEnabled *bool  `json:"highlightEnabled"`
+}
+
+// TerminalThemeColors mirrors xterm.js's ITheme shape: the 4 base colors
+// plus the 16 ANSI colors, all as hex strings.
+type TerminalThemeColors struct {
+	Background    string `json:"background"`
+	Foreground    string `json:"foreground"`
+	Cursor        string `json:"cursor"`
+	Selection     string `json:"selection"`
+	Black         string `json:"black"`
+	Red           string `json:"red"`
+	Green         string `json:"green"`
+	Yellow        string `json:"yellow"`
+	Blue          string `json:"blue"`
+	Magenta       string `json:"magenta"`
+	Cyan          string `json:"cyan"`
+	White         string `json:"white"`
+	BrightBlack   string `json:"brightBlack"`
+	BrightRed     string `json:"brightRed"`
+	BrightGreen   string `json:"brightGreen"`
+	BrightYellow  string `json:"brightYellow"`
+	BrightBlue    string `json:"brightBlue"`
+	BrightMagenta string `json:"brightMagenta"`
+	BrightCyan    string `json:"brightCyan"`
+	BrightWhite   string `json:"brightWhite"`
+}
+
+// CustomTerminalTheme is a user-defined terminal color scheme, stored
+// alongside (not inside) TerminalSettings since a theme is a reusable
+// resource, not a single terminal session's property.
+type CustomTerminalTheme struct {
+	ID     string              `json:"id"`
+	Name   string              `json:"name"`
+	Type   string              `json:"type"` // "dark" | "light"
+	Colors TerminalThemeColors `json:"colors"`
 }
 
 // AIConfig is the legacy flat AI config type, kept for Wails binding compatibility.
@@ -51,13 +86,14 @@ type KeyBinding struct {
 }
 
 type AppSettings struct {
-	Theme            string                `json:"theme"`
-	Language         string                `json:"language"`
-	Terminal         TerminalSettings      `json:"terminal"`
-	AI               AISettings            `json:"ai"`
-	Keyboard         map[string]KeyBinding `json:"keyboard"`
-	AutoCheckUpdate  *bool                 `json:"autoCheckUpdate"`
-	SFTPBookmarks    SFTPBookmarks         `json:"sftpBookmarks"`
+	Theme                string                `json:"theme"`
+	Language             string                `json:"language"`
+	Terminal             TerminalSettings      `json:"terminal"`
+	AI                   AISettings            `json:"ai"`
+	Keyboard             map[string]KeyBinding `json:"keyboard"`
+	AutoCheckUpdate      *bool                 `json:"autoCheckUpdate"`
+	SFTPBookmarks        SFTPBookmarks         `json:"sftpBookmarks"`
+	CustomTerminalThemes []CustomTerminalTheme `json:"customTerminalThemes"`
 }
 
 type SFTPBookmarks struct {
@@ -186,22 +222,23 @@ func defaultSettings() AppSettings {
 			LocalPaths:  []string{},
 			RemotePaths: []string{},
 		},
+		CustomTerminalThemes: []CustomTerminalTheme{},
 	}
 }
 
 func defaultKeyboard() map[string]KeyBinding {
 	return map[string]KeyBinding{
-		"nextTab":         {Ctrl: true, Shift: false, Alt: false, Key: "tab"},
-		"prevTab":         {Ctrl: true, Shift: true, Alt: false, Key: "tab"},
-		"newConnection":   {Ctrl: true, Shift: true, Alt: false, Key: "n"},
-		"toggleSidebar":   {Ctrl: true, Shift: true, Alt: false, Key: "h"},
-		"focusTerminal":   {Ctrl: true, Shift: true, Alt: false, Key: "j"},
-		"focusAI":         {Ctrl: true, Shift: true, Alt: false, Key: "k"},
-		"lockAI":          {Ctrl: true, Shift: true, Alt: false, Key: "l"},
-		"duplicateSession":{Ctrl: true, Shift: true, Alt: false, Key: "d"},
-		"closePanel":      {Ctrl: true, Shift: true, Alt: false, Key: "q"},
-		"navigatePrev":    {Ctrl: false, Shift: false, Alt: true, Key: "arrowleft"},
-		"navigateNext":    {Ctrl: false, Shift: false, Alt: true, Key: "arrowright"},
-		"openSettings":    {Ctrl: true, Shift: true, Alt: false, Key: "c"},
+		"nextTab":          {Ctrl: true, Shift: false, Alt: false, Key: "tab"},
+		"prevTab":          {Ctrl: true, Shift: true, Alt: false, Key: "tab"},
+		"newConnection":    {Ctrl: true, Shift: true, Alt: false, Key: "n"},
+		"toggleSidebar":    {Ctrl: true, Shift: true, Alt: false, Key: "h"},
+		"focusTerminal":    {Ctrl: true, Shift: true, Alt: false, Key: "j"},
+		"focusAI":          {Ctrl: true, Shift: true, Alt: false, Key: "k"},
+		"lockAI":           {Ctrl: true, Shift: true, Alt: false, Key: "l"},
+		"duplicateSession": {Ctrl: true, Shift: true, Alt: false, Key: "d"},
+		"closePanel":       {Ctrl: true, Shift: true, Alt: false, Key: "q"},
+		"navigatePrev":     {Ctrl: false, Shift: false, Alt: true, Key: "arrowleft"},
+		"navigateNext":     {Ctrl: false, Shift: false, Alt: true, Key: "arrowright"},
+		"openSettings":     {Ctrl: true, Shift: true, Alt: false, Key: "c"},
 	}
 }

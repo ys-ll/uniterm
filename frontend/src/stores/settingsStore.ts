@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import type { AppSettings, AIModelConfig } from '../types/settings'
+import type { AppSettings, AIModelConfig, CustomTerminalTheme } from '../types/settings'
 import { DEFAULT_SETTINGS, DEFAULT_KEYBOARD } from '../types/settings'
 import { SaveSettings, LoadSettings, GetAvailableShells } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
@@ -65,6 +65,27 @@ export const useSettingsStore = defineStore('settings', () => {
   function updateTheme(value: AppSettings['theme']) {
     settings.value.theme = value
     save()
+  }
+
+  function addCustomTheme(theme: CustomTerminalTheme) {
+    settings.value.customTerminalThemes.push(theme)
+    save()
+  }
+
+  function updateCustomTheme(id: string, updates: Partial<CustomTerminalTheme>) {
+    const idx = settings.value.customTerminalThemes.findIndex(t => t.id === id)
+    if (idx >= 0) {
+      settings.value.customTerminalThemes[idx] = { ...settings.value.customTerminalThemes[idx], ...updates }
+      save()
+    }
+  }
+
+  function removeCustomTheme(id: string) {
+    const idx = settings.value.customTerminalThemes.findIndex(t => t.id === id)
+    if (idx >= 0) {
+      settings.value.customTerminalThemes.splice(idx, 1)
+      save()
+    }
   }
 
   function updateLanguage(value: AppSettings['language']) {
@@ -176,7 +197,10 @@ export const useSettingsStore = defineStore('settings', () => {
     setActiveModel,
     sftpBookmarks,
     addSftpBookmark,
-    removeSftpBookmark
+    removeSftpBookmark,
+    addCustomTheme,
+    updateCustomTheme,
+    removeCustomTheme
   }
 })
 
@@ -203,6 +227,7 @@ function mergeSettings(loaded: AppSettings): AppSettings {
     sftpBookmarks: {
       localPaths: loaded.sftpBookmarks?.localPaths || [],
       remotePaths: loaded.sftpBookmarks?.remotePaths || []
-    }
+    },
+    customTerminalThemes: loaded.customTerminalThemes || []
   }
 }

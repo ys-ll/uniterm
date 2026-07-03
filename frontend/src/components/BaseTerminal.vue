@@ -617,7 +617,7 @@ onMounted(() => {
 
   // Acquire shared terminal from manager (or create if first mount)
   const opts = getTerminalOptions()
-  terminal = acquireTerminal(props.sessionId || '', terminalInstanceRef, opts)
+  terminal = acquireTerminal(props.sessionId || '', terminalInstanceRef, opts, settingsStore.settings.customTerminalThemes)
 
   // Load WebLinksAddon per-component (has custom callbacks)
   let hoverEl: HTMLDivElement | null = null
@@ -1268,7 +1268,7 @@ watch(() => settingsStore.settings.terminal, (ts) => {
   if (ts.fontSize) terminal.options.fontSize = ts.fontSize
   if (ts.fontFamily) terminal.options.fontFamily = ts.fontFamily
   if (ts.maxHistoryLines) terminal.options.scrollback = ts.maxHistoryLines
-  if (ts.theme) terminal.options.theme = getXtermTheme(ts.theme)
+  if (ts.theme) terminal.options.theme = getXtermTheme(ts.theme, settingsStore.settings.customTerminalThemes)
   resize()
 }, { deep: true })
 

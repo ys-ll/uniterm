@@ -802,6 +802,92 @@ export namespace store {
 		    return a;
 		}
 	}
+	export class TerminalThemeColors {
+	    background: string;
+	    foreground: string;
+	    cursor: string;
+	    selection: string;
+	    black: string;
+	    red: string;
+	    green: string;
+	    yellow: string;
+	    blue: string;
+	    magenta: string;
+	    cyan: string;
+	    white: string;
+	    brightBlack: string;
+	    brightRed: string;
+	    brightGreen: string;
+	    brightYellow: string;
+	    brightBlue: string;
+	    brightMagenta: string;
+	    brightCyan: string;
+	    brightWhite: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TerminalThemeColors(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.background = source["background"];
+	        this.foreground = source["foreground"];
+	        this.cursor = source["cursor"];
+	        this.selection = source["selection"];
+	        this.black = source["black"];
+	        this.red = source["red"];
+	        this.green = source["green"];
+	        this.yellow = source["yellow"];
+	        this.blue = source["blue"];
+	        this.magenta = source["magenta"];
+	        this.cyan = source["cyan"];
+	        this.white = source["white"];
+	        this.brightBlack = source["brightBlack"];
+	        this.brightRed = source["brightRed"];
+	        this.brightGreen = source["brightGreen"];
+	        this.brightYellow = source["brightYellow"];
+	        this.brightBlue = source["brightBlue"];
+	        this.brightMagenta = source["brightMagenta"];
+	        this.brightCyan = source["brightCyan"];
+	        this.brightWhite = source["brightWhite"];
+	    }
+	}
+	export class CustomTerminalTheme {
+	    id: string;
+	    name: string;
+	    type: string;
+	    colors: TerminalThemeColors;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomTerminalTheme(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.colors = this.convertValues(source["colors"], TerminalThemeColors);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SFTPBookmarks {
 	    localPaths: string[];
 	    remotePaths: string[];
@@ -868,6 +954,7 @@ export namespace store {
 	    keyboard: Record<string, KeyBinding>;
 	    autoCheckUpdate?: boolean;
 	    sftpBookmarks: SFTPBookmarks;
+	    customTerminalThemes: CustomTerminalTheme[];
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -882,6 +969,7 @@ export namespace store {
 	        this.keyboard = this.convertValues(source["keyboard"], KeyBinding, true);
 	        this.autoCheckUpdate = source["autoCheckUpdate"];
 	        this.sftpBookmarks = this.convertValues(source["sftpBookmarks"], SFTPBookmarks);
+	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], CustomTerminalTheme);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -902,6 +990,7 @@ export namespace store {
 		    return a;
 		}
 	}
+	
 	export class HistoryEntry {
 	    id: string;
 	    command: string;
@@ -1001,6 +1090,7 @@ export namespace store {
 		    return a;
 		}
 	}
+	
 	
 	
 

@@ -13,9 +13,55 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/UserExistsError/conpty"
+	"golang.org/x/sys/windows"
 )
+
+const cpUTF8 = 65001
+
+var (
+	kernel32Dll        = windows.NewLazySystemDLL("kernel32.dll")
+	procAttachConsole  = kernel32Dll.NewProc("AttachConsole")
+	procFreeConsoleWin = kernel32Dll.NewProc("FreeConsole")
+
+	// AttachConsole/FreeConsole operate on process-wide state (a process can
+	// only be attached to one console at a time), so concurrent calls from
+	// multiple local sessions being opened at once must be serialized.
+	consoleAttachMu sync.Mutex
+)
+
+// forceUTF8ConsoleCodePage attaches to the hidden conhost that ConPTY
+// created for pid and forces its input/output code page to UTF-8 (65001),
+// then detaches. Without this, the pseudo console inherits the system's
+// default ANSI/OEM code page (e.g. GBK/936 on zh-CN Windows); MSYS2 shells
+// like Git Bash write raw UTF-8 to their controlling console, which the
+// console then reinterprets under that legacy code page before ConPTY
+// re-serializes it as the VT stream uniterm reads, producing mojibake that
+// does not occur in standalone Git Bash (which runs under mintty and never
+// goes through the Win32 console subsystem). Windows Terminal and VS Code's
+// integrated terminal apply the same fix. uniterm's own process is a GUI
+// subsystem app with no console of its own, so AttachConsole/FreeConsole
+// here only ever touches the child's console, never uniterm's.
+func forceUTF8ConsoleCodePage(pid int) {
+	consoleAttachMu.Lock()
+	defer consoleAttachMu.Unlock()
+
+	// The child's console may not be immediately attachable right after
+	// CreateProcess returns; a few short retries comfortably cover that
+	// without noticeably delaying session startup.
+	for attempt := 0; attempt < 10; attempt++ {
+		ret, _, _ := procAttachConsole.Call(uintptr(pid))
+		if ret != 0 {
+			_ = windows.SetConsoleCP(cpUTF8)
+			_ = windows.SetConsoleOutputCP(cpUTF8)
+			procFreeConsoleWin.Call()
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
 
 type LocalSession struct {
 	baseSession
@@ -54,6 +100,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 
 	var commandLine string
 	var cmd *exec.Cmd
+	isMSYSBash := false
 
 	if distro, ok := parseWSLPath(shell); ok {
 		if distro == "" {
@@ -73,6 +120,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 			} else {
 				cmd = exec.Command(shell, "--login", "-i")
 				cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+				isMSYSBash = true
 			}
 		} else {
 			cmd = exec.Command(shell)
@@ -91,6 +139,9 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		c, err := conpty.Start(commandLine, conpty.ConPtyDimensions(cols, rows))
 		if err == nil {
 			s.cpty = c
+			if isMSYSBash {
+				go forceUTF8ConsoleCodePage(c.Pid())
+			}
 			go func() {
 				_, _ = s.cpty.Wait(context.Background())
 				s.Disconnect()

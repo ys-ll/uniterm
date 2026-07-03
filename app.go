@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"go.bug.st/serial"
 	"io"
 	"net/http"
 	"os"
@@ -19,7 +20,6 @@ import (
 	"strings"
 	stdsync "sync"
 	"time"
-	"go.bug.st/serial"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/ys-ll/uniterm/backend/database"
@@ -440,6 +440,17 @@ func (a *App) OpenFileDialog() (string, error) {
 	})
 }
 
+// OpenFileDialogFiltered is like OpenFileDialog but restricts the picker to
+// a single extension filter (e.g. for importing a specific file format).
+func (a *App) OpenFileDialogFiltered(title, filterDisplayName, filterPattern string) (string, error) {
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: title,
+		Filters: []runtime.FileFilter{
+			{DisplayName: filterDisplayName, Pattern: filterPattern},
+		},
+	})
+}
+
 func (a *App) OpenMultipleFilesDialog() ([]string, error) {
 	files, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Files",
@@ -460,6 +471,18 @@ func (a *App) SaveFileDialog(defaultName string) (string, error) {
 	return runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:           "Save File",
 		DefaultFilename: defaultName,
+	})
+}
+
+// SaveFileDialogFiltered is like SaveFileDialog but restricts the picker to
+// a single extension filter (e.g. for exporting a specific file format).
+func (a *App) SaveFileDialogFiltered(title, defaultName, filterDisplayName, filterPattern string) (string, error) {
+	return runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           title,
+		DefaultFilename: defaultName,
+		Filters: []runtime.FileFilter{
+			{DisplayName: filterDisplayName, Pattern: filterPattern},
+		},
 	})
 }
 
@@ -1372,9 +1395,9 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 
 	// --- Build OpenAI-format request body ---
 	openaiBody := map[string]interface{}{
-		"model":       model,
-		"stream":      true,
-		"max_tokens":  reqBody["max_tokens"],
+		"model":      model,
+		"stream":     true,
+		"max_tokens": reqBody["max_tokens"],
 	}
 
 	// Convert tools

@@ -255,11 +255,24 @@
         <div class="persist-section-title">{{ t('settings.terminal') }}</div>
         <div class="persist-section">
           <div class="persist-label">{{ t('settings.colorScheme') }}</div>
-          <el-select v-model="settingsStore.settings.terminal.theme" @change="settingsStore.save()" popper-class="theme-select-popper">
-            <el-option-group v-for="group in terminalThemeGroups" :key="group.label" :label="group.label">
-              <el-option v-for="th in group.options" :key="th.value" :label="th.label" :value="th.value" />
-            </el-option-group>
-          </el-select>
+          <div class="theme-select-row">
+            <el-select v-model="settingsStore.settings.terminal.theme" @change="settingsStore.save()" popper-class="theme-select-popper">
+              <el-option-group v-for="group in terminalThemeGroups" :key="group.label" :label="group.label">
+                <el-option v-for="th in group.options" :key="th.value" :label="th.label" :value="th.value" />
+              </el-option-group>
+            </el-select>
+            <button class="btn btn-ghost btn-icon btn-sm" :title="t('theme.newTitle')" @click="openThemeEditor()">
+              <Plus :size="14" />
+            </button>
+            <button
+              v-if="isCustomTheme(settingsStore.settings.terminal.theme)"
+              class="btn btn-ghost btn-icon btn-sm"
+              :title="t('theme.editTitle')"
+              @click="openThemeEditor(settingsStore.settings.terminal.theme)"
+            >
+              <Pencil :size="14" />
+            </button>
+          </div>
         </div>
         <div class="persist-section">
           <div class="persist-label">{{ t('settings.font') }}</div>
@@ -286,6 +299,7 @@
     </template>
 
     <ConnectionForm v-model="showForm" :edit-config="editConfig" :default-group-id="newConnGroupId" @save="onSave" @connect="onConnectFromForm" />
+    <CustomThemeEditor v-model="themeEditorVisible" :source-theme-id="themeEditorSourceId" />
 
     <!-- Connection context menu (kept inside sidebar to avoid native RDP occlusion) -->
     <div
@@ -442,7 +456,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Activity, Laptop, Cable } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Activity, Laptop, Cable, Pencil } from '@lucide/vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -450,10 +464,11 @@ import { useI18n } from '../i18n'
 import ConnectionForm from './ConnectionForm.vue'
 import QuickCommandsPanel from './QuickCommandsPanel.vue'
 import HistoryPanel from './HistoryPanel.vue'
+import CustomThemeEditor from './CustomThemeEditor.vue'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 import { parseQuickConnect, formatConnSubtitle } from '../utils/quickConnect'
-import { FONT_OPTIONS, TERMINAL_THEMES, LANGUAGE_OPTIONS } from '../types/settings'
-import type { TerminalTheme } from '../types/settings'
+import { FONT_OPTIONS, LANGUAGE_OPTIONS } from '../types/settings'
+import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
 import { GetSystemFonts } from '../../wailsjs/go/main/App'
 
 defineProps<{
@@ -476,10 +491,14 @@ const personalizationFontOptions = computed(() => {
   return FONT_OPTIONS
 })
 
-const terminalThemeGroups = computed(() => [
-  { label: 'Dark', options: TERMINAL_THEMES.filter(t => t.type === 'dark') },
-  { label: 'Light', options: TERMINAL_THEMES.filter(t => t.type === 'light') }
-])
+const { terminalThemeGroups, isCustomTheme } = useTerminalThemeOptions()
+
+const themeEditorVisible = ref(false)
+const themeEditorSourceId = ref<string | undefined>(undefined)
+function openThemeEditor(sourceThemeId?: string) {
+  themeEditorSourceId.value = sourceThemeId
+  themeEditorVisible.value = true
+}
 
 // Notify App.vue to hide native RDP window when edit dialog opens
 watch(showForm, (val) => {
@@ -1738,6 +1757,17 @@ defineExpose({ focusSearch })
 .persist-section .el-select,
 .persist-section .el-input-number {
   width: 100%;
+}
+
+.theme-select-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-select-row .el-select {
+  flex: 1;
+  min-width: 0;
 }
 </style>
 

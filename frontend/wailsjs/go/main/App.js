@@ -222,6 +222,10 @@ export function OpenFileDialog() {
   return window['go']['main']['App']['OpenFileDialog']();
 }
 
+export function OpenFileDialogFiltered(arg1, arg2, arg3) {
+  return window['go']['main']['App']['OpenFileDialogFiltered'](arg1, arg2, arg3);
+}
+
 export function OpenMultipleFilesDialog() {
   return window['go']['main']['App']['OpenMultipleFilesDialog']();
 }
@@ -376,6 +380,10 @@ export function SaveConnections(arg1) {
 
 export function SaveFileDialog(arg1) {
   return window['go']['main']['App']['SaveFileDialog'](arg1);
+}
+
+export function SaveFileDialogFiltered(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveFileDialogFiltered'](arg1, arg2, arg3, arg4);
 }
 
 export function SaveLocalState(arg1) {

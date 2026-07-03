@@ -7,8 +7,42 @@ export type Language = Locale | 'system'
 export type Theme = 'dark' | 'deep-blue' | 'light' | 'system'
 export type TerminalTheme = 'uniterm-dark' | 'uniterm-light' | 'solarized-dark' | 'solarized-light' | 'monokai' | 'dracula' | 'molokai' | 'tomorrow-night' | 'tomorrow-night-bright' | 'tomorrow' | 'one-dark' | 'one-light' | 'github-dark' | 'github-light' | 'gotham' | 'hybrid' | 'nord' | 'gruvbox-dark' | 'gruvbox-light' | 'catppuccin-mocha' | 'catppuccin-latte' | 'tokyo-night' | 'tokyo-day' | 'rose-pine' | 'rose-pine-dawn' | 'everforest-dark' | 'everforest-light'
 
+// xterm.js's ITheme shape: the 4 base colors plus the 16 ANSI colors, all as hex strings.
+export interface TerminalThemeColors {
+  background: string
+  foreground: string
+  cursor: string
+  selection: string
+  black: string
+  red: string
+  green: string
+  yellow: string
+  blue: string
+  magenta: string
+  cyan: string
+  white: string
+  brightBlack: string
+  brightRed: string
+  brightGreen: string
+  brightYellow: string
+  brightBlue: string
+  brightMagenta: string
+  brightCyan: string
+  brightWhite: string
+}
+
+// A user-defined terminal color scheme. Stored alongside (not inside)
+// TerminalSettings since a theme is a reusable resource, not a single
+// terminal session's property.
+export interface CustomTerminalTheme {
+  id: string
+  name: string
+  type: 'dark' | 'light'
+  colors: TerminalThemeColors
+}
+
 export interface TerminalSettings {
-  theme: TerminalTheme
+  theme: TerminalTheme | string
   fontFamily: string
   fontSize: number
   selectionAction: 'none' | 'copy'
@@ -102,6 +136,7 @@ export interface AppSettings {
   keyboard: KeyboardSettings
   autoCheckUpdate: boolean
   sftpBookmarks: SFTPBookmarks
+  customTerminalThemes: CustomTerminalTheme[]
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -135,10 +170,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sftpBookmarks: {
     localPaths: [],
     remotePaths: []
-  }
+  },
+  customTerminalThemes: []
 }
 
-export interface TerminalThemeEntry { label: string; value: TerminalTheme; type: 'dark' | 'light' }
+export interface TerminalThemeEntry { label: string; value: string; type: 'dark' | 'light' }
 export const TERMINAL_THEMES: TerminalThemeEntry[] = [
   { label: 'uniTerm Dark', value: 'uniterm-dark', type: 'dark' },
   { label: 'uniTerm Light', value: 'uniterm-light', type: 'light' },

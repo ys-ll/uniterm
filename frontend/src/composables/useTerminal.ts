@@ -10,6 +10,7 @@ import { EventsOn, BrowserOpenURL } from '../../wailsjs/runtime'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { highlight } from './useHighlight'
+import type { CustomTerminalTheme } from '../types/settings'
 
 export interface UseTerminalOptions {
   onSessionData?: (data: string) => void
@@ -29,7 +30,33 @@ export interface UseTerminalReturn {
   setRetryOnEnter: (value: boolean) => void
 }
 
-export function getXtermTheme(name: string): any {
+export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]): any {
+  const custom = customThemes?.find(t => t.id === name)
+  if (custom) {
+    const c = custom.colors
+    return {
+      background: c.background,
+      foreground: c.foreground,
+      cursor: c.cursor,
+      selectionBackground: c.selection,
+      black: c.black,
+      red: c.red,
+      green: c.green,
+      yellow: c.yellow,
+      blue: c.blue,
+      magenta: c.magenta,
+      cyan: c.cyan,
+      white: c.white,
+      brightBlack: c.brightBlack,
+      brightRed: c.brightRed,
+      brightGreen: c.brightGreen,
+      brightYellow: c.brightYellow,
+      brightBlue: c.brightBlue,
+      brightMagenta: c.brightMagenta,
+      brightCyan: c.brightCyan,
+      brightWhite: c.brightWhite
+    }
+  }
   const base = {
     background: 'var(--bg-base)',
     foreground: 'var(--text-primary)',
@@ -316,7 +343,7 @@ export function useTerminal(
     return {
       fontSize: ts.fontSize || 13,
       fontFamily: ts.fontFamily || 'Consolas, "Courier New", monospace',
-      theme: getXtermTheme(themeName),
+      theme: getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
       cursorBlink: true,
       rightClickSelectsWord: false,
       scrollback: ts.maxHistoryLines || 2500,
@@ -632,7 +659,7 @@ export function useTerminal(
     if (ts.fontSize) terminal.options.fontSize = ts.fontSize
     if (ts.fontFamily) terminal.options.fontFamily = ts.fontFamily
     if (ts.maxHistoryLines) terminal.options.scrollback = ts.maxHistoryLines
-    if (ts.theme) terminal.options.theme = getXtermTheme(ts.theme)
+    if (ts.theme) terminal.options.theme = getXtermTheme(ts.theme, settingsStore.settings.customTerminalThemes)
     resize()
   }, { deep: true })
 

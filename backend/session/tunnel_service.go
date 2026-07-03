@@ -14,6 +14,7 @@ import (
 type tunnelEntry struct {
 	sshClient *ssh.Client
 	listener  net.Listener
+	quit      chan struct{}
 }
 
 // TunnelService manages SSH tunnel lifecycles.
@@ -55,6 +56,13 @@ func (ts *TunnelService) Start(sessionID string, sshConfig ConnectionConfig, tar
 	conn, err := net.DialTimeout("tcp", addr, clientConfig.Timeout)
 	if err != nil {
 		return 0, fmt.Errorf("tunnel ssh dial: %w", err)
+	}
+	// TCP keepalive: same interval as direct SSH sessions, so an idle tunnel
+	// (e.g. forwarding a single long-lived vim/editor session through a jump
+	// host) doesn't get silently dropped by a firewall/NAT idle timeout.
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(sshKeepAliveInterval)
 	}
 
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, clientConfig)
@@ -107,12 +115,60 @@ func (ts *TunnelService) Start(sessionID string, sshConfig ConnectionConfig, tar
 		}
 	}()
 
+	quit := make(chan struct{})
 	ts.tunnels[sessionID] = &tunnelEntry{
 		sshClient: client,
 		listener:  listener,
+		quit:      quit,
 	}
+	go tunnelKeepAlive(client, quit)
 
 	return localPort, nil
+}
+
+// tunnelKeepAlive periodically pings the tunnel's SSH connection with a
+// global keepalive request (same cadence/threshold as SSHSession's) and
+// closes the connection if the remote stops responding, so a dead jump-host
+// hop doesn't linger silently while the forwarded session on top of it hangs.
+func tunnelKeepAlive(client *ssh.Client, quit chan struct{}) {
+	ticker := time.NewTicker(sshKeepAliveInterval)
+	defer ticker.Stop()
+
+	failures := 0
+	for {
+		select {
+		case <-ticker.C:
+			done := make(chan error, 1)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						done <- fmt.Errorf("panic: %v", r)
+					}
+				}()
+				_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
+				done <- err
+			}()
+
+			select {
+			case err := <-done:
+				if err != nil {
+					failures++
+				} else {
+					failures = 0
+				}
+			case <-time.After(sshKeepAliveTimeout):
+				failures++
+			}
+
+			if failures >= sshKeepAliveMaxFail {
+				client.Close()
+				return
+			}
+
+		case <-quit:
+			return
+		}
+	}
 }
 
 // Stop closes the tunnel and SSH connection for the given session.
@@ -126,6 +182,7 @@ func (ts *TunnelService) Stop(sessionID string) {
 	}
 	delete(ts.tunnels, sessionID)
 
+	close(entry.quit)
 	entry.listener.Close()
 	entry.sshClient.Close()
 }
@@ -141,6 +198,7 @@ func (ts *TunnelService) Shutdown() {
 	ts.mu.Unlock()
 
 	for _, entry := range entries {
+		close(entry.quit)
 		entry.listener.Close()
 		entry.sshClient.Close()
 	}

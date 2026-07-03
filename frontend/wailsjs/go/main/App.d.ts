@@ -117,6 +117,8 @@ export function OpenDirectoryDialog():Promise<string>;
 
 export function OpenFileDialog():Promise<string>;
 
+export function OpenFileDialogFiltered(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function OpenMultipleFilesDialog():Promise<Array<string>>;
 
 export function RDPHide(arg1:string):Promise<void>;
@@ -194,6 +196,8 @@ export function SaveAISessions(arg1:store.AISessionData):Promise<void>;
 export function SaveConnections(arg1:session.ConnectionStoreData):Promise<void>;
 
 export function SaveFileDialog(arg1:string):Promise<string>;
+
+export function SaveFileDialogFiltered(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function SaveLocalState(arg1:store.LocalState):Promise<void>;
 

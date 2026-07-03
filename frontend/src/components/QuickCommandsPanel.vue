@@ -68,6 +68,9 @@
               <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
                 <Clipboard :size="14" />
               </button>
+              <button class="btn btn-ghost btn-icon btn-sm" @click.stop="copyCommand(cmd)" :title="t('quickCommands.copy')">
+                <Copy :size="14" />
+              </button>
             </div>
           </div>
         </template>
@@ -98,6 +101,9 @@
             </button>
             <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
               <Clipboard :size="14" />
+            </button>
+            <button class="btn btn-ghost btn-icon btn-sm" @click.stop="copyCommand(cmd)" :title="t('quickCommands.copy')">
+              <Copy :size="14" />
             </button>
           </div>
         </div>
@@ -144,6 +150,9 @@
               <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
                 <Clipboard :size="14" />
               </button>
+              <button class="btn btn-ghost btn-icon btn-sm" @click.stop="copyCommand(cmd)" :title="t('quickCommands.copy')">
+                <Copy :size="14" />
+              </button>
             </div>
           </div>
         </template>
@@ -166,6 +175,7 @@
       <template v-if="selectedCmd">
         <div class="menu-item" @click="runCommand(selectedCmd!); closeMenu()">{{ t('quickCommands.run') }}</div>
         <div class="menu-item" @click="pasteCommand(selectedCmd!); closeMenu()">{{ t('quickCommands.paste') }}</div>
+        <div class="menu-item" @click="copyCommand(selectedCmd!); closeMenu()">{{ t('quickCommands.copy') }}</div>
         <div class="menu-divider" />
         <div class="menu-item" @click="editCommand(selectedCmd!)">{{ t('quickCommands.editCommand') }}</div>
         <div class="menu-item danger" @click="deleteCommand(selectedCmd!)">{{ t('quickCommands.deleteCommand') }}</div>
@@ -223,7 +233,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import {
-  Plus, Play, Clipboard,
+  Plus, Play, Clipboard, Copy,
   ChevronDown, ChevronRight
 } from '@lucide/vue'
 import { useQuickCommandStore, type QuickCommand, type QuickCommandGroup } from '../stores/quickCommandStore'
@@ -231,6 +241,7 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { SessionWrite } from '../../wailsjs/go/main/App'
 import { useI18n } from '../i18n'
+import { msg } from '../services/message'
 import QuickCommandEditDialog from './QuickCommandEditDialog.vue'
 
 const { t } = useI18n()
@@ -409,6 +420,15 @@ async function sendCommand(cmd: QuickCommand, mode: 'run' | 'paste') {
 
 function runCommand(cmd: QuickCommand) { sendCommand(cmd, 'run') }
 function pasteCommand(cmd: QuickCommand) { sendCommand(cmd, 'paste') }
+
+async function copyCommand(cmd: QuickCommand) {
+  try {
+    await navigator.clipboard.writeText(cmd.command)
+    msg.success(t('quickCommands.copied'))
+  } catch {
+    msg.error(t('quickCommands.copyFailed'))
+  }
+}
 
 function onCommandContextMenu(e: MouseEvent, cmd: QuickCommand) {
   e.stopPropagation()

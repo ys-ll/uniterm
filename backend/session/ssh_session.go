@@ -18,8 +18,13 @@ import (
 )
 
 const (
-	sshKeepAliveInterval = 60 * time.Second
-	sshKeepAliveTimeout  = 10 * time.Second
+	// Kept well under common corporate firewall/NAT/VPN idle-connection
+	// timeouts (commonly 5-15 minutes, sometimes as low as a few minutes),
+	// which otherwise silently drop the TCP session while the user is
+	// idle-reading in an editor (e.g. vim in normal mode) with no traffic
+	// flowing between keystrokes.
+	sshKeepAliveInterval = 20 * time.Second
+	sshKeepAliveTimeout  = 5 * time.Second
 	sshKeepAliveMaxFail  = 3
 )
 
