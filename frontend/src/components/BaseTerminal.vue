@@ -1135,6 +1135,12 @@ onActivated(() => {
   bindListeners?.()
   // Terminal dimensions may be stale after tab switch; recalculate.
   resize()
+  // Ensure viewport is at the bottom after reactivation so scroll wheel
+  // state is consistent — stale scrollTop from deactivation can cause
+  // mouse wheel to misbehave (scroll up broken, scroll down jumps to top).
+  nextTick(() => {
+    terminal?.scrollToBottom()
+  })
   // Re-initialize zmodem service only if it was disposed in onDeactivated.
   // If a transfer was active, the service is still running — skip recreate.
   // safe: no focus() call here, avoids WebView2 crash race with native dialogs.
