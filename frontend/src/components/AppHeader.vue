@@ -44,9 +44,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Settings, PanelLeft, Bot } from '@lucide/vue'
+import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
+import { useTabStore } from '../stores/tabStore'
 import WindowControls from './WindowControls.vue'
 import TabsList from './TabsList.vue'
 import {
@@ -62,6 +64,12 @@ import {
 } from '../../wailsjs/runtime'
 
 const { t } = useI18n()
+const tabStore = useTabStore()
+
+// Count non-start, non-settings tabs (actual connection tabs)
+const hasActiveConnections = computed(() =>
+  tabStore.tabs.some(t => t.type !== 'start' && t.type !== 'settings')
+)
 
 const emit = defineEmits<{
   'toggle-ai': []
@@ -119,7 +127,18 @@ async function linuxMaximise() {
   }
 }
 
-function onClose() {
+async function onClose() {
+  if (hasActiveConnections.value) {
+    try {
+      await ElMessageBox.confirm(
+        t('app.closeConfirm'),
+        t('app.closeTitle'),
+        { confirmButtonText: t('tab.close'), cancelButtonText: t('conn.cancel'), type: 'warning' }
+      )
+    } catch {
+      return // user cancelled
+    }
+  }
   Quit()
 }
 

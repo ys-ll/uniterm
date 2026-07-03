@@ -3,6 +3,8 @@
   "header.newConnection": "新建连接",
   "header.settings": "设置",
   "header.ai": "AI",
+  "app.closeConfirm": "有正在活动的连接，确定关闭？",
+  "app.closeTitle": "关闭确认",
   "sidebar.newConnection": "新建连接",
   "sidebar.collapse": "收起",
   "sidebar.personalization": "个性化",

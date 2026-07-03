@@ -3,6 +3,8 @@
   "header.newConnection": "New Connection",
   "header.settings": "Settings",
   "header.ai": "AI",
+  "app.closeConfirm": "Active connections are present. Close anyway?",
+  "app.closeTitle": "Close Confirmation",
   "sidebar.newConnection": "New Connection",
   "sidebar.collapse": "Collapse",
   "sidebar.personalization": "Personalization",
