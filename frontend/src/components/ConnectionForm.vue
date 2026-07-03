@@ -142,7 +142,7 @@
                 <el-input v-model="form.smbDomain" placeholder="e.g. WORKGROUP" />
               </el-form-item>
               <el-form-item label="Share">
-                <el-input v-model="form.smbShare" placeholder="Share name (leave empty to browse)" />
+                <el-input v-model="form.smbShare" placeholder="Share name (leave empty to browse all)" />
               </el-form-item>
             </template>
             <template v-if="form.type === 'webdav'">

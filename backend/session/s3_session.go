@@ -53,7 +53,11 @@ func (s *S3Session) Connect(config ConnectionConfig) error {
 
 	s.s3 = s3Client
 	s.bucket = config.S3Bucket
-	s.cwd = "/"
+	if s.bucket != "" {
+		s.cwd = "/" + s.bucket
+	} else {
+		s.cwd = "/"
+	}
 	s.setStatus(StatusConnected)
 	return nil
 }
@@ -92,6 +96,11 @@ func (s *S3Session) resolveRemote(p string) (string, error) {
 func (s *S3Session) s3Key(p string) string {
 	// S3 keys don't start with "/", they're relative to the bucket root.
 	p = strings.TrimPrefix(p, "/")
+	// Strip bucket name prefix if present (paths include bucket for breadcrumb display)
+	if s.bucket != "" {
+		bucketPrefix := s.bucket + "/"
+		p = strings.TrimPrefix(p, bucketPrefix)
+	}
 	return p
 }
 
@@ -190,26 +199,45 @@ func (s *S3Session) ChangeRemoteDir(dir string) (FileListResult, error) {
 	}
 
 	// Handle bucket-level navigation
-	if s.bucket == "" && target == "/" {
-		// Already at bucket list root, just refresh
-		return s.ListRemote("/")
-	}
 	if s.bucket == "" {
+		if target == "/" {
+			// Already at bucket list root, just refresh
+			return s.ListRemote("/")
+		}
 		// Navigating into a bucket from the bucket list
 		bucketName := strings.TrimPrefix(target, "/")
 		s.mu.Lock()
 		s.bucket = bucketName
-		s.cwd = "/"
+		s.cwd = "/" + bucketName
 		s.mu.Unlock()
-		return s.ListRemote("/")
+		return s.ListRemote("/" + bucketName)
 	}
-	if target == "/" && s.cwd == "/" {
-		// Already at bucket root, navigating up goes back to bucket list
+
+	// Inside a bucket: navigating up from bucket root returns to bucket list
+	bucketRoot := "/" + s.bucket
+	if target == bucketRoot || dir == ".." {
+		parts := strings.Split(strings.TrimPrefix(s.cwd, "/"+s.bucket), "/")
+		if len(parts) == 0 || (len(parts) == 1 && parts[0] == "") {
+			// At bucket root, go back to bucket list
+			s.mu.Lock()
+			s.bucket = ""
+			s.cwd = "/"
+			s.mu.Unlock()
+			return s.ListRemote("/")
+		}
+	}
+
+	// Navigate to parent when dir is ".." within a bucket
+	if dir == ".." {
+		parent := path.Dir(s.cwd)
+		if parent == bucketRoot || parent == "/"+s.bucket || parent == "/" {
+			// Parent is the bucket root
+			parent = bucketRoot
+		}
 		s.mu.Lock()
-		s.bucket = ""
-		s.cwd = "/"
+		s.cwd = parent
 		s.mu.Unlock()
-		return s.ListRemote("/")
+		return s.ListRemote(parent)
 	}
 
 	// Validate directory exists by listing it
@@ -227,7 +255,6 @@ func (s *S3Session) ChangeRemoteDir(dir string) (FileListResult, error) {
 	if err != nil {
 		return FileListResult{}, fmt.Errorf("no such directory: %s", target)
 	}
-	// If no objects and no common prefixes and prefix is not empty, the directory might not exist
 	if len(resp.Objects) == 0 && len(resp.CommonPrefixes) == 0 && prefix != "" {
 		// Could be a "virtual" directory (no marker object). Allow it.
 	}
