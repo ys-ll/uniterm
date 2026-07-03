@@ -85,7 +85,7 @@ import { usePanelStore } from '../stores/panelStore'
 import { useI18n } from '../i18n'
 import { CreateSession } from '../../wailsjs/go/main/App'
 import type { TerminalTab, SettingsTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, WorkspaceTab } from '../types/workspace'
-import { SquareTerminal, Laptop, FolderUp, Monitor, MonitorCloud, Settings, Sparkles, Database, Activity, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus } from '@lucide/vue'
+import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Sparkles, Database, DatabaseZap, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus } from '@lucide/vue'
 
 const props = defineProps<{
   tab: TerminalTab | SettingsTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | WorkspaceTab
@@ -114,17 +114,29 @@ const editInputRef = ref<HTMLInputElement>()
 const tabIcon = computed(() => {
   const t = props.tab
   if (t.type === 'settings') return Settings
-  if (t.type === 'sftp') return FolderUp
+  if (t.type === 'sftp') {
+    const panel = panelStore.getPanel(t.panelId)
+    if (panel?.config?.type === 'smb') return HardDrive
+    if (panel?.config?.type === 's3') return Cloud
+    if (panel?.config?.type === 'webdav') return Globe
+    return FolderUp
+  }
   if (t.type === 'rdp') return Monitor
-  if (t.type === 'vnc') return MonitorCloud
+  if (t.type === 'vnc') return MonitorSmartphone
   if (t.type === 'spice') return MonitorCloud
-  if (t.type === 'database') return Database
+  if (t.type === 'database') {
+    const panel = panelStore.getPanel(t.panelId)
+    if (panel?.config?.dbType === 'redis') return DatabaseZap
+    return Database
+  }
   if (t.type === 'monitor') return Activity
   if (t.type === 'workspace') return LayoutDashboard
   if (t.type === 'terminal') {
     const panel = panelStore.getPanel(t.panelId)
     if (panel?.type === 'local') return Laptop
     if (panel?.type === 'serial') return Cable
+    if (panel?.type === 'telnet') return Terminal
+    if (panel?.type === 'mosh') return Zap
     return SquareTerminal
   }
   if (t.type === 'start') return SquarePlus

@@ -442,7 +442,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, FolderUp, Monitor, MonitorCloud, Database, Activity, Laptop, Cable } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Activity, Laptop, Cable } from '@lucide/vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -1290,15 +1290,22 @@ function getSubtitle(conn: ConnectionConfig): string {
 
 function connIcon(conn: ConnectionConfig) {
   switch (conn.type) {
-    case 'sftp': return FolderUp
-    case 'rdp': return Monitor
-    case 'vnc': return MonitorCloud
-    case 'spice': return MonitorCloud
-    case 'database': return Database
-    case 'monitor': return Activity
+    case 'ssh': return SquareTerminal
+    case 'telnet': return Terminal
+    case 'mosh': return Zap
     case 'local': return Laptop
     case 'serial': return Cable
-    default: return SquareTerminal // ssh, telnet, mosh, ftp
+    case 'sftp': return FolderUp
+    case 'ftp': return FolderUp
+    case 'smb': return HardDrive
+    case 's3': return Cloud
+    case 'webdav': return Globe
+    case 'rdp': return Monitor
+    case 'vnc': return MonitorSmartphone
+    case 'spice': return MonitorCloud
+    case 'database': return conn.dbType === 'redis' ? DatabaseZap : Database
+    case 'monitor': return Activity
+    default: return SquareTerminal
   }
 }
 
