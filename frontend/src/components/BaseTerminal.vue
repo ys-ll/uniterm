@@ -572,7 +572,7 @@ function handleTerminalKey(e: KeyboardEvent): boolean {
   // Check global shortcuts first (Ctrl+Shift+/Alt+ combos)
   if (e.type === 'keydown' && !onTerminalKey(e)) return false
 
-  if (e.ctrlKey && e.key === 'f' && e.type === 'keydown') {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f' && e.type === 'keydown') {
     openSearch()
     return false
   }
