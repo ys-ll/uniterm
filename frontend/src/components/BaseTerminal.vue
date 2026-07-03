@@ -572,9 +572,35 @@ function handleTerminalKey(e: KeyboardEvent): boolean {
   // Check global shortcuts first (Ctrl+Shift+/Alt+ combos)
   if (e.type === 'keydown' && !onTerminalKey(e)) return false
 
-  if (e.ctrlKey && e.key === 'f' && e.type === 'keydown') {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f' && e.type === 'keydown') {
     openSearch()
     return false
+  }
+
+  // macOS-style cursor word/line jumping via Option/Cmd + arrow keys
+  if (e.type === 'keydown' && (e.altKey || e.metaKey)) {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      if (e.metaKey) {
+        // Cmd+Left → beginning of line
+        SessionWrite(props.sessionId || '', '\x1b[H')
+      } else if (e.altKey) {
+        // Option+Left → backward word
+        SessionWrite(props.sessionId || '', '\x1bb')
+      }
+      return false
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      if (e.metaKey) {
+        // Cmd+Right → end of line
+        SessionWrite(props.sessionId || '', '\x1b[F')
+      } else if (e.altKey) {
+        // Option+Right → forward word
+        SessionWrite(props.sessionId || '', '\x1bf')
+      }
+      return false
+    }
   }
 
   // Suggestion navigation (only on keydown, ignore keyup)
