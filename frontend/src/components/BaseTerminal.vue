@@ -1333,7 +1333,10 @@ async function pasteToSession(text: string) {
   if (props.mode === 'ssh' || props.mode === 'local') {
     const sid = props.sessionId
     if (sid) {
-      SessionWrite(sid, text)
+      // Normalize line endings: \r\n -> \r to prevent extra newlines
+      // when pasting into editors like vim (Windows clipboard often has \r\n)
+      const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '')
+      SessionWrite(sid, normalized)
     }
   }
 }
