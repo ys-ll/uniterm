@@ -83,7 +83,6 @@ export type ShortcutAction =
   | 'closePanel'
   | 'navigatePrev' | 'navigateNext'
   | 'duplicateSession'
-  | 'openSettings'
 
 export interface KeyBinding {
   ctrl: boolean
@@ -95,6 +94,7 @@ export interface KeyBinding {
 export type KeyboardSettings = Partial<Record<ShortcutAction, KeyBinding>>
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
+  newConnection: 'shortcut.newConnection',
   nextTab: 'shortcut.nextTab',
   prevTab: 'shortcut.prevTab',
   navigatePrev: 'shortcut.navigatePrev',
@@ -104,9 +104,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   focusTerminal: 'shortcut.focusTerminal',
   focusAI: 'shortcut.focusAI',
   lockAI: 'shortcut.lockAI',
-  newConnection: 'shortcut.newConnection',
   duplicateSession: 'shortcut.duplicateSession',
-  openSettings: 'shortcut.openSettings',
 }
 
 export const DEFAULT_KEYBOARD: KeyboardSettings = {

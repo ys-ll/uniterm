@@ -613,7 +613,6 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
       console.error('Failed to duplicate session:', e)
     }
   },
-  openSettings: () => openSettings(),
 }
 
 function applyKeybindings() {

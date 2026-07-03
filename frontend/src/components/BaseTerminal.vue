@@ -577,6 +577,15 @@ function handleTerminalKey(e: KeyboardEvent): boolean {
     return false
   }
 
+  // Ctrl+Shift+C: copy terminal selection to clipboard
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'c' || e.key === 'C') && e.type === 'keydown') {
+    const sel = terminal?.getSelection()
+    if (sel) {
+      navigator.clipboard.writeText(sel).catch(() => {})
+    }
+    return false
+  }
+
   // Suggestion navigation (only on keydown, ignore keyup)
   if (suggestions.isVisible() && e.type === 'keydown') {
     if (e.key === 'ArrowDown') {
