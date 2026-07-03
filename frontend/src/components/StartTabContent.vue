@@ -222,11 +222,22 @@
         >
           <div class="start-card-top">
             <div class="start-card-icon" :class="config.type">
-              <el-icon v-if="config.type === 'ssh' || config.type === 'telnet' || config.type === 'mosh'"><SquareTerminal :size="28" /></el-icon>
+              <el-icon v-if="config.type === 'ssh'"><SquareTerminal :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'telnet'"><Terminal :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'mosh'"><Zap :size="28" /></el-icon>
               <el-icon v-else-if="config.type === 'local'"><Laptop :size="28" /></el-icon>
-              <el-icon v-else-if="config.type === 'database'"><Database :size="28" /></el-icon>
-              <el-icon v-else-if="config.type === 'rdp' || config.type === 'vnc' || config.type === 'spice'"><Monitor :size="28" /></el-icon>
               <el-icon v-else-if="config.type === 'serial'"><Cable :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'ftp' || config.type === 'sftp'"><FolderUp :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'smb'"><HardDrive :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 's3'"><Cloud :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'webdav'"><Globe :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'rdp'"><Monitor :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'vnc'"><MonitorSmartphone :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'spice'"><MonitorCloud :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'database'">
+                <DatabaseZap v-if="config.dbType === 'redis'" :size="28" />
+                <Database v-else :size="28" />
+              </el-icon>
               <el-icon v-else><Server :size="28" /></el-icon>
             </div>
             <div>
@@ -360,7 +371,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import { GetRecentConnections } from '../../wailsjs/go/main/App'
 import { formatConnSubtitle } from '../utils/quickConnect'
-import { Filter, Plus, Laptop, Cable, SquareTerminal, Database, Monitor, Server, Folder, FolderOpen, Zap } from '@lucide/vue'
+import { Filter, Plus, Laptop, Cable, SquareTerminal, Terminal, Database, DatabaseZap, Monitor, MonitorSmartphone, MonitorCloud, FolderUp, HardDrive, Cloud, Globe, Server, Folder, FolderOpen, Zap } from '@lucide/vue'
 
 const props = defineProps<{
   tab: StartTab

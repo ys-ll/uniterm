@@ -53,11 +53,7 @@ func (s *S3Session) Connect(config ConnectionConfig) error {
 
 	s.s3 = s3Client
 	s.bucket = config.S3Bucket
-	if s.bucket != "" {
-		s.cwd = "/" + s.bucket
-	} else {
-		s.cwd = "/"
-	}
+	s.cwd = "/"
 	s.setStatus(StatusConnected)
 	return nil
 }
@@ -96,7 +92,11 @@ func (s *S3Session) resolveRemote(p string) (string, error) {
 func (s *S3Session) s3Key(p string) string {
 	// S3 keys don't start with "/", they're relative to the bucket root.
 	p = strings.TrimPrefix(p, "/")
-	// Strip bucket name prefix if present (paths include bucket for breadcrumb display)
+	// Bucket root: path equals the bucket name → empty key
+	if s.bucket != "" && p == s.bucket {
+		return ""
+	}
+	// Strip bucket name prefix from subdirectory paths (e.g. "mybucket/dir" → "dir")
 	if s.bucket != "" {
 		bucketPrefix := s.bucket + "/"
 		p = strings.TrimPrefix(p, bucketPrefix)
@@ -198,13 +198,12 @@ func (s *S3Session) ChangeRemoteDir(dir string) (FileListResult, error) {
 		return FileListResult{}, err
 	}
 
-	// Handle bucket-level navigation
+	// ── Bucket list level ──
 	if s.bucket == "" {
 		if target == "/" {
-			// Already at bucket list root, just refresh
-			return s.ListRemote("/")
+			return s.ListRemote("/") // refresh bucket list
 		}
-		// Navigating into a bucket from the bucket list
+		// Enter a bucket
 		bucketName := strings.TrimPrefix(target, "/")
 		s.mu.Lock()
 		s.bucket = bucketName
@@ -213,27 +212,29 @@ func (s *S3Session) ChangeRemoteDir(dir string) (FileListResult, error) {
 		return s.ListRemote("/" + bucketName)
 	}
 
-	// Inside a bucket: navigating up from bucket root returns to bucket list
+	// ── Inside a bucket ──
 	bucketRoot := "/" + s.bucket
-	if target == bucketRoot || dir == ".." {
-		parts := strings.Split(strings.TrimPrefix(s.cwd, "/"+s.bucket), "/")
-		if len(parts) == 0 || (len(parts) == 1 && parts[0] == "") {
-			// At bucket root, go back to bucket list
-			s.mu.Lock()
-			s.bucket = ""
-			s.cwd = "/"
-			s.mu.Unlock()
-			return s.ListRemote("/")
-		}
+
+	// "/" inside a bucket means the bucket list root
+	if target == "/" {
+		s.mu.Lock()
+		s.bucket = ""
+		s.cwd = "/"
+		s.mu.Unlock()
+		return s.ListRemote("/")
 	}
 
-	// Navigate to parent when dir is ".." within a bucket
+	// Navigate to bucket root via breadcrumb or direct path
+	if target == bucketRoot {
+		s.mu.Lock()
+		s.cwd = bucketRoot
+		s.mu.Unlock()
+		return s.ListRemote(bucketRoot)
+	}
+
+	// ".." navigation within the bucket
 	if dir == ".." {
 		parent := path.Dir(s.cwd)
-		if parent == bucketRoot || parent == "/"+s.bucket || parent == "/" {
-			// Parent is the bucket root
-			parent = bucketRoot
-		}
 		s.mu.Lock()
 		s.cwd = parent
 		s.mu.Unlock()

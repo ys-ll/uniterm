@@ -56,13 +56,13 @@
               </el-select>
             </el-form-item>
             <el-form-item :label="form.type === 's3' ? 'Endpoint' : t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial'">
-              <el-input v-model="form.host" :placeholder="t('conn.hostPlaceholder')" />
+              <el-input v-model="form.host" :placeholder="form.type === 's3' ? 'e.g. s3.amazonaws.com' : t('conn.hostPlaceholder')" />
             </el-form-item>
             <el-form-item :label="t('conn.port')" v-if="form.type !== 'local' && form.type !== 'serial' && form.type !== 's3'">
               <el-input-number v-model="form.port" :min="0" :max="65535" />
             </el-form-item>
             <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local' && form.type !== 'serial'" :label="form.type === 's3' ? 'Access Key' : t('conn.user')">
-              <el-input v-model="form.user" :placeholder="t('conn.userPlaceholder')" />
+              <el-input v-model="form.user" :placeholder="form.type === 's3' ? 'Access Key ID' : t('conn.userPlaceholder')" />
             </el-form-item>
             <el-form-item v-if="form.type === 'ssh' || form.type === 'mosh'" :label="t('conn.authType')">
               <el-radio-group v-model="form.authType">
@@ -71,7 +71,7 @@
               </el-radio-group>
             </el-form-item>
             <el-form-item v-if="form.type !== 'local' && form.type !== 'serial' && (form.authType === 'password' || form.type === 'rdp' || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="form.type === 's3' ? 'Secret Key' : t('conn.password')">
-              <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" />
+              <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" :placeholder="form.type === 's3' ? 'Secret Access Key' : ''" />
             </el-form-item>
             <el-form-item v-if="form.authType === 'key' && (form.type === 'ssh' || form.type === 'mosh')" :label="t('conn.keyPath')">
               <el-input v-model="form.keyPath" :placeholder="t('conn.keyPathPlaceholder')">

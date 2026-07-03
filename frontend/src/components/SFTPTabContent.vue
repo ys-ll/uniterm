@@ -11,7 +11,7 @@
         <div v-if="dragOverLocal" class="drop-overlay">
           <span>{{ t('sftp.dropHere') }}</span>
         </div>
-        <SFTPPathBreadcrumb :label="t('sftp.local')" :path="localCwd" :drives="localDrives" bookmark-mode="local" :saved-paths="settingsStore.sftpBookmarks.localPaths" @navigate="onLocalNavigate" @save-bookmark="onSaveBookmark('local', $event)" @remove-bookmark="onRemoveBookmark('local', $event)" />
+        <SFTPPathBreadcrumb :path="localCwd" :drives="localDrives" bookmark-mode="local" :saved-paths="settingsStore.sftpBookmarks.localPaths" @navigate="onLocalNavigate" @save-bookmark="onSaveBookmark('local', $event)" @remove-bookmark="onRemoveBookmark('local', $event)" />
         <SFTPFileList
           mode="local"
           :files="localFiles"
@@ -47,7 +47,7 @@
         <div v-if="dragOverRemote" class="drop-overlay">
           <span>{{ t('sftp.dropHere') }}</span>
         </div>
-        <SFTPPathBreadcrumb :label="panel?.config?.host || t('sftp.remote')" :path="cwd" bookmark-mode="remote" :saved-paths="settingsStore.sftpBookmarks.remotePaths" @navigate="onRemoteNavigate" @save-bookmark="onSaveBookmark('remote', $event)" @remove-bookmark="onRemoveBookmark('remote', $event)" />
+        <SFTPPathBreadcrumb :path="cwd" bookmark-mode="remote" :saved-paths="settingsStore.sftpBookmarks.remotePaths" @navigate="onRemoteNavigate" @save-bookmark="onSaveBookmark('remote', $event)" @remove-bookmark="onRemoveBookmark('remote', $event)" />
         <SFTPFileList
           mode="remote"
           :files="remoteFiles"
@@ -546,13 +546,14 @@ function parseMode(mode: string) {
 
 let unsubscribe: (() => void) | null = null
 let unsubscribeStatus: (() => void) | null = null
+let initialNavDone = false
 
 onMounted(async () => {
   unsubscribeStatus = EventsOn('session:status', (payload: { id: string; status: string }) => {
     if (payload.id === panel.value?.sessionId) {
       if (payload.status === 'connected') {
         onRefreshLocal()
-        onRefreshRemote()
+        onRefreshRemote().then(() => doInitialAutoNav())
       } else if (payload.status === 'error') {
         ElMessage.error(t('sftp.connectError'))
       }
@@ -647,7 +648,7 @@ onMounted(async () => {
       const sess = sessions.find(s => s.id === sid)
       if (sess && sess.status === 'connected') {
         onRefreshLocal()
-        onRefreshRemote()
+        onRefreshRemote().then(() => doInitialAutoNav())
       }
     } catch {}
   }
@@ -737,6 +738,23 @@ async function onRefreshRemote() {
     msg.error(e?.toString() || 'Failed to list remote files')
   } finally {
     if (version === loadVersionRemote) loadingRemote.value = false
+  }
+}
+
+// Auto-navigate into the configured share/bucket on initial load.
+async function doInitialAutoNav() {
+  if (initialNavDone) return
+  initialNavDone = true
+  const cfg = panel.value?.config
+  if (!cfg) return
+  let target = ''
+  if (cfg.type === 'smb' && cfg.smbShare) {
+    target = '/' + cfg.smbShare
+  } else if (cfg.type === 's3' && cfg.s3Bucket) {
+    target = '/' + cfg.s3Bucket
+  }
+  if (target) {
+    await onRemoteNavigate(target)
   }
 }
 
