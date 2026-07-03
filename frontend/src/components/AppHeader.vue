@@ -23,8 +23,8 @@
     </div>
 
     <!-- AI button -->
-    <button class="header-btn accent ai-btn" @click="emit('toggle-ai')" :title="t('header.ai')">
-      {{ t('header.ai') }}
+    <button class="header-btn" @click="emit('toggle-ai')" :title="t('header.ai')">
+      <el-icon><Bot :size="14" /></el-icon>
     </button>
 
     <!-- Settings button (icon only, rightmost) -->
@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { Settings, PanelLeft } from '@lucide/vue'
+import { Settings, PanelLeft, Bot } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import WindowControls from './WindowControls.vue'
 import TabsList from './TabsList.vue'
@@ -225,25 +225,6 @@ onUnmounted(() => {
 .header-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-}
-
-.header-btn.accent {
-  background: linear-gradient(135deg, var(--accent-dim), var(--accent));
-  color: var(--on-accent);
-  box-shadow: 0 0 0 1px var(--accent-glow), 0 2px 8px var(--accent-glow);
-}
-
-.header-btn.accent:hover {
-  background: linear-gradient(135deg, var(--accent), var(--accent-dim));
-  box-shadow: 0 0 0 1px var(--accent-glow), 0 4px 16px var(--accent-glow);
-  transform: translateY(-1px);
-}
-
-.ai-btn {
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  min-width: 28px;
 }
 
 .header-btn .el-icon {

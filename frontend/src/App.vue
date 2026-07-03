@@ -169,6 +169,7 @@ import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFo
 import { EventsOn } from '../wailsjs/runtime'
 import { msg } from './services/message'
 import type { ConnectionConfig } from './types/session'
+import { parseQuickConnect } from './utils/quickConnect'
 
 const connectionStore = useConnectionStore()
 const tabStore = useTabStore()
@@ -731,6 +732,7 @@ function getPanelSessionId(panelId: string): string | null {
 
 function onSaveOnly(config: ConnectionConfig) {
   connectionStore.add(config)
+  RecordRecentConnection(config.id)
 }
 
 // Atomically remove a start tab and place a newly-created tab in its position.
@@ -817,7 +819,12 @@ const pendingGroupId = ref<string | undefined>(undefined)
 
 function onNewConnectionFromStart(payload?: { host?: string; groupId?: string }) {
   pendingGroupId.value = payload?.groupId
-  editConfig.value = null
+  if (payload?.host) {
+    const parsed = parseQuickConnect(payload.host)
+    editConfig.value = (parsed || { host: payload.host }) as ConnectionConfig
+  } else {
+    editConfig.value = null
+  }
   showConnectionForm.value = true
 }
 

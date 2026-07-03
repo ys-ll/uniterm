@@ -1,7 +1,10 @@
 <template>
   <div ref="startTabRef" class="start-tab">
     <div class="start-content" :style="contentStyle">
-    <!-- Search row -->
+      <!-- Branding -->
+      <div class="start-brand" v-show="!searchQuery.trim()">uniTerm</div>
+
+      <!-- Search row -->
     <div class="start-search-row">
       <el-dropdown trigger="click" placement="bottom-start" :teleported="false">
         <span class="start-filter-btn" :class="{ active: selectedTypeFilter !== 'all' }">
@@ -148,37 +151,39 @@
         </div>
       </div>
 
-      <!-- All connections -->
-      <div class="start-section-label">{{ t('startTab.allConnections') }}</div>
-      <div class="start-cards-grid">
-        <div
-          v-for="{ config } in filteredConnections"
-          :key="config.id"
-          class="start-card"
-          :class="{ focused: isCardFocused('conn:' + config.id), selected: selectedIds.has('conn:' + config.id) }"
-          @click="onCardClick(config, $event)"
-          @dblclick="onCardDblClick(config, $event)"
-          @contextmenu.prevent="onContextMenu($event, config)"
-        >
-          <div class="start-card-top">
-            <div class="start-card-icon" :class="config.type">
-              <el-icon v-if="config.type === 'ssh' || config.type === 'telnet' || config.type === 'mosh'"><SquareTerminal :size="28" /></el-icon>
-              <el-icon v-else-if="config.type === 'local'"><Laptop :size="28" /></el-icon>
-              <el-icon v-else-if="config.type === 'database'"><Database :size="28" /></el-icon>
-              <el-icon v-else-if="config.type === 'rdp' || config.type === 'vnc' || config.type === 'spice'"><Monitor :size="28" /></el-icon>
-              <el-icon v-else-if="config.type === 'serial'"><Cable :size="28" /></el-icon>
-              <el-icon v-else><Server :size="28" /></el-icon>
-            </div>
-            <div>
-              <div class="start-card-name">{{ config.name }}</div>
-              <div class="start-card-meta">{{ getCardSubtitle(config) }}</div>
+      <!-- All connections - only shown when searching -->
+      <template v-if="searchQuery.trim()">
+        <div class="start-section-label">{{ t('startTab.allConnections') }}</div>
+        <div class="start-cards-grid">
+          <div
+            v-for="{ config } in filteredConnections"
+            :key="config.id"
+            class="start-card"
+            :class="{ focused: isCardFocused('conn:' + config.id), selected: selectedIds.has('conn:' + config.id) }"
+            @click="onCardClick(config, $event)"
+            @dblclick="onCardDblClick(config, $event)"
+            @contextmenu.prevent="onContextMenu($event, config)"
+          >
+            <div class="start-card-top">
+              <div class="start-card-icon" :class="config.type">
+                <el-icon v-if="config.type === 'ssh' || config.type === 'telnet' || config.type === 'mosh'"><SquareTerminal :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'local'"><Laptop :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'database'"><Database :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'rdp' || config.type === 'vnc' || config.type === 'spice'"><Monitor :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'serial'"><Cable :size="28" /></el-icon>
+                <el-icon v-else><Server :size="28" /></el-icon>
+              </div>
+              <div>
+                <div class="start-card-name">{{ config.name }}</div>
+                <div class="start-card-meta">{{ getCardSubtitle(config) }}</div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div v-if="filteredConnections.length === 0 && connectionStore.connections.length > 0 && !searchQuery.trim()" class="start-empty-hint">
-        {{ t('startTab.noConnections') }}
-      </div>
+        <div v-if="filteredConnections.length === 0 && connectionStore.connections.length > 0" class="start-empty-hint">
+          {{ t('startTab.noConnections') }}
+        </div>
+      </template>
     </template>
 
     <!-- Group detail view -->
@@ -278,11 +283,28 @@
       :style="contextMenuStyle"
       @click.stop
     >
-      <div class="menu-item" @click="doRenameGroup">{{ t('sidebar.edit') }}</div>
+      <div class="menu-item" @click="doRenameGroup">{{ t('conn.renameGroup') }}</div>
       <div class="menu-divider" />
-      <div class="menu-item danger" @click="doDeleteGroup">{{ t('sidebar.delete') }}</div>
+      <div class="menu-item danger" @click="doDeleteGroup">{{ t('conn.deleteGroup') }}</div>
     </div>
     </div>
+
+    <!-- Rename group dialog -->
+    <el-dialog v-model="showRenameGroupDialog" :title="t('conn.renameGroup')" width="360px">
+      <el-form @submit.prevent="confirmRenameGroup">
+        <el-form-item :label="t('conn.groupName')">
+          <el-input
+            v-model="renameGroupName"
+            :placeholder="t('conn.groupNamePlaceholder')"
+            @keyup.enter="confirmRenameGroup"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showRenameGroupDialog = false">{{ t('conn.cancel') }}</el-button>
+        <el-button type="primary" @click="confirmRenameGroup">{{ t('conn.save') }}</el-button>
+      </template>
+    </el-dialog>
 
     <!-- New group dialog -->
     <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="360px">
@@ -315,6 +337,7 @@ import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import { GetRecentConnections } from '../../wailsjs/go/main/App'
+import { formatConnSubtitle } from '../utils/quickConnect'
 import { Filter, Plus, Laptop, Cable, SquareTerminal, Database, Monitor, Server, Folder, FolderOpen, Zap } from '@lucide/vue'
 
 const props = defineProps<{
@@ -339,15 +362,7 @@ const settingsStore = useSettingsStore()
 
 // ── Card subtitle (matches sidebar display format) ──
 function getCardSubtitle(config: ConnectionConfig): string {
-  const typeLabel = config.type === 'database' ? (config.dbType || config.type) : config.type
-  const detail = config.type === 's3'
-    ? config.host
-    : config.type === 'local'
-      ? getShellLabel(config.shellPath || '')
-      : config.user
-        ? `${config.user}@${config.host}:${config.port}`
-        : `${config.host}:${config.port}`
-  return typeLabel + ' ' + detail
+  return formatConnSubtitle(config, getShellLabel)
 }
 
 // ── Multi-select ──
@@ -462,6 +477,7 @@ const recentConfigs = computed(() => {
       c.name.toLowerCase().includes(query) ||
       (c.host || '').toLowerCase().includes(query) ||
       c.type.toLowerCase().includes(query))
+    .slice(0, 12)
 })
 
 // ── Filtered connections ──
@@ -491,15 +507,20 @@ const filteredConnections = computed(() => {
 // ── Groups ──
 const groupCards = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
+  const hasFilter = !!query || selectedTypeFilter.value !== 'all'
   const matchFilter = (c: ConnectionConfig) =>
     matchTypeFilter(c, selectedTypeFilter.value) &&
     (!query || c.name.toLowerCase().includes(query) || (c.host || '').toLowerCase().includes(query) || c.type.toLowerCase().includes(query))
-  const groups = [...connectionStore.groups]
+  let groups = [...connectionStore.groups]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(g => ({
       ...g,
       count: connectionStore.connections.filter(c => c.groupId === g.id && matchFilter(c)).length
     }))
+  // Hide groups with 0 matches when filtering
+  if (hasFilter) {
+    groups = groups.filter(g => g.count > 0)
+  }
   const ungroupedCount = connectionStore.connections.filter(c => !c.groupId && matchFilter(c)).length
   return { groups, ungroupedCount }
 })
@@ -670,6 +691,8 @@ function onSearchKeydown(e: KeyboardEvent) {
 function onKeydown(e: KeyboardEvent) {
   // Don't handle keyboard navigation when a dialog is open
   if (showNewGroupDialog.value || showDeleteGroupDialog.value) return
+  // Don't intercept keyboard events from modal dialogs (e.g. ConnectionForm)
+  if ((e.target as HTMLElement)?.closest?.('.el-dialog')) return
   // Only handle when this component is mounted and this tab is active
   if (!startTabRef.value) return
   if (tabStore.activeTabId !== props.tab.id) return
@@ -819,16 +842,26 @@ const groupContextTarget = ref<{ id: string; name: string } | null>(null)
 function onGroupContextMenu(e: MouseEvent, groupId: string, groupName: string) {
   closeContextMenu()
   groupContextTarget.value = { id: groupId, name: groupName }
-  const pos = clampMenuPos(e.clientX, e.clientY)
+  const pos = clampMenuPos(e.clientX, e.clientY, 140, 80)
   contextMenuStyle.value = { position: 'fixed', left: pos.left, top: pos.top, zIndex: '10000' }
   groupContextVisible.value = true
 }
 
+const showRenameGroupDialog = ref(false)
+const renameGroupName = ref('')
+
 function doRenameGroup() {
-  if (!groupContextTarget.value) return
-  const name = prompt('Rename group:', groupContextTarget.value.name)
-  if (name) connectionStore.renameGroup(groupContextTarget.value.id, name)
   closeContextMenu()
+  if (!groupContextTarget.value) return
+  renameGroupName.value = groupContextTarget.value.name
+  showRenameGroupDialog.value = true
+}
+
+function confirmRenameGroup() {
+  const name = renameGroupName.value.trim()
+  if (!name || !groupContextTarget.value) return
+  connectionStore.renameGroup(groupContextTarget.value.id, name)
+  showRenameGroupDialog.value = false
 }
 
 const showNewGroupDialog = ref(false)
@@ -976,7 +1009,7 @@ async function doDelete(config: ConnectionConfig | null) {
 
 <style scoped>
 .start-tab {
-  padding: 32px;
+  padding: 32px 64px 32px 64px;
   height: 100%;
   overflow-y: auto;
   outline: none;
@@ -984,6 +1017,16 @@ async function doDelete(config: ConnectionConfig | null) {
 
 .start-content {
   margin: 0 auto;
+}
+
+.start-brand {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-top: 64px;
+  margin-bottom: 36px;
+  user-select: none;
 }
 
 .start-search-row {
@@ -1069,8 +1112,6 @@ async function doDelete(config: ConnectionConfig | null) {
   margin-bottom: 10px;
   font-size: 12px;
   color: var(--text-disabled);
-  text-transform: uppercase;
-  letter-spacing: 1px;
 }
 .start-breadcrumb .link {
   color: var(--accent);

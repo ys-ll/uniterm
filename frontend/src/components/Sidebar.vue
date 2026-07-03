@@ -125,7 +125,7 @@
             <div class="conn-details">
               <span class="name">{{ conn.name }}</span>
               <span class="conn-meta">
-                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 's3' ? conn.host : conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+                <span class="host">{{ getSubtitle(conn) }}</span>
               </span>
             </div>
           </div>
@@ -168,7 +168,7 @@
             <div class="conn-details">
               <span class="name">{{ conn.name }}</span>
               <span class="conn-meta">
-                <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 's3' ? conn.host : conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+                <span class="host">{{ getSubtitle(conn) }}</span>
               </span>
             </div>
           </div>
@@ -195,7 +195,7 @@
           <div class="conn-details">
             <span class="name">{{ conn.name }}</span>
             <span class="conn-meta">
-              <span class="host">{{ conn.type === 'database' ? (conn.dbType || conn.type) : conn.type }} {{ conn.type === 's3' ? conn.host : conn.type === 'local' ? getShellLabel(conn.shellPath) : conn.user ? `${conn.user}@${conn.host}:${conn.port}` : `${conn.host}:${conn.port}` }}</span>
+              <span class="host">{{ getSubtitle(conn) }}</span>
             </span>
           </div>
         </div>
@@ -451,6 +451,7 @@ import ConnectionForm from './ConnectionForm.vue'
 import QuickCommandsPanel from './QuickCommandsPanel.vue'
 import HistoryPanel from './HistoryPanel.vue'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
+import { parseQuickConnect, formatConnSubtitle } from '../utils/quickConnect'
 import { FONT_OPTIONS, TERMINAL_THEMES, LANGUAGE_OPTIONS } from '../types/settings'
 import type { TerminalTheme } from '../types/settings'
 import { GetSystemFonts } from '../../wailsjs/go/main/App'
@@ -1283,6 +1284,10 @@ function getShellLabel(path: string): string {
   return path.split(/[\\/]/).pop() || path
 }
 
+function getSubtitle(conn: ConnectionConfig): string {
+  return formatConnSubtitle(conn, getShellLabel)
+}
+
 function connIcon(conn: ConnectionConfig) {
   switch (conn.type) {
     case 'sftp': return FolderUp
@@ -1320,7 +1325,8 @@ function openNewForm() {
 }
 
 function openNewFormFromSearch() {
-  editConfig.value = { host: searchQuery.value.trim() } as ConnectionConfig
+  const parsed = parseQuickConnect(searchQuery.value.trim())
+  editConfig.value = (parsed || { host: searchQuery.value.trim() }) as ConnectionConfig
   selectedIds.value = new Set()
   newConnGroupId.value = undefined
   showForm.value = true
