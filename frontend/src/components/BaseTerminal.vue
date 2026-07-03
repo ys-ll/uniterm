@@ -442,6 +442,14 @@ function resize() {
     // Skip resize when the component is hidden (e.g. during tab switching
     // with KeepAlive). A zero-size resize would corrupt xterm.js buffers.
     if (rect.width === 0 || rect.height === 0) return
+
+    // Always fit first to update CSS dimensions on the .xterm element.
+    // Without this, stale inline pixel dimensions from a previous fit()
+    // prevent the terminal from filling the container after window resize
+    // (e.g. after duplicating a session tab).
+    fitAddon.fit()
+    if (terminal.cols <= 0 || terminal.rows <= 0) return
+
     let cellWidth = 0
     let cellHeight = 0
     try {
@@ -457,8 +465,6 @@ function resize() {
     }
 
     if (cellWidth === 0 || cellHeight === 0) {
-      fitAddon.fit()
-      if (terminal.cols <= 0 || terminal.rows <= 0) return
       SessionResize(sid, terminal.cols, terminal.rows).catch(() => {})
       return
     }
