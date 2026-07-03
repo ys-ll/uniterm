@@ -101,6 +101,7 @@
   "terminal.searchPrev": "Previous",
   "terminal.searchNext": "Next",
   "terminal.searchClose": "Close",
+  "terminal.export": "Export to Text",
   "input.cut": "Cut",
   "input.copy": "Copy",
   "input.paste": "Paste",

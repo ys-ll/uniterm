@@ -101,6 +101,7 @@
   "terminal.searchPrev": "上一个",
   "terminal.searchNext": "下一个",
   "terminal.searchClose": "关闭",
+  "terminal.export": "导出内容到文本",
   "input.cut": "剪切",
   "input.copy": "复制",
   "input.paste": "粘贴",

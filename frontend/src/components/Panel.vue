@@ -51,6 +51,7 @@
             <div v-if="panel.type === 'ssh'" class="menu-item" @click="uploadFileRz(); moreMenuVisible = false">{{ t('terminal.uploadFileRz') }}</div>
             <div v-if="panel.type === 'ssh'" class="menu-item" @click="connectMonitor(); moreMenuVisible = false">{{ t('sidebar.connectMonitor') }}</div>
             <div class="menu-item" @click="triggerSearch(); moreMenuVisible = false">{{ t('terminal.searchText') }}</div>
+            <div class="menu-item" @click="triggerExport(); moreMenuVisible = false">{{ t('terminal.export') }}</div>
           </div>
         </div>
         <button class="panel-close" @click.stop="emit('close', panel.id)"><X :size="14" /></button>
@@ -138,6 +139,10 @@ function connectMonitor() {
 
 function triggerSearch() {
   window.dispatchEvent(new CustomEvent('terminal:open-search', { detail: { panelId: props.panel.id } }))
+}
+
+function triggerExport() {
+  window.dispatchEvent(new CustomEvent('terminal:export', { detail: { panelId: props.panel.id } }))
 }
 
 function onDocumentClick() {

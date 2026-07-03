@@ -67,6 +67,7 @@
         <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="uploadFileRz">{{ t('terminal.uploadFileRz') }}</div>
         <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="openMonitor">{{ t('sidebar.connectMonitor') }}</div>
         <div v-if="tab.type === 'terminal'" class="menu-item" @click="triggerSearch">{{ t('terminal.searchText') }}</div>
+        <div v-if="tab.type === 'terminal'" class="menu-item" @click="triggerExport">{{ t('terminal.export') }}</div>
         <div v-if="tab.type === 'terminal'" class="menu-item" @click="startEdit">{{ t('tab.rename') }}</div>
         <div v-if="tab.type === 'terminal'" class="menu-divider" />
         <div class="menu-item" @click="closeTab">{{ t('tab.close') }}</div>
@@ -286,6 +287,11 @@ function openMonitor() {
 
 function triggerSearch() {
   window.dispatchEvent(new CustomEvent('terminal:open-search', { detail: { panelId: (props.tab as TerminalTab).panelId } }))
+  closeContextMenu()
+}
+
+function triggerExport() {
+  window.dispatchEvent(new CustomEvent('terminal:export', { detail: { panelId: (props.tab as TerminalTab).panelId } }))
   closeContextMenu()
 }
 

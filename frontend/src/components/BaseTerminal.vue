@@ -52,6 +52,7 @@
         {{ t('terminal.copyAndPaste') }}
       </div>
       <div class="menu-item" @click="menu.pasteFromClipboard">{{ t('terminal.paste') }}</div>
+      <div class="menu-item" @click="menu.closeMenu(); exportContent()">{{ t('terminal.export') }}</div>
     </div>
 
     <!-- Terminal suggestions popup -->
@@ -77,8 +78,7 @@ import type { Terminal } from '@xterm/xterm'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { SessionWrite, SessionResize, SessionEndZmodem } from '../../wailsjs/go/main/App'
-import { WriteTempFile } from '../../wailsjs/go/main/App'
-import { FrontendLog } from '../../wailsjs/go/main/App'
+import { WriteFileBase64, SaveFileDialog, FrontendLog } from '../../wailsjs/go/main/App'
 import { EventsOn, BrowserOpenURL } from '../../wailsjs/runtime'
 import { useSettingsStore } from '../stores/settingsStore'
 import { highlight } from '../composables/useHighlight'
@@ -154,6 +154,7 @@ let unsubscribe: (() => void) | null = null
 let statusUnsubscribe: (() => void) | null = null
 let onDocumentMouseDown: ((e: MouseEvent) => void) | null = null
 let onOpenSearch: ((e: Event) => void) | null = null
+let onExport: ((e: Event) => void) | null = null
 let onSendRz: ((e: Event) => void) | null = null
 
 let resizeTimer: ReturnType<typeof setTimeout> | null = null
@@ -166,6 +167,7 @@ let isZmodemStarting = false
 let zmodemStartTimer: ReturnType<typeof setTimeout> | null = null
 let zmodemDirection: 'upload' | 'download' | undefined = undefined
 let zmodemCancellingUntil = 0
+let exporting = false
 
 function initZmodemService(sessionId: string) {
   if (!sessionId || props.mode !== 'ssh') return
@@ -491,6 +493,46 @@ function write(data: string) {
 
 function focus() {
   terminal?.focus()
+}
+
+function toBase64(str: string): string {
+  const encoder = new TextEncoder()
+  const bytes = encoder.encode(str)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+async function exportContent() {
+  if (!terminal || exporting) return
+  exporting = true
+  try {
+    let content = ''
+    try {
+      const buffer = terminal.buffer.active
+      const totalLines = buffer.length
+      const lines = new Array(totalLines)
+      for (let i = 0; i < totalLines; i++) {
+        const line = buffer.getLine(i)
+        lines[i] = line ? line.translateToString() : ''
+      }
+      content = lines.join('\n')
+    } catch (e) {
+      console.error('Buffer read failed:', e)
+      return
+    }
+    try {
+      const filePath = await SaveFileDialog('terminal.txt')
+      if (!filePath) return
+      await WriteFileBase64(filePath, toBase64(content))
+    } catch (e) {
+      console.error('Export failed:', e)
+    }
+  } finally {
+    exporting = false
+  }
 }
 
 function setRetryOnEnter(value: boolean) {
@@ -1059,11 +1101,20 @@ onMounted(() => {
   window.addEventListener('split:resize-start', onSplitResizeStart)
   window.addEventListener('split:resize-end', onSplitResizeEnd)
   onOpenSearch = (e: Event) => {
+    if (!isActive.value) return
     const detail = (e as CustomEvent).detail
-    if (detail?.panelId && detail.panelId !== props.panelId) return
+    if (!props.panelId || detail?.panelId !== props.panelId) return
     openSearch()
   }
   window.addEventListener('terminal:open-search', onOpenSearch)
+
+  onExport = (e: Event) => {
+    if (!isActive.value) return
+    const detail = (e as CustomEvent).detail
+    if (!props.panelId || detail?.panelId !== props.panelId) return
+    exportContent()
+  }
+  window.addEventListener('terminal:export', onExport)
 
   onSendRz = (e: Event) => {
     const detail = (e as CustomEvent).detail
@@ -1321,6 +1372,7 @@ onUnmounted(() => {
   window.removeEventListener('split:resize-start', onSplitResizeStart)
   window.removeEventListener('split:resize-end', onSplitResizeEnd)
   if (onOpenSearch) window.removeEventListener('terminal:open-search', onOpenSearch)
+  if (onExport) window.removeEventListener('terminal:export', onExport)
   if (onSendRz) window.removeEventListener('terminal:send-rz', onSendRz)
   suggestions.close()
   if (!zmodemStore.getActiveTransfer(props.sessionId || '')) {
