@@ -99,11 +99,30 @@ Oracle Database support is implemented with a pure Go driver. uniTerm does not b
 ## Screenshots
 
 <p align="center">
-  <img src="docs/imgs/screenshot-ssh-ai.png" alt="SSH Terminal with AI" width="45%" />
-  <img src="docs/imgs/screenshot-sftp.png" alt="SFTP File Manager" width="45%" />
+  <picture>
+    <source srcset="docs/imgs/start_tab_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/start_tab.png" alt="Start Page" width="45%" />
+  </picture>
+  <picture>
+    <source srcset="docs/imgs/ai_assistant_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/ai_assistant.png" alt="SSH Terminal with AI Assistant" width="45%" />
+  </picture>
 </p>
 <p align="center">
-  <img src="docs/imgs/screenshot-ai-config.png" alt="AI Model Config" width="45%" />
+  <picture>
+    <source srcset="docs/imgs/workspace_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/workspace.png" alt="Workspace" width="45%" />
+  </picture>
+  <picture>
+    <source srcset="docs/imgs/sftp_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/sftp.png" alt="SFTP File Transfer" width="45%" />
+  </picture>
+</p>
+<p align="center">
+  <picture>
+    <source srcset="docs/imgs/database_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/database.png" alt="Database Browser" width="45%" />
+  </picture>
 </p>
 
 ## Download

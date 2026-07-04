@@ -404,6 +404,8 @@ html[lang="zh-CN"] .content-inline-zh, html[lang="en"] .content-inline-en { disp
   width: 100%;
   display: block;
 }
+html[data-theme="dark"] .img-light { display: none; }
+html[data-theme="light"] .img-dark { display: none; }
 .screenshot-caption {
   padding: 10px 16px;
   font-size: 13px;
@@ -771,24 +773,43 @@ var _hmt = _hmt || [];
 
     <div class="screenshots-track">
       <div class="screenshots-slide">
-        <img src="imgs/screenshot-ssh-ai.png" alt="SSH terminal with AI assistant" />
+        <img class="img-dark" src="imgs/start_tab.png" alt="Start page with connection cards" />
+        <img class="img-light" src="imgs/start_tab_light.png" alt="Start page with connection cards" />
+        <div class="screenshot-caption">
+          <span class="content-zh">开始页 —— 连接卡片快速访问</span>
+          <span class="content-en">Start Tab — Connection cards for quick access</span>
+        </div>
+      </div>
+      <div class="screenshots-slide">
+        <img class="img-dark" src="imgs/ai_assistant.png" alt="SSH terminal with AI assistant" />
+        <img class="img-light" src="imgs/ai_assistant_light.png" alt="SSH terminal with AI assistant" />
         <div class="screenshot-caption">
           <span class="content-zh">SSH 终端 + AI 助理侧边栏</span>
           <span class="content-en">SSH Terminal + AI Assistant Sidebar</span>
         </div>
       </div>
       <div class="screenshots-slide">
-        <img src="imgs/screenshot-sftp.png" alt="SFTP file manager" />
+        <img class="img-dark" src="imgs/workspace.png" alt="Workspace with multiple panels" />
+        <img class="img-light" src="imgs/workspace_light.png" alt="Workspace with multiple panels" />
         <div class="screenshot-caption">
-          <span class="content-zh">文件传输双栏文件管理</span>
+          <span class="content-zh">工作区 —— 多面板自由分屏</span>
+          <span class="content-en">Workspace — Multi-panel split panes</span>
+        </div>
+      </div>
+      <div class="screenshots-slide">
+        <img class="img-dark" src="imgs/sftp.png" alt="SFTP dual-pane file transfer" />
+        <img class="img-light" src="imgs/sftp_light.png" alt="SFTP dual-pane file transfer" />
+        <div class="screenshot-caption">
+          <span class="content-zh">文件传输双栏管理</span>
           <span class="content-en">File Transfer Dual-Pane Manager</span>
         </div>
       </div>
       <div class="screenshots-slide">
-        <img src="imgs/screenshot-ai-config.png" alt="AI model configuration" />
+        <img class="img-dark" src="imgs/database.png" alt="Database browser" />
+        <img class="img-light" src="imgs/database_light.png" alt="Database browser" />
         <div class="screenshot-caption">
-          <span class="content-zh">AI 大模型配置</span>
-          <span class="content-en">AI Model Configuration</span>
+          <span class="content-zh">数据库浏览器</span>
+          <span class="content-en">Database Browser</span>
         </div>
       </div>
     </div>
@@ -797,6 +818,8 @@ var _hmt = _hmt || [];
       <button class="screenshots-dot active" data-index="0"></button>
       <button class="screenshots-dot" data-index="1"></button>
       <button class="screenshots-dot" data-index="2"></button>
+      <button class="screenshots-dot" data-index="3"></button>
+      <button class="screenshots-dot" data-index="4"></button>
     </div>
   </div>
 </section>

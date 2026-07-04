@@ -99,11 +99,30 @@ Oracle Database 支持基于纯 Go 驱动实现。uniTerm 不随安装包分发 
 ## 界面截图
 
 <p align="center">
-  <img src="docs/imgs/screenshot-ssh-ai.png" alt="SSH 终端与 AI 对话" width="45%" />
-  <img src="docs/imgs/screenshot-sftp.png" alt="SFTP 文件管理器" width="45%" />
+  <picture>
+    <source srcset="docs/imgs/start_tab_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/start_tab.png" alt="开始页" width="45%" />
+  </picture>
+  <picture>
+    <source srcset="docs/imgs/ai_assistant_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/ai_assistant.png" alt="SSH 终端与 AI 对话" width="45%" />
+  </picture>
 </p>
 <p align="center">
-  <img src="docs/imgs/screenshot-ai-config.png" alt="AI 模型配置" width="45%" />
+  <picture>
+    <source srcset="docs/imgs/workspace_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/workspace.png" alt="工作区" width="45%" />
+  </picture>
+  <picture>
+    <source srcset="docs/imgs/sftp_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/sftp.png" alt="SFTP 文件传输" width="45%" />
+  </picture>
+</p>
+<p align="center">
+  <picture>
+    <source srcset="docs/imgs/database_light.png" media="(prefers-color-scheme: light)" />
+    <img src="docs/imgs/database.png" alt="数据库浏览器" width="45%" />
+  </picture>
 </p>
 
 ## 下载安装
