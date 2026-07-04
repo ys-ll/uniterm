@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { SaveTerminalHistory, LoadTerminalHistory } from '../../wailsjs/go/main/App'
 import { chat } from '../services/llm'
 import { useQuickCommandStore } from '../stores/quickCommandStore'
+import { useI18n } from '../i18n'
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -47,6 +48,7 @@ function syncHistoryEntries() {
 }
 
 export function useSuggestions() {
+  const { t } = useI18n()
   const state = ref<SuggestionsState>({
     visible: false,
     items: [],
@@ -231,7 +233,7 @@ export function useSuggestions() {
           type: 'history',
           label: cmd,
           value: cmd,
-          description: '历史',
+          description: t('terminal.suggestionHistory'),
           matchIndices: indices,
           id: entry.id,
         })
@@ -249,7 +251,7 @@ export function useSuggestions() {
           type: 'history',
           label: cmd,
           value: cmd,
-          description: '历史',
+          description: t('terminal.suggestionHistory'),
           matchIndices: indices,
           id: entry.id,
         })
@@ -289,7 +291,7 @@ export function useSuggestions() {
           type: 'quick-command',
           label,
           value: cmd.command,
-          description: '快捷命令',
+          description: t('terminal.suggestionQuickCommand'),
           matchIndices: labelIndices.length > 0 ? labelIndices : undefined,
           commandMatchIndices: cmdIndices.length > 0 ? cmdIndices : undefined,
           id: cmd.id,
@@ -338,7 +340,7 @@ export function useSuggestions() {
       const finalItems = state.value.items.filter(item => item.type !== 'ai-preview')
       finalItems.push({
         type: 'ai-result',
-        label: 'AI 转写失败',
+        label: t('terminal.aiTranscribeFailed'),
         value: '',
         description: 'AI',
       })
@@ -364,7 +366,7 @@ export function useSuggestions() {
       const items: SuggestionItem[] = [...quickCommandItems, ...historyItems]
       items.push({
         type: 'ai-preview',
-        label: 'AI 转写...',
+        label: t('terminal.aiTranscribing'),
         value: '',
         description: 'AI',
       })

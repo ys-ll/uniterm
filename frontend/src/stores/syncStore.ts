@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { useI18n } from '../i18n'
 import {
   SyncGetConfig,
   SyncSaveConfig,
@@ -35,6 +36,7 @@ export interface SyncConflict {
 }
 
 export const useSyncStore = defineStore('sync', () => {
+  const { t } = useI18n()
   const config = ref<SyncConfig>({
     repoUrl: '',
     branch: 'main',
@@ -195,7 +197,7 @@ export const useSyncStore = defineStore('sync', () => {
   }
 
   function formatSyncTime(): string {
-    if (!config.value.lastSyncAt) return '从未同步'
+    if (!config.value.lastSyncAt) return t('sync.neverSynced')
     try {
       const d = new Date(config.value.lastSyncAt)
       return d.toLocaleString()

@@ -128,6 +128,7 @@
                 <span class="host">{{ getSubtitle(conn) }}</span>
               </span>
             </div>
+            <button class="conn-more-btn" @click.stop="onConnMoreClick($event, conn)" :title="t('terminal.more')"><MoreHorizontal :size="14" /></button>
           </div>
         </template>
       </template>
@@ -171,6 +172,7 @@
                 <span class="host">{{ getSubtitle(conn) }}</span>
               </span>
             </div>
+            <button class="conn-more-btn" @click.stop="onConnMoreClick($event, conn)" :title="t('terminal.more')"><MoreHorizontal :size="14" /></button>
           </div>
         </template>
       </template>
@@ -198,6 +200,7 @@
               <span class="host">{{ getSubtitle(conn) }}</span>
             </span>
           </div>
+          <button class="conn-more-btn" @click.stop="onConnMoreClick($event, conn)" :title="t('terminal.more')"><MoreHorizontal :size="14" /></button>
         </div>
       </template>
 
@@ -456,7 +459,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Activity, Laptop, Cable, Pencil } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Activity, Laptop, Cable, Pencil, MoreHorizontal } from '@lucide/vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -914,6 +917,20 @@ function onContextMenu(e: MouseEvent, conn: ConnectionConfig) {
   menuVisible.value = true
 }
 
+function onConnMoreClick(e: MouseEvent, conn: ConnectionConfig) {
+  const btn = e.currentTarget as HTMLElement
+  const rect = btn.getBoundingClientRect()
+  const x = rect.right + 4
+  const y = rect.top
+  selectedConn.value = conn
+  if (!selectedIds.value.has(conn.id)) {
+    selectedIds.value = new Set([conn.id])
+    focusedId.value = conn.id
+  }
+  menuStyle.value = clampMenuPosition(x, y)
+  menuVisible.value = true
+}
+
 function closeMenu() {
   menuVisible.value = false
 }
@@ -1131,6 +1148,30 @@ const showChangeGroupDialog = ref(false)
 const changeGroupTargetId = ref<string | undefined>(undefined)
 const showChangeNewGroupDialog = ref(false)
 const changeNewGroupName = ref('')
+const externalChangeGroupIds = ref<string[]>([])
+
+// Open change-group dialog from outside (e.g. StartTab card context menu)
+function openChangeGroupFor(ids: string[]) {
+  externalChangeGroupIds.value = ids
+  const groups = new Set(ids.map(id => {
+    const c = connectionStore.connections.find(c => c.id === id)
+    return c?.groupId || '__none__'
+  }))
+  if (groups.size === 1) {
+    const g = [...groups][0]
+    changeGroupTargetId.value = g === '__none__' ? undefined : g
+  } else {
+    changeGroupTargetId.value = undefined
+  }
+  showChangeGroupDialog.value = true
+}
+
+function getChangeGroupIds(): string[] {
+  if (externalChangeGroupIds.value.length > 0) {
+    return externalChangeGroupIds.value
+  }
+  return getSelectedConnectionIds()
+}
 
 function doChangeGroup() {
   closeMenu()
@@ -1157,11 +1198,12 @@ function confirmChangeGroup() {
     return
   }
   const groupId = val === '__none__' ? undefined : val
-  const ids = getSelectedConnectionIds()
+  const ids = getChangeGroupIds()
   connectionStore.setConnectionsGroup(ids, groupId)
   selectedIds.value = new Set()
   showChangeGroupDialog.value = false
   changeGroupTargetId.value = undefined
+  externalChangeGroupIds.value = []
 }
 
 async function confirmChangeNewGroup() {
@@ -1172,13 +1214,19 @@ async function confirmChangeNewGroup() {
     return
   }
   const group = await connectionStore.addGroup(name)
-  const ids = getSelectedConnectionIds()
+  const ids = getChangeGroupIds()
   connectionStore.setConnectionsGroup(ids, group.id)
   selectedIds.value = new Set()
   showChangeNewGroupDialog.value = false
   showChangeGroupDialog.value = false
   changeGroupTargetId.value = undefined
+  externalChangeGroupIds.value = []
 }
+
+// Clear external IDs when dialog is closed without saving
+watch(showChangeGroupDialog, (open) => {
+  if (!open) externalChangeGroupIds.value = []
+})
 
 // ── Group context menu ──
 const groupMenuVisible = ref(false)
@@ -1423,7 +1471,7 @@ onUnmounted(() => {
   })
 })
 
-defineExpose({ focusSearch })
+defineExpose({ focusSearch, openChangeGroupFor })
 </script>
 
 <style scoped>
@@ -1643,6 +1691,29 @@ defineExpose({ focusSearch })
 
 .connection-item.active .name {
   color: var(--accent);
+}
+
+.conn-more-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0;
+}
+.connection-item:hover .conn-more-btn {
+  display: flex;
+}
+.conn-more-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .conn-icon {

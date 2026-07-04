@@ -118,6 +118,7 @@
                 <div class="start-card-meta">{{ getCardSubtitle(config) }}</div>
               </div>
             </div>
+            <button class="card-more-btn" @click.stop="onCardMoreClick($event, config, 'recent:')" :title="t('terminal.more')"><MoreHorizontal :size="16" /></button>
           </div>
         </div>
       </template>
@@ -200,6 +201,7 @@
                 <div class="start-card-meta">{{ getCardSubtitle(config) }}</div>
               </div>
             </div>
+            <button class="card-more-btn" @click.stop="onCardMoreClick($event, config)" :title="t('terminal.more')"><MoreHorizontal :size="16" /></button>
           </div>
         </div>
         <div v-if="filteredConnections.length === 0 && connectionStore.connections.length > 0" class="start-empty-hint">
@@ -245,6 +247,7 @@
               <div class="start-card-meta">{{ getCardSubtitle(config) }}</div>
             </div>
           </div>
+          <button class="card-more-btn" @click.stop="onCardMoreClick($event, config)" :title="t('terminal.more')"><MoreHorizontal :size="16" /></button>
         </div>
       </div>
       <div v-if="filteredConnections.length === 0" class="start-empty-hint">
@@ -371,7 +374,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import { GetRecentConnections } from '../../wailsjs/go/main/App'
 import { formatConnSubtitle } from '../utils/quickConnect'
-import { Filter, Plus, Laptop, Cable, SquareTerminal, Terminal, Database, DatabaseZap, Monitor, MonitorSmartphone, MonitorCloud, FolderUp, HardDrive, Cloud, Globe, Server, Folder, FolderOpen, Zap } from '@lucide/vue'
+import { Filter, Plus, Laptop, Cable, SquareTerminal, Terminal, Database, DatabaseZap, Monitor, MonitorSmartphone, MonitorCloud, FolderUp, HardDrive, Cloud, Globe, Server, Folder, FolderOpen, Zap, MoreHorizontal } from '@lucide/vue'
 
 const props = defineProps<{
   tab: StartTab
@@ -868,6 +871,21 @@ function closeContextMenu() {
   groupContextVisible.value = false
 }
 
+function onCardMoreClick(e: MouseEvent, config: ConnectionConfig, prefix = 'conn:') {
+  const btn = e.currentTarget as HTMLElement
+  const rect = btn.getBoundingClientRect()
+  const x = rect.right + 4
+  const y = rect.top
+  const key = prefix + config.id
+  if (!selectedIds.value.has(key)) {
+    selectedIds.value = new Set([key])
+  }
+  contextMenuConfig.value = config
+  const pos = clampMenuPos(x, y)
+  contextMenuStyle.value = { position: 'fixed', left: pos.left, top: pos.top, zIndex: '10000' }
+  contextMenuVisible.value = true
+}
+
 // ── Group context menu ──
 const groupContextVisible = ref(false)
 const groupContextTarget = ref<{ id: string; name: string } | null>(null)
@@ -1201,6 +1219,7 @@ async function doDelete(config: ConnectionConfig | null) {
 }
 
 .start-card {
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -1211,6 +1230,31 @@ async function doDelete(config: ConnectionConfig | null) {
 }
 .start-card:hover {
   border-color: var(--accent);
+}
+.card-more-btn {
+  display: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  right: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  z-index: 2;
+}
+.start-card:hover .card-more-btn {
+  display: flex;
+}
+.card-more-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .start-card.dimmed {
   opacity: 0.35;

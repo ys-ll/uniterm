@@ -455,6 +455,7 @@ export namespace session {
 	    modTime: string;
 	    mode: string;
 	    isDir: boolean;
+	    isHidden: boolean;
 	    owner: string;
 	    group: string;
 	
@@ -469,6 +470,7 @@ export namespace session {
 	        this.modTime = source["modTime"];
 	        this.mode = source["mode"];
 	        this.isDir = source["isDir"];
+	        this.isHidden = source["isHidden"];
 	        this.owner = source["owner"];
 	        this.group = source["group"];
 	    }

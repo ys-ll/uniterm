@@ -23,7 +23,7 @@
           v-if="item === '...'"
           class="breadcrumb-part breadcrumb-ellipsis"
           @click.stop="onEllipsisClick"
-        >...</span>
+        ><MoreHorizontal :size="14" /></span>
         <span
           v-else-if="isWindowsPath && item === pathParts[0]"
           class="breadcrumb-part breadcrumb-drive"
@@ -130,7 +130,7 @@
 
 <script setup lang="ts">
 import { computed, ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
-import { Bookmark, BookmarkPlus, BookmarkCheck, Trash2 } from '@lucide/vue'
+import { Bookmark, BookmarkPlus, BookmarkCheck, Trash2, MoreHorizontal } from '@lucide/vue'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()

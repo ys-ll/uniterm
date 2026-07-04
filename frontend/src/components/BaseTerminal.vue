@@ -25,13 +25,13 @@
       />
       <span class="search-count" v-if="searchText">{{ searchResultIndex + 1 }}/{{ searchResultCount || 0 }}</span>
       <button class="search-btn" @click="onSearchPrev" :title="t('terminal.searchPrev')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+        <ChevronUp :size="14" />
       </button>
       <button class="search-btn" @click="onSearchNext" :title="t('terminal.searchNext')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <ChevronDown :size="14" />
       </button>
       <button class="search-btn" @click="closeSearch" :title="t('terminal.searchClose')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        <X :size="14" />
       </button>
     </div>
 
@@ -78,7 +78,7 @@ import type { Terminal } from '@xterm/xterm'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { SessionWrite, SessionResize, SessionEndZmodem } from '../../wailsjs/go/main/App'
-import { WriteFileBase64, SaveFileDialog, FrontendLog } from '../../wailsjs/go/main/App'
+import { WriteFileBase64, SaveFileDialog, FrontendLog, WriteTempFile } from '../../wailsjs/go/main/App'
 import { EventsOn, BrowserOpenURL } from '../../wailsjs/runtime'
 import { useSettingsStore } from '../stores/settingsStore'
 import { highlight } from '../composables/useHighlight'
@@ -104,6 +104,7 @@ import TerminalSuggestion from './TerminalSuggestion.vue'
 import { startZmodemService } from '../services/zmodemService'
 import { useZmodemStore } from '../stores/zmodemStore'
 import ZmodemTransfer from './ZmodemTransfer.vue'
+import { ChevronUp, ChevronDown, X } from '@lucide/vue'
 
 const props = defineProps<{
   mode: 'ssh' | 'sftp' | 'local'

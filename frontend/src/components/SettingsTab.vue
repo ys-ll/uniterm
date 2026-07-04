@@ -380,7 +380,7 @@
               <div class="setting-desc">{{ t('settings.modelListDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-button @click="showModelForm = true">+ {{ t('settings.addModel') }}</el-button>
+              <el-button @click="showModelForm = true"><Plus :size="14" /> {{ t('settings.addModel') }}</el-button>
             </div>
           </div>
 

@@ -86,7 +86,7 @@
           <div v-for="col in insertColumns" :key="col" class="insert-field">
             <div class="field-label-row">
               <label>{{ col }} <span class="col-type-hint">{{ getColumnType(col) }}</span></label>
-              <label v-if="isColumnAuto(col)" class="null-toggle"><input type="checkbox" v-model="insertAutoIncrement[col]" /> 自增</label>
+              <label v-if="isColumnAuto(col)" class="null-toggle"><input type="checkbox" v-model="insertAutoIncrement[col]" /> {{ t('db.autoIncrement') }}</label>
               <label v-else-if="!isColumnPrimary(col) && getColumnNullable(col)" class="null-toggle"><input type="checkbox" v-model="insertNulls[col]" /> NULL</label>
             </div>
             <input v-model="insertValues[col]" class="insert-input" :disabled="insertNulls[col] || insertAutoIncrement[col]" :placeholder="getColumnPlaceholder(col)" />

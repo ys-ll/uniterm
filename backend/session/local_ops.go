@@ -50,13 +50,18 @@ func (o *localFSOps) ListLocal(dir string) (FileListResult, error) {
 				isDir = target.IsDir()
 			}
 		}
+		isHidden := e.Name() != "" && e.Name()[0] == '.'
+		if !isHidden {
+			isHidden = isPathHidden(filepath.Join(dir, e.Name()))
+		}
 		files = append(files, FileItem{
-			Name:    e.Name(),
-			Size:    size,
-			ModTime: modTime.Format(time.RFC3339),
-			Mode:    mode.String(),
-			IsDir:   isDir,
-			Owner:   owner,
+			Name:     e.Name(),
+			Size:     size,
+			ModTime:  modTime.Format(time.RFC3339),
+			Mode:     mode.String(),
+			IsDir:    isDir,
+			IsHidden: isHidden,
+			Owner:    owner,
 		})
 	}
 	return FileListResult{Files: files, Dir: dir}, nil

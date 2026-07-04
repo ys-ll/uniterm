@@ -87,25 +87,8 @@
       </div>
       <AISidebar ref="aiSidebarRef" />
     </div>
-    <ConnectionForm v-model="showConnectionForm" :edit-config="editConfig" :default-group-id="pendingGroupId" @save="onSaveOnly" @connect="(c: ConnectionConfig, ko?: boolean) => { editConfig = null; onConnect(c, ko) }" @cancel="editConfig = null" />
+    <ConnectionForm v-model="showConnectionForm" :edit-config="editConfig" :default-group-id="pendingGroupId" @save="onSaveOnly" @connect="(c: ConnectionConfig, ko?: boolean) => { const wasEdit = !!editConfig; editConfig = null; onConnect(c, ko, wasEdit) }" @cancel="editConfig = null" />
     <SerialConnectDialog v-model="showSerialDialog" @connect="(sid: string, portName: string, baudRate: number) => onConnectSerial(sid, portName, baudRate, serialKeepOpen)" />
-    <!-- Change group dialog (from start tab context menu) -->
-    <el-dialog v-model="showChangeGroupFromStart" :title="t('conn.changeGroup')" width="360px">
-      <div class="group-list">
-        <div class="group-item" @click="onSelectGroupForStart(undefined)">{{ t('conn.noGroup') }}</div>
-        <div
-          v-for="g in connectionStore.groups"
-          :key="g.id"
-          class="group-item"
-          @click="onSelectGroupForStart(g.id)"
-        >
-          {{ g.name }}
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="showChangeGroupFromStart = false">{{ t('conn.deleteGroupCancel') }}</el-button>
-      </template>
-    </el-dialog>
     <CredentialPrompt
       v-model:visible="credentialVisible"
       :title="credentialTitle"
@@ -730,7 +713,11 @@ function getPanelSessionId(panelId: string): string | null {
 }
 
 function onSaveOnly(config: ConnectionConfig) {
-  connectionStore.add(config)
+  if (editConfig.value) {
+    connectionStore.update(config.id, config)
+  } else {
+    connectionStore.add(config)
+  }
   RecordRecentConnection(config.id)
 }
 
@@ -748,7 +735,7 @@ function closeStartAndReposition(prevTab: any): (newTabId: string) => void {
   }
 }
 
-async function onConnect(config: ConnectionConfig, keepOpen?: boolean) {
+async function onConnect(config: ConnectionConfig, keepOpen?: boolean, wasEdit?: boolean) {
   const prev = tabStore.activeTab
   const prevStart = (prev?.type === 'start' && !keepOpen) ? prev : undefined
   if (config.type === 'ftp') { await onConnectFtp(config, prevStart); return }
@@ -759,7 +746,11 @@ async function onConnect(config: ConnectionConfig, keepOpen?: boolean) {
   if (config.type === 'vnc') { await onConnectVNC(config, prevStart); return }
   if (config.type === 'spice') { await onConnectSPICE(config, prevStart); return }
   if (config.type === 'database') { await onConnectDB(config, prevStart); return }
-  connectionStore.add(config)
+  if (wasEdit) {
+    connectionStore.update(config.id, config)
+  } else {
+    connectionStore.add(config)
+  }
 
   // Credential check
   const resolved = await ensureCredentials(config)
@@ -834,36 +825,12 @@ function onEditConnection(config: ConnectionConfig) {
   showConnectionForm.value = true
 }
 
-// Simple group selector when triggered from start tab context menu
-const showChangeGroupFromStart = ref(false)
-const changeGroupFromStartConfig = ref<ConnectionConfig | null>(null)
-
 function onChangeGroupFromStart(config: ConnectionConfig) {
-  changeGroupFromStartConfig.value = config
-  showChangeGroupFromStart.value = true
+  sidebarRef.value?.openChangeGroupFor([config.id])
 }
 
 function onChangeGroupFromStartIds(ids: string[]) {
-  changeGroupFromStartIds.value = ids
-  showChangeGroupFromStart.value = true
-}
-
-const changeGroupFromStartIds = ref<string[]>([])
-
-function onSelectGroupForStart(groupId: string | undefined) {
-  // Bulk mode (from StartTab multi-select)
-  if (changeGroupFromStartIds.value.length > 0) {
-    connectionStore.setConnectionsGroup(changeGroupFromStartIds.value, groupId)
-    showChangeGroupFromStart.value = false
-    changeGroupFromStartIds.value = []
-    return
-  }
-  // Single mode (from context menu)
-  if (changeGroupFromStartConfig.value) {
-    connectionStore.setConnectionsGroup([changeGroupFromStartConfig.value.id], groupId)
-  }
-  showChangeGroupFromStart.value = false
-  changeGroupFromStartConfig.value = null
+  sidebarRef.value?.openChangeGroupFor(ids)
 }
 
 function onToggleAiLock(panelId: string) {

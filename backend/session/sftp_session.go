@@ -9,6 +9,7 @@ import (
 	osUser "os/user"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -140,6 +141,7 @@ type FileItem struct {
 	ModTime string `json:"modTime"`
 	Mode    string `json:"mode"`
 	IsDir   bool   `json:"isDir"`
+	IsHidden bool  `json:"isHidden"`
 	Owner   string `json:"owner"`
 	Group   string `json:"group"`
 }
@@ -239,14 +241,25 @@ func (s *SFTPSession) ListRemote(dir string) (FileListResult, error) {
 				isDir = target.IsDir()
 			}
 		}
+		isHidden := fi.Name() != "" && fi.Name()[0] == '.'
+		if stat, ok := fi.Sys().(*sftp.FileStat); ok {
+			for _, ext := range stat.Extended {
+				if ext.ExtType == "win32-file-attributes" {
+					if attrs, err := strconv.ParseInt(ext.ExtData, 0, 32); err == nil {
+						isHidden = attrs&0x2 != 0 // FILE_ATTRIBUTE_HIDDEN
+					}
+				}
+			}
+		}
 		files = append(files, FileItem{
-			Name:    fi.Name(),
-			Size:    fi.Size(),
-			ModTime: fi.ModTime().Format(time.RFC3339),
-			Mode:    fi.Mode().String(),
-			IsDir:   isDir,
-			Owner:   owner,
-			Group:   group,
+			Name:     fi.Name(),
+			Size:     fi.Size(),
+			ModTime:  fi.ModTime().Format(time.RFC3339),
+			Mode:     fi.Mode().String(),
+			IsDir:    isDir,
+			IsHidden: isHidden,
+			Owner:    owner,
+			Group:    group,
 		})
 	}
 	return FileListResult{Files: files, Dir: dir}, nil
@@ -283,13 +296,18 @@ func (s *SFTPSession) ListLocal(dir string) (FileListResult, error) {
 				isDir = target.IsDir()
 			}
 		}
+		isHidden := e.Name() != "" && e.Name()[0] == '.'
+		if !isHidden {
+			isHidden = isPathHidden(filepath.Join(dir, e.Name()))
+		}
 		files = append(files, FileItem{
-			Name:    e.Name(),
-			Size:    size,
-			ModTime: modTime.Format(time.RFC3339),
-			Mode:    mode.String(),
-			IsDir:   isDir,
-			Owner:   owner,
+			Name:     e.Name(),
+			Size:     size,
+			ModTime:  modTime.Format(time.RFC3339),
+			Mode:     mode.String(),
+			IsDir:    isDir,
+			IsHidden: isHidden,
+			Owner:    owner,
 		})
 	}
 	return FileListResult{Files: files, Dir: dir}, nil

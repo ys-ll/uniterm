@@ -85,13 +85,10 @@
           <div class="menu-divider" />
           <div class="menu-item" @click="doSendToOther">{{ t(sendToKey) }}</div>
           <div v-if="mode === 'remote'" class="menu-item" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</div>
-          <div v-if="mode === 'remote'" class="menu-item" @click="doUpload">{{ t('sftp.upload') }}</div>
           <div class="menu-divider" />
           <div class="menu-item" @click="doRename">{{ t('sftp.rename') }}</div>
           <div class="menu-item" @click="doDelete">{{ t('sftp.delete') }}</div>
           <div v-if="mode === 'remote'" class="menu-item" @click="doChmod">{{ t('sftp.changePermission') }}</div>
-          <div class="menu-divider" />
-          <div class="menu-item" @click="doRefresh">{{ t('sftp.refresh') }}</div>
         </template>
         <template v-else-if="menuType === 'dir'">
           <div class="menu-item" @click="doNewFile">{{ t('sftp.newFile') }}</div>
@@ -103,13 +100,10 @@
           <div class="menu-divider" />
           <div class="menu-item" @click="doSendToOther">{{ t(sendToKey) }}</div>
           <div v-if="mode === 'remote'" class="menu-item" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</div>
-          <div v-if="mode === 'remote'" class="menu-item" @click="doUpload">{{ t('sftp.upload') }}</div>
           <div class="menu-divider" />
           <div class="menu-item" @click="doRename">{{ t('sftp.rename') }}</div>
           <div class="menu-item" @click="doDelete">{{ t('sftp.delete') }}</div>
           <div v-if="mode === 'remote'" class="menu-item" @click="doChmod">{{ t('sftp.changePermission') }}</div>
-          <div class="menu-divider" />
-          <div class="menu-item" @click="doRefresh">{{ t('sftp.refresh') }}</div>
         </template>
         <template v-else-if="menuType === 'batch'">
           <div class="menu-item" @click="doCopyToClipboard">{{ t('sftp.copy') }}</div>
@@ -118,24 +112,17 @@
           <div class="menu-divider" />
           <div class="menu-item" @click="doSendToOther">{{ t(sendToKey) }}</div>
           <div v-if="mode === 'remote'" class="menu-item" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</div>
-          <div v-if="mode === 'remote'" class="menu-item" @click="doUpload">{{ t('sftp.upload') }}</div>
           <div class="menu-divider" />
           <div v-if="mode === 'remote'" class="menu-item disabled">{{ t('sftp.renameDisabled') }}</div>
           <div v-if="mode === 'local'" class="menu-item" @click="doRename">{{ t('sftp.rename') }}</div>
           <div class="menu-item" @click="doDelete">{{ t('sftp.delete') }}</div>
           <div v-if="mode === 'remote'" class="menu-item disabled">{{ t('sftp.chmodDisabled') }}</div>
-          <div class="menu-divider" />
-          <div class="menu-item" @click="doRefresh">{{ t('sftp.refresh') }}</div>
         </template>
         <template v-else-if="menuType === 'empty'">
           <div class="menu-item" @click="doNewFile">{{ t('sftp.newFile') }}</div>
           <div class="menu-item" @click="doMkdir">{{ t('sftp.newDirectory') }}</div>
           <div class="menu-divider" />
           <div :class="['menu-item', { disabled: !clipboardCount }]" @click="clipboardCount && doPaste()">{{ t('sftp.paste') }}</div>
-          <div v-if="mode === 'remote'" class="menu-divider" />
-          <div v-if="mode === 'remote'" class="menu-item" @click="doUpload">{{ t('sftp.upload') }}</div>
-          <div class="menu-divider" />
-          <div class="menu-item" @click="doRefresh">{{ t('sftp.refresh') }}</div>
         </template>
       </div>
     </Teleport>
@@ -153,6 +140,7 @@ export interface FileItem {
   modTime: string
   mode: string
   isDir: boolean
+  isHidden: boolean
   owner: string
   group: string
 }
@@ -205,7 +193,7 @@ const sendToKey = computed(() => props.mode === 'local' ? 'sftp.sendToRemote' : 
 const filteredFiles = computed(() => {
   let list = [...props.files]
   if (!list.find(f => f.name === '..')) {
-    list.unshift({ name: '..', size: 0, modTime: '', mode: '', isDir: true, owner: '', group: '' })
+    list.unshift({ name: '..', size: 0, modTime: '', mode: '', isDir: true, isHidden: false, owner: '', group: '' })
   }
   list.sort((a, b) => {
     if (a.name === '..') return -1
@@ -215,7 +203,7 @@ const filteredFiles = computed(() => {
     return a.name.localeCompare(b.name)
   })
   if (!showHidden.value) {
-    list = list.filter(f => f.name === '..' || !f.name.startsWith('.'))
+    list = list.filter(f => f.name === '..' || (!f.name.startsWith('.') && !f.isHidden))
   }
   const q = filterText.value.trim().toLowerCase()
   if (!q) return list
