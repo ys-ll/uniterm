@@ -57,7 +57,7 @@
 
   /* Fonts */
   --font-ui: -apple-system, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', 'Consolas', 'Courier New', monospace;
+  --font-mono: 'SF Mono', 'Consolas', monospace;
 
   /* Spacing */
   --radius-sm: 4px;

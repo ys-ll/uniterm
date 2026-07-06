@@ -158,7 +158,22 @@
                 <el-input v-model="form.s3Bucket" placeholder="my-bucket (leave empty to list all buckets)" />
               </el-form-item>
             </template>
-            <div v-if="form.type !== 'serial' && form.type !== 'spice' && form.type !== 's3'" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
+            <el-form-item v-if="showTunnel" :label="t('conn.tunnel')">
+              <el-select
+                v-model="form.tunnelSSHConnId"
+                :placeholder="t('conn.tunnelPlaceholder')"
+                clearable
+                filterable
+              >
+                <el-option
+                  v-for="c in sshConnections"
+                  :key="c.id"
+                  :label="`${c.name} (${c.user}@${c.host}:${c.port})`"
+                  :value="c.id"
+                />
+              </el-select>
+            </el-form-item>
+            <div v-if="form.type === 'rdp' || form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'ftp'" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
               <el-icon class="advanced-arrow" :class="{ expanded: showAdvanced }"><ChevronRight :size="14" /></el-icon>
               <span>{{ t('conn.advanced') }}</span>
             </div>
@@ -282,21 +297,6 @@
                 </el-select>
               </el-form-item>
             </template>
-            <el-form-item v-if="showTunnel" :label="t('conn.tunnel')">
-              <el-select
-                v-model="form.tunnelSSHConnId"
-                :placeholder="t('conn.tunnelPlaceholder')"
-                clearable
-                filterable
-              >
-                <el-option
-                  v-for="c in sshConnections"
-                  :key="c.id"
-                  :label="`${c.name} (${c.user}@${c.host}:${c.port})`"
-                  :value="c.id"
-                />
-              </el-select>
-            </el-form-item>
             </template>
           </el-form>
         </div>

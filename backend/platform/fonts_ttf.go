@@ -4,33 +4,14 @@ package platform
 
 import "fmt"
 
-// parseFont reads a TTF/OTF/TTC file and returns (familyName, isMonospace, error).
-// Shared by the Windows registry-based scanner and the macOS directory-based
-// scanner: the font binary format itself doesn't differ across platforms,
-// only how each platform enumerates candidate font files.
+// parseFont reads a TTF/OTF/TTC font file and returns (familyName, isMonospace, error).
 func parseFont(path string) (string, bool, error) {
 	data, err := readFontFile(path)
 	if err != nil {
 		return "", false, err
 	}
 
-	// Handle TrueType Collection (.ttc): the container header is laid out as
-	// [tag(4) version(4) numFonts(4) offsetTable[numFonts](4 bytes each)...],
-	// where each offsetTable entry points to that sub-font's own table
-	// directory ([sfntVersion(4) numTables(2) ...] followed by numTables
-	// entries) elsewhere in the *same* file. Every offset recorded inside a
-	// table directory entry (name/post/hhea/hmtx/etc.) is an absolute offset
-	// into the whole file, not relative to the table directory itself.
-	//
-	// The previous version did `data = data[offset:]` to "enter" the first
-	// sub-font, which shifted the base for every later offset read by
-	// `offset` bytes too many — every u32() table-offset lookup then landed
-	// `offset` bytes past where it should have, reading garbage (glyph data,
-	// etc.) as if it were the name/post table and producing mangled family
-	// names. Fix: never re-slice `data`; only remember tableDirOffset (where
-	// this sub-font's table directory starts) and read numTables from there,
-	// while every table entry's own offset is still resolved against the
-	// original, full-length `data`.
+	// For .ttc files, use the first sub-font's table directory.
 	tableDirOffset := 0
 	tag := tag4(data, 0)
 	if tag == "ttcf" {
@@ -55,8 +36,8 @@ func parseFont(path string) (string, bool, error) {
 		return "", false, fmt.Errorf("invalid numTables")
 	}
 
-	var nameOffset, nameLen uint32
-	var postOffset, hheaOffset, hmtxOffset, os2Offset, cmapOffset uint32
+	var nameOffset uint32
+	var postOffset, os2Offset, cmapOffset uint32
 
 	for i := 0; i < numTables; i++ {
 		off := tableDirOffset + 12 + i*16
@@ -65,18 +46,12 @@ func parseFont(path string) (string, bool, error) {
 		}
 		tableTag := tag4(data, off)
 		tableOffset := u32(data, off+8)
-		tableLength := u32(data, off+12)
 
 		switch tableTag {
 		case "name":
 			nameOffset = tableOffset
-			nameLen = tableLength
 		case "post":
 			postOffset = tableOffset
-		case "hhea":
-			hheaOffset = tableOffset
-		case "hmtx":
-			hmtxOffset = tableOffset
 		case "OS/2":
 			os2Offset = tableOffset
 		case "cmap":
@@ -88,24 +63,7 @@ func parseFont(path string) (string, bool, error) {
 		return "", false, fmt.Errorf("name table not found")
 	}
 
-	// Symbol/icon fonts (Webdings, Wingdings, ZapfDingbats, SAP's SAPIcons/
-	// SAPGUI-Icons, Font Awesome, ...) map character slots to pictograms
-	// rather than actual letterforms, so they are never a sensible terminal
-	// font even when their glyphs happen to share a uniform advance width
-	// (which is what fooled the hmtx heuristic below into treating Webdings
-	// as monospace). Two independent, complementary signals catch this:
-	//
-	//  1. The OS/2 table's sFamilyClass high byte uses the standard IBM font
-	//     classification, where class 12 (0x0C) is reserved for "Symbolic" —
-	//     the same field Windows itself uses to keep symbol fonts out of its
-	//     own font pickers. Covers classic Mac/Windows dingbat fonts.
-	//  2. A cmap subtable registered as (platform 3, encoding 0) is the
-	//     decades-old Windows convention a font uses specifically to mark
-	//     itself as a "Symbol" font (vs. encoding 1, "Unicode BMP", used by
-	//     real text fonts). Many third-party icon fonts (SAPIcons and
-	//     similar in-house icon sets) never bother setting sFamilyClass
-	//     correctly but still follow this cmap convention to render at all
-	//     on Windows, so this catches what signal 1 misses.
+	// Exclude symbol/icon fonts (Wingdings, Font Awesome, etc.).
 	if os2Offset != 0 && int(os2Offset)+32 <= len(data) {
 		familyClass := u16(data, int(os2Offset)+30)
 		if familyClass>>8 == 12 {
@@ -116,32 +74,18 @@ func parseFont(path string) (string, bool, error) {
 		return "", false, nil
 	}
 
-	// The post table's isFixedPitch flag is set by whoever authored the
-	// font and is unreliable in practice — e.g. macOS's own Monaco.ttf
-	// renders as monospace but ships with this flag cleared to 0. Trust it
-	// when set, but when it's 0 (or the table is missing) fall back to
-	// measuring actual glyph advance widths in hmtx, which reflects the
-	// real rendered metrics regardless of what the flag claims.
-	isMono := false
-	if postOffset != 0 && int(postOffset)+16 <= len(data) {
-		isMono = u32(data, int(postOffset)+12) != 0
-	}
-	if !isMono && hheaOffset != 0 && hmtxOffset != 0 {
-		isMono = looksMonospaceByMetrics(data, int(hheaOffset), int(hmtxOffset))
-	}
-	if !isMono {
+	// Use the post table's isFixedPitch flag (CJK fonts don't set it).
+	if postOffset == 0 || int(postOffset)+16 > len(data) || u32(data, int(postOffset)+12) == 0 {
 		return "", false, nil
 	}
 
 	// Read font family name from name table (Name ID 1)
-	family := parseNameTable(data, int(nameOffset), int(nameLen))
+	family := parseNameTable(data, int(nameOffset))
 	return family, true, nil
 }
 
-// hasWindowsSymbolCmap reports whether the font's cmap table registers a
-// (platform 3, encoding 0) subtable — the "Windows Symbol" encoding a font
-// declares to identify itself as a symbol/icon/dingbat font rather than a
-// text font using the standard (platform 3, encoding 1) Unicode BMP mapping.
+// hasWindowsSymbolCmap checks whether the cmap table's (platform 3, encoding 0)
+// subtable is present — the Windows convention for identifying symbol fonts.
 func hasWindowsSymbolCmap(data []byte, cmapOffset int) bool {
 	if cmapOffset+4 > len(data) {
 		return false
@@ -164,56 +108,11 @@ func hasWindowsSymbolCmap(data []byte, cmapOffset int) bool {
 	return false
 }
 
-// looksMonospaceByMetrics inspects hmtx glyph advance widths and reports
-// monospace when the overwhelming majority of non-zero-width glyphs (i.e.
-// excluding combining marks and other zero-advance glyphs, which carry no
-// signal either way) share the same advance width. This is the metric a
-// monospace font actually produces, independent of the post table's flag.
-func looksMonospaceByMetrics(data []byte, hheaOffset, hmtxOffset int) bool {
-	if hheaOffset+36 > len(data) {
-		return false
-	}
-	numOfLongHorMetrics := int(u16(data, hheaOffset+34))
-	if numOfLongHorMetrics < 4 {
-		return false // not enough samples to draw a conclusion
-	}
-	if numOfLongHorMetrics > 20000 {
-		numOfLongHorMetrics = 20000 // sane cap against malformed fonts
-	}
-
-	counts := make(map[uint16]int)
-	nonZero := 0
-	for i := 0; i < numOfLongHorMetrics; i++ {
-		off := hmtxOffset + i*4
-		if off+2 > len(data) {
-			break
-		}
-		w := u16(data, off)
-		if w == 0 {
-			continue
-		}
-		counts[w]++
-		nonZero++
-	}
-	if nonZero < 4 {
-		return false
-	}
-
-	maxCount := 0
-	for _, c := range counts {
-		if c > maxCount {
-			maxCount = c
-		}
-	}
-	return float64(maxCount)/float64(nonZero) >= 0.85
-}
-
-// parseNameTable extracts Name ID 1 (Font Family) from the name table.
-func parseNameTable(data []byte, offset, length int) string {
+// parseNameTable returns the font family name (Name ID 1) from the name table.
+func parseNameTable(data []byte, offset int) string {
 	if offset+6 > len(data) {
 		return ""
 	}
-	_ = length
 
 	count := int(u16(data, offset+2))
 	storageOffset := offset + int(u16(data, offset+4))
@@ -221,9 +120,7 @@ func parseNameTable(data []byte, offset, length int) string {
 		return ""
 	}
 
-	// Priority: Platform 3 (Windows) > Platform 1 (Mac)
-	var win16, macRoman string
-
+	var fallback string
 	for i := 0; i < count; i++ {
 		recOff := offset + 6 + i*12
 		if recOff+12 > len(data) {
@@ -245,18 +142,31 @@ func parseNameTable(data []byte, offset, length int) string {
 		}
 		raw := data[strOff : strOff+recLen]
 
-		switch {
-		case platformID == 3 && encodingID == 1: // Windows, UTF-16 BE
-			win16 = decodeUTF16BE(raw)
-		case platformID == 1 && encodingID == 0: // Mac Roman
-			macRoman = decodeMacRoman(raw)
+		if platformID == 3 && encodingID == 1 {
+			name := decodeUTF16BE(raw)
+			if name == "" {
+				continue
+			}
+			// Prefer localized names (non-ASCII) over English ones.
+			if hasNonASCII(name) {
+				return name
+			}
+			if fallback == "" {
+				fallback = name
+			}
 		}
 	}
 
-	if win16 != "" {
-		return win16
+	return fallback
+}
+
+func hasNonASCII(s string) bool {
+	for _, r := range s {
+		if r > 127 {
+			return true
+		}
 	}
-	return macRoman
+	return false
 }
 
 func decodeUTF16BE(data []byte) string {
@@ -268,53 +178,6 @@ func decodeUTF16BE(data []byte) string {
 		runes[i/2] = rune(u16(data, i))
 	}
 	return string(runes)
-}
-
-func decodeMacRoman(data []byte) string {
-	runes := make([]rune, len(data))
-	for i, b := range data {
-		runes[i] = macRomanToRune(b)
-	}
-	return string(runes)
-}
-
-func macRomanToRune(b byte) rune {
-	return macRomanTable[b]
-}
-
-// Mac OS Roman character set
-var macRomanTable = [256]rune{
-	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-	0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
-	0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
-	0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
-	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-	0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F,
-	0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
-	0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
-	0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
-	0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F,
-	0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67,
-	0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F,
-	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77,
-	0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F,
-	0xC4, 0xC5, 0xC7, 0xC9, 0xD1, 0xD6, 0xDC, 0xE1,
-	0xE0, 0xE2, 0xE4, 0xE3, 0xE5, 0xE7, 0xE9, 0xE8,
-	0xEA, 0xEB, 0xED, 0xEC, 0xEE, 0xEF, 0xF1, 0xF3,
-	0xF2, 0xF4, 0xF6, 0xF5, 0xFA, 0xF9, 0xFB, 0xFC,
-	0x2020, 0xB0, 0xA2, 0xA3, 0xA7, 0x2022, 0xB6, 0xDF,
-	0xAE, 0xA9, 0x2122, 0xB4, 0xA8, 0x2260, 0xC6, 0xD8,
-	0x221E, 0xB1, 0x2264, 0x2265, 0xA5, 0xB5, 0x2202, 0x2211,
-	0x220F, 0x03C0, 0x222B, 0xAA, 0xBA, 0x03A9, 0xE6, 0xF8,
-	0xBF, 0xA1, 0xAC, 0x221A, 0x0192, 0x2248, 0x2206, 0xAB,
-	0xBB, 0x2026, 0xA0, 0xC0, 0xC3, 0xD5, 0x0152, 0x0153,
-	0x2013, 0x2014, 0x201C, 0x201D, 0x2018, 0x2019, 0xF7,
-	0x25CA, 0xFF, 0x0178, 0x2044, 0x20AC, 0x2039, 0x203A,
-	0xFB01, 0xFB02, 0x2021, 0xB7, 0x201A, 0x201E, 0x2030,
-	0xC2, 0xCA, 0xC1, 0xCB, 0xC8, 0xCD, 0xCE, 0xCF,
-	0xCC, 0xD3, 0xD4, 0xF8FF, 0xD2, 0xDA, 0xDB, 0xD9,
 }
 
 // Binary parsing helpers
