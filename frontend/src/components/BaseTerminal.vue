@@ -154,6 +154,7 @@ let writtenChunks = 0
 let unsubscribe: (() => void) | null = null
 let statusUnsubscribe: (() => void) | null = null
 let onDocumentMouseDown: ((e: MouseEvent) => void) | null = null
+let onTerminalAuxClick: ((e: MouseEvent) => void) | null = null
 let onOpenSearch: ((e: Event) => void) | null = null
 let onExport: ((e: Event) => void) | null = null
 let onSendRz: ((e: Event) => void) | null = null
@@ -981,6 +982,22 @@ onMounted(() => {
   }
   document.addEventListener('mousedown', onDocumentMouseDown)
 
+  // Middle-click paste: read setting and paste clipboard if enabled
+  onTerminalAuxClick = (event: MouseEvent) => {
+    if (event.button !== 1) return
+    if (!terminalRef.value?.contains(event.target as Node)) return
+    const action = settingsStore.settings.terminal.middleClickAction
+    if (action !== 'paste') return
+    event.preventDefault()
+    event.stopPropagation()
+    navigator.clipboard.readText().then(text => {
+      if (text && props.sessionId) {
+        SessionWrite(props.sessionId, text)
+      }
+    }).catch(() => {})
+  }
+  document.addEventListener('auxclick', onTerminalAuxClick)
+
   // Session data
   unsubscribe = EventsOn('session:data', (payload: { id: string; data: string }) => {
     if (!isActive.value) {
@@ -1401,6 +1418,10 @@ onUnmounted(() => {
   if (onDocumentMouseDown) {
     document.removeEventListener('mousedown', onDocumentMouseDown)
     onDocumentMouseDown = null
+  }
+  if (onTerminalAuxClick) {
+    document.removeEventListener('auxclick', onTerminalAuxClick)
+    onTerminalAuxClick = null
   }
   window.removeEventListener('resize', onWindowResize)
   window.removeEventListener('split:resize-start', onSplitResizeStart)

@@ -157,6 +157,19 @@
 
           <div class="setting-card">
             <div class="setting-info">
+              <div class="setting-title">{{ t('settings.middleClick') }}</div>
+              <div class="setting-desc">{{ t('settings.middleClickDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-select v-model="settingsStore.settings.terminal.middleClickAction" @change="settingsStore.save()">
+                <el-option :label="t('settings.middleClickNone')" value="none" />
+                <el-option :label="t('settings.middleClickPaste')" value="paste" />
+              </el-select>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
               <div class="setting-title">{{ t('settings.maxHistory') }}</div>
               <div class="setting-desc">{{ t('settings.maxHistoryDesc') }}</div>
             </div>

@@ -47,6 +47,7 @@ export interface TerminalSettings {
   fontSize: number
   selectionAction: 'none' | 'copy'
   rightClickAction: 'menu' | 'paste'
+  middleClickAction: 'none' | 'paste'
   maxHistoryLines: number
   smartCompletion: boolean
   highlightEnabled: boolean
@@ -146,6 +147,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     fontSize: 14,
     selectionAction: 'none',
     rightClickAction: 'menu',
+    middleClickAction: 'paste',
     maxHistoryLines: 2500,
     smartCompletion: true,
     highlightEnabled: true
