@@ -651,7 +651,7 @@ const contentWidth = ref(0)
 
 const CARD_WIDTH = 240
 const CARD_GAP = 12
-const PADDING = 32 // .start-tab padding on each side
+const PADDING = 64 // .start-tab padding on each side
 
 function updateContentWidth() {
   const el = startTabRef.value
