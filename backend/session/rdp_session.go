@@ -443,6 +443,7 @@ func (s *RDPSession) runMessagePump() {
 	var m msg
 	pumpTick := 0
 	noMsgCount := 0
+	disconnectLogged := false
 	for {
 		s.mu.Lock()
 		done := s.hwnd == 0
@@ -472,6 +473,43 @@ func (s *RDPSession) runMessagePump() {
 			noMsgCount++
 			if noMsgCount%20 == 0 {
 				log.Writef("[RDP-pump] heartbeat idle=%d, pumpMsgs=%d, hwnd=0x%x", noMsgCount, pumpTick, s.hwnd)
+				// Check if RDP connection is still alive via ActiveX Connected property.
+				// When the remote side drops or the connection is lost, this transitions
+				// to 0 while the ActiveX window is still alive.
+				if !disconnectLogged {
+					s.mu.Lock()
+					rdp := s.rdp
+					s.mu.Unlock()
+					if rdp != nil {
+						connected, err := rdp.GetProperty("Connected")
+						if err == nil && connected != nil {
+							v := connected.Value()
+							isDisconnected := false
+							if b, ok := v.(bool); ok {
+								isDisconnected = !b
+							} else if v == nil || v == int16(0) || v == int32(0) || v == 0 {
+								isDisconnected = true
+							}
+							if isDisconnected {
+								discMsg := "RDP connection was lost"
+								// Try to get the disconnect reason
+								reason, reasonErr := rdp.GetProperty("DisconnectedReason")
+								if reasonErr == nil && reason != nil {
+									discMsg = fmt.Sprintf("RDP disconnected: %v", reason.Value())
+								}
+								log.Writef("[RDP-pump] connection lost: %s, signaling disconnected", discMsg)
+								disconnectLogged = true
+								s.setStatus(StatusDisconnected)
+								// Post WM_QUIT to exit the pump and trigger cleanup
+								s.mu.Lock()
+								if s.hwnd != 0 {
+									procPostMessageW.Call(s.hwnd, 0x0012, 0, 0)
+								}
+								s.mu.Unlock()
+							}
+						}
+					}
+				}
 			}
 		}
 	}

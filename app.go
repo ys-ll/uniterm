@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"go.bug.st/serial"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -683,6 +684,7 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 				payload["proxyAddr"] = spice.ProxyAddr()
 			}
 		}
+
 		runtime.EventsEmit(a.ctx, "session:status", payload)
 	})
 
@@ -702,6 +704,31 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 					log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
 				}
 			}()
+
+			// RDP TCP pre-check: fail fast before creating the ActiveX window.
+			if sessionType == "rdp" {
+				port := config.Port
+				if port <= 0 { port = 3389 }
+				addr := fmt.Sprintf("%s:%d", config.Host, port)
+				tcpConn, tcpErr := net.DialTimeout("tcp", addr, 5*time.Second)
+				if tcpErr != nil {
+					log.Writef("[CreateSession] RDP TCP pre-check to %s failed: %v", addr, tcpErr)
+					if a.ctx != nil {
+						runtime.EventsEmit(a.ctx, "session:status", map[string]interface{}{
+							"id":           s.ID(),
+							"status":       "error",
+							"errorMessage": fmt.Sprintf("Cannot reach %s: %v", addr, tcpErr),
+						})
+					}
+					if a.sessionManager != nil {
+						_ = a.sessionManager.Close(s.ID())
+					}
+					return
+				}
+				tcpConn.Close()
+				log.Writef("[CreateSession] RDP TCP pre-check to %s succeeded", addr)
+			}
+
 			if err := s.Connect(config); err != nil {
 				if a.ctx != nil {
 					runtime.EventsEmit(a.ctx, "session:data", map[string]interface{}{

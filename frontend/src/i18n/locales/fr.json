@@ -391,6 +391,7 @@
   "rdp.error": "Échec de la connexion",
   "rdp.reconnect": "Reconnecter",
   "rdp.retry": "Réessayer",
+  "rdp.timeout": "Délai de connexion dépassé. Veuillez vérifier l&apos;adresse de l&apos;hôte et la connectivité réseau.",
   "rdp.resolution": "Résolution",
   "vnc.connecting": "Connexion à {host}...",
   "vnc.connected": "Connecté",

@@ -9,6 +9,7 @@
     <!-- Error state -->
     <div v-else-if="status === 'error'" class="rdp-overlay">
       <p class="rdp-error-text">{{ t('rdp.error') }}</p>
+      <p v-if="errorMessage" class="rdp-error-detail">{{ errorMessage }}</p>
       <el-button type="primary" @click="reconnect">{{ t('rdp.retry') }}</el-button>
     </div>
 
@@ -43,8 +44,10 @@ import { useI18n } from '../i18n'
 import type { ConnectionConfig } from '../types/session'
 import { CreateSession, CloseSession, RDPHide } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
+import { usePanelStore } from '../stores/panelStore'
 
 const { t } = useI18n()
+const panelStore = usePanelStore()
 
 const props = defineProps<{
   panelId: string
@@ -54,6 +57,7 @@ const props = defineProps<{
 
 const status = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting')
 const currentSessionId = ref<string | null>(props.sessionId)
+const errorMessage = ref<string>('')
 const statusResolution = computed(() => {
   if (props.config?.rdpFixedWidth && props.config?.rdpFixedHeight) {
     return `${props.config.rdpFixedWidth}×${props.config.rdpFixedHeight}`
@@ -61,21 +65,50 @@ const statusResolution = computed(() => {
   return '800×600'
 })
 
+const CONNECT_TIMEOUT = 30_000 // 30 seconds
+
 // --- Connection ---
+
+let connectTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearConnectTimer() {
+  if (connectTimer !== null) {
+    clearTimeout(connectTimer)
+    connectTimer = null
+  }
+}
 
 async function connect() {
   if (!props.config) return
   status.value = 'connecting'
+  errorMessage.value = ''
+
+  // Start timeout timer
+  clearConnectTimer()
+  connectTimer = setTimeout(() => {
+    if (status.value === 'connecting') {
+      errorMessage.value = t('rdp.timeout')
+      status.value = 'error'
+      if (currentSessionId.value) {
+        try { CloseSession(currentSessionId.value) } catch (_) {}
+      }
+    }
+  }, CONNECT_TIMEOUT)
+
   try {
     const info = await CreateSession('rdp', props.config)
     currentSessionId.value = info.id
+    panelStore.bindSession(props.panelId, info.id)
   } catch (e) {
     console.error('RDP connect error:', e)
+    errorMessage.value = String(e)
     status.value = 'error'
+    clearConnectTimer()
   }
 }
 
 async function reconnect() {
+  clearConnectTimer()
   if (currentSessionId.value) {
     try { await CloseSession(currentSessionId.value) } catch (_) {}
     currentSessionId.value = null
@@ -102,15 +135,20 @@ onMounted(() => {
     if (data.id !== currentSessionId.value) return
     switch (data.status) {
       case 'connected':
+        clearConnectTimer()
         status.value = 'connected'
+        errorMessage.value = ''
         window.dispatchEvent(new CustomEvent('rdp:sync-position'))
         break
       case 'disconnected':
+        clearConnectTimer()
         if (status.value !== 'error') status.value = 'disconnected'
         if (currentSessionId.value) RDPHide(currentSessionId.value)
         break
       case 'error':
+        clearConnectTimer()
         status.value = 'error'
+        errorMessage.value = data.errorMessage || ''
         if (currentSessionId.value) RDPHide(currentSessionId.value)
         break
     }
@@ -126,6 +164,7 @@ onMounted(() => {
 onUnmounted(() => {
   unsubStatus?.()
   unsubData?.()
+  clearConnectTimer()
 })
 
 watch(() => props.sessionId, (newId) => {
@@ -141,12 +180,11 @@ watch(() => props.sessionId, (newId) => {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: var(--bg-primary);
   position: relative;
 }
 .rdp-area {
   flex: 1;
-  background: #000;
 }
 .rdp-overlay {
   position: absolute;
@@ -160,6 +198,7 @@ watch(() => props.sessionId, (newId) => {
   z-index: 10;
 }
 .rdp-error-text { color: var(--error); }
+.rdp-error-detail { color: var(--text-muted); font-size: 13px; max-width: 480px; text-align: center; word-break: break-word; }
 .rdp-statusbar {
   display: flex;
   align-items: center;

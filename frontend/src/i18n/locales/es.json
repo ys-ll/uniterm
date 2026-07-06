@@ -391,6 +391,7 @@
   "rdp.error": "Error de conexión",
   "rdp.reconnect": "Reconectar",
   "rdp.retry": "Reintentar",
+  "rdp.timeout": "Tiempo de conexión agotado. Verifique la dirección del host y la conectividad de red.",
   "rdp.resolution": "Resolución",
   "vnc.connecting": "Conectando a {host}...",
   "vnc.connected": "Conectado",

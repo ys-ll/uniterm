@@ -391,6 +391,7 @@
   "rdp.error": "연결 실패",
   "rdp.reconnect": "재연결",
   "rdp.retry": "다시 시도",
+  "rdp.timeout": "연결 시간이 초과되었습니다. 호스트 주소와 네트워크 연결을 확인하세요.",
   "rdp.resolution": "해상도",
   "vnc.connecting": "{host}에 연결 중...",
   "vnc.connected": "연결됨",

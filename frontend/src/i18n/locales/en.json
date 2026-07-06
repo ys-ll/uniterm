@@ -394,6 +394,7 @@
   "rdp.error": "Connection failed",
   "rdp.reconnect": "Reconnect",
   "rdp.retry": "Retry",
+  "rdp.timeout": "Connection timed out. Please check the host address and network connectivity.",
   "rdp.resolution": "Resolution",
   "vnc.connecting": "Connecting to {host}...",
   "vnc.connected": "Connected",

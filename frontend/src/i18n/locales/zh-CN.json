@@ -394,6 +394,7 @@
   "rdp.error": "连接失败",
   "rdp.reconnect": "重新连接",
   "rdp.retry": "重试",
+  "rdp.timeout": "连接超时，请检查主机地址和网络连接。",
   "rdp.resolution": "分辨率",
   "vnc.connecting": "正在连接到 {host}...",
   "vnc.connected": "已连接",

@@ -391,6 +391,7 @@
   "rdp.error": "接続に失敗しました",
   "rdp.reconnect": "再接続",
   "rdp.retry": "再試行",
+  "rdp.timeout": "接続がタイムアウトしました。ホストアドレスとネットワーク接続を確認してください。",
   "rdp.resolution": "解像度",
   "vnc.connecting": "{host} に接続中...",
   "vnc.connected": "接続しました",

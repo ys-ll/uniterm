@@ -391,6 +391,7 @@
   "rdp.error": "Verbindung fehlgeschlagen",
   "rdp.reconnect": "Wieder verbinden",
   "rdp.retry": "Erneut versuchen",
+  "rdp.timeout": "Zeitüberschreitung bei der Verbindung. Bitte überprüfen Sie die Hostadresse und die Netzwerkverbindung.",
   "rdp.resolution": "Auflösung",
   "vnc.connecting": "Verbinde mit {host}...",
   "vnc.connected": "Verbunden",

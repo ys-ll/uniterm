@@ -391,6 +391,7 @@
   "rdp.error": "連線失敗",
   "rdp.reconnect": "重新連線",
   "rdp.retry": "重試",
+  "rdp.timeout": "連線逾時，請檢查主機位址和網路連線。",
   "rdp.resolution": "解析度",
   "vnc.connecting": "正在連線到 {host}...",
   "vnc.connected": "已連線",
