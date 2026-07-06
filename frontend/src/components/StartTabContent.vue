@@ -30,11 +30,12 @@
           </el-dropdown-menu>
         </template>
       </el-dropdown>
-      <input
+      <el-input
         ref="searchInputRef"
         v-model="searchQuery"
         class="start-search-input"
         :placeholder="t('sidebar.searchPlaceholder')"
+        clearable
         @keydown="onSearchKeydown"
       />
     </div>
@@ -1110,19 +1111,26 @@ async function doDelete(config: ConnectionConfig | null) {
 
 .start-search-input {
   flex: 1;
-  padding: 8px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: 14px;
-  outline: none;
 }
-.start-search-input:focus {
-  border-color: var(--accent);
+</style>
+
+<style>
+.start-search-input .el-input__wrapper {
+  background-color: var(--bg-surface) !important;
+  box-shadow: 0 0 0 1px var(--border-subtle) inset !important;
+  padding: 4px 14px !important;
+  border-radius: var(--radius-md) !important;
 }
-.start-search-input::placeholder {
-  color: var(--text-disabled);
+.start-search-input .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--accent) inset !important;
+}
+.start-search-input .el-input__inner {
+  font-family: inherit !important;
+  font-size: 13px !important;
+  color: var(--text-primary) !important;
+}
+.start-search-input .el-input__inner::placeholder {
+  color: var(--text-disabled) !important;
 }
 
 .start-action-btns {
