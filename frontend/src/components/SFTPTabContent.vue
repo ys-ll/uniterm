@@ -171,7 +171,7 @@
           </div>
           <div class="editor-footer-buttons">
             <el-button @click="editorVisible = false">{{ t('sftp.dialog.cancel') }}</el-button>
-            <el-button type="primary" :loading="editorSaving" @click="onEditorSave">{{ t('sftp.dialog.confirm') }}</el-button>
+            <el-button type="primary" :loading="editorSaving" @click="onEditorSave">{{ t('sftp.edit.save') }}</el-button>
           </div>
         </div>
       </template>
@@ -299,10 +299,36 @@ function detectEncoding(bytes: Uint8Array): { encoding: Encoding, hasBom: boolea
   const checkLen = Math.min(bytes.length, 1024)
   for (let i = 0; i < checkLen; i++) { if (bytes[i] === 0) nullCount++ }
   if (nullCount > checkLen * 0.3) return { encoding: 'utf-16le', hasBom: false }
+
+  // Try UTF-8 first (most common). Use non-fatal mode so valid UTF-8
+  // sequences are accepted even if some bytes might be interpreted as
+  // legacy encodings. WebView2's TextDecoder(fatal:true) may be overly
+  // strict for certain byte sequences.
   try {
-    new TextDecoder('utf-8', { fatal: true }).decode(bytes.slice(0, 4096))
-    return { encoding: 'utf-8', hasBom: false }
-  } catch { return { encoding: 'gbk', hasBom: false } }
+    const sample = bytes.slice(0, 8192)
+    // Quick check: valid UTF-8 lead/trail byte pattern
+    let i = 0
+    let valid = true
+    while (i < sample.length) {
+      const b = sample[i]
+      if (b < 0x80) { i++; continue }
+      let trailing: number
+      if ((b & 0xE0) === 0xC0) trailing = 1
+      else if ((b & 0xF0) === 0xE0) trailing = 2
+      else if ((b & 0xF8) === 0xF0) trailing = 3
+      else { valid = false; break }
+      if (i + trailing >= sample.length) { valid = false; break }
+      for (let j = 1; j <= trailing; j++) {
+        if ((sample[i + j] & 0xC0) !== 0x80) { valid = false; break }
+      }
+      if (!valid) break
+      i += trailing + 1
+    }
+    if (valid) return { encoding: 'utf-8', hasBom: false }
+  } catch { /* fall through */ }
+
+  // Try GBK/GB18030 — common for Chinese text on Windows
+  return { encoding: 'gbk', hasBom: false }
 }
 
 function detectLineEnding(text: string): LineEnding {
@@ -330,7 +356,12 @@ function encodeContent(text: string, enc: Encoding, lineEnding: LineEnding): str
   if (lineEnding === 'crlf') normalized = text.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n')
   else if (lineEnding === 'cr') normalized = text.replace(/\r\n/g, '\n').replace(/\n/g, '\r')
   else normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  if (enc === 'gbk' || enc === 'utf-8') return toBase64(normalized)
+
+  if (enc === 'utf-8' || enc === 'gbk') {
+    // Always encode as UTF-8 here. The backend will re-encode to GBK
+    // when needed (TextEncoder only supports UTF-8 in browsers).
+    return toBase64(normalized)
+  }
   const buf = new Uint8Array(normalized.length * 2 + 2)
   let pos = 0
   buf[pos++] = enc === 'utf-16le' ? 0xFF : 0xFE
@@ -387,6 +418,7 @@ const editorTitle = ref('')
 const editorPath = ref('')
 const editorMode = ref<'local' | 'remote'>('remote')
 const editorContent = ref('')
+const editorRawBytes = ref<Uint8Array | null>(null)
 const editorSaving = ref(false)
 const editorLineNumbers = ref<HTMLElement | null>(null)
 const editorTextarea = ref<HTMLTextAreaElement | null>(null)
@@ -421,6 +453,15 @@ const editorLineNumbersText = computed(() => {
 })
 
 const editorMinHeight = computed(() => '')
+
+// Re-decode content when user switches encoding
+watch(editorEncoding, (newEnc) => {
+  if (editorRawBytes.value) {
+    editorContent.value = decodeContent(editorRawBytes.value, newEnc)
+  }
+})
+
+// Sync editorMode from the source that set it (remote edit sets 'remote', local sets 'local')
 
 function computeVisualLines() {
   if (!editorWrapEnabled.value || !editorMirror.value || !editorTextarea.value) return
@@ -1172,6 +1213,8 @@ async function onEditFile(item: FileItem) {
     }
     const detected = detectEncoding(bytes)
     editorEncoding.value = detected.encoding
+    editorRawBytes.value = bytes
+    editorMode.value = 'remote'
     const text = decodeContent(bytes, detected.encoding)
     editorLineEnding.value = detectLineEnding(text)
     editorContent.value = text
@@ -1187,13 +1230,13 @@ async function onEditorSave() {
   editorSaving.value = true
   try {
     if (editorMode.value === 'local') {
-      await SftpLocalPutContent(sid, editorPath.value, encodeContent(editorContent.value, editorEncoding.value, editorLineEnding.value))
+      await SftpLocalPutContent(sid, editorPath.value, encodeContent(editorContent.value, editorEncoding.value, editorLineEnding.value), editorEncoding.value)
       onRefreshLocal()
     } else {
-      await SftpPutContent(sid, editorPath.value, encodeContent(editorContent.value, editorEncoding.value, editorLineEnding.value))
+      await SftpPutContent(sid, editorPath.value, encodeContent(editorContent.value, editorEncoding.value, editorLineEnding.value), editorEncoding.value)
       onRefreshRemote()
     }
-    msg.success(t('sftp.dialog.confirm'))
+    msg.success(t('sftp.edit.saveSuccess'))
     editorVisible.value = false
   } catch (e: any) {
     msg.error(e?.toString() || 'Failed to save file')
@@ -1223,6 +1266,7 @@ async function onLocalEditFile(item: FileItem) {
     if (isBinaryContent(bytes)) { editorVisible.value = false; msg.warning(t('sftp.edit.binaryFile')); return }
     const detected = detectEncoding(bytes)
     editorEncoding.value = detected.encoding
+    editorRawBytes.value = bytes
     const text = decodeContent(bytes, detected.encoding)
     editorLineEnding.value = detectLineEnding(text)
     editorContent.value = text

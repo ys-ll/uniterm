@@ -213,6 +213,8 @@
   "sftp.edit.binaryFile": "Impossible d'éditer un fichier binaire",
   "sftp.edit.fileTooLarge": "Fichier trop volumineux (>5 MB)",
   "sftp.edit.fileLargeWarning": "Fichier volumineux ({size}), ouvrir quand même ?",
+  "sftp.edit.saveSuccess": "Enregistré",
+  "sftp.edit.save": "Enregistrer",
   "sftp.paste.circularWarning": "Impossible de coller un dossier dans lui-même",
   "sftp.paste.cutSameDir": "Impossible de déplacer le fichier vers ce dossier",
   "sftp.pasting": "Collage...",

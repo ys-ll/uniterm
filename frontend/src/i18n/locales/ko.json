@@ -213,6 +213,8 @@
   "sftp.edit.binaryFile": "바이너리 파일은 편집할 수 없습니다",
   "sftp.edit.fileTooLarge": "파일이 너무 큽니다 (>5 MB)",
   "sftp.edit.fileLargeWarning": "파일이 큽니다 ({size}), 열겠습니까?",
+  "sftp.edit.saveSuccess": "저장됨",
+  "sftp.edit.save": "저장",
   "sftp.paste.circularWarning": "디렉터리를 자기 자신 안에 붙여넣을 수 없습니다",
   "sftp.paste.cutSameDir": "이 디렉터리로 파일을 이동할 수 없습니다",
   "sftp.pasting": "붙여넣는 중...",

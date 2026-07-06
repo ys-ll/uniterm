@@ -249,7 +249,7 @@ export function SftpLocalMkdir(arg1:string,arg2:string):Promise<void>;
 
 export function SftpLocalMove(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function SftpLocalPutContent(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function SftpLocalPutContent(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SftpLocalRemove(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
@@ -263,7 +263,7 @@ export function SftpPauseTransfer(arg1:string,arg2:string):Promise<void>;
 
 export function SftpPut(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<string>;
 
-export function SftpPutContent(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function SftpPutContent(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SftpRemove(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 

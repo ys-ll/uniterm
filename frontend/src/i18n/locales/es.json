@@ -213,6 +213,8 @@
   "sftp.edit.binaryFile": "No se puede editar un archivo binario",
   "sftp.edit.fileTooLarge": "El archivo es demasiado grande (>5 MB)",
   "sftp.edit.fileLargeWarning": "El archivo es grande ({size}), ¿abrir de todos modos?",
+  "sftp.edit.saveSuccess": "Guardado",
+  "sftp.edit.save": "Guardar",
   "sftp.paste.circularWarning": "No se puede pegar un directorio dentro de sí mismo",
   "sftp.paste.cutSameDir": "No se puede mover el archivo a este directorio",
   "sftp.pasting": "Pegando...",

@@ -213,6 +213,8 @@
   "sftp.edit.binaryFile": "無法編輯二進位檔案",
   "sftp.edit.fileTooLarge": "檔案太大，無法編輯（>5 MB）",
   "sftp.edit.fileLargeWarning": "檔案較大（{size}），仍然打開？",
+  "sftp.edit.saveSuccess": "儲存成功",
+  "sftp.edit.save": "儲存",
   "sftp.paste.circularWarning": "不能將目錄貼上到自身內部",
   "sftp.paste.cutSameDir": "不能移動檔案到本目錄",
   "sftp.pasting": "貼上中...",

@@ -213,6 +213,8 @@
   "sftp.edit.binaryFile": "Невозможно редактировать бинарный файл",
   "sftp.edit.fileTooLarge": "Файл слишком большой (>5 MB)",
   "sftp.edit.fileLargeWarning": "Файл большой ({size}), открыть?",
+  "sftp.edit.saveSuccess": "Сохранено",
+  "sftp.edit.save": "Сохранить",
   "sftp.paste.circularWarning": "Нельзя вставить папку в саму себя",
   "sftp.paste.cutSameDir": "Нельзя переместить файл в этот каталог",
   "sftp.pasting": "Вставка...",

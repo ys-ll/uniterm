@@ -486,8 +486,8 @@ export function SftpLocalMove(arg1, arg2, arg3) {
   return window['go']['main']['App']['SftpLocalMove'](arg1, arg2, arg3);
 }
 
-export function SftpLocalPutContent(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SftpLocalPutContent'](arg1, arg2, arg3);
+export function SftpLocalPutContent(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SftpLocalPutContent'](arg1, arg2, arg3, arg4);
 }
 
 export function SftpLocalRemove(arg1, arg2, arg3) {
@@ -514,8 +514,8 @@ export function SftpPut(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['SftpPut'](arg1, arg2, arg3, arg4);
 }
 
-export function SftpPutContent(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SftpPutContent'](arg1, arg2, arg3);
+export function SftpPutContent(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SftpPutContent'](arg1, arg2, arg3, arg4);
 }
 
 export function SftpRemove(arg1, arg2, arg3) {

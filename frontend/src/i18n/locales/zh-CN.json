@@ -217,6 +217,8 @@
   "sftp.edit.wrap": "自动换行",
   "sftp.edit.fileTooLarge": "文件太大，无法编辑（>5 MB）",
   "sftp.edit.fileLargeWarning": "文件较大（{size}），仍然打开？",
+  "sftp.edit.saveSuccess": "保存成功",
+  "sftp.edit.save": "保存",
   "sftp.paste.circularWarning": "不能将目录粘贴到自身内部",
   "sftp.paste.cutSameDir": "不能移动文件到本目录",
   "sftp.dialog.conflictTitle": "文件名冲突",

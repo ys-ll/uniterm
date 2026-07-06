@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 	"github.com/ys-ll/uniterm/backend/database"
 	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/platform"
@@ -1894,12 +1896,17 @@ func (a *App) SftpLocalGetContent(sessionID, localPath string) (string, error) {
 	return base64.StdEncoding.EncodeToString(content), nil
 }
 
-func (a *App) SftpLocalPutContent(sessionID, localPath, contentBase64 string) error {
+func (a *App) SftpLocalPutContent(sessionID, localPath, contentBase64, encoding string) error {
 	fs, err := a.getSftp(sessionID)
 	if err != nil {
 		return err
 	}
 	content, err := base64.StdEncoding.DecodeString(contentBase64)
+	if err != nil {
+		return err
+	}
+	// Re-encode if target encoding is not UTF-8 (frontend always sends UTF-8)
+	content, err = convertEncoding(content, encoding)
 	if err != nil {
 		return err
 	}
@@ -1962,7 +1969,7 @@ func (a *App) SftpPut(sessionID, localPath, remotePath string, recursive bool) (
 	return fs.Put(localPath, remotePath, recursive)
 }
 
-func (a *App) SftpPutContent(sessionID, remotePath, contentBase64 string) error {
+func (a *App) SftpPutContent(sessionID, remotePath, contentBase64, encoding string) error {
 	fs, err := a.getSftp(sessionID)
 	if err != nil {
 		return err
@@ -1971,7 +1978,26 @@ func (a *App) SftpPutContent(sessionID, remotePath, contentBase64 string) error 
 	if err != nil {
 		return err
 	}
+	// Re-encode if target encoding is not UTF-8 (frontend always sends UTF-8)
+	content, err = convertEncoding(content, encoding)
+	if err != nil {
+		return err
+	}
 	return fs.PutContent(remotePath, content)
+}
+
+// convertEncoding converts UTF-8 bytes to the target encoding.
+// Returns the original bytes unchanged if encoding is UTF-8 or empty.
+func convertEncoding(utf8Bytes []byte, encoding string) ([]byte, error) {
+	switch strings.ToLower(encoding) {
+	case "", "utf-8", "utf8":
+		return utf8Bytes, nil
+	case "gbk", "gb2312", "gb18030":
+		reader := transform.NewReader(bytes.NewReader(utf8Bytes), simplifiedchinese.GBK.NewEncoder())
+		return io.ReadAll(reader)
+	default:
+		return nil, fmt.Errorf("unsupported encoding: %s", encoding)
+	}
 }
 
 func (a *App) SftpGetContent(sessionID, remotePath string) (string, error) {

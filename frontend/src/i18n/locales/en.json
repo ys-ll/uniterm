@@ -217,6 +217,8 @@
   "sftp.edit.fileTooLarge": "File is too large to edit (>5 MB)",
   "sftp.edit.wrap": "Word wrap",
   "sftp.edit.fileLargeWarning": "File is large ({size}), open anyway?",
+  "sftp.edit.saveSuccess": "Saved",
+  "sftp.edit.save": "Save",
   "sftp.paste.circularWarning": "Cannot paste a directory into itself",
   "sftp.paste.cutSameDir": "Cannot move file to the same directory",
   "sftp.dialog.conflictTitle": "File Name Conflict",
