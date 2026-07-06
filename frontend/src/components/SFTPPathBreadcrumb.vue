@@ -374,7 +374,8 @@ function toggleBookmarkMenu(event?: MouseEvent) {
     const rect = (event.target as HTMLElement).closest('.bookmark-btn')?.getBoundingClientRect()
     if (rect) {
       bookmarkMenuStyle.value = {
-        left: (rect.right - 200) + 'px',
+        left: 'auto',
+        right: (window.innerWidth - rect.right) + 'px',
         top: (rect.bottom + 4) + 'px'
       }
     }
