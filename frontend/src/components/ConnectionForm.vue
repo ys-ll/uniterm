@@ -10,7 +10,7 @@
           :class="{ active: category === cat.key }"
           @click="onCategorySelect(cat.key)"
         >
-          <component :is="cat.icon" :size="28" />
+          <component :is="cat.icon" :size="20" />
           <span>{{ cat.label }}</span>
         </div>
       </div>
