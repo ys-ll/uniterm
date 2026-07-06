@@ -1,6 +1,6 @@
 import { ElMessage } from 'element-plus'
 
-const CLOSABLE = { showClose: true, duration: 5000 }
+const CLOSABLE = { showClose: true, duration: 5000, offset: 50 }
 
 export const msg = {
   success(m: string) { ElMessage.success({ message: m, ...CLOSABLE }) },

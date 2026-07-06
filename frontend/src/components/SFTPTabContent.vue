@@ -220,7 +220,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+
 import { msg } from '../services/message'
 import { usePanelStore } from '../stores/panelStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -555,7 +555,7 @@ onMounted(async () => {
         onRefreshLocal()
         onRefreshRemote().then(() => doInitialAutoNav())
       } else if (payload.status === 'error') {
-        ElMessage.error(t('sftp.connectError'))
+        msg.error(t('sftp.connectError'))
       }
     }
   })
@@ -565,7 +565,7 @@ onMounted(async () => {
     // Connection failed messages from backend (SFTP/FTP async connect errors)
     const connMatch = payload.data.match(/\[Connection failed: ([^\]]+)\]/)
     if (connMatch) {
-      ElMessage.error(connMatch[1])
+      msg.error(connMatch[1])
       return
     }
     const match = payload.data.match(/\x1b\]633;S([^\x07]*)\x07/)
@@ -961,7 +961,7 @@ function onCopyToClipboard(items: FileItem[]) {
     sourceDir: cwd.value,
     mode: 'copy'
   }
-  ElMessage.success(t('sftp.copy'))
+  msg.success(t('sftp.copy'))
 }
 
 function onCutToClipboard(items: FileItem[]) {
@@ -970,7 +970,7 @@ function onCutToClipboard(items: FileItem[]) {
     sourceDir: cwd.value,
     mode: 'cut'
   }
-  ElMessage.success(t('sftp.cut'))
+  msg.success(t('sftp.cut'))
 }
 
 function onClearClipboard() {
@@ -983,7 +983,7 @@ function onLocalCopyToClipboard(items: FileItem[]) {
     sourceDir: localCwd.value,
     mode: 'copy'
   }
-  ElMessage.success(t('sftp.copy'))
+  msg.success(t('sftp.copy'))
 }
 
 function onLocalCutToClipboard(items: FileItem[]) {
@@ -992,7 +992,7 @@ function onLocalCutToClipboard(items: FileItem[]) {
     sourceDir: localCwd.value,
     mode: 'cut'
   }
-  ElMessage.success(t('sftp.cut'))
+  msg.success(t('sftp.cut'))
 }
 
 function onLocalClearClipboard() {
@@ -1059,7 +1059,7 @@ async function onPaste() {
 
   // Cut to same directory: error immediately, no conflict dialog
   if (mode === 'cut' && sourceDir === targetDir) {
-    ElMessage.warning(t('sftp.paste.cutSameDir'))
+    msg.warning(t('sftp.paste.cutSameDir'))
     pasteLoadingRemote.value = false
     return
   }
@@ -1086,7 +1086,7 @@ async function onPaste() {
       // copy mode (cut already blocked at top level)
     } else if (isPathInside(target, source)) {
     // Circular check (only when source !== target)
-      ElMessage.warning(t('sftp.paste.circularWarning'))
+      msg.warning(t('sftp.paste.circularWarning'))
       continue
     }
     const forceRename = source === target && mode === 'copy'
@@ -1113,9 +1113,9 @@ async function onPaste() {
   if (pasteCancelled) {
     // keep clipboard so user can retry
   } else if (failed.length > 0) {
-    ElMessage.error(`Copied/Moved ${success}/${items.length}, ${failed.length} failed`)
+    msg.error(`Copied/Moved ${success}/${items.length}, ${failed.length} failed`)
   } else {
-    ElMessage.success(t('sftp.paste'))
+    msg.success(t('sftp.paste'))
   }
 
   if (!pasteCancelled) clipboard.value = null
@@ -1149,7 +1149,7 @@ async function onEditFile(item: FileItem) {
   if (!sid) return
 
   if (item.size > 5 * 1024 * 1024) {
-    ElMessage.warning(t('sftp.edit.fileTooLarge'))
+    msg.warning(t('sftp.edit.fileTooLarge'))
     return
   }
   if (item.size > 500 * 1024) {
@@ -1167,7 +1167,7 @@ async function onEditFile(item: FileItem) {
     const bytes = fromBase64(rawB64)
     if (isBinaryContent(bytes)) {
       editorVisible.value = false
-      ElMessage.warning(t('sftp.edit.binaryFile'))
+      msg.warning(t('sftp.edit.binaryFile'))
       return
     }
     const detected = detectEncoding(bytes)
@@ -1177,7 +1177,7 @@ async function onEditFile(item: FileItem) {
     editorContent.value = text
   } catch (e: any) {
     editorVisible.value = false
-    ElMessage.error(e?.toString() || 'Failed to read file')
+    msg.error(e?.toString() || 'Failed to read file')
   }
 }
 
@@ -1193,10 +1193,10 @@ async function onEditorSave() {
       await SftpPutContent(sid, editorPath.value, encodeContent(editorContent.value, editorEncoding.value, editorLineEnding.value))
       onRefreshRemote()
     }
-    ElMessage.success(t('sftp.dialog.confirm'))
+    msg.success(t('sftp.dialog.confirm'))
     editorVisible.value = false
   } catch (e: any) {
-    ElMessage.error(e?.toString() || 'Failed to save file')
+    msg.error(e?.toString() || 'Failed to save file')
   } finally {
     editorSaving.value = false
   }
@@ -1209,7 +1209,7 @@ async function onLocalEditFile(item: FileItem) {
   const sid = panel.value?.sessionId
   if (!sid) return
   if (item.size > 5 * 1024 * 1024) {
-    ElMessage.warning(t('sftp.edit.fileTooLarge'))
+    msg.warning(t('sftp.edit.fileTooLarge'))
     return
   }
   editorPath.value = joinPath(localCwd.value, item.name)
@@ -1220,7 +1220,7 @@ async function onLocalEditFile(item: FileItem) {
   try {
     const rawB64 = await SftpLocalGetContent(sid, editorPath.value)
     const bytes = fromBase64(rawB64)
-    if (isBinaryContent(bytes)) { editorVisible.value = false; ElMessage.warning(t('sftp.edit.binaryFile')); return }
+    if (isBinaryContent(bytes)) { editorVisible.value = false; msg.warning(t('sftp.edit.binaryFile')); return }
     const detected = detectEncoding(bytes)
     editorEncoding.value = detected.encoding
     const text = decodeContent(bytes, detected.encoding)
@@ -1228,7 +1228,7 @@ async function onLocalEditFile(item: FileItem) {
     editorContent.value = text
   } catch (e: any) {
     editorVisible.value = false
-    ElMessage.error(e?.toString() || 'Failed to read file')
+    msg.error(e?.toString() || 'Failed to read file')
   }
 }
 
@@ -1254,7 +1254,7 @@ async function onLocalPaste() {
   pasteLoadingLocal.value = true
   const targetDir = localCwd.value
   if (mode === 'cut' && sourceDir === targetDir) {
-    ElMessage.warning(t('sftp.paste.cutSameDir'))
+    msg.warning(t('sftp.paste.cutSameDir'))
     pasteLoadingLocal.value = false
     return
   }
@@ -1287,8 +1287,8 @@ async function onLocalPaste() {
   }
   pasteLoadingLocal.value = false
   if (!localPasteCancelled) {
-    if (failed.length > 0) ElMessage.error(`Copied/Moved ${success}/${items.length}, ${failed.length} failed`)
-    else ElMessage.success(t('sftp.paste'))
+    if (failed.length > 0) msg.error(`Copied/Moved ${success}/${items.length}, ${failed.length} failed`)
+    else msg.success(t('sftp.paste'))
   }
   if (!localPasteCancelled) localClipboard.value = null
   onRefreshLocal()
@@ -1322,10 +1322,10 @@ async function onNewFileCreate() {
       await SftpPutContent(sid, targetPath, '')
       onRefreshRemote()
     }
-    ElMessage.success(t('sftp.dialog.confirm'))
+    msg.success(t('sftp.dialog.confirm'))
     newFileVisible.value = false
   } catch (e: any) {
-    ElMessage.error(e?.toString() || 'Failed to create file')
+    msg.error(e?.toString() || 'Failed to create file')
   } finally {
     newFileCreating.value = false
   }

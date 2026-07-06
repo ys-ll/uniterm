@@ -460,7 +460,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Activity, Laptop, Cable, Pencil, MoreHorizontal } from '@lucide/vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { msg } from '../services/message'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
@@ -1136,7 +1137,7 @@ async function confirmNewGroup() {
   const name = newGroupName.value.trim()
   if (!name) return
   if (connectionStore.groups.some(g => g.name === name)) {
-    ElMessage.warning(t('conn.groupNameDuplicate'))
+    msg.warning(t('conn.groupNameDuplicate'))
     return
   }
   await connectionStore.addGroup(name)
@@ -1210,7 +1211,7 @@ async function confirmChangeNewGroup() {
   const name = changeNewGroupName.value.trim()
   if (!name) return
   if (connectionStore.groups.some(g => g.name === name)) {
-    ElMessage.warning(t('conn.groupNameDuplicate'))
+    msg.warning(t('conn.groupNameDuplicate'))
     return
   }
   const group = await connectionStore.addGroup(name)

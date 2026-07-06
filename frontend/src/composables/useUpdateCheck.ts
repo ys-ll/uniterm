@@ -24,6 +24,7 @@ function showUpdateNotification(info: UpdateInfo) {
     type: 'success',
     duration: 0,
     showClose: true,
+    offset: 50,
   })
 }
 

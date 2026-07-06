@@ -93,7 +93,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { msg } from '../services/message'
 import { Upload, Download } from '@lucide/vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
@@ -227,9 +228,9 @@ async function onImport() {
       const base = path.split(/[\\/]/).pop() || ''
       draft.value.name = base.replace(/\.itermcolors$/i, '') || draft.value.name
     }
-    ElMessage.success(t('theme.importSuccess'))
+    msg.success(t('theme.importSuccess'))
   } catch {
-    ElMessage.error(t('theme.importFailed'))
+    msg.error(t('theme.importFailed'))
   }
 }
 
@@ -245,9 +246,9 @@ async function onExport() {
   try {
     const xml = buildItermColors(draft.value.colors)
     await WriteFileBase64(path, btoa(xml))
-    ElMessage.success(t('theme.exportSuccess'))
+    msg.success(t('theme.exportSuccess'))
   } catch {
-    ElMessage.error(t('theme.exportFailed'))
+    msg.error(t('theme.exportFailed'))
   }
 }
 </script>

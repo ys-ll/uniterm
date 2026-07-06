@@ -365,7 +365,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { msg } from '../services/message'
 import type { StartTab } from '../types/workspace'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -922,7 +923,7 @@ async function doAddGroup() {
   const name = newGroupDialogName.value.trim()
   if (!name) return
   if (connectionStore.groups.some(g => g.name === name)) {
-    ElMessage.warning(t('conn.groupNameDuplicate'))
+    msg.warning(t('conn.groupNameDuplicate'))
     return
   }
   await connectionStore.addGroup(name)

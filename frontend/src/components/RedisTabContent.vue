@@ -267,7 +267,8 @@
 
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { msg } from '../services/message'
 import { Trash2, Plus, GripVertical, RefreshCw, ChevronLeft, ChevronRight } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import {
@@ -393,7 +394,7 @@ async function doScan(cursor: number) {
     nextCursor.value = result.cursor
     hasMore.value = result.cursor !== 0
   } catch (e: any) {
-    ElMessage.error(`Scan failed: ${e?.message || e}`)
+    msg.error(`Scan failed: ${e?.message || e}`)
     keys.value = []
   } finally {
     loading.value = false
@@ -439,7 +440,7 @@ async function onSwitchDB(idx: number) {
     await fetchDBSize()
     await doScan(0)
   } catch (e: any) {
-    ElMessage.error(`Switch DB failed: ${e?.message || e}`)
+    msg.error(`Switch DB failed: ${e?.message || e}`)
   }
 }
 
@@ -460,7 +461,7 @@ async function onSelectKey(info: RedisKeyInfo) {
       case 'set': { const members = await RedisGetSetAll(props.sessionId, info.name); setEntries.value = members || []; break }
       case 'zset': { const members = await RedisGetSortedSetRange(props.sessionId, info.name, '-inf', '+inf'); zsetEntries.value = members || []; break }
     }
-  } catch (e: any) { ElMessage.error(`Load key failed: ${e?.message || e}`) }
+  } catch (e: any) { msg.error(`Load key failed: ${e?.message || e}`) }
   finally { keyLoading.value = false }
 }
 
@@ -501,10 +502,10 @@ async function onSave() {
         break
       }
     }
-    ElMessage.success(t('redis.saved'))
+    msg.success(t('redis.saved'))
     const info = await RedisGetKeyInfo(props.sessionId, key)
     if (info) { selectedKeyInfo.value = info; editTTL.value = info.ttl }
-  } catch (e: any) { ElMessage.error(`Save failed: ${e?.message || e}`) }
+  } catch (e: any) { msg.error(`Save failed: ${e?.message || e}`) }
   finally { saving.value = false }
 }
 
@@ -513,10 +514,10 @@ async function onSetTTL() {
   if (!selectedKey.value) return
   try {
     await RedisSetKeyTTL(props.sessionId, selectedKey.value, editTTL.value)
-    ElMessage.success(t('redis.ttlUpdated'))
+    msg.success(t('redis.ttlUpdated'))
     const info = await RedisGetKeyInfo(props.sessionId, selectedKey.value)
     if (info) selectedKeyInfo.value = info
-  } catch (e: any) { ElMessage.error(`Set TTL failed: ${e?.message || e}`) }
+  } catch (e: any) { msg.error(`Set TTL failed: ${e?.message || e}`) }
 }
 
 // --- Revert ---
@@ -533,18 +534,18 @@ async function onDeleteKey() {
   deleting.value = true
   try {
     await RedisDeleteKey(props.sessionId, selectedKey.value)
-    ElMessage.success('Key deleted')
+    msg.success('Key deleted')
     selectedKey.value = ''
     selectedKeyInfo.value = null
     await doScan(cursorStack.value.length > 0 ? cursorStack.value[cursorStack.value.length - 1] : 0)
-  } catch (e: any) { ElMessage.error(`Delete failed: ${e?.message || e}`) }
+  } catch (e: any) { msg.error(`Delete failed: ${e?.message || e}`) }
   finally { deleting.value = false }
 }
 
 // --- New key ---
 function onShowNewKeyDialog() { resetNewKeyForm(); showNewKeyDialog.value = true }
 async function onCreateKey() {
-  if (!newKeyName.value.trim()) { ElMessage.warning(t('redis.keyNameRequired')); return }
+  if (!newKeyName.value.trim()) { msg.warning(t('redis.keyNameRequired')); return }
   try {
     switch (newKeyType.value) {
       case 'string': await RedisSetString(props.sessionId, newKeyName.value, newStringValue.value); break
@@ -574,9 +575,9 @@ async function onCreateKey() {
     }
     if (newKeyTTL.value >= 0) { await RedisSetKeyTTL(props.sessionId, newKeyName.value, newKeyTTL.value) }
     showNewKeyDialog.value = false
-    ElMessage.success(t('redis.keyCreated'))
+    msg.success(t('redis.keyCreated'))
     await doScan(cursorStack.value.length > 0 ? cursorStack.value[cursorStack.value.length - 1] : 0)
-  } catch (e: any) { ElMessage.error(`Create key failed: ${e?.message || e}`) }
+  } catch (e: any) { msg.error(`Create key failed: ${e?.message || e}`) }
 }
 
 // --- List drag reorder ---
