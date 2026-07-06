@@ -479,10 +479,8 @@ function resize() {
     const newCols = Math.max(2, cols)
     const newRows = Math.max(1, rows)
 
-    if (terminal.cols !== newCols || terminal.rows !== newRows) {
-      terminal.resize(newCols, newRows)
-      SessionResize(sid, newCols, newRows).catch(() => {})
-    }
+    terminal.resize(newCols, newRows)
+    SessionResize(sid, newCols, newRows).catch(() => {})
   } else {
     getFitAddon()?.fit()
   }

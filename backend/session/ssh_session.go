@@ -467,7 +467,6 @@ func (s *SSHSession) Resize(cols, rows int) error {
 	if s.session == nil {
 		return fmt.Errorf("session not connected")
 	}
-	fmt.Printf("[Resize] %s -> cols=%d rows=%d\n", s.id, cols, rows)
 	return s.session.WindowChange(rows, cols)
 }
 
