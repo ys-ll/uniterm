@@ -346,8 +346,7 @@ function onRemove(id: string) {
   transition: opacity 0.12s ease, visibility 0.12s ease;
 }
 
-.suggestion-item:hover .delete-btn.visible,
-.suggestion-item.selected .delete-btn.visible {
+.suggestion-item:hover .delete-btn.visible {
   visibility: visible;
   opacity: 1;
 }
