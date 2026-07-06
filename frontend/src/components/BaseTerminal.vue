@@ -612,6 +612,9 @@ function writeTerminalInput(data: string, inAlternateScreen: boolean) {
 }
 
 function handleTerminalKey(e: KeyboardEvent): boolean {
+  // Let system keys pass through to the OS (e.g. PrintScreen for screenshots)
+  if (e.key === 'PrintScreen') return false
+
   // Check global shortcuts first (Ctrl+Shift+/Alt+ combos)
   if (e.type === 'keydown' && !onTerminalKey(e)) return false
 
