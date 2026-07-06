@@ -232,7 +232,7 @@ import {
   SftpLocalRemove, SftpLocalRename, SftpLocalMkdir,
   SftpLocalGetContent, SftpLocalPutContent, SftpLocalCopy, SftpLocalMove,
   SftpGet, SftpPut, SftpPutContent, SftpGetContent, SftpCopy, SftpMove,
-  WriteTempFile, SftpCancelTransfer, SftpPauseTransfer, SftpResumeTransfer, ListSessions, GetDesktopPath,
+  WriteTempFile, SftpCancelTransfer, SftpPauseTransfer, SftpResumeTransfer, ListSessions,
   OpenMultipleFilesDialog, OpenDirectoryDialog,
 } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
@@ -269,7 +269,6 @@ const dragSource = ref<'local' | 'remote' | null>(null)
 let dragEnterLocalCount = 0
 let dragEnterRemoteCount = 0
 let dragDroppedInternally = false
-let draggedRemoteItems: FileItem[] = []
 const dialogMode = ref<'local' | 'remote'>('remote')
 
 function joinPath(base: string, name: string): string {
@@ -1560,18 +1559,10 @@ function onDragOver(e: DragEvent) {
 function onDragStart(e: DragEvent) {
   const target = e.target as HTMLElement | null
   dragDroppedInternally = false
-  draggedRemoteItems = []
   if (target?.closest('.local-pane')) {
     dragSource.value = 'local'
   } else if (target?.closest('.remote-pane')) {
     dragSource.value = 'remote'
-    // Capture the dragged file items for potential drag-out download
-    try {
-      const raw = e.dataTransfer?.getData('application/sftp-file')
-      if (raw) {
-        draggedRemoteItems = [JSON.parse(raw)]
-      }
-    } catch {}
   }
 }
 
@@ -1605,26 +1596,12 @@ function onDragLeave(mode: 'local' | 'remote') {
   }
 }
 
-async function clearDragState() {
+function clearDragState() {
   dragOverLocal.value = false
   dragOverRemote.value = false
   dragEnterLocalCount = 0
   dragEnterRemoteCount = 0
-  // Drag-out: remote file dragged outside app (e.g. to desktop)
-  if (dragSource.value === 'remote' && !dragDroppedInternally && draggedRemoteItems.length > 0) {
-    const sid = panel.value?.sessionId
-    if (sid) {
-      let desktopPath = ''
-      try { desktopPath = await GetDesktopPath() } catch {}
-      for (const item of draggedRemoteItems) {
-        const remotePath = joinPath(cwd.value, item.name)
-        const localPath = (desktopPath || localCwd.value) + '/' + item.name
-        SftpGet(sid, remotePath, localPath, item.isDir)
-      }
-    }
-  }
   dragSource.value = null
-  draggedRemoteItems = []
 }
 
 function onDropLocal(e: DragEvent) {
