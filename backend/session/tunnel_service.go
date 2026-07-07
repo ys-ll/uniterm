@@ -18,16 +18,24 @@ type tunnelEntry struct {
 }
 
 // TunnelService manages SSH tunnel lifecycles.
-// Each session that uses a tunnel gets its own SSH connection
-// and local listener. The key is the parent session ID.
+//
+// Two independent kinds of tunnel share it: session tunnels (keyed by the
+// parent session ID — the implicit jump-host forwarding used by CreateSession),
+// and user tunnels (keyed by Tunnel.ID — the standalone port forwards managed
+// from the tunnels panel; see tunnel_forward.go).
 type TunnelService struct {
-	mu      sync.Mutex
-	tunnels map[string]*tunnelEntry
+	mu          sync.Mutex
+	tunnels     map[string]*tunnelEntry
+	userTunnels map[string]*userTunnelEntry
+	states      map[string]TunnelState
+	onState     func(TunnelState)
 }
 
 func NewTunnelService() *TunnelService {
 	return &TunnelService{
-		tunnels: make(map[string]*tunnelEntry),
+		tunnels:     make(map[string]*tunnelEntry),
+		userTunnels: make(map[string]*userTunnelEntry),
+		states:      make(map[string]TunnelState),
 	}
 }
 
