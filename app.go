@@ -42,6 +42,7 @@ type App struct {
 	settingsStore        *store.SettingsStore
 	localStateStore      *store.LocalStateStore
 	quickCommandsStore   *store.QuickCommandsStore
+	tunnelStore          *store.TunnelStore
 	terminalHistoryStore *store.TerminalHistoryStore
 	recentStore          *store.RecentStore
 	syncService          *sync.SyncService
@@ -113,6 +114,7 @@ func (a *App) startup(ctx context.Context) {
 	appDir := filepath.Join(configDir, "uniTerm")
 	a.terminalHistoryStore = store.NewTerminalHistoryStore(appDir)
 	a.quickCommandsStore = store.NewQuickCommandsStore(appDir)
+	a.tunnelStore = store.NewTunnelStore(appDir)
 	a.localStateStore = store.NewLocalStateStore(appDir)
 	a.recentStore = store.NewRecentStore(appDir)
 	if _, err := a.recentStore.Load(); err != nil {
@@ -178,6 +180,26 @@ func (a *App) LoadConnections() (session.ConnectionStoreData, error) {
 		return session.ConnectionStoreData{}, fmt.Errorf("connection store not initialized")
 	}
 	return a.connectionStore.Load()
+}
+
+// TunnelStore methods
+
+func (a *App) SaveTunnels(data session.TunnelStoreData) error {
+	if a.tunnelStore == nil {
+		return fmt.Errorf("tunnel store not initialized")
+	}
+	err := a.tunnelStore.Save(data)
+	if err == nil {
+		runtime.EventsEmit(a.ctx, "store:tunnels:changed", data)
+	}
+	return err
+}
+
+func (a *App) LoadTunnels() (session.TunnelStoreData, error) {
+	if a.tunnelStore == nil {
+		return session.TunnelStoreData{}, fmt.Errorf("tunnel store not initialized")
+	}
+	return a.tunnelStore.Load()
 }
 
 // AI Config Store methods
