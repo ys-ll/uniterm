@@ -38,3 +38,5 @@ docs/superpowers/
 # Root package files (project uses frontend/ for Node.js)
 /package.json
 /package-lock.json
+designs/
+/design.md
