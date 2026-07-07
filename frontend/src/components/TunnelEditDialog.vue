@@ -2,127 +2,131 @@
   <el-dialog
     v-model="visible"
     :title="editingId ? t('tunnels.editTunnel') : t('tunnels.addTunnel')"
-    width="480px"
+    width="460px"
     :close-on-click-modal="false"
+    class="tunnel-dialog"
     @close="resetForm"
   >
-    <el-form label-width="92px" label-position="top">
-      <el-form-item :label="t('tunnels.name')">
+    <div class="tf">
+      <div class="field">
+        <label class="fl">{{ t('tunnels.name') }} <span class="req">*</span></label>
         <el-input v-model="form.name" :placeholder="t('tunnels.namePlaceholder')" maxlength="50" />
-      </el-form-item>
+      </div>
 
-      <el-form-item :label="t('tunnels.sshConn')">
-        <el-select v-model="form.sshConnId" :placeholder="t('tunnels.sshConnPlaceholder')" filterable class="full">
-          <el-option
-            v-for="c in sshConnections"
-            :key="c.id"
-            :label="c.name"
-            :value="c.id"
-          >
+      <div class="field">
+        <label class="fl">{{ t('tunnels.sshConn') }} <span class="req">*</span></label>
+        <el-select v-model="form.sshConnId" :placeholder="t('tunnels.sshConnPlaceholder')" filterable>
+          <el-option v-for="c in sshConnections" :key="c.id" :label="c.name" :value="c.id">
             <span>{{ c.name }}</span>
             <span class="opt-meta">{{ c.user }}@{{ c.host }}</span>
           </el-option>
         </el-select>
         <div class="field-hint">{{ t('tunnels.sshConnHint') }}</div>
-      </el-form-item>
+      </div>
 
-      <el-form-item :label="t('tunnels.mode')">
+      <div class="field">
+        <label class="fl">{{ t('tunnels.mode') }} <span class="req">*</span></label>
         <el-radio-group v-model="form.mode" class="mode-group">
-          <el-radio-button value="local">
-            <div class="mode-label"><span class="mode-en">Local</span><span class="mode-sub">{{ t('tunnels.mode.local') }}</span></div>
-          </el-radio-button>
-          <el-radio-button value="remote">
-            <div class="mode-label"><span class="mode-en">Remote</span><span class="mode-sub">{{ t('tunnels.mode.remote') }}</span></div>
-          </el-radio-button>
-          <el-radio-button value="dynamic">
-            <div class="mode-label"><span class="mode-en">Dynamic</span><span class="mode-sub">{{ t('tunnels.mode.dynamic') }}</span></div>
-          </el-radio-button>
+          <el-radio-button value="local">{{ t('tunnels.mode.local') }}</el-radio-button>
+          <el-radio-button value="remote">{{ t('tunnels.mode.remote') }}</el-radio-button>
+          <el-radio-button value="dynamic">{{ t('tunnels.mode.dynamic') }}</el-radio-button>
         </el-radio-group>
-      </el-form-item>
+      </div>
 
       <!-- Local -->
       <template v-if="form.mode === 'local'">
         <div class="row2">
-          <el-form-item :label="t('tunnels.localPort')">
-            <el-input v-model.number="form.listenPort" type="number" :placeholder="'13306'" />
-          </el-form-item>
-          <el-form-item :label="t('tunnels.bind')">
+          <div class="field">
+            <label class="fl">{{ t('tunnels.localPort') }} <span class="req">*</span></label>
+            <el-input v-model.number="form.listenPort" type="number" placeholder="13306" />
+          </div>
+          <div class="field">
+            <label class="fl">{{ t('tunnels.bind') }}</label>
             <el-input v-model="form.listenHost" placeholder="127.0.0.1" />
-          </el-form-item>
+          </div>
         </div>
-        <el-form-item :label="t('tunnels.target')">
+        <div class="field">
+          <label class="fl">{{ t('tunnels.target') }} <span class="req">*</span></label>
           <div class="hostport">
             <el-input v-model="form.targetHost" placeholder="10.0.1.20" />
             <span class="colon">:</span>
-            <el-input v-model.number="form.targetPort" type="number" placeholder="3306" class="port" />
+            <el-input v-model.number="form.targetPort" type="number" placeholder="3306" />
           </div>
-        </el-form-item>
-        <div class="field-hint">{{ t('tunnels.hint.local') }}</div>
+          <div class="field-hint">{{ t('tunnels.hint.local') }}</div>
+        </div>
       </template>
 
       <!-- Remote -->
       <template v-else-if="form.mode === 'remote'">
         <div class="row2">
-          <el-form-item :label="t('tunnels.remotePort')">
+          <div class="field">
+            <label class="fl">{{ t('tunnels.remotePort') }} <span class="req">*</span></label>
             <el-input v-model.number="form.listenPort" type="number" placeholder="8022" />
-          </el-form-item>
-          <el-form-item :label="t('tunnels.remoteBind')">
+          </div>
+          <div class="field">
+            <label class="fl">{{ t('tunnels.remoteBind') }}</label>
             <el-input v-model="form.listenHost" placeholder="0.0.0.0" />
-          </el-form-item>
+          </div>
         </div>
-        <el-form-item :label="t('tunnels.backTarget')">
+        <div class="field">
+          <label class="fl">{{ t('tunnels.backTarget') }} <span class="req">*</span></label>
           <div class="hostport">
             <el-input v-model="form.targetHost" placeholder="127.0.0.1" />
             <span class="colon">:</span>
-            <el-input v-model.number="form.targetPort" type="number" placeholder="22" class="port" />
+            <el-input v-model.number="form.targetPort" type="number" placeholder="22" />
           </div>
-        </el-form-item>
-        <div class="field-hint">{{ t('tunnels.hint.remote') }}</div>
+          <div class="field-hint">{{ t('tunnels.hint.remote') }}</div>
+        </div>
       </template>
 
       <!-- Dynamic -->
       <template v-else>
         <div class="row2">
-          <el-form-item :label="t('tunnels.socksPort')">
+          <div class="field">
+            <label class="fl">{{ t('tunnels.socksPort') }} <span class="req">*</span></label>
             <el-input v-model.number="form.listenPort" type="number" placeholder="1080" />
-          </el-form-item>
-          <el-form-item :label="t('tunnels.bind')">
+          </div>
+          <div class="field">
+            <label class="fl">{{ t('tunnels.bind') }}</label>
             <el-input v-model="form.listenHost" placeholder="127.0.0.1" />
-          </el-form-item>
+          </div>
         </div>
-        <div class="field-hint">{{ t('tunnels.hint.dynamic') }}</div>
+        <div class="field-hint dynamic-hint">{{ t('tunnels.hint.dynamic') }}</div>
       </template>
 
-      <el-divider />
+      <div class="divider"></div>
 
-      <el-form-item>
+      <div class="toggle-field">
         <el-switch v-model="upstreamOn" />
         <span class="switch-label">{{ t('tunnels.upstream') }}</span>
-      </el-form-item>
+      </div>
       <template v-if="upstreamOn">
         <div class="row2">
-          <el-form-item :label="t('tunnels.proxyKind')">
-            <el-select v-model="upstream.kind" class="full">
+          <div class="field">
+            <label class="fl">{{ t('tunnels.proxyKind') }}</label>
+            <el-select v-model="upstream.kind">
               <el-option label="SOCKS5" value="socks5" />
               <el-option label="HTTP" value="http" />
             </el-select>
-          </el-form-item>
-          <el-form-item :label="t('tunnels.proxyPort')">
+          </div>
+          <div class="field">
+            <label class="fl">{{ t('tunnels.proxyPort') }}</label>
             <el-input v-model.number="upstream.port" type="number" placeholder="1080" />
-          </el-form-item>
+          </div>
         </div>
-        <el-form-item :label="t('tunnels.proxyAddr')">
+        <div class="field">
+          <label class="fl">{{ t('tunnels.proxyAddr') }}</label>
           <el-input v-model="upstream.host" placeholder="127.0.0.1" />
-        </el-form-item>
+        </div>
       </template>
 
-      <el-form-item>
+      <div class="toggle-field">
         <el-switch v-model="form.autoStart" />
         <span class="switch-label">{{ t('tunnels.autoStart') }}</span>
-      </el-form-item>
-    </el-form>
+      </div>
 
-    <div v-if="errorMsg" class="form-error">{{ errorMsg }}</div>
+      <div v-if="errorMsg" class="form-error">{{ errorMsg }}</div>
+    </div>
 
     <template #footer>
       <el-button disabled class="test-btn">
@@ -250,20 +254,25 @@ function resetForm() {
 </script>
 
 <style scoped>
-.full { width: 100%; }
-.opt-meta { float: right; color: var(--text-muted); font-size: 11px; }
-.field-hint { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-top: 4px; }
+.tf { display: flex; flex-direction: column; }
+.field { margin-bottom: 14px; }
+.fl { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; line-height: 1.4; }
+.req { color: var(--error); }
+.field :deep(.el-input), .field :deep(.el-select) { width: 100%; }
+.opt-meta { float: right; color: var(--text-muted); font-size: 11px; margin-left: 12px; }
+.field-hint { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin-top: 6px; }
+.dynamic-hint { margin-top: -4px; margin-bottom: 4px; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.hostport { display: grid; grid-template-columns: 1fr auto 96px; gap: 8px; align-items: center; width: 100%; }
-.hostport .colon { color: var(--text-muted); }
-.mode-group { width: 100%; display: flex; }
+.row2 .field { margin-bottom: 14px; }
+.hostport { display: grid; grid-template-columns: 1fr auto 100px; gap: 8px; align-items: center; }
+.hostport .colon { color: var(--text-muted); text-align: center; }
+.mode-group { display: flex; width: 100%; }
 .mode-group :deep(.el-radio-button) { flex: 1; }
 .mode-group :deep(.el-radio-button__inner) { width: 100%; }
-.mode-label { display: flex; flex-direction: column; align-items: center; line-height: 1.25; }
-.mode-en { font-weight: 600; }
-.mode-sub { font-size: 10px; opacity: .75; }
-.switch-label { margin-left: 10px; font-size: 12px; color: var(--text-secondary); }
-.form-error { color: var(--error); font-size: 12px; margin-top: 4px; }
+.divider { height: 1px; background: var(--border-subtle); margin: 2px 0 14px; }
+.toggle-field { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.switch-label { font-size: 12px; color: var(--text-secondary); }
+.form-error { color: var(--error); font-size: 12px; margin-top: 2px; }
 .test-btn { margin-right: auto; }
 .test-btn .soon { font-size: 10px; color: var(--warning, #e0a54b); margin-left: 4px; }
 </style>
