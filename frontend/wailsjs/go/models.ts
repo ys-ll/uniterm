@@ -634,6 +634,146 @@ export namespace session {
 	        this.status = source["status"];
 	    }
 	}
+	export class SocksProxy {
+	    kind: string;
+	    host: string;
+	    port: number;
+	    user?: string;
+	    pass?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SocksProxy(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.host = source["host"];
+	        this.port = source["port"];
+	        this.user = source["user"];
+	        this.pass = source["pass"];
+	    }
+	}
+	export class Tunnel {
+	    id: string;
+	    name: string;
+	    mode: string;
+	    sshConnId: string;
+	    listenHost?: string;
+	    listenPort: number;
+	    targetHost?: string;
+	    targetPort?: number;
+	    upstream?: SocksProxy;
+	    autoStart?: boolean;
+	    groupId?: string;
+	    sortOrder?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Tunnel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.mode = source["mode"];
+	        this.sshConnId = source["sshConnId"];
+	        this.listenHost = source["listenHost"];
+	        this.listenPort = source["listenPort"];
+	        this.targetHost = source["targetHost"];
+	        this.targetPort = source["targetPort"];
+	        this.upstream = this.convertValues(source["upstream"], SocksProxy);
+	        this.autoStart = source["autoStart"];
+	        this.groupId = source["groupId"];
+	        this.sortOrder = source["sortOrder"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TunnelGroup {
+	    id: string;
+	    name: string;
+	    sortOrder?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TunnelGroup(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.sortOrder = source["sortOrder"];
+	    }
+	}
+	export class TunnelState {
+	    id: string;
+	    status: string;
+	    localPort?: number;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TunnelState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.status = source["status"];
+	        this.localPort = source["localPort"];
+	        this.error = source["error"];
+	    }
+	}
+	export class TunnelStoreData {
+	    version: number;
+	    groups: TunnelGroup[];
+	    tunnels: Tunnel[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TunnelStoreData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.groups = this.convertValues(source["groups"], TunnelGroup);
+	        this.tunnels = this.convertValues(source["tunnels"], Tunnel);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

@@ -178,6 +178,10 @@ export function ListSessions() {
   return window['go']['main']['App']['ListSessions']();
 }
 
+export function ListTunnelStates() {
+  return window['go']['main']['App']['ListTunnelStates']();
+}
+
 export function LoadAIConfig() {
   return window['go']['main']['App']['LoadAIConfig']();
 }
@@ -204,6 +208,10 @@ export function LoadSettings() {
 
 export function LoadTerminalHistory() {
   return window['go']['main']['App']['LoadTerminalHistory']();
+}
+
+export function LoadTunnels() {
+  return window['go']['main']['App']['LoadTunnels']();
 }
 
 export function ModifyColumn(arg1, arg2, arg3, arg4) {
@@ -402,6 +410,10 @@ export function SaveTerminalHistory(arg1) {
   return window['go']['main']['App']['SaveTerminalHistory'](arg1);
 }
 
+export function SaveTunnels(arg1) {
+  return window['go']['main']['App']['SaveTunnels'](arg1);
+}
+
 export function SessionEndZmodem(arg1) {
   return window['go']['main']['App']['SessionEndZmodem'](arg1);
 }
@@ -528,6 +540,14 @@ export function SftpRename(arg1, arg2, arg3) {
 
 export function SftpResumeTransfer(arg1, arg2) {
   return window['go']['main']['App']['SftpResumeTransfer'](arg1, arg2);
+}
+
+export function StartTunnel(arg1) {
+  return window['go']['main']['App']['StartTunnel'](arg1);
+}
+
+export function StopTunnel(arg1) {
+  return window['go']['main']['App']['StopTunnel'](arg1);
 }
 
 export function SyncChangePassword(arg1, arg2) {

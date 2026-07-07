@@ -95,6 +95,8 @@ export function ListSerialPorts():Promise<Array<string>>;
 
 export function ListSessions():Promise<Array<session.SessionInfo>>;
 
+export function ListTunnelStates():Promise<Array<session.TunnelState>>;
+
 export function LoadAIConfig():Promise<store.AIConfig>;
 
 export function LoadAISessions():Promise<store.AISessionData>;
@@ -108,6 +110,8 @@ export function LoadQuickCommands():Promise<store.QuickCommandData>;
 export function LoadSettings():Promise<store.AppSettings>;
 
 export function LoadTerminalHistory():Promise<Array<store.HistoryEntry>>;
+
+export function LoadTunnels():Promise<session.TunnelStoreData>;
 
 export function ModifyColumn(arg1:string,arg2:string,arg3:string,arg4:database.ColumnDef):Promise<void>;
 
@@ -207,6 +211,8 @@ export function SaveSettings(arg1:store.AppSettings):Promise<void>;
 
 export function SaveTerminalHistory(arg1:Array<store.HistoryEntry>):Promise<void>;
 
+export function SaveTunnels(arg1:session.TunnelStoreData):Promise<void>;
+
 export function SessionEndZmodem(arg1:string):Promise<void>;
 
 export function SessionResize(arg1:string,arg2:number,arg3:number):Promise<void>;
@@ -270,6 +276,10 @@ export function SftpRemove(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 export function SftpRename(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SftpResumeTransfer(arg1:string,arg2:string):Promise<void>;
+
+export function StartTunnel(arg1:string):Promise<session.TunnelState>;
+
+export function StopTunnel(arg1:string):Promise<void>;
 
 export function SyncChangePassword(arg1:string,arg2:string):Promise<void>;
 
