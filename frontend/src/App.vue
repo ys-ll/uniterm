@@ -144,6 +144,7 @@ import { useSessionStore } from './stores/sessionStore'
 import { useAIStore } from './stores/aiStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useQuickCommandStore } from './stores/quickCommandStore'
+import { useTunnelStore } from './stores/tunnelStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
 import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../types/settings'
@@ -433,6 +434,8 @@ onMounted(async () => {
   }
   // Pre-load quick commands so suggestions can read them immediately
   useQuickCommandStore().load()
+  // Pre-load tunnels so auto-start state and the panel are ready
+  useTunnelStore().load()
   // Auto-open start tab if no tabs are open
   if (tabStore.tabs.length === 0) {
     tabStore.createStartTab()
