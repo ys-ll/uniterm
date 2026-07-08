@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 
 	_ "github.com/rqlite/gorqlite/stdlib"
@@ -14,15 +15,23 @@ func init() {
 	Register("rqlite", &rqliteProvider{})
 }
 
-func (p *rqliteProvider) DSN(host string, port int, user, password, dbName string) string {
+func (p *rqliteProvider) DSN(host string, port int, user, password, dbName string, extraParams map[string]string) string {
 	addr := host
 	if port > 0 {
 		addr = fmt.Sprintf("%s:%d", host, port)
 	}
-	if user != "" && password != "" {
-		return fmt.Sprintf("http://%s:%s@%s/", user, password, addr)
+	u := &url.URL{Scheme: "http", Host: addr}
+	if user != "" || password != "" {
+		u.User = url.UserPassword(user, password)
 	}
-	return fmt.Sprintf("http://%s/", addr)
+	if len(extraParams) > 0 {
+		q := u.Query()
+		for k, v := range extraParams {
+			q.Set(k, v)
+		}
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
 }
 
 func (p *rqliteProvider) DriverName() string {

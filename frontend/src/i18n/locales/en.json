@@ -534,6 +534,7 @@
   "monitor.net.ipAddrs": "IP Addresses",
   "db.database": "Database",
   "db.databases": "Databases",
+  "db.params": "Extra Params",
   "db.loading": "Loading...",
   "db.selectTableHint": "Double-click a database or table to view",
   "db.tableStructure": "Table Structure",

@@ -18,15 +18,22 @@ func init() {
 	Register("oracle", &oracleProvider{})
 }
 
-func (p *oracleProvider) DSN(host string, port int, user, password, dbName string) string {
+func (p *oracleProvider) DSN(host string, port int, user, password, dbName string, extraParams map[string]string) string {
 	if port <= 0 {
 		port = 1521
 	}
-	u := url.URL{
+	u := &url.URL{
 		Scheme: "oracle",
 		User:   url.UserPassword(user, password),
 		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
 		Path:   "/" + dbName,
+	}
+	if len(extraParams) > 0 {
+		q := u.Query()
+		for k, v := range extraParams {
+			q.Set(k, v)
+		}
+		u.RawQuery = q.Encode()
 	}
 	return u.String()
 }

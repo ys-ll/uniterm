@@ -87,6 +87,9 @@
             <el-form-item v-if="form.type === 'database' && form.dbType !== 'rqlite' && form.dbType !== 'redis'" :label="t('db.databases')">
               <el-input v-model="form.dbName" :placeholder="t('db.databases')" />
             </el-form-item>
+            <el-form-item v-if="form.type === 'database'" :label="t('db.params')">
+              <el-input v-model="form.dbParams" :placeholder="defaultParamsHint" style="width:100%" />
+            </el-form-item>
             <el-form-item v-if="form.type === 'local'" :label="t('conn.shell')">
               <el-select v-model="form.shellPath" filterable>
                 <el-option
@@ -520,6 +523,15 @@ const showTunnel = computed(() =>
   !TUNNEL_UNSUPPORTED.includes(form.type)
 )
 
+const defaultParamsHint = computed(() => {
+  switch (form.dbType) {
+    case 'mysql': return '默认: charset=utf8mb4'
+    case 'postgres': return '默认: sslmode=disable'
+    case 'sqlserver': return '默认: encrypt=disable'
+    default: return ''
+  }
+})
+
 const form = reactive<ConnectionConfig>({
   id: '',
   name: '',
@@ -536,6 +548,7 @@ const form = reactive<ConnectionConfig>({
   rdpSmartSizing: true,
   dbType: '',
   dbName: '',
+  dbParams: '',
   postLoginScript: '',
   postLoginExpectSteps: [],
   sftpMaxConcurrency: 5,
@@ -675,6 +688,7 @@ function resetForm() {
   form.rdpSmartSizing = true
   form.dbType = ''
   form.dbName = ''
+  form.dbParams = ''
   form.postLoginScript = ''
   form.postLoginExpectSteps = []
   postLoginMode.value = 'script'

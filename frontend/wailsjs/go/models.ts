@@ -275,6 +275,7 @@ export namespace session {
 	    serialParity?: string;
 	    dbType?: string;
 	    dbName?: string;
+	    dbParams?: string;
 	    postLoginScript?: string;
 	    postLoginExpectSteps?: PostLoginExpectStep[];
 	    tunnelSSHConnId?: string;
@@ -319,6 +320,7 @@ export namespace session {
 	        this.serialParity = source["serialParity"];
 	        this.dbType = source["dbType"];
 	        this.dbName = source["dbName"];
+	        this.dbParams = source["dbParams"];
 	        this.postLoginScript = source["postLoginScript"];
 	        this.postLoginExpectSteps = this.convertValues(source["postLoginExpectSteps"], PostLoginExpectStep);
 	        this.tunnelSSHConnId = source["tunnelSSHConnId"];

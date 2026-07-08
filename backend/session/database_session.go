@@ -40,7 +40,7 @@ func (s *DatabaseSession) Connect(config ConnectionConfig) error {
 		s.title = fmt.Sprintf("%s:%s@%s:%d", config.DBType, config.User, config.Host, config.Port)
 	}
 
-	dsn, err := database.BuildDSN(config.DBType, config.Host, config.User, config.Password, config.DBName, config.Port)
+	dsn, err := database.BuildDSN(config.DBType, config.Host, config.User, config.Password, config.DBName, config.DBParams, config.Port)
 	if err != nil {
 		log.Writef("[DatabaseSession.Connect] BuildDSN failed: %v", err)
 		s.setStatus(StatusError)

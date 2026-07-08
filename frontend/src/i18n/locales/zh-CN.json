@@ -534,6 +534,7 @@
   "monitor.net.ipAddrs": "IP地址",
   "db.database": "数据库",
   "db.databases": "数据库",
+  "db.params": "额外参数",
   "db.loading": "加载中...",
   "db.selectTableHint": "双击数据库或表查看",
   "db.tableStructure": "表结构",

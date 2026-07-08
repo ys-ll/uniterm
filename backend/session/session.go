@@ -47,8 +47,9 @@ type ConnectionConfig struct {
 	SerialStopBits float64 `json:"serialStopBits,omitempty"`
 	SerialParity   string  `json:"serialParity,omitempty"`
 	// Database-specific fields
-	DBType string `json:"dbType,omitempty"` // "mysql", "postgres", "rqlite", "oracle"
-	DBName string `json:"dbName,omitempty"` // default database name
+	DBType   string `json:"dbType,omitempty"`   // "mysql", "postgres", "rqlite", "oracle", "sqlserver"
+	DBName   string `json:"dbName,omitempty"`   // default database name
+	DBParams string `json:"dbParams,omitempty"` // extra DSN query parameters, e.g. "sslmode=require&connect_timeout=30"
 	// SSH post-login script: commands to execute after successful login
 	PostLoginScript string `json:"postLoginScript,omitempty"`
 	// Post-login expect/send automation: interactive steps executed after login.

@@ -16,7 +16,7 @@ func init() {
 	Register("sqlserver", &sqlserverProvider{})
 }
 
-func (p *sqlserverProvider) DSN(host string, port int, user, password, dbName string) string {
+func (p *sqlserverProvider) DSN(host string, port int, user, password, dbName string, extraParams map[string]string) string {
 	if port <= 0 {
 		port = 1433
 	}
@@ -32,6 +32,9 @@ func (p *sqlserverProvider) DSN(host string, port int, user, password, dbName st
 	q.Set("encrypt", "disable")
 	q.Set("dial timeout", "10")
 	q.Set("connection timeout", "30")
+	for k, v := range extraParams {
+		q.Set(k, v)
+	}
 	u.RawQuery = q.Encode()
 	return u.String()
 }
