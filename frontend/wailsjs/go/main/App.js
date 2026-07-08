@@ -402,6 +402,10 @@ export function SaveTerminalHistory(arg1) {
   return window['go']['main']['App']['SaveTerminalHistory'](arg1);
 }
 
+export function SaveWindowState(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SaveWindowState'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function SessionEndZmodem(arg1) {
   return window['go']['main']['App']['SessionEndZmodem'](arg1);
 }

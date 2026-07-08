@@ -80,6 +80,9 @@ func (a *App) startup(ctx context.Context) {
 	go func() {
 		for evt := range a.moveResizeCh {
 			runtime.EventsEmit(a.ctx, evt)
+			if evt == "rdp:move-resize-end" {
+				a.saveWindowStateFromRuntime()
+			}
 		}
 	}()
 
@@ -146,6 +149,61 @@ func (a *App) startup(ctx context.Context) {
 			}()
 		}
 	}
+
+	// Restore window position and size from last session
+	a.restoreWindow(ctx)
+}
+
+// restoreWindow restores the saved window position and size.
+// Windows will constrain off-screen windows to the visible area, so no
+// explicit screen-boundary validation is needed.
+func (a *App) restoreWindow(ctx context.Context) {
+	ls, err := a.localStateStore.Load()
+	if err != nil {
+		return
+	}
+	if ls.WindowWidth <= 0 || ls.WindowHeight <= 0 {
+		return
+	}
+	// Move to the correct monitor first, then maximise if needed
+	runtime.WindowSetPosition(ctx, ls.WindowX, ls.WindowY)
+	if ls.WindowMaximised {
+		runtime.WindowMaximise(ctx)
+	} else {
+		runtime.WindowSetSize(ctx, ls.WindowWidth, ls.WindowHeight)
+	}
+}
+
+// saveWindowStateFromRuntime saves the current window geometry using runtime
+// API calls. Called from the WndProc event loop on Windows (WM_EXITSIZEMOVE).
+func (a *App) saveWindowStateFromRuntime() {
+	if a.localStateStore == nil {
+		return
+	}
+	ls, err := a.localStateStore.Load()
+	if err != nil {
+		return
+	}
+	ls.WindowX, ls.WindowY = runtime.WindowGetPosition(a.ctx)
+	ls.WindowWidth, ls.WindowHeight = runtime.WindowGetSize(a.ctx)
+	ls.WindowMaximised = runtime.WindowIsMaximised(a.ctx)
+	_ = a.localStateStore.Save(ls)
+}
+
+func (a *App) SaveWindowState(x, y, width, height int, maximised bool) {
+	if a.localStateStore == nil {
+		return
+	}
+	ls, err := a.localStateStore.Load()
+	if err != nil {
+		return
+	}
+	ls.WindowX = x
+	ls.WindowY = y
+	ls.WindowWidth = width
+	ls.WindowHeight = height
+	ls.WindowMaximised = maximised
+	a.localStateStore.Save(ls)
 }
 
 func (a *App) shutdown(ctx context.Context) {

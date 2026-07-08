@@ -1011,6 +1011,11 @@ export namespace store {
 	export class LocalState {
 	    sidebarVisible: boolean;
 	    aiSidebarVisible: boolean;
+	    windowX: number;
+	    windowY: number;
+	    windowWidth: number;
+	    windowHeight: number;
+	    windowMaximised: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new LocalState(source);
@@ -1020,6 +1025,11 @@ export namespace store {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sidebarVisible = source["sidebarVisible"];
 	        this.aiSidebarVisible = source["aiSidebarVisible"];
+	        this.windowX = source["windowX"];
+	        this.windowY = source["windowY"];
+	        this.windowWidth = source["windowWidth"];
+	        this.windowHeight = source["windowHeight"];
+	        this.windowMaximised = source["windowMaximised"];
 	    }
 	}
 	export class QuickCommand {

@@ -59,9 +59,12 @@ import {
   WindowUnmaximise,
   WindowIsMaximised,
   WindowSetMaxSize,
+  WindowGetPosition,
+  WindowGetSize,
   Quit,
   ScreenGetAll,
 } from '../../wailsjs/runtime'
+import { SaveWindowState } from '../../wailsjs/go/main/App'
 
 const { t } = useI18n()
 const tabStore = useTabStore()
@@ -101,7 +104,10 @@ async function onMaximise() {
   } else {
     WindowToggleMaximise()
   }
-  setTimeout(updateMaximisedState, 100)
+  setTimeout(() => {
+    updateMaximisedState()
+    saveWindowState()
+  }, 100)
 }
 
 async function linuxMaximise() {
@@ -127,6 +133,19 @@ async function linuxMaximise() {
   }
 }
 
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+async function saveWindowState() {
+  try {
+    const maxed = await WindowIsMaximised()
+    const { x, y } = await WindowGetPosition()
+    const { w, h } = await WindowGetSize()
+    SaveWindowState(x, y, w, h, maxed)
+  } catch {
+    // ignore
+  }
+}
+
 async function onClose() {
   if (hasActiveConnections.value) {
     try {
@@ -139,6 +158,7 @@ async function onClose() {
       return // user cancelled
     }
   }
+  await saveWindowState()
   Quit()
 }
 
@@ -150,6 +170,9 @@ function onDblClick(e: MouseEvent) {
 
 function onWindowResize() {
   updateMaximisedState()
+  // Debounce save to avoid frequent writes during drag-resize
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(saveWindowState, 500)
 }
 
 onMounted(async () => {
