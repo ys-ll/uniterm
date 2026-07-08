@@ -51,6 +51,9 @@ func (ts *TunnelService) Start(sessionID string, sshConfig ConnectionConfig, tar
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Config: ssh.Config{
+			KeyExchanges: sshKeyExchanges(),
+		},
 	}
 
 	conn, err := net.DialTimeout("tcp", addr, clientConfig.Timeout)
