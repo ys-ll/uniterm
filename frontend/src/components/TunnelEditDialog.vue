@@ -7,7 +7,7 @@
     class="tunnel-dialog"
     @close="resetForm"
   >
-    <el-form :model="form" label-width="88px" label-position="left">
+    <el-form :model="form" label-width="88px" label-position="right">
       <el-form-item :label="t('tunnels.name')" required>
         <el-input v-model="form.name" :placeholder="t('tunnels.namePlaceholder')" maxlength="50" />
       </el-form-item>

@@ -8,8 +8,8 @@
     <div class="resize-handle" @mousedown="onResizeStart" />
     <div class="sidebar-header">
       <button class="sidebar-tab" :class="{ active: activeView === 'connections' }" @click="activeView = 'connections'" :title="t('header.connections')"><el-icon><Network :size="14" /></el-icon></button>
+      <button class="sidebar-tab" :class="{ active: activeView === 'tunnels' }" @click="activeView = 'tunnels'" :title="t('tunnels.tunnelsTab')"><el-icon><ArrowRightLeft :size="14" /></el-icon></button>
       <button class="sidebar-tab" :class="{ active: activeView === 'quickCommands' }" @click="activeView = 'quickCommands'" :title="t('quickCommands.quickCommandsTab')"><el-icon><Zap :size="14" /></el-icon></button>
-      <button class="sidebar-tab" :class="{ active: activeView === 'tunnels' }" @click="activeView = 'tunnels'" :title="t('tunnels.tunnelsTab')"><el-icon><Waypoints :size="14" /></el-icon></button>
       <button class="sidebar-tab" :class="{ active: activeView === 'history' }" @click="activeView = 'history'" :title="t('quickCommands.historyTab')"><el-icon><Clock :size="14" /></el-icon></button>
       <button class="sidebar-tab" :class="{ active: activeView === 'personalization' }" @click="activeView = 'personalization'" :title="t('sidebar.personalization')"><el-icon><Palette :size="14" /></el-icon></button>
       <button class="icon-btn" @click="emit('toggle')" :title="t('sidebar.collapse')"><el-icon><X :size="14" /></el-icon></button>
@@ -462,7 +462,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Activity, Laptop, Cable, Pencil, MoreHorizontal, Waypoints } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Activity, Laptop, Cable, Pencil, MoreHorizontal, ArrowRightLeft } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { msg } from '../services/message'
 import { useConnectionStore } from '../stores/connectionStore'
