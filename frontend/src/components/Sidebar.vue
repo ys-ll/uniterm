@@ -1729,7 +1729,7 @@ defineExpose({ focusSearch, openChangeGroupFor })
 .conn-details {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -1741,15 +1741,17 @@ defineExpose({ focusSearch, openChangeGroupFor })
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.4;
 }
 
 .host {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.4;
 }
 
 .conn-meta {
