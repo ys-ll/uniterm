@@ -416,6 +416,13 @@ function setInputSelection(el: HTMLInputElement | HTMLTextAreaElement, text: str
 function onWheel(e: WheelEvent) {
   if (e.ctrlKey) {
     e.preventDefault()
+    const ts = settingsStore.settings.terminal
+    const delta = e.deltaY < 0 ? 1 : -1
+    const next = Math.max(8, Math.min(32, ts.fontSize + delta))
+    if (next !== ts.fontSize) {
+      ts.fontSize = next
+      settingsStore.save()
+    }
   }
 }
 
