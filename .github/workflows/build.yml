@@ -18,7 +18,7 @@ jobs:
             platform: windows/amd64
             slug: windows-amd64
             artifact: uniTerm.exe
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             platform: linux/amd64
             slug: linux-amd64
             artifact: uniTerm
@@ -72,7 +72,7 @@ jobs:
         if: matrix.platform == 'linux/amd64'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Install NSIS (Windows)
         if: matrix.platform == 'windows/amd64'
@@ -90,7 +90,7 @@ jobs:
             export PATH="/c/Program Files (x86)/NSIS/Bin:$PATH"
           fi
           echo "PATH=$PATH"
-          wails build -platform ${{ matrix.platform }} -ldflags "-s -w -X main.Version=${{ env.VERSION }}" -skipbindings ${{ matrix.platform == 'windows/amd64' && '-nsis' || '' }}
+          wails build -platform ${{ matrix.platform }} -ldflags "-s -w -X main.Version=${{ env.VERSION }}" -skipbindings ${{ matrix.platform == 'windows/amd64' && '-nsis' || '' }} ${{ matrix.platform == 'linux/amd64' && '-tags webkit2_41' || '' }}
 
       - name: Fix macOS permissions and sign
         if: matrix.platform == 'darwin/universal'
