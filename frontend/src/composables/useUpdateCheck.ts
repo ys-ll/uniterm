@@ -23,6 +23,7 @@ function showUpdateNotification(info: UpdateInfo) {
     ]),
     type: 'success',
     duration: 0,
+    placement: 'top-right',
     showClose: true,
     offset: 50,
   })
