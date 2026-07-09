@@ -27,6 +27,7 @@ export interface ConnectionConfig {
   rdpFixedWidth?: number
   rdpFixedHeight?: number
   rdpSmartSizing?: boolean
+  rdpEnableNLA?: boolean
   // Local terminal shell path
   shellPath?: string
   // Serial port

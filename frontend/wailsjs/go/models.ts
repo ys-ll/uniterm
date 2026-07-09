@@ -267,6 +267,7 @@ export namespace session {
 	    rdpFixedWidth?: number;
 	    rdpFixedHeight?: number;
 	    rdpSmartSizing: boolean;
+	    rdpEnableNLA: boolean;
 	    shellPath?: string;
 	    serialPort?: string;
 	    serialBaudRate?: number;
@@ -312,6 +313,7 @@ export namespace session {
 	        this.rdpFixedWidth = source["rdpFixedWidth"];
 	        this.rdpFixedHeight = source["rdpFixedHeight"];
 	        this.rdpSmartSizing = source["rdpSmartSizing"];
+	        this.rdpEnableNLA = source["rdpEnableNLA"];
 	        this.shellPath = source["shellPath"];
 	        this.serialPort = source["serialPort"];
 	        this.serialBaudRate = source["serialBaudRate"];

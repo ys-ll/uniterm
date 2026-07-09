@@ -5,7 +5,6 @@ package session
 import (
 	"runtime"
 	"fmt"
-	"os/exec"
 	"sync"
 	"time"
 	"unsafe"
@@ -20,6 +19,7 @@ var (
 	atlDll              = windows.NewLazySystemDLL("atl.dll")
 	procAtlAxWinInit    = atlDll.NewProc("AtlAxWinInit")
 	procAtlAxGetControl = atlDll.NewProc("AtlAxGetControl")
+
 
 	user32Dll              = windows.NewLazySystemDLL("user32.dll")
 	procSetWindowPos       = user32Dll.NewProc("SetWindowPos")
@@ -107,17 +107,10 @@ func (s *RDPSession) SetParentHwnd(hwnd uintptr) {
 	s.parentHwnd = hwnd
 }
 
-func (s *RDPSession) storeCredentials(host, user, password string) {
-	cmd := exec.Command("cmdkey", "/generic:TERMSRV/"+host, "/user:"+user, "/pass:"+password)
-	if err := cmd.Run(); err != nil {
-		log.Writef("[RDP] cmdkey failed: %v", err)
-	} else {
-		log.Writef("[RDP] credentials stored for TERMSRV/%s", host)
-	}
-}
+
 
 // autoDismissSecurityDialogs polls for RDP security warning dialogs (e.g.
-// "网站正在尝试启动远程连接") and dismisses them by clicking "Yes" / "是".
+// cert prompts or "do you want to connect" dialogs) and dismisses them.
 func (s *RDPSession) autoDismissSecurityDialogs(stop <-chan struct{}) {
 	dialogTitles := []string{
 		"远程桌面连接",
@@ -148,6 +141,7 @@ func (s *RDPSession) autoDismissSecurityDialogs(stop <-chan struct{}) {
 				if hwnd == 0 {
 					continue
 				}
+
 				log.Writef("[RDP] found security dialog: %s hwnd=0x%x", title, hwnd)
 
 				// Dismiss via standard dialog button IDs
@@ -311,13 +305,15 @@ func (s *RDPSession) Connect(config ConnectionConfig) error {
 		port = 3389
 	}
 
+	// NonScriptable.ClearTextPassword BEFORE AdvancedSettings.
+	s.configureNonScriptable(config.Password)
+
 	dispatch.PutProperty("Server", config.Host)
 	dispatch.PutProperty("UserName", config.User)
 	dispatch.PutProperty("Domain", "")
 	dispatch.PutProperty("DesktopWidth", width)
 	dispatch.PutProperty("DesktopHeight", height)
 	dispatch.PutProperty("FullScreen", false)
-	dispatch.PutProperty("AuthenticationLevel", 0)
 
 	// AdvancedSettings2
 	advObj, _ := dispatch.GetProperty("AdvancedSettings2")
@@ -329,6 +325,13 @@ func (s *RDPSession) Connect(config ConnectionConfig) error {
 			adv.PutProperty("RedirectDrives", true)
 			adv.PutProperty("DisplayConnectionBar", false)
 			adv.PutProperty("EnableAutoReconnect", true)
+			if config.RdpEnableNLA {
+				adv.PutProperty("EnableCredSspSupport", true)
+				adv.PutProperty("AuthenticationLevel", 2)
+			} else {
+				adv.PutProperty("EnableCredSspSupport", false)
+				adv.PutProperty("AuthenticationLevel", 0)
+			}
 			adv.PutProperty("WarnOnDirectConnect", false)
 			adv.PutProperty("ContainerHandledFullScreen", true)
 			if config.RdpSmartSizing {
@@ -360,13 +363,6 @@ func (s *RDPSession) Connect(config ConnectionConfig) error {
 	// Suppress server certificate warning at OS level
 	setAuthLevelOverride()
 
-	// Store credentials in Windows Credential Manager
-	if config.Password != "" {
-		s.storeCredentials(config.Host, config.User, config.Password)
-	}
-
-	// Suppress credential dialogs via NonScriptable interface
-	s.configureNonScriptable(config.Password)
 
 	// Auto-dismiss any security dialogs that appear during Connect (e.g.
 	// "网站正在尝试启动远程连接"). The goroutine polls for dialog windows
@@ -668,6 +664,7 @@ func (s *RDPSession) configureNonScriptable(password string) {
 		return
 	}
 	nsGUIDs := []string{
+		"{C1E6743A-41C1-4A74-832A-0DD06C0C9265}", // IMsTscNonScriptable (base)
 		"{4F5331FB-42F5-48A2-9AFD-4743E3F6D3D7}", // IMsRdpClientNonScriptable5
 		"{F50FA8AA-1C05-471B-9CB5-3BD7A6FD32BD}", // IMsRdpClientNonScriptable4
 		"{B3378D90-0728-45C7-8ED7-B6159FB92219}", // IMsRdpClientNonScriptable3
@@ -684,20 +681,15 @@ func (s *RDPSession) configureNonScriptable(password string) {
 		if err != nil || nsUnk == nil {
 			continue
 		}
-		nsUnk.PutProperty("AllowPromptingForCredentials", false)
-		nsUnk.PutProperty("PromptForCredentials", false)
-		nsUnk.PutProperty("PromptForCredentialsOnce", false)
-		nsUnk.PutProperty("MarkRdpSettingsSecure", true)
-		nsUnk.CallMethod("MarkRdpSettingsSecure", true)
 		if password != "" {
 			nsUnk.PutProperty("ClearTextPassword", password)
 		}
 		nsUnk.Release()
-		log.Writef("[RDP] NonScriptable configured via index %d (prompts disabled, password=%v)", i, password != "")
-		return
+		log.Writef("[RDP] NonScriptable[%d] configured, password=%v", i, password != "")
+		break
 	}
-	log.Writef("[RDP] NonScriptable not available on this control")
 }
+
 
 type point struct{ X, Y int32 }
 

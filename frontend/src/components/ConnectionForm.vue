@@ -56,10 +56,13 @@
               </el-select>
             </el-form-item>
             <el-form-item :label="form.type === 's3' ? 'Endpoint' : t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial'">
-              <el-input v-model="form.host" :placeholder="form.type === 's3' ? 'e.g. s3.amazonaws.com' : t('conn.hostPlaceholder')" />
-            </el-form-item>
-            <el-form-item :label="t('conn.port')" v-if="form.type !== 'local' && form.type !== 'serial' && form.type !== 's3'">
-              <el-input-number v-model="form.port" :min="0" :max="65535" />
+              <div class="host-port-row">
+                <el-input v-model="form.host" class="host-input" :placeholder="form.type === 's3' ? 'e.g. s3.amazonaws.com' : t('conn.hostPlaceholder')" />
+                <template v-if="form.type !== 's3'">
+                  <span class="host-port-sep">:</span>
+                  <el-input-number v-model="form.port" :min="0" :max="65535" class="port-input" />
+                </template>
+              </div>
             </el-form-item>
             <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local' && form.type !== 'serial'" :label="form.type === 's3' ? 'Access Key' : t('conn.user')">
               <el-input v-model="form.user" :placeholder="form.type === 's3' ? 'Access Key ID' : t('conn.userPlaceholder')" />
@@ -70,7 +73,15 @@
                 <el-radio-button label="key">{{ t('conn.keyPath') }}</el-radio-button>
               </el-radio-group>
             </el-form-item>
-            <el-form-item v-if="form.type !== 'local' && form.type !== 'serial' && (form.authType === 'password' || form.type === 'rdp' || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="form.type === 's3' ? 'Secret Key' : t('conn.password')">
+            <template v-if="form.type === 'rdp' && isWindows">
+              <el-form-item :label="t('conn.rdpEnableNLA')">
+                <div class="nla-row">
+                  <el-switch v-model="form.rdpEnableNLA" />
+                  <span class="field-hint">{{ form.rdpEnableNLA ? t('conn.rdpEnableNLAOnHint') : t('conn.rdpEnableNLAOffHint') }}</span>
+                </div>
+              </el-form-item>
+            </template>
+            <el-form-item v-if="form.type !== 'local' && form.type !== 'serial' && ((form.authType === 'password' && form.type !== 'rdp') || (form.type === 'rdp' && !form.rdpEnableNLA) || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'mosh' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="form.type === 's3' ? 'Secret Key' : t('conn.password')">
               <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" :placeholder="form.type === 's3' ? 'Secret Access Key' : ''" />
             </el-form-item>
             <el-form-item v-if="form.authType === 'key' && (form.type === 'ssh' || form.type === 'mosh')" :label="t('conn.keyPath')">
@@ -161,6 +172,21 @@
                 <el-input v-model="form.s3Bucket" placeholder="my-bucket (leave empty to list all buckets)" />
               </el-form-item>
             </template>
+            <template v-if="form.type === 'rdp' && isWindows">
+              <el-form-item :label="t('rdp.resolution')">
+                <el-select v-model="rdpResolution" placeholder="1280×720">
+                  <el-option
+                    v-for="r in rdpResolutions"
+                    :key="r.label"
+                    :label="r.label"
+                    :value="r.label"
+                  />
+                </el-select>
+              </el-form-item>
+              <el-form-item :label="t('conn.rdpSmartSizing')">
+                <el-switch v-model="form.rdpSmartSizing" />
+              </el-form-item>
+            </template>
             <el-form-item v-if="showTunnel" :label="t('conn.tunnel')">
               <el-select
                 v-model="form.tunnelSSHConnId"
@@ -176,26 +202,11 @@
                 />
               </el-select>
             </el-form-item>
-            <div v-if="form.type === 'rdp' || form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'ftp'" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
+            <div v-if="form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'ftp'" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
               <el-icon class="advanced-arrow" :class="{ expanded: showAdvanced }"><ChevronRight :size="14" /></el-icon>
               <span>{{ t('conn.advanced') }}</span>
             </div>
             <template v-if="showAdvanced">
-            <template v-if="form.type === 'rdp'">
-              <el-form-item :label="t('rdp.resolution')">
-                <el-select v-model="rdpResolution" placeholder="1280×720">
-                  <el-option
-                    v-for="r in rdpResolutions"
-                    :key="r.label"
-                    :label="r.label"
-                    :value="r.label"
-                  />
-                </el-select>
-              </el-form-item>
-              <el-form-item :label="t('conn.rdpSmartSizing')">
-                <el-switch v-model="form.rdpSmartSizing" />
-              </el-form-item>
-            </template>
             <el-form-item v-if="form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local'" :label="t('conn.postLoginScript')">
               <div class="post-login-config">
                 <el-radio-group v-model="postLoginMode" size="small">
@@ -546,6 +557,7 @@ const form = reactive<ConnectionConfig>({
   rdpFixedWidth: undefined,
   rdpFixedHeight: undefined,
   rdpSmartSizing: true,
+  rdpEnableNLA: true,
   dbType: '',
   dbName: '',
   dbParams: '',
@@ -592,6 +604,8 @@ watch(() => props.editConfig, (config) => {
       resetForm()
     }
     Object.assign(form, { ...config, postLoginExpectSteps: cloneExpectSteps(config.postLoginExpectSteps || []) })
+    // Existing connections without the field default to NLA off (old behavior).
+    form.rdpEnableNLA = config.rdpEnableNLA ?? false
     postLoginMode.value = (config.postLoginExpectSteps?.length || 0) > 0 ? 'expect' : 'script'
     selectedGroupId.value = config.groupId || undefined
     // Sync serial refs from config
@@ -686,6 +700,7 @@ function resetForm() {
   form.rdpFixedWidth = undefined
   form.rdpFixedHeight = undefined
   form.rdpSmartSizing = true
+  form.rdpEnableNLA = true
   form.dbType = ''
   form.dbName = ''
   form.dbParams = ''
@@ -964,6 +979,42 @@ function onConnect() {
   flex: 1;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+/* ── Host + port row ── */
+.host-port-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.host-input {
+  width: calc(100% - 150px) !important;
+}
+
+.host-port-sep {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.port-input {
+  width: 130px !important;
+  flex-shrink: 0;
+}
+
+/* ── NLA toggle row ── */
+.nla-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Field hint text ── */
+.field-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 /* ── Advanced toggle ── */

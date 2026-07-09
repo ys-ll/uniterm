@@ -38,6 +38,7 @@ type ConnectionConfig struct {
 	RdpFixedWidth  int  `json:"rdpFixedWidth,omitempty"`
 	RdpFixedHeight int  `json:"rdpFixedHeight,omitempty"`
 	RdpSmartSizing bool `json:"rdpSmartSizing"`
+	RdpEnableNLA  bool `json:"rdpEnableNLA"`
 	// Local terminal shell path
 	ShellPath string `json:"shellPath,omitempty"`
 	// Serial port configuration
