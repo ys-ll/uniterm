@@ -120,6 +120,8 @@
   "ai.placeholder": "Pídale a la IA que haga algo...",
   "ai.send": "Enviar",
   "ai.stop": "Detener",
+  "ai.queue": "En cola",
+  "ai.queueRemove": "Quitar de la cola",
   "ai.interrupted": "Interrumpido por el usuario",
   "ai.run": "Ejecutar",
   "ai.skip": "Omitir",

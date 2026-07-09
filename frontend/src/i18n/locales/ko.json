@@ -120,6 +120,8 @@
   "ai.placeholder": "AI에게 무언가를 요청해 보세요...",
   "ai.send": "전송",
   "ai.stop": "중지",
+  "ai.queue": "대기열에 추가",
+  "ai.queueRemove": "대기열에서 제거",
   "ai.interrupted": "사용자가 중지함",
   "ai.run": "실행",
   "ai.skip": "걸러뛰기",

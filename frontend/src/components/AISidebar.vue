@@ -85,6 +85,14 @@
 
     <div class="ai-input">
       <div class="input-container">
+        <div v-if="aiStore.queuedMessages.length" class="queued-area">
+          <div v-for="q in aiStore.queuedMessages" :key="q.id" class="queued-chip">
+            <span class="queued-text">{{ q.content }}</span>
+            <button class="queued-remove" :title="t('ai.queueRemove')" @click="aiStore.removeQueuedMessage(q.id)">
+              <X :size="12" />
+            </button>
+          </div>
+        </div>
         <div class="textarea-wrap">
           <el-input
             ref="chatInputRef"
@@ -132,10 +140,10 @@
               </template>
             </el-dropdown>
             <button
-              v-if="!aiStore.isRunning && !aiStore.pendingCommand"
+              v-if="!(busy && !input.trim())"
               class="send-btn"
               :disabled="!input.trim()"
-              :title="t('ai.send')"
+              :title="busy ? t('ai.queue') : t('ai.send')"
               @click="onSend"
             >
               <ArrowUp :size="18" />
@@ -313,6 +321,8 @@ const currentModelName = computed(() => {
   return m?.name || 'Model'
 })
 
+const busy = computed(() => aiStore.isRunning || !!aiStore.pendingCommand)
+
 function onModeChange(mode: string) {
   aiStore.mode = mode as ExecutionMode
 }
@@ -439,7 +449,13 @@ function onKeydownEnter(e: KeyboardEvent) {
 
 async function onSend() {
   const text = input.value.trim()
-  if (!text || aiStore.isRunning || aiStore.pendingCommand) return
+  if (!text) return
+  if (busy.value) {
+    aiStore.enqueueMessage(text)
+    input.value = ''
+    resizeTextarea()
+    return
+  }
   input.value = ''
   scrollToBottom()
   await runAgent(text)
@@ -456,6 +472,7 @@ function onStop() {
       content: 'User cancelled this command.',
       tool_call_id: cmd.toolId
     })
+    aiStore.clearQueue()
     return
   }
   CancelChatStream().catch(() => { /* ignore */ })
@@ -918,6 +935,44 @@ defineExpose({ focusInput })
 
 .ai-menu-item:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.queued-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 8px 0 8px;
+}
+.queued-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--text-secondary);
+}
+.queued-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.queued-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+.queued-remove:hover {
   color: var(--text-primary);
 }
 </style>

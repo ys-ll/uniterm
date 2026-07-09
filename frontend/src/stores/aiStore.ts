@@ -159,9 +159,27 @@ export const useAIStore = defineStore('ai', () => {
     dangerous: boolean
   } | null>(null)
   const lastPanelContext = ref<{ panelId: string; shellPath: string } | null>(null)
+  const queuedMessages = ref<{ id: string; content: string }[]>([])
 
   function setLastPanelContext(panelId: string, shellPath: string) {
     lastPanelContext.value = { panelId, shellPath }
+  }
+
+  function enqueueMessage(content: string) {
+    const trimmed = content.trim()
+    if (!trimmed) return
+    queuedMessages.value.push({
+      id: `q-${Date.now()}-${queuedMessages.value.length}`,
+      content: trimmed,
+    })
+  }
+
+  function removeQueuedMessage(id: string) {
+    queuedMessages.value = queuedMessages.value.filter(q => q.id !== id)
+  }
+
+  function clearQueue() {
+    queuedMessages.value = []
   }
 
   async function saveVisible() {
@@ -349,6 +367,7 @@ export const useAIStore = defineStore('ai', () => {
     if (sessions.value.length > 15) {
       sessions.value = sessions.value.slice(0, 15)
     }
+    clearQueue()
     // Don't save empty sessions — only persist when first message is added
   }
 
@@ -357,6 +376,7 @@ export const useAIStore = defineStore('ai', () => {
     if (!s) return
     currentSessionId.value = sessionId
     messages.value = s.messages.map(m => reactive({ ...m }) as AIMessage)
+    clearQueue()
   }
 
   function deleteSession(sessionId: string) {
@@ -384,6 +404,7 @@ export const useAIStore = defineStore('ai', () => {
   function stop() {
     stopRequested.value = true
     isRunning.value = false
+    clearQueue()
   }
 
   function resetStop() {
@@ -605,6 +626,10 @@ export const useAIStore = defineStore('ai', () => {
     init,
     lastPanelContext,
     setLastPanelContext,
+    queuedMessages,
+    enqueueMessage,
+    removeQueuedMessage,
+    clearQueue,
     doSave
   }
 })

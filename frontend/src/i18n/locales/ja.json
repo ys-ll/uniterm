@@ -120,6 +120,8 @@
   "ai.placeholder": "AI に何かさせたいことを入力...",
   "ai.send": "送信",
   "ai.stop": "停止",
+  "ai.queue": "キューに追加",
+  "ai.queueRemove": "キューから削除",
   "ai.interrupted": "手動で停止しました",
   "ai.run": "実行",
   "ai.skip": "スキップ",

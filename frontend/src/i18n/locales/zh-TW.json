@@ -120,6 +120,8 @@
   "ai.placeholder": "讓 AI 幫你做點什麼...",
   "ai.send": "傳送",
   "ai.stop": "停止",
+  "ai.queue": "排隊發送",
+  "ai.queueRemove": "移除",
   "ai.interrupted": "已手動停止",
   "ai.run": "執行",
   "ai.skip": "跳過",

@@ -123,6 +123,8 @@
   "ai.placeholder": "让 AI 帮你做点什么...",
   "ai.send": "发送",
   "ai.stop": "停止",
+  "ai.queue": "排队发送",
+  "ai.queueRemove": "移除",
   "ai.interrupted": "已手动停止",
   "ai.run": "运行",
   "ai.skip": "跳过",

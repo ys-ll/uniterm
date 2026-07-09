@@ -120,6 +120,8 @@
   "ai.placeholder": "Frage die KI, etwas zu erledigen...",
   "ai.send": "Senden",
   "ai.stop": "Stopp",
+  "ai.queue": "In Warteschlange",
+  "ai.queueRemove": "Aus Warteschlange entfernen",
   "ai.interrupted": "Vom Benutzer unterbrochen",
   "ai.run": "Ausführen",
   "ai.skip": "Überspringen",

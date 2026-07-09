@@ -123,6 +123,8 @@
   "ai.placeholder": "Ask the AI to do something...",
   "ai.send": "Send",
   "ai.stop": "Stop",
+  "ai.queue": "Queue",
+  "ai.queueRemove": "Remove",
   "ai.interrupted": "Interrupted by user",
   "ai.run": "Run",
   "ai.skip": "Skip",

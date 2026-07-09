@@ -254,6 +254,21 @@ export async function runAgent(userInput: string) {
       return
     }
 
+    // Drain queued user messages at the turn boundary. Injected messages become
+    // real user turns; reset turnCount so the new instruction regains its full
+    // autonomous-turn budget.
+    if (store.queuedMessages.length > 0) {
+      const drained = store.queuedMessages.splice(0)
+      drained.forEach((q, i) => {
+        store.addMessage({
+          id: `msg-${Date.now()}-${i}`,
+          role: 'user',
+          content: q.content,
+        })
+      })
+      turnCount = 0
+    }
+
     const assistantMsg = store.addMessage({
       id: `msg-${Date.now()}`,
       role: 'assistant',
@@ -358,6 +373,11 @@ export async function runAgent(userInput: string) {
     }
 
     if (toolUses.length === 0) {
+      // If the user queued messages while the model was responding, don't end —
+      // continue looping so the next iteration drains and processes them.
+      if (store.queuedMessages.length > 0) {
+        continue
+      }
       store.isRunning = false
       cleanupStreamListeners()
       return
