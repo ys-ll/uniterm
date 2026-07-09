@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -14,12 +15,23 @@ func init() {
 	Register("postgres", &postgresProvider{})
 }
 
-func (p *postgresProvider) DSN(host string, port int, user, password, dbName string) string {
+func (p *postgresProvider) DSN(host string, port int, user, password, dbName string, extraParams map[string]string) string {
 	if port <= 0 {
 		port = 5432
 	}
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbName)
+	u := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   fmt.Sprintf("%s:%d", host, port),
+		Path:   "/" + dbName,
+	}
+	q := u.Query()
+	q.Set("sslmode", "disable")
+	for k, v := range extraParams {
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (p *postgresProvider) DriverName() string {

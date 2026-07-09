@@ -26,7 +26,7 @@ type execer interface {
 // Provider encapsulates all database-type-specific behavior.
 type Provider interface {
 	// DSN generates a driver-specific connection string from connection fields.
-	DSN(host string, port int, user, password, dbName string) string
+	DSN(host string, port int, user, password, dbName string, extraParams map[string]string) string
 
 	// DriverName returns the Go SQL driver name to use for sql.Open.
 	DriverName() string

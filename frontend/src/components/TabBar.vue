@@ -303,13 +303,11 @@ function clearDragState() {
   align-items: center;
   height: 40px;
   background: var(--bg-base);
-  border-bottom: 1px solid var(--border-subtle);
   position: relative;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s;
 }
 .tab-bar.drag-over {
   background: var(--accent-subtle);
-  border-bottom-color: var(--accent-dim);
 }
 .tabs-list {
   display: flex;

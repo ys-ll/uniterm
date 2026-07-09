@@ -213,6 +213,8 @@ export function SaveTerminalHistory(arg1:Array<store.HistoryEntry>):Promise<void
 
 export function SaveTunnels(arg1:session.TunnelStoreData):Promise<void>;
 
+export function SaveWindowState(arg1:number,arg2:number,arg3:number,arg4:number,arg5:boolean):Promise<void>;
+
 export function SessionEndZmodem(arg1:string):Promise<void>;
 
 export function SessionResize(arg1:string,arg2:number,arg3:number):Promise<void>;

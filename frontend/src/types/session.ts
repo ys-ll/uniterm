@@ -37,6 +37,7 @@ export interface ConnectionConfig {
   serialParity?: string
   dbType?: string   // database type key
   dbName?: string   // default database name
+  dbParams?: string // extra DSN query parameters, e.g. "sslmode=require&connect_timeout=30"
   postLoginScript?: string
   postLoginExpectSteps?: PostLoginExpectStep[]
   // SSH tunnel: reference to an existing SSH connection used as a jump host

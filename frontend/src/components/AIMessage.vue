@@ -1,6 +1,5 @@
 <template>
   <div class="ai-message" :class="message.role">
-    <div class="avatar">{{ avatar }}</div>
     <div class="content">
       <div class="text" v-html="renderedContent" @click="onTextClick" />
 
@@ -98,12 +97,6 @@ const { t } = useI18n()
 const inExpanded = ref(true)
 const outExpanded = ref(false)
 const copyMdLabel = ref(t('ai.copyMarkdown'))
-
-const avatar = computed(() => {
-  if (props.message.role === 'user') return t('ai.avatarUser')
-  if (props.message.role === 'tool') return t('ai.avatarTool')
-  return t('ai.avatarAI')
-})
 
 const COPY_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
 const CHECK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
@@ -304,19 +297,34 @@ function renderMarkdown(text: string): string {
   // Restore protected code blocks
   html = html.replace(/\x00CODEBLOCK(\d+)\x00/g, (_, idx) => protectedBlocks[parseInt(idx)])
 
-  // Convert remaining newlines to <br>, but remove <br> after block-level elements
-  html = html.replace(/\n/g, '<br>')
-  html = html.replace(/(<\/(h[1-6]|pre|table|ul|ol|hr|li|div|p|blockquote)>|<hr\/?>)(\s*<br>)+/gi, '$1')
+  // Ensure blank lines after block-level elements for paragraph separation
+  html = html.replace(/(<\/(table|ul|ol|blockquote|pre|div)>)\s*/gi, '$1\n\n')
+  html = html.replace(/(<hr\s*\/?>)\s*/gi, '$1\n\n')
+
+  // Wrap paragraphs: split by blank lines, wrap each segment in <p>
+  const parts = html.split(/\n{2,}/)
+  html = parts.map(part => {
+    const trimmed = part.trim()
+    if (!trimmed) return ''
+    // Don't wrap if already a block-level element (opening or closing)
+    if (/^<\/?(h[1-6]|pre|table|ul|ol|hr|div|p|blockquote|li|hr\s*\/?>)/i.test(trimmed)) {
+      return trimmed
+    }
+    // Convert single newlines to <br> within paragraph
+    return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>'
+  }).join('')
+  // Clean up empty <p> tags
+  html = html.replace(/<p>\s*<\/p>/g, '')
+  html = html.replace(/<p>\s*<br>\s*<\/p>/g, '')
+  // Remove <br> after block-level closing tags
+  html = html.replace(/(<\/(h[1-6]|pre|table|ul|ol|hr|li|div|p|blockquote)>|<hr\s*\/?>)(\s*<br>)+/gi, '$1')
   html = html.replace(/<br>\s*(<(h[1-6]|pre|table|ul|ol|hr|div|p|blockquote)[\s>])/gi, '$1')
-  // Also remove <br> before/after code-block-wrapper and nested blockquotes
   html = html.replace(/<br>\s*<div class="code-block-wrapper">/gi, '<div class="code-block-wrapper">')
   html = html.replace(/(<\/blockquote>)\s*<br>/gi, '$1')
   html = html.replace(/<br>\s*(<blockquote>)/gi, '$1')
   // Remove leading/trailing <br>
   html = html.replace(/^(\s*<br>)+/i, '')
   html = html.replace(/(<br>\s*)+$/i, '')
-  // Collapse multiple consecutive <br> into one
-  html = html.replace(/(<br>\s*)+/g, '<br>')
 
   return html
 }
@@ -491,8 +499,7 @@ function escapeHtml(text: string): string {
 }
 .ai-message {
   display: flex;
-  gap: 10px;
-  padding: 10px 14px;
+  padding: 14px 18px;
 }
 .ai-message.user .content {
   display: flex;
@@ -500,31 +507,9 @@ function escapeHtml(text: string): string {
 }
 .ai-message.user .text {
   background: var(--bg-surface);
-  padding: 8px 12px;
+  padding: 10px 16px;
   border-radius: var(--radius-md);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
-}
-.avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-dim), var(--accent));
-  color: var(--on-accent);
-  font-size: 9px;
-  font-family: var(--font-ui);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  letter-spacing: 0.5px;
-}
-.ai-message.user .avatar {
-  background: var(--bg-active);
-  color: var(--text-secondary);
-}
-.ai-message.tool .avatar {
-  background: linear-gradient(135deg, var(--success-dim), var(--success));
 }
 .content {
   flex: 1;
@@ -624,6 +609,9 @@ function escapeHtml(text: string): string {
 }
 
 /* Links */
+.text :deep(p) {
+  margin: 5px 0;
+}
 .text :deep(a) {
   color: var(--info);
 }

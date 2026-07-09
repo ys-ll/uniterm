@@ -4,6 +4,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { SearchAddon } from '@xterm/addon-search'
 import { getXtermTheme } from '../composables/useTerminal'
 import type { CustomTerminalTheme } from '../types/settings'
+import { formatFontFamily } from '../utils/formatFontFamily'
 
 export interface TerminalOptions {
   fontSize?: number
@@ -65,7 +66,7 @@ export function acquireTerminal(
   } else {
     const terminal = new Terminal({
       fontSize: options.fontSize ?? 13,
-      fontFamily: options.fontFamily ?? 'Consolas, "Courier New", monospace',
+      fontFamily: formatFontFamily(options.fontFamily ?? 'Consolas, "Courier New", monospace'),
       theme: getXtermTheme(options.themeName ?? 'dark', customThemes),
       cursorBlink: true,
       rightClickSelectsWord: false,

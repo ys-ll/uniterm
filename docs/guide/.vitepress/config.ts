@@ -26,6 +26,7 @@ const sidebarZh = [
       { text: '本地和串口连接', link: '/zh/connections/local' },
       { text: '文件传输', link: '/zh/connections/file-transfer' },
       { text: '远程桌面', link: '/zh/connections/remote-desktop' },
+      { text: '服务器监控', link: '/zh/connections/server-monitor' },
       { text: '数据库', link: '/zh/connections/databases' }
     ]
   },
@@ -69,6 +70,7 @@ const sidebarEn = [
       { text: 'Local', link: '/en/connections/local' },
       { text: 'File Transfer', link: '/en/connections/file-transfer' },
       { text: 'Remote Desktop', link: '/en/connections/remote-desktop' },
+      { text: 'Server Monitor', link: '/en/connections/server-monitor' },
       { text: 'Databases', link: '/en/connections/databases' }
     ]
   },

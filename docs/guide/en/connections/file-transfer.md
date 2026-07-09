@@ -93,7 +93,7 @@ Right-click in the file list to open a context menu with common operations such 
 
 ### Text Editor
 
-Double-click a text file to open it in the built-in editor, which supports syntax highlighting, find and replace, character encoding switching, line ending type switching (LF/CRLF), and saving to the remote target.
+Double-click a text file to open it in the built-in editor, which supports character encoding switching, line ending type switching (LF/CRLF), and saving to the remote target.
 
 ### Transfer Management
 

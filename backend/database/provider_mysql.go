@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 )
 
 type mysqlProvider struct{}
@@ -15,13 +15,27 @@ func init() {
 	Register("mysql", &mysqlProvider{})
 }
 
-func (p *mysqlProvider) DSN(host string, port int, user, password, dbName string) string {
-	addr := host
-	if port > 0 {
-		addr = fmt.Sprintf("%s:%d", host, port)
+func (p *mysqlProvider) DSN(host string, port int, user, password, dbName string, extraParams map[string]string) string {
+	if port <= 0 {
+		port = 3306
 	}
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=true&loc=Local&timeout=10s&readTimeout=30s", user, password, addr, dbName)
-	return dsn
+	cfg := mysql.NewConfig()
+	cfg.User = user
+	cfg.Passwd = password
+	cfg.Net = "tcp"
+	cfg.Addr = fmt.Sprintf("%s:%d", host, port)
+	cfg.DBName = dbName
+	cfg.Params = map[string]string{
+		"charset":      "utf8mb4",
+		"parseTime":    "true",
+		"loc":          "Local",
+		"timeout":      "10s",
+		"readTimeout":  "30s",
+	}
+	for k, v := range extraParams {
+		cfg.Params[k] = v
+	}
+	return cfg.FormatDSN()
 }
 
 func (p *mysqlProvider) DriverName() string {

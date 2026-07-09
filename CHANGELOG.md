@@ -1,8 +1,15 @@
 # Changelog
 
-## v1.3.3-alpha
+## v1.3.3
 
 ### What's Changed
+
+**New Features**
+- Remember window size and position between sessions. The application now restores its previous window size and position on launch.
+
+**Improvements**
+- Database connection parameters are now customizable. DSN construction has been refactored to URL format, allowing users to specify additional database parameters.
+- Linux build upgraded to webkit2gtk 4.1 for better compatibility with newer distributions.
 
 **Bug Fixes**
 - Fixed macOS key-repeat in terminal. Holding a key now produces continuous input instead of showing the press-and-hold accent picker. (@surenwuyuwuqiu)
@@ -10,11 +17,20 @@
 - Fixed AI model field not showing as clickable dropdown after fetching model list from server. Changed from autocomplete to filterable select with allow-create. (@surenwuyuwuqiu)
 - Fixed preset terminal fonts (Monaco, Menlo, Consolas, etc.) not appearing in the font picker when installed. Font scanning now returns all families and unions in well-known presets, regardless of the font file's isFixedPitch flag. (@surenwuyuwuqiu)
 - Fixed CJK font family names (e.g. 幼圆, 隶书) regressing to ASCII names after adding Mac Roman encoding fallback for legacy macOS system fonts like Monaco. (@surenwuyuwuqiu)
-- Fixed RDP white screen and silent disconnect issues. Added TCP pre-check for unreachable hosts, enabled NLA/CredSSP support, added periodic connection status detection with reconnect button, fixed reconnection panel positioning, and fixed background color in light mode.
+- Fixed some issues that could cause RDP white screen. Added TCP pre-check for unreachable hosts, enabled NLA/CredSSP support, added periodic connection status detection with reconnect button, fixed reconnection panel positioning, and fixed background color in light mode.
+- Fixed SSH connection failures with older servers by adding legacy key exchange algorithms (diffie-hellman-group1-sha1, diffie-hellman-group14-sha1, diffie-hellman-group-exchange-sha1).
+- Fixed version comparison incorrectly treating pre-release versions (e.g. 1.3.3-alpha) as older than stable releases. (@wangxufeng)
 
 Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this release.
 
 ### 更新内容
+
+**新功能**
+- 窗口大小和位置记忆。应用启动时自动恢复上次关闭时的窗口大小和位置。
+
+**改进**
+- 数据库连接参数支持自定义。DSN 构建重构为 URL 格式，用户可指定额外数据库参数。
+- Linux 构建升级至 webkit2gtk 4.1，提升新版发行版兼容性。
 
 **Bug 修复**
 - 修复 macOS 终端按键长按不重复的问题。长按按键现在产生连续输入，不再弹出重音符号选择器。（@surenwuyuwuqiu）
@@ -22,7 +38,9 @@ Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this releas
 - 修复 AI 模型输入框从服务器拉取列表后不显示为可点击下拉框的问题。从 autocomplete 改为 filterable select。（@surenwuyuwuqiu）
 - 修复 Monaco、Menlo、Consolas 等已安装的预设终端字体在字体选择器中不显示的问题。字体扫描现在返回所有字体族并合并知名预设字体，不受字体文件 isFixedPitch 标志影响。（@surenwuyuwuqiu）
 - 修复新增 Mac Roman 编码回退（支持 Monaco 等 macOS 旧字体）后，CJK 字体名称（如幼圆、隶书）错误显示为 ASCII 名称的问题。（@surenwuyuwuqiu）
-- 修复 RDP 白屏及静默断线问题。增加 TCP 预检、启用 NLA/CredSSP 支持、增加断线检测及重连按钮、修复重连后面板定位错误、修复浅色模式背景色异常。
+- 修复部分会导致 RDP 连接白屏的问题。增加 TCP 预检、启用 NLA/CredSSP 支持、增加断线检测及重连按钮、修复重连后面板定位错误、修复浅色模式背景色异常。
+- 修复旧版 SSH 服务器连接失败问题，增加 legacy 密钥交换算法支持（diffie-hellman-group1-sha1、diffie-hellman-group14-sha1、diffie-hellman-group-exchange-sha1）。
+- 修复版本比较错误将预发布版本（如 1.3.3-alpha）判定为低于正式版的问题。（@wangxufeng）
 
 感谢 @surenwuyuwuqiu 和 @wangxufeng 对本版本的贡献。
 

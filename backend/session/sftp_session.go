@@ -81,6 +81,9 @@ func (s *SFTPSession) Connect(config ConnectionConfig) error {
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Config: ssh.Config{
+			KeyExchanges: sshKeyExchanges(),
+		},
 	}
 
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port), clientConfig)

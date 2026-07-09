@@ -164,6 +164,9 @@ func (s *SSHSession) Connect(config ConnectionConfig) error {
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Config: ssh.Config{
+			KeyExchanges: sshKeyExchanges(),
+		},
 	}
 
 	conn, err := net.DialTimeout("tcp", addr, clientConfig.Timeout)

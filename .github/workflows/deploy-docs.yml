@@ -5,9 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'docs/guide/**'
-      - 'docs/index.html'
-      - 'docs/imgs/**'
+      - 'docs/**'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 

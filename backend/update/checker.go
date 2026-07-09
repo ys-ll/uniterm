@@ -36,28 +36,78 @@ func normalizeVersion(v string) string {
 	return strings.TrimPrefix(strings.TrimSpace(v), "v")
 }
 
-func versionParts(v string) []int {
-	parts := strings.Split(v, ".")
-	result := make([]int, 0, len(parts))
-	for _, p := range parts {
-		n, _ := strconv.Atoi(p)
-		result = append(result, n)
+// parseSemver splits a version string into its numeric core parts and its
+// optional pre-release identifiers, following SemVer 2.0.0. Build metadata
+// (anything after '+') is discarded because it does not affect precedence.
+func parseSemver(v string) (core []int, pre []string) {
+	v = normalizeVersion(v)
+	if idx := strings.Index(v, "+"); idx >= 0 {
+		v = v[:idx]
 	}
-	return result
+	var prePart string
+	if idx := strings.Index(v, "-"); idx >= 0 {
+		prePart = v[idx+1:]
+		v = v[:idx]
+	}
+	for _, p := range strings.Split(v, ".") {
+		n, _ := strconv.Atoi(p)
+		core = append(core, n)
+	}
+	if prePart != "" {
+		pre = strings.Split(prePart, ".")
+	}
+	return core, pre
+}
+
+// comparePre compares two pre-release identifier slices per SemVer 2.0.0 §11.4.
+// Returns -1, 0, or 1. A version WITHOUT a pre-release has higher precedence
+// than one WITH a pre-release; callers must handle that case before calling.
+func comparePre(a, b []string) int {
+	for i := 0; i < len(a) || i < len(b); i++ {
+		if i >= len(a) {
+			return -1
+		}
+		if i >= len(b) {
+			return 1
+		}
+		an, aErr := strconv.Atoi(a[i])
+		bn, bErr := strconv.Atoi(b[i])
+		aNumeric := aErr == nil
+		bNumeric := bErr == nil
+		switch {
+		case aNumeric && bNumeric:
+			if an != bn {
+				if an < bn {
+					return -1
+				}
+				return 1
+			}
+		case aNumeric && !bNumeric:
+			return -1
+		case !aNumeric && bNumeric:
+			return 1
+		default:
+			if a[i] != b[i] {
+				if a[i] < b[i] {
+					return -1
+				}
+				return 1
+			}
+		}
+	}
+	return 0
 }
 
 func versionGreater(latest, current string) bool {
-	latest = normalizeVersion(latest)
-	current = normalizeVersion(current)
-	lp := versionParts(latest)
-	cp := versionParts(current)
-	for i := 0; i < len(lp) || i < len(cp); i++ {
+	lc, lp := parseSemver(latest)
+	cc, cp := parseSemver(current)
+	for i := 0; i < len(lc) || i < len(cc); i++ {
 		var ln, cn int
-		if i < len(lp) {
-			ln = lp[i]
+		if i < len(lc) {
+			ln = lc[i]
 		}
-		if i < len(cp) {
-			cn = cp[i]
+		if i < len(cc) {
+			cn = cc[i]
 		}
 		if ln > cn {
 			return true
@@ -66,7 +116,17 @@ func versionGreater(latest, current string) bool {
 			return false
 		}
 	}
-	return false
+	// Core versions equal: a version without a pre-release outranks one with.
+	if len(lp) == 0 && len(cp) == 0 {
+		return false
+	}
+	if len(lp) == 0 {
+		return true
+	}
+	if len(cp) == 0 {
+		return false
+	}
+	return comparePre(lp, cp) > 0
 }
 
 func shouldUpdate(current, latest string) bool {

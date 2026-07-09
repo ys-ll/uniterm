@@ -93,6 +93,7 @@ Same as SSH. uniTerm first connects to the server via SSH, then automatically st
 
 
 ::: tip Related
+- [Server Monitor](/en/connections/server-monitor) -- Real-time SSH server monitoring
 - [Getting Started](/en/getting-started) -- First connection tutorial
 - [Local](/en/connections/local) -- Local Shell and Serial
 :::

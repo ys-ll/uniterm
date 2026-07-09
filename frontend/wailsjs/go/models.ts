@@ -275,6 +275,7 @@ export namespace session {
 	    serialParity?: string;
 	    dbType?: string;
 	    dbName?: string;
+	    dbParams?: string;
 	    postLoginScript?: string;
 	    postLoginExpectSteps?: PostLoginExpectStep[];
 	    tunnelSSHConnId?: string;
@@ -319,6 +320,7 @@ export namespace session {
 	        this.serialParity = source["serialParity"];
 	        this.dbType = source["dbType"];
 	        this.dbName = source["dbName"];
+	        this.dbParams = source["dbParams"];
 	        this.postLoginScript = source["postLoginScript"];
 	        this.postLoginExpectSteps = this.convertValues(source["postLoginExpectSteps"], PostLoginExpectStep);
 	        this.tunnelSSHConnId = source["tunnelSSHConnId"];
@@ -1151,6 +1153,11 @@ export namespace store {
 	export class LocalState {
 	    sidebarVisible: boolean;
 	    aiSidebarVisible: boolean;
+	    windowX: number;
+	    windowY: number;
+	    windowWidth: number;
+	    windowHeight: number;
+	    windowMaximised: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new LocalState(source);
@@ -1160,6 +1167,11 @@ export namespace store {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sidebarVisible = source["sidebarVisible"];
 	        this.aiSidebarVisible = source["aiSidebarVisible"];
+	        this.windowX = source["windowX"];
+	        this.windowY = source["windowY"];
+	        this.windowWidth = source["windowWidth"];
+	        this.windowHeight = source["windowHeight"];
+	        this.windowMaximised = source["windowMaximised"];
 	    }
 	}
 	export class QuickCommand {

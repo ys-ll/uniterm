@@ -6,13 +6,31 @@ import (
 	"strings"
 )
 
+// parseParams parses "key1=val1&key2=val2" into a map.
+func parseParams(s string) map[string]string {
+	m := make(map[string]string)
+	for s != "" {
+		var pair string
+		if before, after, found := strings.Cut(s, "&"); found {
+			pair, s = before, after
+		} else {
+			pair, s = s, ""
+		}
+		k, v, _ := strings.Cut(pair, "=")
+		if k != "" {
+			m[k] = v
+		}
+	}
+	return m
+}
+
 // BuildDSN builds a DSN string from connection config fields.
-func BuildDSN(dbType, host, user, password, dbName string, port int) (string, error) {
+func BuildDSN(dbType, host, user, password, dbName, extraParams string, port int) (string, error) {
 	p, err := NewProvider(dbType)
 	if err != nil {
 		return "", err
 	}
-	return p.DSN(host, port, user, password, dbName), nil
+	return p.DSN(host, port, user, password, dbName, parseParams(extraParams)), nil
 }
 
 // NewDB opens a database/sql connection for the given database type and DSN.
