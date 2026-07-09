@@ -8,11 +8,13 @@ export interface ExecuteResult {
   output: string
   exitCode: number
   timedOut?: boolean
+  cancelled?: boolean
 }
 
 export interface WatchResult {
   output: string
   timedOut: boolean
+  cancelled?: boolean
 }
 
 // Split terminal output into display lines. Splits on newlines and, within a
@@ -34,53 +36,126 @@ function toDisplayLines(clean: string): string[] {
 // prompt and the command is done. No marker is injected into the shell, so the
 // terminal shows nothing extra.
 //
-// When `promptLine` is empty (prompt could not be captured, or the prompt is
-// dynamic and never reappears verbatim) detection is skipped entirely and the
-// call resolves on timeout — the command already carries its own timeout.
+// As a fallback for dynamic prompts (timestamps, git branches, etc.) or ANSI
+// mismatches, an idle heuristic is also used: if output stops for a short
+// period and the last non-blank line looks like a prompt (ends with $, #, >,
+// %, or :), the command is considered finished.
+//
+// When `promptLine` is empty and the heuristic cannot match, detection is
+// skipped entirely and the call resolves on timeout.
+//
+// `shouldCancel` is polled periodically. When it returns true the watcher
+// stops listening and resolves with cancelled=true. The terminal command is
+// NOT interrupted; callers should discard the output and not pass it to the
+// LLM.
 export function watchOutput(
   sessionId: string,
   promptLine: string,
-  timeoutMs: number
+  timeoutMs: number,
+  shouldCancel?: () => boolean
 ): { promise: Promise<WatchResult>; cleanup: () => void } {
+  const IDLE_MS = 800
+  const CANCEL_POLL_MS = 150
   let timeoutId: ReturnType<typeof setTimeout>
+  let idleTimeoutId: ReturnType<typeof setTimeout> | null = null
+  let cancelPollId: ReturnType<typeof setTimeout> | null = null
   let unsubscribe: (() => void) | null = null
   let resolved = false
   let output = ''
 
   const cleanup = () => {
     clearTimeout(timeoutId)
+    if (idleTimeoutId) {
+      clearTimeout(idleTimeoutId)
+      idleTimeoutId = null
+    }
+    if (cancelPollId) {
+      clearTimeout(cancelPollId)
+      cancelPollId = null
+    }
     unsubscribe?.()
     resolved = true
   }
 
+  function getLastDisplayLine(text: string): { line: string; index: number } | null {
+    const lines = toDisplayLines(stripAnsi(text))
+    let last = lines.length - 1
+    while (last >= 0 && lines[last].trimEnd() === '') last--
+    if (last < 0) return null
+    return { line: lines[last].trimEnd(), index: last }
+  }
+
+  function looksLikePrompt(line: string): boolean {
+    // Common prompt terminators: $, #, >, %, :
+    // Avoid matching plain text lines that happen to end with these chars by
+    // requiring a reasonably short line (prompts are rarely > 200 chars).
+    return line.length <= 200 && /[\$#>%:]\s*$/.test(line)
+  }
+
   const promise = new Promise<WatchResult>((resolve) => {
+    const finish = (timedOut: boolean, cancelled = false) => {
+      cleanup()
+      if (cancelled) {
+        resolve({ output: '', timedOut: false, cancelled: true })
+        return
+      }
+      if (timedOut) {
+        resolve({ output: stripAnsi(output).trim(), timedOut: true })
+        return
+      }
+      const lastInfo = getLastDisplayLine(output)
+      const result = lastInfo
+        ? toDisplayLines(stripAnsi(output)).slice(0, lastInfo.index).join('\n').trim()
+        : stripAnsi(output).trim()
+      resolve({ output: result, timedOut: false })
+    }
+
+    const checkIdle = () => {
+      if (resolved || !promptLine) return
+      const lastInfo = getLastDisplayLine(output)
+      if (!lastInfo || lastInfo.index < 1) return
+      if (looksLikePrompt(lastInfo.line)) {
+        finish(false)
+      }
+    }
+
+    const checkCancel = () => {
+      if (resolved) return
+      if (shouldCancel?.()) {
+        finish(false, true)
+        return
+      }
+      cancelPollId = setTimeout(checkCancel, CANCEL_POLL_MS)
+    }
+
     unsubscribe = EventsOn('session:data', (payload: { id: string; data: string }) => {
       if (payload.id !== sessionId || resolved) return
 
       output += payload.data
-      if (!promptLine) return
 
-      const lines = toDisplayLines(stripAnsi(output))
-      // Locate the last non-blank display line.
-      let last = lines.length - 1
-      while (last >= 0 && lines[last].trimEnd() === '') last--
-      // Require at least the echoed command line before the prompt, so the
-      // reappearing prompt — not the initial state — is what triggers.
-      if (last < 1) return
+      // Reset idle detection whenever new data arrives.
+      if (idleTimeoutId) {
+        clearTimeout(idleTimeoutId)
+        idleTimeoutId = null
+      }
+      idleTimeoutId = setTimeout(checkIdle, IDLE_MS)
 
-      if (lines[last].trimEnd() === promptLine) {
-        cleanup()
-        const result = lines.slice(0, last).join('\n').trim()
-        resolve({ output: result, timedOut: false })
+      const lastInfo = getLastDisplayLine(output)
+      if (!lastInfo || lastInfo.index < 1) return
+
+      // Exact prompt match (works when the prompt is static and ANSI-stripped).
+      if (promptLine && lastInfo.line === promptLine) {
+        finish(false)
+        return
       }
     })
 
+    if (shouldCancel) {
+      cancelPollId = setTimeout(checkCancel, CANCEL_POLL_MS)
+    }
+
     timeoutId = setTimeout(() => {
-      cleanup()
-      resolve({
-        output: stripAnsi(output).trim(),
-        timedOut: true,
-      })
+      finish(true)
     }, timeoutMs)
   })
 
@@ -141,8 +216,10 @@ function getShellNewline(shellPath?: string): string {
 
 // Read the current prompt line from the terminal buffer. Called right before a
 // command is sent, when the cursor sits on the (freshly drawn) prompt with no
-// input yet, so the cursor line's text is exactly the prompt string. Returns ''
-// when unavailable, which disables prompt detection for that command.
+// input yet, so the cursor line's text is exactly the prompt string. ANSI
+// sequences are stripped so the captured prompt matches the stripped output
+// used in watchOutput. Returns '' when unavailable, which disables exact prompt
+// detection for that command (idle heuristic still applies).
 function capturePromptLine(sessionId: string): string {
   const managed = getManagedTerminal(sessionId)
   const terminal = managed?.terminal
@@ -150,14 +227,15 @@ function capturePromptLine(sessionId: string): string {
   const buffer = terminal.buffer.active
   const line = buffer.getLine(buffer.baseY + buffer.cursorY)
   if (!line) return ''
-  return line.translateToString(true).trimEnd()
+  return stripAnsi(line.translateToString(true)).trimEnd()
 }
 
 export async function executeCommand(
   command: string,
   timeoutMs: number = 60000,
   headLines: number = 50,
-  tailLines: number = 300
+  tailLines: number = 300,
+  shouldCancel?: () => boolean
 ): Promise<ExecuteResult> {
   const { sessionId, shellPath } = resolveActiveSession()
   const promptLine = capturePromptLine(sessionId)
@@ -166,8 +244,16 @@ export async function executeCommand(
 
   await SessionWrite(sessionId, fullCommand + newline)
 
-  const { promise } = watchOutput(sessionId, promptLine, timeoutMs)
+  const { promise } = watchOutput(sessionId, promptLine, timeoutMs, shouldCancel)
   const result = await promise
+
+  if (result.cancelled) {
+    return {
+      output: '',
+      exitCode: -1,
+      timedOut: false,
+    }
+  }
 
   if (result.timedOut) {
     const truncated = truncateOutput(result.output, headLines, tailLines)

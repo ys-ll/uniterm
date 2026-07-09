@@ -13,6 +13,18 @@ export interface ChatOptions {
   onToolUse?: (tool: { id: string; name: string; input: Record<string, unknown> }) => void
 }
 
+export class ChatCancelledError extends Error {
+  constructor() {
+    super('Chat was cancelled by user')
+    this.name = 'ChatCancelledError'
+  }
+}
+
+function isCancellationError(raw: string): boolean {
+  const lower = raw.toLowerCase()
+  return lower.includes('context canceled') || lower.includes('context cancelled')
+}
+
 function formatAPIError(raw: string): string {
   // Parse Go backend error format: "HTTP <code>: <json body>"
   const match = raw.match(/^HTTP\s+(\d+):\s*(.+)/)
@@ -55,7 +67,11 @@ export async function chat(options: ChatOptions): Promise<void> {
   try {
     responseText = await ChatCompletion(apiKey, baseURL, model, requestJSON, protocol, userAgent)
   } catch (e: any) {
-    throw new Error(formatAPIError(e?.message || String(e)))
+    const raw = e?.message || String(e)
+    if (isCancellationError(raw)) {
+      throw new ChatCancelledError()
+    }
+    throw new Error(formatAPIError(raw))
   }
 
   let json: any

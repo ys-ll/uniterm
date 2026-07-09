@@ -190,6 +190,25 @@ describe('watchOutput', () => {
     expect(result.output).toContain('hi')
   })
 
+  it('resolves via idle heuristic when prompt differs (e.g. dynamic prompt)', async () => {
+    vi.useFakeTimers()
+    let capturedCallback: ((payload: { id: string; data: string }) => void) | null = null
+    vi.mocked(EventsOn).mockImplementation((_eventName, callback) => {
+      capturedCallback = callback
+      return () => { }
+    })
+
+    const { promise } = watchOutput('s1', PROMPT, 5000)
+
+    capturedCallback!(fakeData('s1', `${PROMPT} echo hi\nhi\n[user@host ~]$ `))
+    vi.advanceTimersByTime(800)
+
+    const result: WatchResult = await promise
+    expect(result.timedOut).toBe(false)
+    expect(result.output).toContain('hi')
+    vi.useRealTimers()
+  })
+
   it('does not resolve on the initial prompt alone', async () => {
     vi.useFakeTimers()
     let capturedCallback: ((payload: { id: string; data: string }) => void) | null = null

@@ -1,11 +1,31 @@
-import { chat, AVAILABLE_TOOLS } from './llm'
+import { chat, AVAILABLE_TOOLS, ChatCancelledError } from './llm'
 import { executeCommand, startCommand, captureTerminal, collectOutput, sendTerminalKey } from './terminalAgent'
 import { useAIStore } from '../stores/aiStore'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { EventsOn } from '../../wailsjs/runtime'
-import { CancelChatStream } from '../../wailsjs/go/main/App'
 import type { AIMessage } from '../types/ai'
+
+// Global token listener management: only one runAgent instance should receive
+// ai:token events at a time. Registering a new listener automatically cancels
+// the previous one, preventing duplicate streaming into multiple assistant
+// messages when a stop/continue sequence races.
+let activeTokenUnsubscribe: (() => void) | null = null
+let activeAssistantMsg: AIMessage | null = null
+
+function registerTokenListener(callback: (data: any) => void): () => void {
+  activeTokenUnsubscribe?.()
+  activeTokenUnsubscribe = EventsOn('ai:token', callback)
+  return () => {
+    activeTokenUnsubscribe?.()
+    activeTokenUnsubscribe = null
+    activeAssistantMsg = null
+  }
+}
+
+function setActiveAssistantMsg(msg: AIMessage | null) {
+  activeAssistantMsg = msg
+}
 
 function getActivePanel() {
   const tabStore = useTabStore()
@@ -74,7 +94,7 @@ function getShellName(path?: string): string {
  * Shell-specific suffix: appended to system rules dynamically (NOT cached).
  * Lightweight enough that it doesn't significantly impact cache efficiency.
  */
-function getShellGuidance(shellPath?: string, isWindowsShell: boolean): string {
+function getShellGuidance(shellPath?: string, isWindowsShell?: boolean): string {
   if (isWindowsShell) {
     const isCmd = shellPath?.toLowerCase().includes('cmd')
     return isCmd
@@ -200,26 +220,21 @@ export async function runAgent(userInput: string) {
   }
 
   // Track active stream listeners for cleanup
-  let currentAssistantMsg: AIMessage | null = null
-  let cleanupTokenListener: (() => void) | null = null
-
   // Track whether streaming already delivered text, to skip onChunk duplication
   let streamedText = ''
 
   // Register stream event listener (fires from Go backend SSE events)
-  cleanupTokenListener = EventsOn('ai:token', (data: any) => {
-    if (currentAssistantMsg && data.text) {
-      currentAssistantMsg.content += data.text
+  const cleanupTokenListener = registerTokenListener((data: any) => {
+    if (store.stopRequested) return
+    if (activeAssistantMsg && data.text) {
+      activeAssistantMsg.content += data.text
       streamedText += data.text
     }
   })
 
   function cleanupStreamListeners() {
-    if (cleanupTokenListener) {
-      cleanupTokenListener()
-      cleanupTokenListener = null
-    }
-    currentAssistantMsg = null
+    cleanupTokenListener()
+    setActiveAssistantMsg(null)
   }
 
   let turnCount = 0
@@ -229,6 +244,11 @@ export async function runAgent(userInput: string) {
     turnCount++
 
     if (store.stopRequested) {
+      store.addMessage({
+        id: `msg-${Date.now()}`,
+        role: 'tool',
+        content: '[INTERRUPTED]'
+      })
       store.isRunning = false
       cleanupStreamListeners()
       return
@@ -239,7 +259,7 @@ export async function runAgent(userInput: string) {
       role: 'assistant',
       content: ''
     })
-    currentAssistantMsg = assistantMsg
+    setActiveAssistantMsg(assistantMsg)
 
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
@@ -270,7 +290,11 @@ export async function runAgent(userInput: string) {
       // Convert the failed assistant placeholder to a display-only tool message.
       // This keeps the error visible in the UI without polluting the API conversation.
       assistantMsg.role = 'tool'
-      assistantMsg.content = `[Error: ${errMsg}]`
+      if (e instanceof ChatCancelledError || store.stopRequested) {
+        assistantMsg.content = '[INTERRUPTED]'
+      } else {
+        assistantMsg.content = `[Error: ${errMsg}]`
+      }
       delete assistantMsg._rawApiMsg
       delete assistantMsg.tool_calls
       store.setDebugInfo(store.conversation, errMsg)
@@ -295,6 +319,14 @@ export async function runAgent(userInput: string) {
             cancelledIds.add(block.id)
           }
         }
+      }
+      // If no tool calls were pending, the user stopped during text generation.
+      // Replace the partial assistant message with a clean stop notice.
+      if (cancelledIds.size === 0) {
+        assistantMsg.role = 'tool'
+        assistantMsg.content = '[INTERRUPTED]'
+        delete assistantMsg._rawApiMsg
+        delete assistantMsg.tool_calls
       }
       store.isRunning = false
       cleanupStreamListeners()
@@ -363,7 +395,17 @@ export async function runAgent(userInput: string) {
       }
 
       try {
-        const result = await executeCommand(command, timeoutMs, headLines, tailLines)
+        const result = await executeCommand(command, timeoutMs, headLines, tailLines, () => store.stopRequested)
+        if (result.cancelled || store.stopRequested) {
+          store.addMessage({
+            id: `msg-${Date.now()}`,
+            role: 'tool',
+            content: '[INTERRUPTED]'
+          })
+          store.isRunning = false
+          cleanupStreamListeners()
+          return
+        }
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',

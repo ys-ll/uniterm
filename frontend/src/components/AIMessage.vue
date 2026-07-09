@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-message" :class="message.role">
+  <div class="ai-message" :class="[message.role, { interrupted: isInterrupted }]">
     <div class="content">
       <div class="text" v-html="renderedContent" @click="onTextClick" />
 
@@ -78,6 +78,8 @@ const emit = defineEmits<{
   (e: 'reject', messageId: string): void
   (e: 'continue'): void
 }>()
+
+const isInterrupted = computed(() => props.message.role === 'tool' && props.message.content === '[INTERRUPTED]')
 
 const isPending = computed(() =>
   aiStore.pendingCommand?.messageId === props.message.id
@@ -464,7 +466,9 @@ function autoLinkUrls(html: string): string {
 
 const renderedContent = computed(() => {
   let html: string
-  if (props.message.role === 'user') {
+  if (isInterrupted.value) {
+    html = `<span class="interrupted-text">${escapeHtml(t('ai.interrupted'))}</span>`
+  } else if (props.message.role === 'user') {
     html = escapeHtml(props.message.content)
   } else {
     html = renderMarkdown(props.message.content)
@@ -510,6 +514,16 @@ function escapeHtml(text: string): string {
   padding: 10px 16px;
   border-radius: var(--radius-md);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.ai-message.interrupted .text {
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+.ai-message.interrupted .text :deep(.interrupted-text) {
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.75;
 }
 .content {
   flex: 1;
