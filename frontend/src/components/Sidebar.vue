@@ -1477,7 +1477,7 @@ defineExpose({ focusSearch, openChangeGroupFor })
 
 <style scoped>
 .sidebar {
-  background: var(--bg-elevated);
+  background: var(--bg-base);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -1495,43 +1495,18 @@ defineExpose({ focusSearch, openChangeGroupFor })
 
 .resize-handle {
   position: absolute;
-  right: -6px;
+  right: 0;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 3px;
   cursor: col-resize;
   z-index: 10;
-  background: transparent;
+  background: var(--border-subtle);
+  transition: background 0.15s ease;
 }
 
-/* Decorative line stays at the sidebar right edge */
-.resize-handle::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 1px;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    var(--accent-subtle) 20%,
-    var(--accent-glow) 50%,
-    var(--accent-subtle) 80%,
-    transparent 100%
-  );
-}
-
-/* Hover: 3px accent bar extending into sidebar */
-.resize-handle:hover::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
+.resize-handle:hover {
   background: var(--accent);
-  box-shadow: 0 0 6px var(--accent-glow);
 }
 
 .sidebar-header {

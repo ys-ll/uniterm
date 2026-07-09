@@ -201,7 +201,7 @@ onUnmounted(() => {
   height: 44px;
   padding: 0 8px;
   gap: 2px;
-  background: var(--bg-elevated);
+  background: var(--border-subtle);
   flex-shrink: 0;
   position: relative;
   z-index: 10;
@@ -212,23 +212,6 @@ onUnmounted(() => {
   height: 52px;
   padding: 0 10px;
   gap: 8px;
-}
-
-.app-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent-subtle) 20%,
-    var(--accent-glow) 50%,
-    var(--accent-subtle) 80%,
-    transparent 100%
-  );
 }
 
 .header-tabs {
@@ -273,16 +256,6 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-[data-theme="light"] .app-header::after {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent-subtle) 20%,
-    var(--accent-glow) 50%,
-    var(--accent-subtle) 80%,
-    transparent 100%
-  );
-}
 
 .mac-traffic-light-spacer {
   width: 72px;

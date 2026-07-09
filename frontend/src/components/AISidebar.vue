@@ -67,7 +67,6 @@
         @continue="onContinue"
       />
       <div v-if="aiStore.isRunning && !streamingMsgHasContent" class="ai-thinking">
-        <div class="thinking-avatar">{{ t('ai.avatarAI') }}</div>
         <div class="thinking-text">{{ t('ai.thinking') }}</div>
       </div>
     </div>
@@ -85,21 +84,20 @@
     </div>
 
     <div class="ai-input">
-      <div class="textarea-wrap">
-        <el-input
-          ref="chatInputRef"
-          v-model="input"
-          type="textarea"
-          :rows="4"
-          :placeholder="t('ai.placeholder')"
-          @keydown.enter="onKeydownEnter"
-        />
+      <div class="input-container">
+        <div class="textarea-wrap">
+          <el-input
+            ref="chatInputRef"
+            v-model="input"
+            type="textarea"
+            :autosize="{ minRows: 3, maxRows: 8 }"
+            :placeholder="t('ai.placeholder')"
+            @keydown.enter="onKeydownEnter"
+          />
+        </div>
         <div class="input-actions">
           <el-dropdown trigger="click" @command="onModelChange" v-if="settingsStore.settings.ai.models.length > 0">
-            <el-button class="model-btn">
-              <span class="model-btn-name">{{ currentModelName }}</span>
-              <el-icon class="dropdown-icon"><ChevronDown /></el-icon>
-            </el-button>
+            <button class="ghost-btn model-btn" :title="currentModelName">{{ currentModelName }}</button>
             <template #dropdown>
               <el-dropdown-menu class="dark-dropdown">
                 <el-dropdown-item
@@ -113,31 +111,39 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-dropdown trigger="click" @command="onModeChange">
-            <el-button :type="modeButtonType" class="mode-btn">
-              {{ modeLabel }}<el-icon class="dropdown-icon"><ChevronDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu class="dark-dropdown">
-                <el-dropdown-item command="confirm_all">
-                  <span class="mode-option mode-confirm">{{ t('ai.confirmAll') }}</span>
-                </el-dropdown-item>
-                <el-dropdown-item command="confirm_write">
-                  <span class="mode-option mode-write">{{ t('ai.confirmWrite') }}</span>
-                </el-dropdown-item>
-                <el-dropdown-item command="confirm_dangerous">
-                  <span class="mode-option mode-warning">{{ t('ai.confirmDangerous') }}</span>
-                </el-dropdown-item>
-                <el-dropdown-item command="bypass">
-                  <span class="mode-option mode-auto">{{ t('ai.bypass') }}</span>
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <el-button v-if="!aiStore.isRunning && !aiStore.pendingCommand" type="primary" :disabled="!input.trim()" @click="onSend">
-            {{ t('ai.send') }}
-          </el-button>
-          <el-button v-else type="danger" @click="onStop">{{ t('ai.stop') }}</el-button>
+          <div class="input-actions-right">
+            <el-dropdown trigger="click" @command="onModeChange">
+              <button class="ghost-btn mode-btn" :title="modeLabel">{{ modeLabel }}</button>
+              <template #dropdown>
+                <el-dropdown-menu class="dark-dropdown">
+                  <el-dropdown-item command="confirm_all">
+                    <span class="mode-option mode-confirm">{{ t('ai.confirmAll') }}</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="confirm_write">
+                    <span class="mode-option mode-write">{{ t('ai.confirmWrite') }}</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="confirm_dangerous">
+                    <span class="mode-option mode-warning">{{ t('ai.confirmDangerous') }}</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="bypass">
+                    <span class="mode-option mode-auto">{{ t('ai.bypass') }}</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <button
+              v-if="!aiStore.isRunning && !aiStore.pendingCommand"
+              class="send-btn"
+              :disabled="!input.trim()"
+              :title="t('ai.send')"
+              @click="onSend"
+            >
+              <ArrowUp :size="18" />
+            </button>
+            <button v-else class="send-btn stop" :title="t('ai.stop')" @click="onStop">
+              <Square :size="15" :fill="'currentColor'" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -147,7 +153,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, computed, watch, onMounted, onUnmounted } from 'vue'
-import { X, Trash2, Expand, Shrink, History, MessageSquarePlus, Search, ChevronDown, ChevronUp } from '@lucide/vue'
+import { X, Trash2, Expand, Shrink, History, MessageSquarePlus, Search, ChevronDown, ChevronUp, ArrowUp, Square } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTabStore } from '../stores/tabStore'
@@ -171,6 +177,19 @@ function focusInput() {
     const el = chatInputRef.value?.$el?.querySelector('textarea')
     if (el instanceof HTMLTextAreaElement) {
       el.focus()
+    }
+  })
+}
+
+function resizeTextarea() {
+  nextTick(() => {
+    const el = chatInputRef.value?.$el?.querySelector('textarea')
+    if (el instanceof HTMLTextAreaElement) {
+      el.style.height = 'auto'
+      requestAnimationFrame(() => {
+        el.style.height = 'auto'
+        el.style.height = el.scrollHeight + 'px'
+      })
     }
   })
 }
@@ -289,16 +308,6 @@ const modeLabel = computed(() => {
   }
 })
 
-const modeButtonType = computed(() => {
-  switch (aiStore.mode) {
-    case 'bypass': return 'danger'
-    case 'confirm_dangerous': return 'warning'
-    case 'confirm_write': return 'primary'
-    case 'confirm_all': return 'success'
-    default: return 'warning'
-  }
-})
-
 const currentModelName = computed(() => {
   const m = settingsStore.settings.ai.models.find(m => m.id === settingsStore.settings.ai.activeModelId)
   return m?.name || 'Model'
@@ -410,6 +419,9 @@ watch(() => aiStore.currentSessionId, () => {
 })
 
 watch(() => aiStore.visible, (visible) => {
+  if (visible) {
+    resizeTextarea()
+  }
   if (!visible && isMaximized.value) {
     isMaximized.value = false
     sidebarWidth.value = preMaxWidth.value
@@ -477,7 +489,7 @@ function onResizeStart(e: MouseEvent) {
   function onMouseMove(ev: MouseEvent) {
     if (!isResizing.value) return
     const delta = startX - ev.clientX
-    const newWidth = Math.min(Math.max(startWidth + delta, 240), 800)
+    const newWidth = Math.min(Math.max(startWidth + delta, 300), 800)
     if (el) el.style.width = newWidth + 'px'
   }
 
@@ -536,7 +548,7 @@ defineExpose({ focusInput })
 
 <style scoped>
 .ai-sidebar {
-  background: var(--bg-elevated);
+  background: var(--bg-base);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -563,50 +575,21 @@ defineExpose({ focusInput })
   left: 0;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 3px;
   cursor: col-resize;
   z-index: 10;
-  background: transparent;
+  background: var(--border-subtle);
   transition: background 0.15s ease;
 }
 
-.resize-handle::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 1px;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    var(--accent-subtle) 20%,
-    var(--accent-glow) 50%,
-    var(--accent-subtle) 80%,
-    transparent 100%
-  );
-  transition: opacity 0.15s;
-}
-
-.resize-handle:hover::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
+.resize-handle:hover {
   background: var(--accent);
-  box-shadow: 0 0 6px var(--accent-glow);
-}
-
-.resize-handle:hover::before {
-  opacity: 0;
 }
 .ai-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 12px 16px;
   font-size: 12px;
   font-family: var(--font-ui);
   font-weight: 600;
@@ -774,24 +757,8 @@ defineExpose({ focusInput })
 }
 .ai-thinking {
   display: flex;
-  gap: 10px;
   align-items: center;
   padding: 10px 14px;
-}
-.thinking-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-dim), var(--accent));
-  color: var(--on-accent);
-  font-size: 9px;
-  font-family: var(--font-ui);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  letter-spacing: 0.5px;
 }
 .thinking-text {
   font-size: 11px;
@@ -800,44 +767,113 @@ defineExpose({ focusInput })
   font-style: italic;
 }
 .ai-input {
-  padding: 10px 12px;
+  padding: 10px 16px;
   flex-shrink: 0;
 }
-.textarea-wrap {
-  position: relative;
+.input-container {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  transition: border-color 0.15s ease;
+}
+.input-container:focus-within {
+  border-color: var(--accent);
+}
+.textarea-wrap :deep(.el-textarea) {
+  box-shadow: none;
+  border: none;
 }
 .textarea-wrap :deep(.el-textarea__inner) {
-  padding-bottom: 36px;
+  padding: 12px 16px;
   font-size: 13px;
+  border: none!important;
+  box-shadow: none !important;
+  background: transparent;
+  border-radius: 0;
+  resize: none;
+  outline: none;
+}
+.textarea-wrap :deep(.el-textarea__inner:focus) {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
 }
 .textarea-wrap :deep(.el-textarea__inner::placeholder) {
   font-size: 13px;
   color: var(--text-muted);
 }
 .input-actions {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
   display: flex;
+  justify-content: space-between;
   gap: 8px;
   align-items: center;
-  z-index: 2;
+  padding: 0 8px 8px 8px;
 }
-.dropdown-icon {
-  margin-left: 4px;
+.input-actions-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
-.model-btn,
-.mode-btn {
-  padding-left: 8px;
-  padding-right: 6px;
-}
-.model-btn-name {
-  max-width: 80px;
+/* Ghost buttons: no border/background by default, reveal on hover */
+.ghost-btn {
+  display: inline-block;
+  box-sizing: border-box;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-block;
-  vertical-align: middle;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ghost-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.model-btn {
+  max-width: 96px;
+}
+.mode-btn {
+  max-width: 108px;
+}
+/* Send / Stop icon button */
+.send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+  transition: background 0.12s ease, opacity 0.12s ease;
+}
+.send-btn:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+.send-btn:disabled {
+  background: var(--bg-active);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+.send-btn.stop {
+  background: var(--error);
+  color: var(--on-accent);
+}
+.send-btn.stop:hover {
+  background: var(--error);
+  opacity: 0.85;
 }
 .mode-option {
   font-size: 12px;
