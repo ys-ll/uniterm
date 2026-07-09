@@ -3,81 +3,89 @@
     v-model="visible"
     :title="editingId ? t('tunnels.editTunnel') : t('tunnels.addTunnel')"
     width="500px"
-    :close-on-click-modal="false"
     class="tunnel-dialog"
     @close="resetForm"
   >
-    <el-form :model="form" label-width="88px" label-position="right">
+    <!-- Tunnel mode: same look as the connection form's type selection -->
+    <div class="mode-section">
+      <div class="mode-grid">
+        <button
+          v-for="m in modes"
+          :key="m.value"
+          type="button"
+          class="mode-btn"
+          :class="{ active: form.mode === m.value }"
+          @click="form.mode = m.value"
+        >
+          <component :is="m.icon" :size="18" />
+          <span>{{ m.label }}</span>
+        </button>
+      </div>
+      <div class="mode-desc">{{ t(`tunnels.hint.${form.mode}`) }}</div>
+    </div>
+
+    <el-form :model="form" label-width="90px">
       <el-form-item :label="t('tunnels.name')" required>
         <el-input v-model="form.name" :placeholder="t('tunnels.namePlaceholder')" maxlength="50" />
       </el-form-item>
 
       <el-form-item :label="t('tunnels.sshConn')" required>
         <el-select v-model="form.sshConnId" :placeholder="t('tunnels.sshConnPlaceholder')" filterable class="full">
-          <el-option v-for="c in sshConnections" :key="c.id" :label="c.name" :value="c.id">
-            <span>{{ c.name }}</span>
-            <span class="opt-meta">{{ c.user }}@{{ c.host }}</span>
-          </el-option>
+          <el-option
+            v-for="c in sshConnections"
+            :key="c.id"
+            :label="`${c.name} (${c.user}@${c.host}:${c.port})`"
+            :value="c.id"
+          />
         </el-select>
-      </el-form-item>
-      <div class="row-hint">{{ t('tunnels.sshConnHint') }}</div>
-
-      <el-form-item :label="t('tunnels.mode')" required>
-        <el-radio-group v-model="form.mode" class="mode-group">
-          <el-radio-button value="local">{{ t('tunnels.mode.local') }}</el-radio-button>
-          <el-radio-button value="remote">{{ t('tunnels.mode.remote') }}</el-radio-button>
-          <el-radio-button value="dynamic">{{ t('tunnels.mode.dynamic') }}</el-radio-button>
-        </el-radio-group>
       </el-form-item>
 
       <!-- Local -->
       <template v-if="form.mode === 'local'">
-        <el-form-item :label="t('tunnels.localPort')" required>
-          <el-input v-model.number="form.listenPort" type="number" placeholder="13306" />
-        </el-form-item>
-        <el-form-item :label="t('tunnels.bind')">
-          <el-input v-model="form.listenHost" placeholder="127.0.0.1" />
+        <el-form-item :label="t('tunnels.listenLocal')" required>
+          <div class="hostport">
+            <el-input v-model="form.listenHost" placeholder="127.0.0.1" />
+            <span class="colon">:</span>
+            <el-input-number v-model="form.listenPort" :min="1" :max="65535" :controls="false" :placeholder="'13306'" />
+          </div>
         </el-form-item>
         <el-form-item :label="t('tunnels.destination')" required>
           <div class="hostport">
             <el-input v-model="form.targetHost" placeholder="10.0.1.20" />
             <span class="colon">:</span>
-            <el-input v-model.number="form.targetPort" type="number" placeholder="3306" />
+            <el-input-number v-model="form.targetPort" :min="1" :max="65535" :controls="false" :placeholder="'3306'" />
           </div>
         </el-form-item>
-        <div class="row-hint">{{ t('tunnels.hint.local') }}</div>
       </template>
 
       <!-- Remote -->
       <template v-else-if="form.mode === 'remote'">
-        <el-form-item :label="t('tunnels.remotePort')" required>
-          <el-input v-model.number="form.listenPort" type="number" placeholder="8022" />
-        </el-form-item>
-        <el-form-item :label="t('tunnels.remoteBind')">
-          <el-input v-model="form.listenHost" placeholder="0.0.0.0" />
+        <el-form-item :label="t('tunnels.listenRemote')" required>
+          <div class="hostport">
+            <el-input v-model="form.listenHost" placeholder="0.0.0.0" />
+            <span class="colon">:</span>
+            <el-input-number v-model="form.listenPort" :min="1" :max="65535" :controls="false" :placeholder="'8022'" />
+          </div>
         </el-form-item>
         <el-form-item :label="t('tunnels.toLocal')" required>
           <div class="hostport">
             <el-input v-model="form.targetHost" placeholder="127.0.0.1" />
             <span class="colon">:</span>
-            <el-input v-model.number="form.targetPort" type="number" placeholder="22" />
+            <el-input-number v-model="form.targetPort" :min="1" :max="65535" :controls="false" :placeholder="'22'" />
           </div>
         </el-form-item>
-        <div class="row-hint">{{ t('tunnels.hint.remote') }}</div>
       </template>
 
       <!-- Dynamic -->
       <template v-else>
-        <el-form-item :label="t('tunnels.socksPort')" required>
-          <el-input v-model.number="form.listenPort" type="number" placeholder="1080" />
+        <el-form-item :label="t('tunnels.listenLocal')" required>
+          <div class="hostport">
+            <el-input v-model="form.listenHost" placeholder="127.0.0.1" />
+            <span class="colon">:</span>
+            <el-input-number v-model="form.listenPort" :min="1" :max="65535" :controls="false" :placeholder="'1080'" />
+          </div>
         </el-form-item>
-        <el-form-item :label="t('tunnels.bind')">
-          <el-input v-model="form.listenHost" placeholder="127.0.0.1" />
-        </el-form-item>
-        <div class="row-hint">{{ t('tunnels.hint.dynamic') }}</div>
       </template>
-
-      <el-divider />
 
       <el-form-item :label="t('tunnels.autoStartLabel')">
         <el-switch v-model="form.autoStart" />
@@ -88,9 +96,6 @@
     <div v-if="errorMsg" class="form-error">{{ errorMsg }}</div>
 
     <template #footer>
-      <el-button disabled class="test-btn">
-        {{ t('tunnels.test') }} <span class="soon">{{ t('tunnels.testSoon') }}</span>
-      </el-button>
       <el-button @click="visible = false">{{ t('tunnels.cancel') }}</el-button>
       <el-button type="primary" @click="handleSave">{{ t('tunnels.save') }}</el-button>
     </template>
@@ -99,6 +104,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
+import { ArrowRightToLine, ArrowLeftToLine, Waypoints } from '@lucide/vue'
 import { useTunnelStore, type TunnelMode } from '../stores/tunnelStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useI18n } from '../i18n'
@@ -121,8 +127,16 @@ const visible = computed({
 })
 
 const sshConnections = computed(() =>
-  connectionStore.connections.filter(c => c.type === 'ssh')
+  connectionStore.connections
+    .filter(c => c.type === 'ssh')
+    .sort((a, b) => a.name.localeCompare(b.name))
 )
+
+const modes = computed(() => [
+  { value: 'local' as TunnelMode, label: t('tunnels.mode.local'), icon: ArrowRightToLine },
+  { value: 'remote' as TunnelMode, label: t('tunnels.mode.remote'), icon: ArrowLeftToLine },
+  { value: 'dynamic' as TunnelMode, label: t('tunnels.mode.dynamic'), icon: Waypoints },
+])
 
 function blankForm() {
   return {
@@ -199,15 +213,68 @@ function resetForm() {
 <style scoped>
 .full { width: 100%; }
 .tunnel-dialog :deep(.el-select) { width: 100%; }
-.opt-meta { float: right; color: var(--text-muted); font-size: 11px; margin-left: 12px; }
-.row-hint { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin: -10px 0 14px 88px; }
 .inline-hint { font-size: 12px; color: var(--text-secondary); margin-left: 10px; }
-.hostport { display: grid; grid-template-columns: 1fr auto 100px; gap: 8px; align-items: center; width: 100%; }
+.hostport { display: grid; grid-template-columns: 1fr auto 120px; gap: 8px; align-items: center; width: 100%; }
 .hostport .colon { color: var(--text-muted); text-align: center; }
-.mode-group { display: flex; width: 100%; }
-.mode-group :deep(.el-radio-button) { flex: 1; }
-.mode-group :deep(.el-radio-button__inner) { width: 100%; }
+.hostport :deep(.el-input-number) { width: 100%; }
 .form-error { color: var(--error); font-size: 12px; margin-top: 2px; }
-.test-btn { margin-right: auto; }
-.test-btn .soon { font-size: 10px; color: var(--warning, #e0a54b); margin-left: 4px; }
+
+/* Mode buttons: identical look to the connection form's sub-type selection */
+.mode-section {
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.mode-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 80px;
+  height: 56px;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+.mode-btn.active {
+  background: linear-gradient(135deg, var(--accent-dim), var(--accent));
+  color: var(--on-accent);
+  border-color: var(--accent-glow);
+  box-shadow: 0 0 0 1px var(--accent-glow), 0 2px 8px var(--accent-glow);
+}
+.mode-btn span {
+  text-align: center;
+  line-height: 1.2;
+}
+.mode-desc {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* ── Dialog overrides ── */
+:deep(.el-dialog__body) {
+  padding: 16px 20px;
+}
 </style>

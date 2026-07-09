@@ -513,9 +513,9 @@ const category = computed(() => {
 })
 
 const sshConnections = computed(() =>
-  connectionStore.connections.filter(c =>
-    c.type === 'ssh' && c.id !== form.id
-  )
+  connectionStore.connections
+    .filter(c => c.type === 'ssh' && c.id !== form.id)
+    .sort((a, b) => a.name.localeCompare(b.name))
 )
 
 const TUNNEL_UNSUPPORTED = ['spice', 'mosh', 'local', 'serial']
