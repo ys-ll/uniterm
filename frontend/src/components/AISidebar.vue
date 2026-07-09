@@ -565,7 +565,7 @@ defineExpose({ focusInput })
 
 <style scoped>
 .ai-sidebar {
-  background: var(--bg-base);
+  background: var(--bg-elevated);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -592,15 +592,44 @@ defineExpose({ focusInput })
   left: 0;
   top: 0;
   bottom: 0;
-  width: 3px;
+  width: 6px;
   cursor: col-resize;
   z-index: 10;
-  background: var(--border-subtle);
+  background: transparent;
   transition: background 0.15s ease;
 }
 
-.resize-handle:hover {
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--accent-subtle) 20%,
+    var(--accent-glow) 50%,
+    var(--accent-subtle) 80%,
+    transparent 100%
+  );
+  transition: opacity 0.15s;
+}
+
+.resize-handle:hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
   background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+.resize-handle:hover::before {
+  opacity: 0;
 }
 .ai-header {
   display: flex;
