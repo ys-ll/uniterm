@@ -1155,6 +1155,7 @@ export namespace store {
 	export class LocalState {
 	    sidebarVisible: boolean;
 	    aiSidebarVisible: boolean;
+	    collapsedGroupIds: string[];
 	    windowX: number;
 	    windowY: number;
 	    windowWidth: number;
@@ -1169,6 +1170,7 @@ export namespace store {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sidebarVisible = source["sidebarVisible"];
 	        this.aiSidebarVisible = source["aiSidebarVisible"];
+	        this.collapsedGroupIds = source["collapsedGroupIds"];
 	        this.windowX = source["windowX"];
 	        this.windowY = source["windowY"];
 	        this.windowWidth = source["windowWidth"];

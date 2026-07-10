@@ -9,13 +9,14 @@ import (
 const localStateFileName = "local_state.json"
 
 type LocalState struct {
-	SidebarVisible   bool `json:"sidebarVisible"`
-	AISidebarVisible bool `json:"aiSidebarVisible"`
-	WindowX          int  `json:"windowX"`
-	WindowY          int  `json:"windowY"`
-	WindowWidth      int  `json:"windowWidth"`
-	WindowHeight     int  `json:"windowHeight"`
-	WindowMaximised  bool `json:"windowMaximised"`
+	SidebarVisible    bool     `json:"sidebarVisible"`
+	AISidebarVisible  bool     `json:"aiSidebarVisible"`
+	CollapsedGroupIds []string `json:"collapsedGroupIds"`
+	WindowX           int      `json:"windowX"`
+	WindowY           int      `json:"windowY"`
+	WindowWidth       int      `json:"windowWidth"`
+	WindowHeight      int      `json:"windowHeight"`
+	WindowMaximised   bool     `json:"windowMaximised"`
 }
 
 type LocalStateStore struct {

@@ -476,6 +476,7 @@ import CustomThemeEditor from './CustomThemeEditor.vue'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 import { parseQuickConnect, formatConnSubtitle } from '../utils/quickConnect'
 import { FONT_OPTIONS, LANGUAGE_OPTIONS } from '../types/settings'
+import { LoadLocalState, SaveLocalState } from '../../wailsjs/go/main/App'
 import { formatFontFamily } from '../utils/formatFontFamily'
 import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
 import { GetSystemFonts } from '../../wailsjs/go/main/App'
@@ -582,13 +583,33 @@ function matchTypeFilter(conn: ConnectionConfig, filter: string): boolean {
 
 // ── Expand/collapse state ──
 const expandedGroups = ref<Set<string>>(new Set())
+const collapsedGroupIds = ref<Set<string>>(new Set())
 
-function toggleGroup(groupId: string) {
+// Build expandedGroups from all known group IDs minus those explicitly collapsed
+function syncExpandedFromCollapsed(groupIds: string[]) {
+  expandedGroups.value = new Set(groupIds.filter(id => !collapsedGroupIds.value.has(id)))
+}
+
+// Persist collapsedGroupIds to LocalState
+async function persistCollapsedState() {
+  try {
+    const state = await LoadLocalState()
+    state.collapsedGroupIds = [...collapsedGroupIds.value]
+    await SaveLocalState(state)
+  } catch {
+    // ignore errors — collapse state is not critical
+  }
+}
+
+async function toggleGroup(groupId: string) {
   if (expandedGroups.value.has(groupId)) {
     expandedGroups.value.delete(groupId)
+    collapsedGroupIds.value.add(groupId)
   } else {
     expandedGroups.value.add(groupId)
+    collapsedGroupIds.value.delete(groupId)
   }
+  await persistCollapsedState()
 }
 
 // ── Multi-select ──
@@ -652,26 +673,96 @@ watch(filteredGrouped, () => {
   }
 }, { immediate: true })
 
-// Auto-expand all groups by default
+// Track the previous group ID set so we can detect new vs deleted groups
+const prevGroupIds = ref<Set<string>>(new Set())
+const collapsedStateLoaded = ref(false)
+
+// Sync expanded state when groups change (add/delete/rename) — preserve user collapse choices
 watch(() => connectionStore.groups, (groups) => {
+  if (!collapsedStateLoaded.value) return
+  const currentIds = new Set<string>()
   for (const g of groups) {
-    expandedGroups.value.add(g.id)
+    currentIds.add(g.id)
   }
   if (groups.length > 0) {
-    expandedGroups.value.add('__ungrouped__')
+    currentIds.add('__ungrouped__')
   }
-}, { immediate: true })
 
-// Auto-expand groups when searching
+  // Remove stale group IDs from both expanded and collapsed
+  const allKnown = new Set([...expandedGroups.value, ...collapsedGroupIds.value])
+  for (const id of allKnown) {
+    if (id === '__ungrouped__' && groups.length === 0) continue
+    if (id !== '__ungrouped__' && !currentIds.has(id)) {
+      expandedGroups.value.delete(id)
+      collapsedGroupIds.value.delete(id)
+    }
+  }
+
+  // New groups (and __ungrouped__ if first time) — expand by default
+  for (const id of currentIds) {
+    if (!prevGroupIds.value.has(id) && !collapsedGroupIds.value.has(id)) {
+      expandedGroups.value.add(id)
+    }
+  }
+
+  prevGroupIds.value = currentIds
+})
+
+// Initialize collapse state from persisted LocalState
+async function initCollapseState() {
+  try {
+    const state = await LoadLocalState()
+    if (state.collapsedGroupIds && state.collapsedGroupIds.length > 0) {
+      collapsedGroupIds.value = new Set(state.collapsedGroupIds)
+    }
+  } catch {
+    // Use default (all expanded)
+  }
+
+  // Build initial expandedGroups and prevGroupIds
+  const allIds: string[] = []
+  for (const g of connectionStore.groups) {
+    allIds.push(g.id)
+  }
+  if (connectionStore.groups.length > 0) {
+    allIds.push('__ungrouped__')
+  }
+  expandedGroups.value = new Set(allIds.filter(id => !collapsedGroupIds.value.has(id)))
+  prevGroupIds.value = new Set(allIds)
+  collapsedStateLoaded.value = true
+}
+
+// Track previous search query state
+const wasSearching = ref(false)
+
+// Auto-expand all groups while searching; restore persisted state when search is cleared
 watch(searchQuery, (q) => {
-  if (q.trim()) {
+  const isSearching = !!q.trim()
+  if (isSearching && !wasSearching.value) {
+    // Entering search mode — expand all visually (don't touch collapsedGroupIds)
+    expandedGroups.value = new Set()
     for (const g of filteredGrouped.value.groups) {
       expandedGroups.value.add(g.group.id)
     }
     if (connectionStore.groups.length > 0) {
       expandedGroups.value.add('__ungrouped__')
     }
+  } else if (!isSearching && wasSearching.value) {
+    // Exiting search mode — restore from persisted collapsed state
+    const allIds: string[] = []
+    for (const g of connectionStore.groups) {
+      allIds.push(g.id)
+    }
+    if (connectionStore.groups.length > 0) {
+      allIds.push('__ungrouped__')
+    }
+    syncExpandedFromCollapsed(allIds)
+    // Clean stale entries from collapsedGroupIds
+    collapsedGroupIds.value = new Set(
+      [...collapsedGroupIds.value].filter(id => id === '__ungrouped__' || connectionStore.groups.some(g => g.id === id))
+    )
   }
+  wasSearching.value = isSearching
 })
 
 // ── Resize ──
@@ -1453,6 +1544,8 @@ onMounted(async () => {
     closeGroupMenu()
     closeEmptyAreaMenu()
   })
+  // Restore group collapse state from persisted settings
+  await initCollapseState()
   // Load system fonts for personalization panel
   try {
     const fonts = await GetSystemFonts()
