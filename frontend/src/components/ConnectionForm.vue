@@ -295,6 +295,7 @@
                   <el-option label="Latin-1" value="latin-1" />
                 </el-select>
               </el-form-item>
+            </template>
             <el-form-item v-if="showTunnel" :label="t('conn.tunnel')">
               <el-select
                 v-model="form.tunnelSSHConnId"
@@ -310,7 +311,6 @@
                 />
               </el-select>
             </el-form-item>
-            </template>
             </template>
           </el-form>
         </div>
@@ -873,7 +873,7 @@ function onConnect() {
 .conn-layout {
   display: flex;
   gap: 0;
-  min-height: 420px;
+  min-height: 360px;
 }
 
 /* ── Left sidebar ── */
@@ -983,8 +983,6 @@ function onConnect() {
 
 /* ── Form fields ── */
 .conn-fields {
-  flex: 1;
-  overflow-y: auto;
   padding-right: 4px;
 }
 
