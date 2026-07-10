@@ -556,6 +556,7 @@ const TYPE_LABELS: Record<string, string> = {
   'database:oracle': 'Oracle',
   'database:sqlserver': 'SQL Server',
   'database:redis': 'Redis',
+  'database:mongodb': 'MongoDB',
 }
 
 const availableTypes = computed<TypeOption[]>(() => {
@@ -1467,7 +1468,7 @@ function connIcon(conn: ConnectionConfig) {
     case 'rdp': return Monitor
     case 'vnc': return MonitorSmartphone
     case 'spice': return MonitorCloud
-    case 'database': return conn.dbType === 'redis' ? DatabaseZap : Database
+    case 'database': return conn.dbType === 'redis' ? DatabaseZap : conn.dbType === 'mongodb' ? Database : Database
     case 'monitor': return Activity
     default: return SquareTerminal
   }

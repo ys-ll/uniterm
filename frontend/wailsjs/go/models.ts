@@ -511,6 +511,42 @@ export namespace session {
 		    return a;
 		}
 	}
+	export class MongoIndexInfo {
+	    name: string;
+	    keys: string[];
+	    type: string;
+	    unique: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MongoIndexInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.keys = source["keys"];
+	        this.type = source["type"];
+	        this.unique = source["unique"];
+	    }
+	}
+	export class MongoQueryResult {
+	    documents: string[];
+	    total: number;
+	    skip: number;
+	    limit: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MongoQueryResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.documents = source["documents"];
+	        this.total = source["total"];
+	        this.skip = source["skip"];
+	        this.limit = source["limit"];
+	    }
+	}
 	export class NetCardInfo {
 	    name: string;
 	    state: string;

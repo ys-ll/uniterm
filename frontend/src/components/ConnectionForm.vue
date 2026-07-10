@@ -396,6 +396,7 @@ const allSubTypes = computed(() => ({
     { type: 'database', dbType: 'sqlserver', label: 'SQL Server', icon: Database },
     { type: 'database', dbType: 'rqlite', label: 'rqlite', icon: Database },
     { type: 'database', dbType: 'redis', label: 'Redis', icon: DatabaseZap },
+    { type: 'database', dbType: 'mongodb', label: 'MongoDB', icon: Database },
   ],
 }))
 
@@ -675,6 +676,7 @@ watch(() => form.dbType, (newType) => {
   else if (newType === 'oracle') form.port = 1521
   else if (newType === 'sqlserver') form.port = 1433
   else if (newType === 'redis') form.port = 6379
+  else if (newType === 'mongodb') form.port = 27017
 })
 
 // Sync resolution picker to form fields

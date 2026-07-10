@@ -12,6 +12,7 @@ OutFile "..\..\bin\uniTerm-amd64-installer.exe"
 InstallDir "$PROGRAMFILES64\${PRODUCT_NAME}"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
+SetCompressorDictSize 128
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"

@@ -2445,6 +2445,18 @@ func (a *App) redisSession(sessionID string) (*session.RedisSession, error) {
 	return rs, nil
 }
 
+func (a *App) mongoSession(sessionID string) (*session.MongoSession, error) {
+	s, ok := a.sessionManager.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not found: %s", sessionID)
+	}
+	ms, ok := s.(*session.MongoSession)
+	if !ok {
+		return nil, fmt.Errorf("session is not a mongodb session: %s (type=%s)", sessionID, s.Type())
+	}
+	return ms, nil
+}
+
 // ── Redis methods ──
 
 func (a *App) RedisPing(sessionID string) error {
@@ -2653,6 +2665,104 @@ func (a *App) RedisZSetRemove(sessionID string, key string, members []string) (i
 		return 0, err
 	}
 	return rs.ZSetRemove(key, members)
+}
+
+// ── MongoDB methods ──
+
+func (a *App) MongoPing(sessionID string) error {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return ms.Ping()
+}
+
+func (a *App) MongoListDatabases(sessionID string) ([]string, error) {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return ms.ListDatabases()
+}
+
+func (a *App) MongoListCollections(sessionID string, dbName string) ([]string, error) {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return ms.ListCollections(dbName)
+}
+
+func (a *App) MongoFind(sessionID string, dbName string, collection string, filterJSON string, skip int64, limit int64) (*session.MongoQueryResult, error) {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return ms.Find(dbName, collection, filterJSON, skip, limit)
+}
+
+func (a *App) MongoGetDocument(sessionID string, dbName string, collection string, docID string) (string, error) {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return "", err
+	}
+	return ms.GetDocument(dbName, collection, docID)
+}
+
+func (a *App) MongoInsertOne(sessionID string, dbName string, collection string, docJSON string) (string, error) {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return "", err
+	}
+	return ms.InsertOne(dbName, collection, docJSON)
+}
+
+func (a *App) MongoUpdateOne(sessionID string, dbName string, collection string, filterJSON string, updateJSON string) error {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return ms.UpdateOne(dbName, collection, filterJSON, updateJSON)
+}
+
+func (a *App) MongoDeleteOne(sessionID string, dbName string, collection string, filterJSON string) error {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return ms.DeleteOne(dbName, collection, filterJSON)
+}
+
+func (a *App) MongoListIndexes(sessionID string, dbName string, collection string) ([]session.MongoIndexInfo, error) {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return ms.ListIndexes(dbName, collection)
+}
+
+func (a *App) MongoCreateCollection(sessionID string, dbName string, collection string) error {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return ms.CreateCollection(dbName, collection)
+}
+
+func (a *App) MongoDropCollection(sessionID string, dbName string, collection string) error {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return ms.DropCollection(dbName, collection)
+}
+
+func (a *App) MongoDropDatabase(sessionID string, dbName string) error {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return ms.DropDatabase(dbName)
 }
 
 func (a *App) GetDatabases(sessionID string) ([]string, error) {

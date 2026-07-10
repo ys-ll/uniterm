@@ -453,6 +453,7 @@ const TYPE_LABELS: Record<string, string> = {
   local: 'Local', sftp: 'SFTP', ftp: 'FTP', smb: 'SMB', s3: 'S3', webdav: 'WebDAV', monitor: 'Monitor',
   'database:mysql': 'MySQL', 'database:postgres': 'PostgreSQL', 'database:rqlite': 'rqlite',
   'database:oracle': 'Oracle', 'database:sqlserver': 'SQL Server', 'database:redis': 'Redis',
+  'database:mongodb': 'MongoDB',
 }
 
 const availableTypes = computed(() => {

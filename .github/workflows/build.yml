@@ -74,14 +74,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
-      - name: Install NSIS (Windows)
+      - name: Install NSIS and UPX (Windows)
         if: matrix.platform == 'windows/amd64'
         shell: bash
         run: |
-          choco install nsis -y
+          choco install nsis upx -y
           NSIS_BIN="/c/Program Files (x86)/NSIS/Bin"
           if [ ! -f "$NSIS_BIN/makensis.exe" ]; then echo "ERROR: makensis.exe not found at $NSIS_BIN"; exit 1; fi
           echo "makensis: $NSIS_BIN/makensis.exe"
+          upx --version
+
+      - name: Install UPX (Linux)
+        if: matrix.platform == 'linux/amd64'
+        run: sudo apt-get install -y upx
 
       - name: Build
         shell: bash
@@ -90,7 +95,23 @@ jobs:
             export PATH="/c/Program Files (x86)/NSIS/Bin:$PATH"
           fi
           echo "PATH=$PATH"
-          wails build -platform ${{ matrix.platform }} -ldflags "-s -w -X main.Version=${{ env.VERSION }}" -skipbindings ${{ matrix.platform == 'windows/amd64' && '-nsis' || '' }} ${{ matrix.platform == 'linux/amd64' && '-tags webkit2_41' || '' }}
+
+          BUILD_ARGS="-platform ${{ matrix.platform }} -ldflags \"-s -w -X main.Version=${{ env.VERSION }}\" -skipbindings"
+
+          if [ "${{ matrix.platform }}" = "windows/amd64" ]; then
+            BUILD_ARGS="$BUILD_ARGS -nsis"
+          fi
+
+          if [ "${{ matrix.platform }}" = "windows/amd64" ] || [ "${{ matrix.platform }}" = "linux/amd64" ]; then
+            BUILD_ARGS="$BUILD_ARGS -upx -upxflags=\"--best --lzma\""
+          fi
+
+          if [ "${{ matrix.platform }}" = "linux/amd64" ]; then
+            BUILD_ARGS="$BUILD_ARGS -tags webkit2_41"
+          fi
+
+          echo "BUILD_ARGS=$BUILD_ARGS"
+          eval wails build $BUILD_ARGS
 
       - name: Fix macOS permissions and sign
         if: matrix.platform == 'darwin/universal'

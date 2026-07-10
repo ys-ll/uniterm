@@ -18,6 +18,8 @@ const QUICK_PROTOCOLS: Record<string, { type: string; dbType?: string; defaultPo
   postgres: { type: 'database', dbType: 'postgres', defaultPort: 5432 },
   postgresql: { type: 'database', dbType: 'postgres', defaultPort: 5432 },
   redis: { type: 'database', dbType: 'redis', defaultPort: 6379 },
+  mongodb: { type: 'database', dbType: 'mongodb', defaultPort: 27017 },
+  mongo: { type: 'database', dbType: 'mongodb', defaultPort: 27017 },
   oracle: { type: 'database', dbType: 'oracle', defaultPort: 1521 },
   sqlserver: { type: 'database', dbType: 'sqlserver', defaultPort: 1433 },
   rqlite: { type: 'database', dbType: 'rqlite', defaultPort: 4001 },

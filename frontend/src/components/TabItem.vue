@@ -125,7 +125,7 @@ const tabIcon = computed(() => {
   if (t.type === 'rdp') return Monitor
   if (t.type === 'vnc') return MonitorSmartphone
   if (t.type === 'spice') return MonitorCloud
-  if (t.type === 'database') {
+  if (t.type === 'database' || t.type === 'mongodb') {
     const panel = panelStore.getPanel(t.panelId)
     if (panel?.config?.dbType === 'redis') return DatabaseZap
     return Database

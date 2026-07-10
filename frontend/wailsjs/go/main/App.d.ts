@@ -115,6 +115,30 @@ export function LoadTunnels():Promise<session.TunnelStoreData>;
 
 export function ModifyColumn(arg1:string,arg2:string,arg3:string,arg4:database.ColumnDef):Promise<void>;
 
+export function MongoCreateCollection(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function MongoDeleteOne(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function MongoDropCollection(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function MongoDropDatabase(arg1:string,arg2:string):Promise<void>;
+
+export function MongoFind(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<session.MongoQueryResult>;
+
+export function MongoGetDocument(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
+export function MongoInsertOne(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+
+export function MongoListCollections(arg1:string,arg2:string):Promise<Array<string>>;
+
+export function MongoListDatabases(arg1:string):Promise<Array<string>>;
+
+export function MongoListIndexes(arg1:string,arg2:string,arg3:string):Promise<Array<session.MongoIndexInfo>>;
+
+export function MongoPing(arg1:string):Promise<void>;
+
+export function MongoUpdateOne(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
+
 export function OnConnectionsChanged(arg1:any):Promise<void>;
 
 export function OpenDirectoryDialog():Promise<string>;

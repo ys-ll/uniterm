@@ -64,6 +64,11 @@
               :key="activeTab.id"
               :session-id="getPanelSessionId(activeTab.panelId) || ''"
             />
+            <MongoDBTabContent
+              v-else-if="activeTab.type === 'mongodb'"
+              :key="activeTab.id"
+              :session-id="getPanelSessionId(activeTab.panelId) || ''"
+            />
             <MonitorTabContent
               v-else-if="activeTab.type === 'monitor'"
               :key="activeTab.id"
@@ -129,6 +134,7 @@ import VNCTabContent from './components/VNCTabContent.vue'
 import SPICETabContent from './components/SPICETabContent.vue'
 import DBTabContent from './components/DBTabContent.vue'
 import RedisTabContent from './components/RedisTabContent.vue'
+import MongoDBTabContent from './components/MongoDBTabContent.vue'
 import MonitorTabContent from './components/MonitorTabContent.vue'
 import StartTabContent from './components/StartTabContent.vue'
 import ConnectionForm from './components/ConnectionForm.vue'
@@ -685,7 +691,7 @@ async function closeTab(tabId: string) {
     }
   }
   // Close redis session
-  if (tab && tab.type === 'redis') {
+  if (tab && (tab.type === 'redis' || tab.type === 'mongodb')) {
     const p = panelStore.getPanel(tab.panelId)
     if (p?.sessionId) {
       try { await CloseSession(p.sessionId) } catch (_) {}
@@ -1146,12 +1152,21 @@ async function onConnectDB(config: ConnectionConfig, prevStart?: any) {
   if (reposition) reposition(tab.id)
   if (config.dbType === 'redis') {
     tab.type = 'redis' as any
+  } else if (config.dbType === 'mongodb') {
+    tab.type = 'mongodb' as any
   }
   panelStore.movePanelToTab(panel.id, tab.id)
   RecordRecentConnection(config.id)
 
   try {
-    const sessionType = config.dbType === 'redis' ? 'redis' : 'database'
+    let sessionType: string
+    if (config.dbType === 'redis') {
+      sessionType = 'redis'
+    } else if (config.dbType === 'mongodb') {
+      sessionType = 'mongodb'
+    } else {
+      sessionType = 'database'
+    }
     const info = await CreateSession(sessionType, config)
     panelStore.bindSession(panel.id, info.id)
     sessionStore.initSession(info.id)
