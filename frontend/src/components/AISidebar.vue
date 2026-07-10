@@ -66,8 +66,8 @@
         @reject="onReject"
         @continue="onContinue"
       />
-      <div v-if="aiStore.isRunning && !streamingMsgHasContent" class="ai-thinking">
-        <div class="thinking-text">{{ t('ai.thinking') }}</div>
+      <div v-if="aiStore.isRunning || aiStore.pendingCommand" class="ai-thinking">
+        <div class="thinking-text">{{ statusText }}</div>
       </div>
     </div>
 
@@ -265,12 +265,10 @@ function closeSearch() {
 watch(() => [searchText.value, visibleMessages.value.length], () => {
   if (searchText.value) highlightMatches()
 })
-// Hide thinking indicator once streaming content arrives
-const streamingMsgHasContent = computed(() => {
-  const msgs = aiStore.messages
-  if (!aiStore.isRunning || msgs.length === 0) return false
-  const last = msgs[msgs.length - 1]
-  return last.role === 'assistant' && !!last.content
+const statusText = computed(() => {
+  if (aiStore.pendingCommand) return t('ai.confirming')
+  const key = `ai.${aiStore.status}` as any
+  return t(key) || t('ai.thinking')
 })
 
 const messagesRef = ref<HTMLDivElement>()
@@ -811,6 +809,12 @@ defineExpose({ focusInput })
   font-family: var(--font-ui);
   color: var(--text-muted);
   font-style: italic;
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 .ai-input {
   padding: 10px 16px;

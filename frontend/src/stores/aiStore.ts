@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, reactive, watch } from 'vue'
-import type { AIMessage, AIConfig, ExecutionMode, AISession } from '../types/ai'
+import type { AIMessage, AIConfig, ExecutionMode, AISession, AIAgentStatus } from '../types/ai'
 import { SaveAIConfig, LoadAIConfig, SaveAISessions, LoadAISessions, SaveLocalState, LoadLocalState } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 import { t } from '../i18n'
@@ -146,6 +146,7 @@ export const useAIStore = defineStore('ai', () => {
   const mode = ref<ExecutionMode>('confirm_dangerous')
   const config = ref<AIConfig>({ ...DEFAULT_CONFIG })
   const isRunning = ref(false)
+  const status = ref<AIAgentStatus>('thinking')
   const stopRequested = ref(false)
   const sessions = ref<AISession[]>([])
   const currentSessionId = ref<string | null>(null)
@@ -602,6 +603,7 @@ export const useAIStore = defineStore('ai', () => {
     mode,
     config,
     isRunning,
+    status,
     saveConfig,
     initConfig,
     setConfig,

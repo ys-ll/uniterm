@@ -202,6 +202,7 @@ export async function runAgent(userInput: string) {
 
   store.resetStop()
   store.isRunning = true
+  store.status = 'thinking'
 
   // Record current panel context so buildDynamicContext can detect terminal switches
   const activePanel = getActivePanel()
@@ -229,6 +230,7 @@ export async function runAgent(userInput: string) {
     if (activeAssistantMsg && data.text) {
       activeAssistantMsg.content += data.text
       streamedText += data.text
+      store.status = 'outputting'
     }
   })
 
@@ -293,6 +295,7 @@ export async function runAgent(userInput: string) {
       }
     }
     try {
+      store.status = 'thinking'
       await chat(chatOptions)
       // Preserve raw API message blocks for conversation history
       if (chatOptions._rawApiMsg) {
@@ -401,6 +404,7 @@ export async function runAgent(userInput: string) {
           risk,
           dangerous: risk === 'dangerous'
         })
+        store.status = 'confirming'
         assistantMsg.tool_calls = [{
           id: tu.id,
           type: 'function' as const,
@@ -415,6 +419,7 @@ export async function runAgent(userInput: string) {
       }
 
       try {
+        store.status = 'executing'
         const result = await executeCommand(command, timeoutMs, headLines, tailLines, () => store.stopRequested)
         if (result.cancelled || store.stopRequested) {
           store.addMessage({
@@ -443,6 +448,7 @@ export async function runAgent(userInput: string) {
     } else if (tu.name === 'start_command') {
       const command = tu.input.command as string
       try {
+        store.status = 'executing'
         const result = await startCommand(command)
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -461,6 +467,7 @@ export async function runAgent(userInput: string) {
     } else if (tu.name === 'capture_terminal') {
       const tailLines = (tu.input.tail_lines as number) ?? 200
       try {
+        store.status = 'executing'
         const result = captureTerminal(tailLines)
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -482,6 +489,7 @@ export async function runAgent(userInput: string) {
       const headLines = (tu.input.head_lines as number) ?? 100
       const tailLines = (tu.input.tail_lines as number) ?? 300
       try {
+        store.status = 'executing'
         const result = await collectOutput(timeoutMs, headLines, tailLines)
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -502,6 +510,7 @@ export async function runAgent(userInput: string) {
       const control = tu.input.control as string | undefined
       const sendEnter = (tu.input.send_enter as boolean) ?? true
       try {
+        store.status = 'executing'
         const result = await sendTerminalKey(
           input,
           control as 'ctrl_c' | 'ctrl_d' | 'enter' | undefined,
@@ -523,6 +532,7 @@ export async function runAgent(userInput: string) {
       }
     } else if (tu.name === 'interrupt_command') {
       try {
+        store.status = 'executing'
         const result = await sendTerminalKey(undefined, 'ctrl_c')
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -582,7 +592,7 @@ export async function approveTool(_messageId: string) {
 
   store.clearPendingCommand()
   store.isRunning = true
-
+  store.status = 'executing'
 
   try {
     const result = await executeCommand(cmd.command)
