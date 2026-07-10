@@ -48,6 +48,7 @@
                 :key="'dbquery-' + selectedDb"
                 :session-id="sessionId"
                 :db-name="selectedDb"
+                :db-type="dbType"
               />
               <DBObjectList
                 v-if="dbActiveTab === 'objects'"
@@ -92,6 +93,7 @@
                 :session-id="sessionId"
                 :table-name="selectedTable"
                 :db-name="selectedDb"
+                :db-type="dbType"
                 :primary-keys="primaryKeys"
                 :table-columns="tableColumns"
                 :is-view="selectedIsView"
@@ -130,6 +132,7 @@ const props = defineProps<{
   sessionId: string
   hostName?: string
   defaultDbName?: string
+  dbType?: string
 }>()
 
 const activeTab = ref<'structure' | 'query'>('query')

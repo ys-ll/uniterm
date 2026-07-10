@@ -187,22 +187,7 @@
                 <el-switch v-model="form.rdpSmartSizing" />
               </el-form-item>
             </template>
-            <el-form-item v-if="showTunnel" :label="t('conn.tunnel')">
-              <el-select
-                v-model="form.tunnelSSHConnId"
-                :placeholder="t('conn.tunnelPlaceholder')"
-                clearable
-                filterable
-              >
-                <el-option
-                  v-for="c in sshConnections"
-                  :key="c.id"
-                  :label="`${c.name} (${c.user}@${c.host}:${c.port})`"
-                  :value="c.id"
-                />
-              </el-select>
-            </el-form-item>
-            <div v-if="form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'ftp'" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
+            <div v-if="showAdvancedToggle" class="advanced-toggle" @click="showAdvanced = !showAdvanced">
               <el-icon class="advanced-arrow" :class="{ expanded: showAdvanced }"><ChevronRight :size="14" /></el-icon>
               <span>{{ t('conn.advanced') }}</span>
             </div>
@@ -310,6 +295,21 @@
                   <el-option label="Latin-1" value="latin-1" />
                 </el-select>
               </el-form-item>
+            <el-form-item v-if="showTunnel" :label="t('conn.tunnel')">
+              <el-select
+                v-model="form.tunnelSSHConnId"
+                :placeholder="t('conn.tunnelPlaceholder')"
+                clearable
+                filterable
+              >
+                <el-option
+                  v-for="c in sshConnections"
+                  :key="c.id"
+                  :label="`${c.name} (${c.user}@${c.host}:${c.port})`"
+                  :value="c.id"
+                />
+              </el-select>
+            </el-form-item>
             </template>
             </template>
           </el-form>
@@ -348,7 +348,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import type { ConnectionConfig, PostLoginExpectStep } from '../types/session'
 import { GetPlatform, OpenFileDialog } from '../../wailsjs/go/main/App'
-import { Plus, Trash2, ChevronRight, FolderOpen, RefreshCw, Terminal, Monitor, Database, DatabaseZap, SquareTerminal, Zap, Laptop, Cable, FolderUp, HardDrive, Cloud, Globe, MonitorCloud, MonitorSmartphone } from '@lucide/vue'
+import { Plus, Trash2, ChevronRight, FolderOpen, RefreshCw, Terminal, Monitor, Database, DatabaseZap, Layers, SquareTerminal, Zap, Laptop, Cable, FolderUp, HardDrive, Cloud, Globe, MonitorCloud, MonitorSmartphone } from '@lucide/vue'
 import { ListSerialPorts } from '../../wailsjs/go/main/App'
 
 const { t } = useI18n()
@@ -396,7 +396,7 @@ const allSubTypes = computed(() => ({
     { type: 'database', dbType: 'sqlserver', label: 'SQL Server', icon: Database },
     { type: 'database', dbType: 'rqlite', label: 'rqlite', icon: Database },
     { type: 'database', dbType: 'redis', label: 'Redis', icon: DatabaseZap },
-    { type: 'database', dbType: 'mongodb', label: 'MongoDB', icon: Database },
+    { type: 'database', dbType: 'mongodb', label: 'MongoDB', icon: Layers },
   ],
 }))
 
@@ -533,6 +533,9 @@ const sshConnections = computed(() =>
 const TUNNEL_UNSUPPORTED = ['spice', 'mosh', 'local', 'serial']
 const showTunnel = computed(() =>
   !TUNNEL_UNSUPPORTED.includes(form.type)
+)
+const showAdvancedToggle = computed(() =>
+  showTunnel.value || form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'ftp'
 )
 
 const defaultParamsHint = computed(() => {
@@ -932,7 +935,7 @@ function onConnect() {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   padding-bottom: 14px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--border-subtle);
@@ -944,8 +947,8 @@ function onConnect() {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  width: 72px;
-  height: 56px;
+  width: 64px;
+  height: 52px;
   padding: 4px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -974,6 +977,8 @@ function onConnect() {
 .subtype-btn span {
   text-align: center;
   line-height: 1.2;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* ── Form fields ── */

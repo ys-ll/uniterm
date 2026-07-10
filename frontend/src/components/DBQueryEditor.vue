@@ -8,6 +8,18 @@
       </div>
     </div>
     <div class="editor-top" :style="{ height: topHeight + 'px' }">
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input
+          v-model="nlInput"
+          class="nl-input"
+          :placeholder="t('mongodb.aiPlaceholder')"
+          @keydown.enter="generateSQL"
+        />
+        <button class="btn btn-default btn-sm" @click="generateSQL" :disabled="aiGenerating || !nlInput.trim()">
+          <Sparkles :size="14" :class="{ 'ai-pulse': aiGenerating }" />
+          {{ aiGenerating ? '...' : 'AI' }}
+        </button>
+      </div>
       <div class="sql-editor-wrap">
         <textarea
           v-model="sql"
@@ -119,10 +131,11 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, nextTick, onMounted } from 'vue'
-import { Pencil, Trash2 } from '@lucide/vue'
+import { Pencil, Trash2, Sparkles } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
-import { ExecuteQuery, ExecuteStatement, GetTableSchema, DBDefaultTableQuery, DBInsertRow, DBUpdateRow, DBDeleteRow } from '../../wailsjs/go/main/App'
+import { ExecuteQuery, ExecuteStatement, GetTables, GetTableSchema, DBDefaultTableQuery, DBInsertRow, DBUpdateRow, DBDeleteRow } from '../../wailsjs/go/main/App'
+import { chat } from '../services/llm'
 import type { QueryResult, ExecResult, ColumnInfo } from '../types/database'
 
 const { t } = useI18n()
@@ -131,6 +144,7 @@ const props = defineProps<{
   sessionId: string
   tableName?: string
   dbName?: string
+  dbType?: string
   primaryKeys?: string[]
   tableColumns?: ColumnInfo[]
   isView?: boolean
@@ -141,6 +155,8 @@ const emit = defineEmits<{
 }>()
 
 const sql = ref('')
+const nlInput = ref('')
+const aiGenerating = ref(false)
 const queryResult = shallowRef<QueryResult | null>(null)
 const execResult = ref<ExecResult | null>(null)
 const error = ref('')
@@ -173,6 +189,98 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault()
     onExecute()
   }
+}
+
+async function generateSQL() {
+  const input = nlInput.value.trim()
+  if (!input) return
+  aiGenerating.value = true
+  try {
+    const dbType = props.dbType || 'MySQL'
+    const dbName = props.dbName || 'unknown'
+    const system = `You are a SQL query assistant for ${dbType}. Use the provided tool to get table schemas if needed, then convert the user's natural language request into a single SQL statement. Output ONLY the raw SQL (no markdown, no explanation, no backticks). Use ${dbType}-specific SQL syntax. Always add LIMIT 100 to SELECT queries.`
+
+    // Fetch table list upfront to save one LLM round-trip
+    let tableList = ''
+    try {
+      const tables = await GetTables(props.sessionId, dbName)
+      tableList = JSON.stringify(tables.map(t => ({ name: t.name, type: t.type })))
+    } catch {}
+
+    let messages: Array<Record<string, unknown>> = [
+      { role: 'user', content: `Database: ${dbName}.\nTables: ${tableList}\n\nQuery: ${input}` }
+    ]
+
+    const tools = [
+      {
+        name: 'get_table_schema',
+        description: `Get column definitions for one or more tables in the ${dbType} database. Request all tables you need at once.`,
+        input_schema: {
+          type: 'object' as const,
+          properties: { table_names: { type: 'array', items: { type: 'string' }, description: 'Table names to fetch schemas for' } },
+          required: ['table_names']
+        }
+      }
+    ]
+
+    // Tool loop: AI can call get_table_schema for specific tables
+    for (let turn = 0; turn < 4; turn++) {
+      let textChunks: string[] = []
+      let toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+
+      await chat({
+        system,
+        messages,
+        tools,
+        onChunk: (chunk: string) => { textChunks.push(chunk) },
+        onToolUse: (tool) => { toolUses.push(tool) },
+      })
+
+      // If AI returned tool calls, execute them and continue the loop
+      if (toolUses.length > 0) {
+        // Add assistant message with tool_use blocks
+        messages.push({
+          role: 'assistant',
+          content: toolUses.map(t => ({ type: 'tool_use', id: t.id, name: t.name, input: t.input }))
+        })
+
+        // Execute each tool and add results
+        const toolResults: Array<Record<string, unknown>> = []
+        for (const tool of toolUses) {
+          let toolContent = ''
+          try {
+            if (tool.name === 'get_table_schema') {
+              const names = tool.input.table_names as string[]
+              const schemas: Record<string, unknown> = {}
+              for (const name of names) {
+                try {
+                  const schema = await GetTableSchema(props.sessionId, dbName, name)
+                  schemas[name] = schema.columns?.map(c => ({ name: c.name, type: c.type, nullable: c.nullable })) || []
+                } catch { schemas[name] = [] }
+              }
+              toolContent = JSON.stringify(schemas)
+            }
+          } catch (e: any) {
+            toolContent = `Error: ${e?.message || 'unknown'}`
+          }
+          toolResults.push({ type: 'tool_result', tool_use_id: tool.id, content: toolContent })
+        }
+        messages.push({ role: 'user', content: toolResults })
+        continue
+      }
+
+      // No tool calls — AI returned the final SQL
+      const result = textChunks.join('').trim()
+        .replace(/^```[\w]*\n?/i, '')
+        .replace(/\n?```$/i, '')
+        .trim()
+      sql.value = result
+      break
+    }
+  } catch (e: any) {
+    error.value = e?.message || String(e)
+  }
+  aiGenerating.value = false
 }
 
 async function onExecute() {
@@ -596,6 +704,25 @@ function onEditRowCancel() {
   color: var(--text-muted);
   font-weight: 400;
   white-space: nowrap;
+}
+.nl-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.nl-input:focus { border-color: var(--accent); }
+.nl-input::placeholder { color: var(--text-muted); }
+.ai-pulse { animation: fade-pulse 1.2s ease-in-out infinite; }
+@keyframes fade-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 .editor-resizer {
   height: 4px;

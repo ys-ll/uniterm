@@ -449,6 +449,48 @@ func (s *MongoSession) ListIndexes(dbName, collection string) ([]MongoIndexInfo,
 	return indexes, nil
 }
 
+// CreateIndex creates an index on a collection.
+func (s *MongoSession) CreateIndex(dbName, collection, name string, keys []string, unique bool) error {
+	client := s.Client()
+	if client == nil {
+		return fmt.Errorf("not connected")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Build index keys: each key is "field" or "-field" for descending
+	var doc bson.D
+	for _, k := range keys {
+		dir := int32(1)
+		f := k
+		if len(k) > 0 && k[0] == '-' {
+			dir = -1
+			f = k[1:]
+		}
+		doc = append(doc, bson.E{Key: f, Value: dir})
+	}
+
+	idx := mongo.IndexModel{
+		Keys:    doc,
+		Options: options.Index().SetName(name).SetUnique(unique),
+	}
+	_, err := client.Database(dbName).Collection(collection).Indexes().CreateOne(ctx, idx)
+	return err
+}
+
+// DropIndex drops an index from a collection.
+func (s *MongoSession) DropIndex(dbName, collection, name string) error {
+	client := s.Client()
+	if client == nil {
+		return fmt.Errorf("not connected")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := client.Database(dbName).Collection(collection).Indexes().DropOne(ctx, name)
+	return err
+}
+
 // ── DDL ──
 
 // CreateCollection creates a new collection in the specified database.

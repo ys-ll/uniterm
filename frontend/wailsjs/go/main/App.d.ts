@@ -117,11 +117,15 @@ export function ModifyColumn(arg1:string,arg2:string,arg3:string,arg4:database.C
 
 export function MongoCreateCollection(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function MongoCreateIndex(arg1:string,arg2:string,arg3:string,arg4:string,arg5:Array<string>,arg6:boolean):Promise<void>;
+
 export function MongoDeleteOne(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function MongoDropCollection(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function MongoDropDatabase(arg1:string,arg2:string):Promise<void>;
+
+export function MongoDropIndex(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function MongoFind(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<session.MongoQueryResult>;
 

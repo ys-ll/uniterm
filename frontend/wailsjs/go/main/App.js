@@ -222,6 +222,10 @@ export function MongoCreateCollection(arg1, arg2, arg3) {
   return window['go']['main']['App']['MongoCreateCollection'](arg1, arg2, arg3);
 }
 
+export function MongoCreateIndex(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['MongoCreateIndex'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function MongoDeleteOne(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['MongoDeleteOne'](arg1, arg2, arg3, arg4);
 }
@@ -232,6 +236,10 @@ export function MongoDropCollection(arg1, arg2, arg3) {
 
 export function MongoDropDatabase(arg1, arg2) {
   return window['go']['main']['App']['MongoDropDatabase'](arg1, arg2);
+}
+
+export function MongoDropIndex(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['MongoDropIndex'](arg1, arg2, arg3, arg4);
 }
 
 export function MongoFind(arg1, arg2, arg3, arg4, arg5, arg6) {

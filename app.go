@@ -2765,6 +2765,22 @@ func (a *App) MongoDropDatabase(sessionID string, dbName string) error {
 	return ms.DropDatabase(dbName)
 }
 
+func (a *App) MongoCreateIndex(sessionID string, dbName string, collection string, name string, keys []string, unique bool) error {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return ms.CreateIndex(dbName, collection, name, keys, unique)
+}
+
+func (a *App) MongoDropIndex(sessionID string, dbName string, collection string, name string) error {
+	ms, err := a.mongoSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return ms.DropIndex(dbName, collection, name)
+}
+
 func (a *App) GetDatabases(sessionID string) ([]string, error) {
 	log.Writef("[GetDatabases] sessionID=%s", sessionID)
 	ds, p, err := a.dbProvider(sessionID)

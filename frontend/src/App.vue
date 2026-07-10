@@ -1,4 +1,5 @@
 <template>
+  <el-config-provider :locale="elLocale">
   <div class="app-container">
     <AppHeader
       @toggle-ai="aiStore.toggle"
@@ -58,6 +59,7 @@
               :session-id="getPanelSessionId(activeTab.panelId)"
               :host-name="getPanelConfig(activeTab.panelId)?.host || ''"
               :default-db-name="getPanelConfig(activeTab.panelId)?.dbName"
+              :db-type="getPanelConfig(activeTab.panelId)?.dbType || ''"
             />
             <RedisTabContent
               v-else-if="activeTab.type === 'redis'"
@@ -119,10 +121,20 @@
 
     <SyncConflictDialog />
   </div>
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted, provide } from 'vue'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import zhTw from 'element-plus/es/locale/lang/zh-tw'
+import enUs from 'element-plus/es/locale/lang/en'
+import ja from 'element-plus/es/locale/lang/ja'
+import ko from 'element-plus/es/locale/lang/ko'
+import de from 'element-plus/es/locale/lang/de'
+import es from 'element-plus/es/locale/lang/es'
+import fr from 'element-plus/es/locale/lang/fr'
+import ru from 'element-plus/es/locale/lang/ru'
 import AppHeader from './components/AppHeader.vue'
 import Sidebar from './components/Sidebar.vue'
 import TerminalTabContent from './components/TerminalTabContent.vue'
@@ -169,7 +181,11 @@ const sessionStore = useSessionStore()
 const aiStore = useAIStore()
 const settingsStore = useSettingsStore()
 const updateCheck = useUpdateCheck()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const EL_LOCALE_MAP: Record<string, typeof enUs> = {
+  'zh-CN': zhCn, 'zh-TW': zhTw, en: enUs, ja, ko, de, es, fr, ru,
+}
+const elLocale = computed(() => EL_LOCALE_MAP[locale.value] || enUs)
 // ── RDP position sync ──
 // Called explicitly on tab switch and overlay restore; no polling needed.
 

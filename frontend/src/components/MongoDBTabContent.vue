@@ -31,9 +31,9 @@
                   v-for="col in (collections[db] || [])"
                   :key="col"
                   class="table-item"
-                  :class="{ selected: activeCollection === col && activeDb === db }"
+                  :class="{ selected: highlightedDb === db && highlightedCol === col }"
                   @dblclick="selectCollection(db, col)"
-                  @click="selectTreeNode(db, col)"
+                  @click="highlightedDb = db; highlightedCol = col"
                   @contextmenu.prevent="onColContextMenu($event, db, col)"
                 >
                   <span class="table-icon-spacer" />
@@ -79,12 +79,25 @@
         <!-- Query sub-tab -->
         <div v-if="activeSubTab === 'query' && activeCollection" class="query-section">
           <div class="editor-top" :style="{ height: topHeight + 'px' }">
+            <!-- AI natural language input -->
+            <div style="display:flex;gap:6px;margin-bottom:6px">
+              <input
+                v-model="nlInput"
+                class="nl-input"
+                :placeholder="t('mongodb.aiPlaceholder')"
+                @keydown.enter="generateFilter"
+              />
+              <button class="btn btn-default btn-sm" @click="generateFilter" :disabled="aiGenerating || !nlInput.trim()">
+                <Sparkles :size="14" :class="{ 'ai-pulse': aiGenerating }" />
+                {{ aiGenerating ? '...' : 'AI' }}
+              </button>
+            </div>
             <div class="query-editor-wrap">
               <textarea
                 ref="queryTextareaRef"
                 v-model="filterText"
                 class="query-textarea"
-                :placeholder="t('mongodb.filter') + '  e.g. {}'"
+                :placeholder="t('mongodb.filter')"
                 @keydown="onQueryKeydown"
               />
               <div class="exec-btn-wrapper">
@@ -94,20 +107,10 @@
                 <span class="shortcut-hint">Ctrl+Enter</span>
               </div>
             </div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <div class="query-field">
-                <label>{{ t('mongodb.projection') }}</label>
-                <textarea
-                  v-model="projectionText"
-                  class="query-field-input"
-                  placeholder="{}"
-                  rows="1"
-                />
-              </div>
-              <div class="query-field" style="max-width:120px">
-                <label>{{ t('mongodb.limit') }}</label>
-                <el-input-number v-model="queryLimit" :min="1" :max="1000" size="small" controls-position="right" style="width:100%" />
-              </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+              <button class="btn btn-default btn-sm" @click="openNewDocument">
+                <Plus :size="14" /> {{ t('mongodb.newDocument') }}
+              </button>
             </div>
           </div>
 
@@ -128,12 +131,6 @@
 
             <!-- Results -->
             <div v-if="columns.length > 0" class="result-grid">
-              <div class="result-info">
-                {{ t('mongodb.totalDocs', { count: totalDocs }) }}
-                <span v-if="queryResult">
-                  | {{ t('mongodb.pageInfo', { start: (queryResult.skip || 0) + 1, end: Math.min((queryResult.skip || 0) + queryLimit, totalDocs), total: totalDocs }) }}
-                </span>
-              </div>
               <div class="result-table-wrap">
                 <el-table
                   :data="tableData"
@@ -168,16 +165,22 @@
                 </el-table>
               </div>
               <div class="pagination">
-                <button class="btn btn-default btn-sm" :disabled="currentSkip <= 0" @click="prevPage">
-                  {{ t('mongodb.prev') }}
-                </button>
-                <button class="btn btn-default btn-sm" :disabled="currentSkip + queryLimit >= totalDocs" @click="nextPage">
-                  {{ t('mongodb.next') }}
-                </button>
+                <el-pagination
+                  background
+                  layout="sizes, prev, pager, next, total"
+                  :page-sizes="[10, 20, 50, 100]"
+                  :page-size="queryLimit"
+                  :total="totalDocs"
+                  :current-page="currentPage"
+                  :pager-count="5"
+                  small
+                  @size-change="onPageSizeChange"
+                  @current-change="onPageChange"
+                />
               </div>
             </div>
             <div v-else-if="!queryLoading && activeCollection" class="db-placeholder">
-              <span>{{ t('mongodb.noData') }}</span>
+              <span>{{ t('db.noData') }}</span>
             </div>
           </div>
         </div>
@@ -189,6 +192,11 @@
               <div class="spinner" />
               <span class="loading-text">{{ t('db.loading') }}</span>
             </div>
+          </div>
+          <div style="margin-bottom:8px">
+            <button class="btn btn-default btn-sm" @click="openNewIndexDialog">
+              <Plus :size="14" /> {{ t('db.addIndex') }}
+            </button>
           </div>
           <el-table :data="indexes" border size="small" style="width:100%" :empty-text="t('db.noData')">
             <el-table-column prop="name" :label="t('db.colName')" show-overflow-tooltip />
@@ -203,15 +211,19 @@
                 {{ row.unique ? '✓' : '' }}
               </template>
             </el-table-column>
+            <el-table-column width="60">
+              <template #default="{ row }">
+                <button v-if="row.name !== '_id_'" class="btn btn-ghost btn-icon btn-sm" style="color:var(--error)" @click="dropIndex(row.name)">
+                  <Trash2 :size="14" />
+                </button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
 
         <!-- Empty state -->
-        <div v-if="!activeCollection && activeDb" class="db-placeholder">
-          <span>{{ t('db.selectTableHint') }}</span>
-        </div>
-        <div v-if="!activeDb" class="db-placeholder">
-          <span>{{ t('db.loading') }}</span>
+        <div v-if="!activeCollection" class="db-placeholder">
+          <span>{{ t('mongodb.selectHint') }}</span>
         </div>
       </div>
     </div>
@@ -223,8 +235,14 @@
       :style="{ left: ctxX + 'px', top: ctxY + 'px' }"
       @click.stop
     >
-      <template v-if="ctxTargetType === 'db'">
+      <template v-if="ctxTargetType === 'blank'">
+        <div class="ctx-item" @click="onCtxNewDatabase">{{ t('db.newDatabase') }}</div>
+        <div class="ctx-sep" />
+        <div class="ctx-item" @click="onCtxRefresh">{{ t('mongodb.refresh') }}</div>
+      </template>
+      <template v-else-if="ctxTargetType === 'db'">
         <div class="ctx-item" @click="onCtxOpenQuery">{{ t('mongodb.openQuery') }}</div>
+        <div class="ctx-item" @click="onCtxNewCollection">{{ t('mongodb.newCollection') }}</div>
         <div class="ctx-sep" />
         <div class="ctx-item" @click="onCtxRefresh">{{ t('mongodb.refresh') }}</div>
         <div class="ctx-sep" />
@@ -232,6 +250,7 @@
       </template>
       <template v-else-if="ctxTargetType === 'col'">
         <div class="ctx-item" @click="onCtxOpenColQuery">{{ t('mongodb.openQuery') }}</div>
+        <div class="ctx-item" @click="onCtxNewColDocument">{{ t('mongodb.newDocument') }}</div>
         <div class="ctx-item" @click="onCtxViewIndexes">{{ t('mongodb.indexesTab') }}</div>
         <div class="ctx-sep" />
         <div class="ctx-item" @click="onCtxCopyName">{{ t('mongodb.copyName') }}</div>
@@ -254,6 +273,64 @@
       <template #footer>
         <button class="btn btn-default" @click="confirmVisible = false">{{ t('common.cancel') }}</button>
         <button class="btn btn-danger" :disabled="confirmInput !== confirmName" @click="onConfirm">
+          {{ t('common.confirm') }}
+        </button>
+      </template>
+    </el-dialog>
+
+    <!-- New Collection dialog -->
+    <el-dialog
+      v-model="newColDialogVisible"
+      :title="t('mongodb.newCollection')"
+      width="380px"
+    >
+      <el-form label-width="80px">
+        <el-form-item :label="t('mongodb.collection')">
+          <el-input v-model="newColName" :placeholder="t('mongodb.collection')" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <button class="btn btn-default" @click="newColDialogVisible = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary" :disabled="!newColName.trim()" @click="createCollection">
+          {{ t('common.confirm') }}
+        </button>
+      </template>
+    </el-dialog>
+
+    <!-- Create Index dialog -->
+    <el-dialog v-model="newIndexDialogVisible" :title="t('db.addIndex')" width="400px">
+      <el-form label-width="80px">
+        <el-form-item :label="t('db.colName')">
+          <el-input v-model="newIndexName" placeholder="index_name" />
+        </el-form-item>
+        <el-form-item label="Fields">
+          <el-input v-model="newIndexFields" placeholder="field1,-field2" />
+        </el-form-item>
+        <el-form-item label="Unique">
+          <el-switch v-model="newIndexUnique" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <button class="btn btn-default" @click="newIndexDialogVisible = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary" :disabled="!newIndexName.trim() || !newIndexFields.trim()" @click="createIndex">
+          {{ t('common.confirm') }}
+        </button>
+      </template>
+    </el-dialog>
+
+    <!-- New Database dialog -->
+    <el-dialog v-model="newDbDialogVisible" :title="t('db.newDatabase')" width="380px">
+      <el-form label-width="80px">
+        <el-form-item :label="t('db.databases')">
+          <el-input v-model="newDbName" :placeholder="t('db.databases')" />
+        </el-form-item>
+        <el-form-item :label="t('mongodb.collection')">
+          <el-input v-model="newDbFirstCol" placeholder="optional" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <button class="btn btn-default" @click="newDbDialogVisible = false">{{ t('common.cancel') }}</button>
+        <button class="btn btn-primary" :disabled="!newDbName.trim()" @click="createDatabase">
           {{ t('common.confirm') }}
         </button>
       </template>
@@ -284,10 +361,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted, onUnmounted, computed } from 'vue'
-import { Database, Layers, ChevronRight, ChevronDown, RefreshCw, Plus, Pencil, Trash2 } from '@lucide/vue'
+import { Database, Layers, ChevronRight, ChevronDown, RefreshCw, Plus, Pencil, Trash2, Sparkles } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
+import { chat } from '../services/llm'
 import {
   MongoListDatabases,
   MongoListCollections,
@@ -296,6 +374,9 @@ import {
   MongoUpdateOne,
   MongoDeleteOne,
   MongoListIndexes,
+  MongoCreateIndex,
+  MongoDropIndex,
+  MongoCreateCollection,
   MongoDropCollection,
   MongoDropDatabase,
 } from '../../wailsjs/go/main/App'
@@ -331,7 +412,7 @@ function onResizeEnd() {
 }
 
 // ── Editor resize state ──
-const topHeight = ref(180)
+const topHeight = ref(220)
 let topResizeStartY = 0
 let topResizeStartHeight = 0
 let topResizing = false
@@ -363,6 +444,8 @@ const treeLoading = ref(false)
 const treeSearchQuery = ref('')
 const activeDb = ref('')
 const activeCollection = ref('')
+const highlightedDb = ref('')
+const highlightedCol = ref('')
 
 const filteredDatabases = computed(() => {
   const q = treeSearchQuery.value.trim().toLowerCase()
@@ -383,7 +466,7 @@ function closeContextMenu() {
 }
 
 function fitContextMenu(x: number, y: number, type: string) {
-  const heights: Record<string, number> = { db: 130, col: 170 }
+  const heights: Record<string, number> = { blank: 90, db: 160, col: 190 }
   const menuW = 160
   const menuH = heights[type] || 150
 
@@ -425,7 +508,8 @@ function onConfirm() {
 // ── Query state ──
 const activeSubTab = ref<'query' | 'indexes'>('query')
 const filterText = ref('{}')
-const projectionText = ref('{}')
+const nlInput = ref('')
+const aiGenerating = ref(false)
 const queryLimit = ref(100)
 const queryLoading = ref(false)
 const queryError = ref('')
@@ -463,6 +547,22 @@ const indexes = ref<MongoIndexInfo[]>([])
 const indexLoading = ref(false)
 
 // ── Document editor state ──
+// ── New database dialog ──
+const newDbDialogVisible = ref(false)
+const newDbName = ref('')
+const newDbFirstCol = ref('')
+
+// ── New index dialog ──
+const newIndexDialogVisible = ref(false)
+const newIndexName = ref('')
+const newIndexFields = ref('')
+const newIndexUnique = ref(false)
+
+// ── New collection dialog ──
+const newColDialogVisible = ref(false)
+const newColName = ref('')
+
+// ── Document editor state ──
 const docDialogVisible = ref(false)
 const docDialogMode = ref<'insert' | 'edit'>('insert')
 const docEditorText = ref('{}')
@@ -475,14 +575,16 @@ async function refreshDatabases() {
   if (!props.sessionId) return
   treeLoading.value = true
   try {
-    databases.value = await MongoListDatabases(props.sessionId)
+    const allDbs = await MongoListDatabases(props.sessionId)
+    databases.value = allDbs.filter(d => d !== 'config' && d !== 'local')
   } catch (e: any) {
     const err = e?.message || String(e)
     // Retry once after a brief delay in case session isn't fully ready yet
     if (err.includes('not connected') || err.includes('session not found')) {
       await new Promise(r => setTimeout(r, 300))
       try {
-        databases.value = await MongoListDatabases(props.sessionId)
+        const allDbs = await MongoListDatabases(props.sessionId)
+    databases.value = allDbs.filter(d => d !== 'config' && d !== 'local')
         treeLoading.value = false
         return
       } catch (_e2: any) {
@@ -502,7 +604,8 @@ async function toggleDb(db: string) {
     expandedDbs.add(db)
     if (!collections.value[db]) {
       try {
-        collections.value[db] = await MongoListCollections(props.sessionId, db)
+        const cols = await MongoListCollections(props.sessionId, db)
+        collections.value[db] = cols.filter(c => !c.startsWith('system.'))
         collections.value = { ...collections.value }
       } catch (e: any) {
         msg.error(e?.message || String(e))
@@ -511,17 +614,12 @@ async function toggleDb(db: string) {
   }
 }
 
-function selectTreeNode(db: string, col: string) {
-  activeDb.value = db
-  activeCollection.value = col
-}
-
 function selectCollection(db: string, col: string) {
   activeDb.value = db
   activeCollection.value = col
   activeSubTab.value = 'query'
   filterText.value = '{}'
-  projectionText.value = '{}'
+  nlInput.value = ''
   currentSkip.value = 0
   queryResult.value = null
   queryError.value = ''
@@ -532,6 +630,11 @@ function selectCollection(db: string, col: string) {
 function onTreeContextMenu(e: MouseEvent) {
   const target = e.target as HTMLElement
   if (target.closest('.db-header') || target.closest('.table-item')) return
+  ctxTargetType.value = 'blank'
+  const pos = fitContextMenu(e.clientX, e.clientY, 'blank')
+  ctxX.value = pos.left
+  ctxY.value = pos.top
+  ctxVisible.value = true
 }
 
 function onDbContextMenu(e: MouseEvent, db: string) {
@@ -565,6 +668,13 @@ function onCtxOpenColQuery() {
   ctxVisible.value = false
 }
 
+function onCtxNewColDocument() {
+  activeDb.value = ctxDbName.value
+  activeCollection.value = ctxColName.value
+  openNewDocument()
+  ctxVisible.value = false
+}
+
 function onCtxViewIndexes() {
   selectCollection(ctxDbName.value, ctxColName.value)
   activeSubTab.value = 'indexes'
@@ -577,9 +687,59 @@ function onCtxCopyName() {
   ctxVisible.value = false
 }
 
+function onCtxNewDatabase() {
+  newDbName.value = ''
+  newDbFirstCol.value = ''
+  newDbDialogVisible.value = true
+  ctxVisible.value = false
+}
+
+async function createDatabase() {
+  const dbName = newDbName.value.trim()
+  if (!dbName) return
+  // Create DB by creating its first collection
+  const colName = newDbFirstCol.value.trim() || '_default'
+  try {
+    await MongoCreateCollection(props.sessionId, dbName, colName)
+    msg.success(t('mongodb.collectionCreated'))
+    newDbDialogVisible.value = false
+    refreshDatabases()
+  } catch (e: any) {
+    msg.error(e?.message || String(e))
+  }
+}
+
 function onCtxRefresh() {
   refreshDatabases()
   ctxVisible.value = false
+}
+
+function openNewCollection(db: string) {
+  if (!db) return
+  ctxDbName.value = db
+  newColName.value = ''
+  newColDialogVisible.value = true
+}
+
+function onCtxNewCollection() {
+  openNewCollection(ctxDbName.value)
+  ctxVisible.value = false
+}
+
+async function createCollection() {
+  const name = newColName.value.trim()
+  if (!name || !ctxDbName.value) return
+  try {
+    await MongoCreateCollection(props.sessionId, ctxDbName.value, name)
+    msg.success(t('mongodb.collectionCreated'))
+    newColDialogVisible.value = false
+    // Refresh the collection list for this DB
+    const cols = await MongoListCollections(props.sessionId, ctxDbName.value)
+    collections.value[ctxDbName.value] = cols.filter(c => !c.startsWith('system.'))
+    collections.value = { ...collections.value }
+  } catch (e: any) {
+    msg.error(e?.message || String(e))
+  }
 }
 
 function onCtxDropDatabase() {
@@ -639,6 +799,44 @@ function onQueryKeydown(e: KeyboardEvent) {
   }
 }
 
+async function generateFilter() {
+  const input = nlInput.value.trim()
+  if (!input || !activeDb.value || !activeCollection.value) return
+  aiGenerating.value = true
+  try {
+    // Fetch a sample document for schema context
+    let sample = ''
+    try {
+      const result = await MongoFind(props.sessionId, activeDb.value, activeCollection.value, '{}', 0, 1)
+      if (result.documents.length > 0) {
+        sample = result.documents[0]
+      }
+    } catch {}
+
+    const schemaContext = sample
+      ? `Collection "${activeCollection.value}" in database "${activeDb.value}". Sample document:\n${sample}`
+      : `Collection "${activeCollection.value}" in database "${activeDb.value}".`
+
+    let result = ''
+    await chat({
+      system: `You are a MongoDB query assistant. Convert natural language to MongoDB Extended JSON filter only. Output ONLY the JSON filter (no markdown, no explanation). Use operators like $eq, $gt, $gte, $lt, $lte, $in, $nin, $regex, $exists, $and, $or, $not, $elemMatch. Dates should use ISODate format. ObjectIds should use $oid format.`,
+      messages: [
+        { role: 'user', content: `Schema context:\n${schemaContext}\n\nQuery: ${input}` }
+      ],
+      onChunk: (chunk: string) => { result += chunk },
+    })
+    const cleaned = result.trim()
+      .replace(/^```[\w]*\n?/i, '')
+      .replace(/\n?```$/i, '')
+    // Validate it's valid JSON
+    JSON.parse(cleaned)
+    filterText.value = cleaned
+  } catch (e: any) {
+    msg.error(e?.message || String(e))
+  }
+  aiGenerating.value = false
+}
+
 async function executeQuery() {
   if (!activeDb.value || !activeCollection.value) return
   queryLoading.value = true
@@ -667,13 +865,16 @@ function cancelQuery() {
   queryLoading.value = false
 }
 
-function prevPage() {
-  currentSkip.value = Math.max(0, currentSkip.value - queryLimit.value)
+const currentPage = computed(() => Math.floor(currentSkip.value / queryLimit.value) + 1)
+
+function onPageChange(page: number) {
+  currentSkip.value = (page - 1) * queryLimit.value
   executeQuery()
 }
 
-function nextPage() {
-  currentSkip.value = currentSkip.value + queryLimit.value
+function onPageSizeChange(size: number) {
+  queryLimit.value = size
+  currentSkip.value = 0
   executeQuery()
 }
 
@@ -748,6 +949,40 @@ async function loadIndexes() {
     msg.error(e?.message || String(e))
   }
   indexLoading.value = false
+}
+
+function openNewIndexDialog() {
+  newIndexName.value = ''
+  newIndexFields.value = ''
+  newIndexUnique.value = false
+  newIndexDialogVisible.value = true
+}
+
+async function createIndex() {
+  const name = newIndexName.value.trim()
+  const fields = newIndexFields.value.trim()
+  if (!name || !fields || !activeDb.value || !activeCollection.value) return
+  try {
+    await MongoCreateIndex(
+      props.sessionId, activeDb.value, activeCollection.value,
+      name, fields.split(',').map(s => s.trim()).filter(Boolean),
+      newIndexUnique.value
+    )
+    newIndexDialogVisible.value = false
+    loadIndexes()
+  } catch (e: any) {
+    msg.error(e?.message || String(e))
+  }
+}
+
+async function dropIndex(name: string) {
+  if (!activeDb.value || !activeCollection.value) return
+  try {
+    await MongoDropIndex(props.sessionId, activeDb.value, activeCollection.value, name)
+    loadIndexes()
+  } catch (e: any) {
+    msg.error(e?.message || String(e))
+  }
 }
 
 // ── Helpers ──
@@ -834,6 +1069,9 @@ watch(() => props.sessionId, () => {
 
 /* ── Search ── */
 .search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 4px 8px;
   flex-shrink: 0;
 }
@@ -1001,6 +1239,27 @@ watch(() => props.sessionId, () => {
 .mongo-tab.active {
   color: var(--text-primary);
   border-bottom-color: var(--accent);
+}
+
+/* ── NL input ── */
+.nl-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.nl-input:focus { border-color: var(--accent); }
+.nl-input::placeholder { color: var(--text-muted); }
+.ai-pulse { animation: fade-pulse 1.2s ease-in-out infinite; }
+@keyframes fade-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 /* ── Query editor ── */
@@ -1192,6 +1451,19 @@ watch(() => props.sessionId, () => {
   gap: 8px;
   margin-top: 8px;
   flex-shrink: 0;
+}
+.pagination :deep(.el-pager li.is-active) {
+  background-color: var(--accent);
+  color: var(--on-accent);
+}
+.pagination :deep(.el-pager li:hover) {
+  color: var(--accent);
+}
+.pagination :deep(.el-pagination .el-select .el-input.is-focus .el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.pagination :deep(.el-select__input) {
+  color: var(--text-primary);
 }
 
 /* ── Indexes ── */
