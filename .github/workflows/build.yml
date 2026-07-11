@@ -22,7 +22,7 @@ jobs:
             platform: linux/amd64
             slug: linux-amd64
             artifact: uniTerm
-          - os: ubuntu-24.04-arm64
+          - os: ubuntu-24.04-arm
             platform: linux/arm64
             slug: linux-arm64
             artifact: uniTerm
@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Free disk space (macOS)
         if: matrix.platform == 'darwin/universal'
@@ -45,12 +45,12 @@ jobs:
           df -h /
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.23'
+          go-version: '1.26'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -195,12 +195,12 @@ jobs:
           EOF
 
           nfpm package --config nfpm.yaml --packager deb \
-            --target "uniterm_${VERSION}_${ARCH}.deb"
+            --target "uniterm-linux-${ARCH}-${VERSION}.deb"
           nfpm package --config nfpm.yaml --packager rpm \
-            --target "uniterm-${VERSION}.${ARCH}.rpm"
+            --target "uniterm-linux-${ARCH}-${VERSION}.rpm"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: uniTerm-${{ matrix.slug }}
           path: |
@@ -208,7 +208,7 @@ jobs:
             uniterm-*.tar.gz
             uniterm-*.exe
             uniterm-*.dmg
-            uniterm_*.deb
+            uniterm-*.deb
             uniterm-*.rpm
 
   release:
@@ -218,10 +218,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -234,7 +234,7 @@ jobs:
         run: sed -n "/^## ${{ github.ref_name }}$/,/^## v/p" CHANGELOG.md | sed '$d' > release_body.md
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           body_path: release_body.md
@@ -243,7 +243,7 @@ jobs:
             uniterm-*.tar.gz
             uniterm-*.exe
             uniterm-*.dmg
-            uniterm_*.deb
+            uniterm-*.deb
             uniterm-*.rpm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
