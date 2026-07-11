@@ -233,10 +233,18 @@ jobs:
       - name: Extract changelog
         run: sed -n "/^## ${{ github.ref_name }}$/,/^## v/p" CHANGELOG.md | sed '$d' > release_body.md
 
+      - name: Detect prerelease
+        run: |
+          if echo "${{ github.ref_name }}" | grep -qiE '\-(rc|beta|alpha|pre|dev)'; then
+            echo "PRERELEASE=true" >> $GITHUB_ENV
+          else
+            echo "PRERELEASE=false" >> $GITHUB_ENV
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          prerelease: true
+          prerelease: ${{ env.PRERELEASE == 'true' }}
           body_path: release_body.md
           files: |
             uniterm-*.zip
