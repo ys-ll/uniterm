@@ -6,6 +6,7 @@ build/windows/*
 build/windows/installer/*
 !build/windows/installer/project.nsi
 !build/appicon.png
+!build/linux/
 uniTerm.exe
 __debug*
 

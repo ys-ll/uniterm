@@ -22,6 +22,10 @@ jobs:
             platform: linux/amd64
             slug: linux-amd64
             artifact: uniTerm
+          - os: ubuntu-24.04-arm64
+            platform: linux/arm64
+            slug: linux-arm64
+            artifact: uniTerm
           - os: macos-latest
             platform: darwin/universal
             slug: darwin-universal
@@ -69,7 +73,7 @@ jobs:
         run: cd frontend && npm install && npm run build
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'linux/amd64'
+        if: startsWith(matrix.platform, 'linux')
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
@@ -85,28 +89,30 @@ jobs:
           upx --version
 
       - name: Install UPX (Linux)
-        if: matrix.platform == 'linux/amd64'
+        if: startsWith(matrix.platform, 'linux')
         run: sudo apt-get install -y upx
 
       - name: Build
         shell: bash
         run: |
-          if [ "${{ matrix.platform }}" = "windows/amd64" ]; then
+          PLATFORM="${{ matrix.platform }}"
+
+          if [ "$PLATFORM" = "windows/amd64" ]; then
             export PATH="/c/Program Files (x86)/NSIS/Bin:$PATH"
           fi
           echo "PATH=$PATH"
 
-          BUILD_ARGS="-platform ${{ matrix.platform }} -ldflags \"-s -w -X main.Version=${{ env.VERSION }}\" -skipbindings"
+          BUILD_ARGS="-platform $PLATFORM -ldflags \"-s -w -X main.Version=${{ env.VERSION }}\" -skipbindings"
 
-          if [ "${{ matrix.platform }}" = "windows/amd64" ]; then
+          if [ "$PLATFORM" = "windows/amd64" ]; then
             BUILD_ARGS="$BUILD_ARGS -nsis"
           fi
 
-          if [ "${{ matrix.platform }}" = "windows/amd64" ] || [ "${{ matrix.platform }}" = "linux/amd64" ]; then
+          if [ "$PLATFORM" = "windows/amd64" ] || [ "${PLATFORM%/*}" = "linux" ]; then
             BUILD_ARGS="$BUILD_ARGS -upx -upxflags=\"--best --lzma\""
           fi
 
-          if [ "${{ matrix.platform }}" = "linux/amd64" ]; then
+          if [ "${PLATFORM%/*}" = "linux" ]; then
             BUILD_ARGS="$BUILD_ARGS -tags webkit2_41"
           fi
 
@@ -147,11 +153,51 @@ jobs:
         run: mv build/bin/uniTerm-amd64-installer.exe "uniterm-windows-amd64-installer-$VERSION.exe"
 
       - name: Package (Linux)
-        if: matrix.platform == 'linux/amd64'
+        if: startsWith(matrix.platform, 'linux')
         run: |
+          ARCH=${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          NFPM_ARCH=${{ matrix.platform == 'linux/amd64' && 'x86_64' || 'arm64' }}
+
           cd build/bin
           chmod +x uniTerm
-          tar czf ../../uniterm-linux-amd64-${VERSION}.tar.gz uniTerm
+
+          # tar.gz
+          tar czf ../../uniterm-linux-${ARCH}-${VERSION}.tar.gz uniTerm
+
+          # nfpm for deb + rpm
+          cd ../..
+          NFPM_VER="2.46.3"
+          curl -sSfL -o /tmp/nfpm.tar.gz \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VER}/nfpm_${NFPM_VER}_Linux_${NFPM_ARCH}.tar.gz"
+          tar xf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
+          chmod +x /usr/local/bin/nfpm
+          nfpm --version
+
+          cat > nfpm.yaml << EOF
+          name: uniterm
+          arch: ${ARCH}
+          platform: linux
+          version: ${VERSION}
+          maintainer: uniTerm <uniTerm@example.com>
+          description: Lightweight all-in-one terminal emulator with built-in AI Agent
+          homepage: https://uniterm.net
+          license: Proprietary
+          depends:
+            - libgtk-3-0
+            - libwebkit2gtk-4.1-0
+          contents:
+            - src: build/bin/uniTerm
+              dst: /usr/bin/uniterm
+            - src: build/linux/uniterm.desktop
+              dst: /usr/share/applications/uniterm.desktop
+            - src: build/appicon.png
+              dst: /usr/share/icons/hicolor/128x128/apps/uniterm.png
+          EOF
+
+          nfpm package --config nfpm.yaml --packager deb \
+            --target "uniterm_${VERSION}_${ARCH}.deb"
+          nfpm package --config nfpm.yaml --packager rpm \
+            --target "uniterm-${VERSION}.${ARCH}.rpm"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -162,6 +208,8 @@ jobs:
             uniterm-*.tar.gz
             uniterm-*.exe
             uniterm-*.dmg
+            uniterm_*.deb
+            uniterm-*.rpm
 
   release:
     needs: build
@@ -179,7 +227,7 @@ jobs:
 
       - name: Collect release files
         run: |
-          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.exe' -o -name '*.dmg' \) -exec mv {} . \;
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) -exec mv {} . \;
           ls -la uniterm-*
 
       - name: Extract changelog
@@ -195,5 +243,7 @@ jobs:
             uniterm-*.tar.gz
             uniterm-*.exe
             uniterm-*.dmg
+            uniterm_*.deb
+            uniterm-*.rpm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

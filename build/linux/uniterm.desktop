@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=uniTerm
+Comment=Lightweight All-in-One Terminal Emulator
+Exec=/usr/bin/uniterm
+Icon=uniterm
+Terminal=false
+Type=Application
+Categories=System;TerminalEmulator;
