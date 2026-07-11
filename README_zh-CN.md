@@ -138,7 +138,23 @@ Oracle Database 支持基于纯 Go 驱动实现。uniTerm 不随安装包分发 
 
 - **Windows**: 安装包 `uniterm-windows-amd64-installer-*.exe`，或便携版 `uniterm-windows-amd64-portable-*.zip`
 - **macOS**: 下载 `uniterm-darwin-universal-*.dmg`
-- **Linux**: 下载 `uniterm-linux-amd64-*.tar.gz`
+- **Linux**: 下载 `uniterm-linux-amd64-*.tar.gz`、`.deb` 或 `.rpm`
+
+### 包管理器安装
+
+```bash
+# Windows
+winget install ys-ll.uniTerm
+scoop bucket add uniterm https://github.com/ys-ll/scoop-uniterm && scoop install uniterm
+choco install uniterm
+
+# macOS
+brew install ys-ll/uniterm/uniterm
+
+# Linux (deb)
+curl -sLo uniterm.deb https://github.com/ys-ll/uniterm/releases/latest/download/uniterm-linux-amd64-*.deb
+sudo dpkg -i uniterm.deb
+```
 
 ### 运行依赖
 

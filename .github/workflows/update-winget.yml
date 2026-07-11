@@ -1,0 +1,16 @@
+name: Update Winget
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update:
+    runs-on: windows-latest
+    steps:
+      - name: Submit to Winget
+        uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: ys-ll.uniTerm
+          max-versions-to-keep: 5
+          token: ${{ secrets.WINGET_TOKEN }}

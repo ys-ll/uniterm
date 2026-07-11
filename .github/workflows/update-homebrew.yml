@@ -1,0 +1,43 @@
+name: Update Homebrew Cask
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout homebrew tap repo
+        uses: actions/checkout@v7
+        with:
+          repository: ys-ll/homebrew-uniterm
+          token: ${{ secrets.PAT }}
+
+      - name: Get version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Download macOS DMG and compute hash
+        run: |
+          URL="https://github.com/ys-ll/uniterm/releases/download/$TAG/uniterm-darwin-universal-$TAG.dmg"
+          curl -sLo /tmp/uniterm.dmg "$URL"
+          SHA256=$(sha256sum /tmp/uniterm.dmg | cut -d' ' -f1)
+          echo "SHA256=$SHA256" >> $GITHUB_ENV
+
+      - name: Update formula
+        run: |
+          sed -i "s/version \".*\"/version \"$VERSION\"/" Formula/uniterm.rb
+          sed -i "s/sha256 arm:.*/sha256 arm:   \"$SHA256\"/" Formula/uniterm.rb
+          sed -i "s/    intel:.*/     intel: \"$SHA256\"/" Formula/uniterm.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add Formula/uniterm.rb
+          git commit -m "Update to $TAG" || true
+          git push

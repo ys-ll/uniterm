@@ -138,7 +138,23 @@ Get the latest pre-built binaries from [GitHub Releases](https://github.com/ys-l
 
 - **Windows**: installer `uniterm-windows-amd64-installer-*.exe`, or portable `uniterm-windows-amd64-portable-*.zip`
 - **macOS**: Download `uniterm-darwin-universal-*.dmg`
-- **Linux**: Download `uniterm-linux-amd64-*.tar.gz`
+- **Linux**: Download `uniterm-linux-amd64-*.tar.gz`, `.deb`, or `.rpm`
+
+### Package Managers
+
+```bash
+# Windows
+winget install ys-ll.uniTerm
+scoop bucket add uniterm https://github.com/ys-ll/scoop-uniterm && scoop install uniterm
+choco install uniterm
+
+# macOS
+brew install ys-ll/uniterm/uniterm
+
+# Linux (deb)
+curl -sLo uniterm.deb https://github.com/ys-ll/uniterm/releases/latest/download/uniterm-linux-amd64-*.deb
+sudo dpkg -i uniterm.deb
+```
 
 ### Runtime Dependencies
 
