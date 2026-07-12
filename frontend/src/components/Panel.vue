@@ -83,6 +83,15 @@ import type { Panel } from '../types/workspace'
 import type { ConnectionConfig } from '../types/session'
 import type { CredentialResult } from './CredentialPrompt.vue'
 
+// Escape sequences to disable all xterm mouse tracking modes.
+// When a terminal app (e.g. opencode, vim, tmux) enables mouse tracking
+// and then exits/crashes without disabling it, the xterm.js terminal
+// is left in tracking mode — mouse events are captured as escape
+// sequences and text selection stops working. Writing these reset
+// sequences to the terminal before reconnecting restores normal
+// selection behaviour without clearing the screen.
+const RESET_MOUSE_MODES = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l'
+
 const { t } = useI18n()
 
 const props = defineProps<{
@@ -172,20 +181,39 @@ function cancelEdit() {
 }
 
 let retryAttempt = 0
+let autoRetried = false
 
 function onSessionStatus(status: string) {
   if (status === 'retry') {
-    retryConnection()
+    // Manual retry — user pressed Enter
+    autoRetried = false
+    retryConnection(false)
   } else if (status === 'connected') {
     retryAttempt = 0
+    autoRetried = false
+  } else if (status === 'disconnected' && props.panel.type === 'local') {
+    // Auto-reconnect local sessions silently on disconnect to handle
+    // ConPTY edge cases where a child process (e.g. opencode /exit)
+    // tears down the pseudo-console. Only auto-retry once per disconnect
+    // cycle (manual Enter resets the guard).
+    if (!autoRetried) {
+      autoRetried = true
+      setTimeout(() => retryConnection(true), 200)
+    }
   }
 }
 
-async function retryConnection() {
+async function retryConnection(silent = false) {
   retryAttempt++
   if (props.panel.type === 'local') {
-    // Local terminal: reconnect with the same shell used when created
-    baseTerminalRef.value?.write('\r\n\x1b[33mRestarting local shell...\x1b[0m\r\n')
+    // Auto-retry (silent): just reset mouse modes and add a newline so the
+    // new prompt is separated from the previous session's output.
+    // Manual retry: show the yellow "Restarting..." message.
+    if (silent) {
+      baseTerminalRef.value?.write(RESET_MOUSE_MODES + '\r\n')
+    } else {
+      baseTerminalRef.value?.write(RESET_MOUSE_MODES + '\r\n\x1b[33mRestarting local shell...\x1b[0m\r\n')
+    }
     try {
       const shellPath = props.panel.config?.shellPath || ''
       const config = { ...props.panel.config, type: 'local', shellPath } as ConnectionConfig
@@ -220,7 +248,7 @@ async function retryConnection() {
     props.panel.config.password = result.password
   }
 
-  baseTerminalRef.value?.write('\r\n\x1b[33mReconnecting...\x1b[0m\r\n')
+  baseTerminalRef.value?.write(RESET_MOUSE_MODES + '\r\n\x1b[33mReconnecting...\x1b[0m\r\n')
   try {
     const info = await CreateSession(props.panel.config.type, props.panel.config)
     panelStore.bindSession(props.panel.id, info.id)

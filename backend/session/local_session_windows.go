@@ -4,6 +4,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -63,14 +65,59 @@ func forceUTF8ConsoleCodePage(pid int) {
 	}
 }
 
+// Mouse tracking escape sequences that terminal applications (e.g. opencode,
+// vim, tmux) send to enable xterm mouse tracking. When an application exits
+// without sending the corresponding disable sequences, the terminal is left
+// in tracking mode and native text selection stops working. We detect these
+// sequences in the output stream and automatically inject the reset when the
+// user next presses Enter.
+var (
+	mouseTrackingEnableSeqs = [][]byte{
+		[]byte("\x1b[?1000h"), // normal tracking
+		[]byte("\x1b[?1002h"), // button-event tracking
+		[]byte("\x1b[?1003h"), // any-event tracking
+		[]byte("\x1b[?1004h"), // focus-event tracking
+		[]byte("\x1b[?1005h"), // UTF-8 extended mode
+		[]byte("\x1b[?1006h"), // SGR extended mode
+		[]byte("\x1b[?1015h"), // urxvt extended mode
+	}
+	mouseTrackingDisableSeqs = [][]byte{
+		[]byte("\x1b[?1000l"),
+		[]byte("\x1b[?1002l"),
+		[]byte("\x1b[?1003l"),
+		[]byte("\x1b[?1004l"),
+		[]byte("\x1b[?1005l"),
+		[]byte("\x1b[?1006l"),
+		[]byte("\x1b[?1015l"),
+	}
+	mouseTrackingReset = []byte("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l")
+)
+
+// updateMouseTrackingState scans data for mouse tracking enable/disable
+// sequences and updates the session's tracking flag accordingly.
+func (s *LocalSession) updateMouseTrackingState(data []byte) {
+	for _, seq := range mouseTrackingEnableSeqs {
+		if bytes.Contains(data, seq) {
+			s.mouseTrackingEnabled.Store(true)
+			return
+		}
+	}
+	for _, seq := range mouseTrackingDisableSeqs {
+		if bytes.Contains(data, seq) {
+			s.mouseTrackingEnabled.Store(false)
+			return
+		}
+	}
+}
 type LocalSession struct {
 	baseSession
-	cpty           *conpty.ConPty
-	stdin          io.WriteCloser
-	stdout         io.Reader
-	cmd            *exec.Cmd
-	quit           chan struct{}
-	disconnectOnce sync.Once
+	cpty                 *conpty.ConPty
+	stdin                io.WriteCloser
+	stdout               io.Reader
+	cmd                  *exec.Cmd
+	quit                 chan struct{}
+	disconnectOnce       sync.Once
+	mouseTrackingEnabled atomic.Bool
 }
 
 func NewLocalSession(id string) *LocalSession {
@@ -136,7 +183,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		if cols <= 0 || rows <= 0 {
 			cols, rows = 80, 24
 		}
-		c, err := conpty.Start(commandLine, conpty.ConPtyDimensions(cols, rows))
+		c, err := conpty.Start(commandLine, conpty.ConPtyDimensions(cols, rows), conpty.ConPtyEnv(os.Environ()))
 		if err == nil {
 			s.cpty = c
 			if isMSYSBash {
@@ -249,11 +296,29 @@ func (s *LocalSession) readLoop() {
 
 		if n > 0 {
 			s.RecordReadActivity()
-			s.emitData(append([]byte(nil), buf[:n]...))
+			data := append([]byte(nil), buf[:n]...)
+			s.emitData(data)
+			s.updateMouseTrackingState(data)
 		}
 		if err != nil {
+			// If the quit channel is already closed, another goroutine
+			// (e.g. the Wait() goroutine) has already initiated disconnect;
+			// the read error is a side-effect of the pipe being closed and
+			// should be silently ignored.
+			select {
+			case <-s.quit:
+				return
+			default:
+			}
 			if err != io.EOF {
-				s.emitData([]byte(fmt.Sprintf("\r\n[read error: %v]\r\n", err)))
+				// On ConPTY (and pipe fallback), any read error after a
+				// process exits is a predictable consequence of the pipe
+				// breaking — treat it as clean EOF instead of showing a
+				// raw OS error message that confuses users (e.g. when
+				// opencode /exit kills the parent shell).
+				if s.cpty == nil {
+					s.emitData([]byte(fmt.Sprintf("\r\n[read error: %v]\r\n", err)))
+				}
 			}
 			s.Disconnect()
 			return
@@ -262,15 +327,27 @@ func (s *LocalSession) readLoop() {
 }
 
 func (s *LocalSession) Write(data []byte) error {
+	var err error
 	if s.cpty != nil {
-		_, err := s.cpty.Write(data)
-		return err
+		_, err = s.cpty.Write(data)
+	} else if s.stdin != nil {
+		_, err = s.stdin.Write(data)
+	} else {
+		return fmt.Errorf("not connected")
 	}
-	if s.stdin != nil {
-		_, err := s.stdin.Write(data)
-		return err
+	// If a terminal application enabled mouse tracking and then exited
+	// without disabling it, automatically reset tracking when the user
+	// presses Enter — this restores native text selection.
+	if err == nil && s.mouseTrackingEnabled.Load() {
+		for _, b := range data {
+			if b == '\r' || b == '\n' {
+				s.emitData(mouseTrackingReset)
+				s.mouseTrackingEnabled.Store(false)
+				break
+			}
+		}
 	}
-	return fmt.Errorf("not connected")
+	return err
 }
 
 // Disconnect tears down the local session. It uses sync.Once so the entire

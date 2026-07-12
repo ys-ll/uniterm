@@ -4,6 +4,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -13,16 +14,63 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/creack/pty"
 )
 
+// Mouse tracking escape sequences that terminal applications (e.g. opencode,
+// vim, tmux) send to enable xterm mouse tracking. When an application exits
+// without sending the corresponding disable sequences, the terminal is left
+// in tracking mode and native text selection stops working. We detect these
+// sequences in the output stream and automatically inject the reset when the
+// user next presses Enter.
+var (
+	mouseTrackingEnableSeqs = [][]byte{
+		[]byte("\x1b[?1000h"), // normal tracking
+		[]byte("\x1b[?1002h"), // button-event tracking
+		[]byte("\x1b[?1003h"), // any-event tracking
+		[]byte("\x1b[?1004h"), // focus-event tracking
+		[]byte("\x1b[?1005h"), // UTF-8 extended mode
+		[]byte("\x1b[?1006h"), // SGR extended mode
+		[]byte("\x1b[?1015h"), // urxvt extended mode
+	}
+	mouseTrackingDisableSeqs = [][]byte{
+		[]byte("\x1b[?1000l"),
+		[]byte("\x1b[?1002l"),
+		[]byte("\x1b[?1003l"),
+		[]byte("\x1b[?1004l"),
+		[]byte("\x1b[?1005l"),
+		[]byte("\x1b[?1006l"),
+		[]byte("\x1b[?1015l"),
+	}
+	mouseTrackingReset = []byte("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l")
+)
+
+// updateMouseTrackingState scans data for mouse tracking enable/disable
+// sequences and updates the session's tracking flag accordingly.
+func (s *LocalSession) updateMouseTrackingState(data []byte) {
+	for _, seq := range mouseTrackingEnableSeqs {
+		if bytes.Contains(data, seq) {
+			s.mouseTrackingEnabled.Store(true)
+			return
+		}
+	}
+	for _, seq := range mouseTrackingDisableSeqs {
+		if bytes.Contains(data, seq) {
+			s.mouseTrackingEnabled.Store(false)
+			return
+		}
+	}
+}
+
 type LocalSession struct {
 	baseSession
-	cmd      *exec.Cmd
-	pty      *os.File
-	quit     chan struct{}
-	quitOnce sync.Once
+	cmd                  *exec.Cmd
+	pty                  *os.File
+	quit                 chan struct{}
+	quitOnce             sync.Once
+	mouseTrackingEnabled atomic.Bool
 }
 
 func NewLocalSession(id string) *LocalSession {
@@ -89,9 +137,20 @@ func (s *LocalSession) readLoop() {
 		n, err := s.pty.Read(buf)
 		if n > 0 {
 			s.RecordReadActivity()
-			s.emitData(append([]byte(nil), buf[:n]...))
+			data := append([]byte(nil), buf[:n]...)
+			s.emitData(data)
+			s.updateMouseTrackingState(data)
 		}
 		if err != nil {
+			// If the quit channel is already closed, another goroutine
+			// (e.g. the Wait() goroutine) has already initiated disconnect;
+			// the read error is a side-effect of the PTY being closed and
+			// should be silently ignored.
+			select {
+			case <-s.quit:
+				return
+			default:
+			}
 			if err != io.EOF {
 				s.emitData([]byte(fmt.Sprintf("\r\n[read error: %v]\r\n", err)))
 			}
@@ -106,6 +165,18 @@ func (s *LocalSession) Write(data []byte) error {
 		return fmt.Errorf("not connected")
 	}
 	_, err := s.pty.Write(data)
+	// If a terminal application enabled mouse tracking and then exited
+	// without disabling it, automatically reset tracking when the user
+	// presses Enter — this restores native text selection.
+	if err == nil && s.mouseTrackingEnabled.Load() {
+		for _, b := range data {
+			if b == '\r' || b == '\n' {
+				s.emitData(mouseTrackingReset)
+				s.mouseTrackingEnabled.Store(false)
+				break
+			}
+		}
+	}
 	return err
 }
 
