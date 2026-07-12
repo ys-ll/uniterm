@@ -400,30 +400,26 @@ async function applySuggestion(item: ReturnType<typeof suggestions.getSelectedIt
     return
   }
 
-  const currentLine = terminalInput.lineBuffer.value
-  const currentToken = terminalInput.currentToken.value
   const sid = props.sessionId
 
   if (item.type === 'ai-result' || item.type === 'history' || item.type === 'quick-command') {
     // Replace entire line with Ctrl+U. Using backspaces only works when the
     // replacement is exactly the currentToken; for multi-token input (e.g.
     // "git che" → "git checkout") backspaces leave the earlier text behind.
-    if (currentLine) {
-      if (props.broadcastActive && props.workspaceId) {
-        const tab = tabStore.tabs.find(t => t.id === props.workspaceId)
-        if (tab && tab.type === 'workspace') {
-          for (const pid of tab.panelIds) {
-            const p = panelStore.getPanel(pid)
-            if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
-              SessionWrite(p.sessionId, '\x15')
-              SessionWrite(p.sessionId, item.value)
-            }
+    if (props.broadcastActive && props.workspaceId) {
+      const tab = tabStore.tabs.find(t => t.id === props.workspaceId)
+      if (tab && tab.type === 'workspace') {
+        for (const pid of tab.panelIds) {
+          const p = panelStore.getPanel(pid)
+          if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
+            SessionWrite(p.sessionId, '\x15')
+            SessionWrite(p.sessionId, item.value)
           }
         }
-      } else if (sid) {
-        SessionWrite(sid, '\x15')
-        SessionWrite(sid, item.value)
       }
+    } else if (sid) {
+      SessionWrite(sid, '\x15')
+      SessionWrite(sid, item.value)
     }
     terminalInput.lineBuffer.value = item.value
     terminalInput.cursorIndex.value = item.value.length

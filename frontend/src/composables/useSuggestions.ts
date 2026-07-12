@@ -378,6 +378,12 @@ export function useSuggestions() {
 
   function selectNext() {
     if (state.value.items.length === 0) return
+    // Cancel any pending suggestion update to prevent the debounced
+    // timer from resetting selectedIndex after the user has navigated.
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
     if (state.value.selectedIndex < 0) {
       state.value.selectedIndex = 0
     } else {
@@ -387,6 +393,12 @@ export function useSuggestions() {
 
   function selectPrev() {
     if (state.value.items.length === 0) return
+    // Cancel any pending suggestion update to prevent the debounced
+    // timer from resetting selectedIndex after the user has navigated.
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
     if (state.value.selectedIndex < 0) {
       state.value.selectedIndex = state.value.items.length - 1
     } else {
