@@ -48,10 +48,19 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		shell = defaultShell()
 	}
 
+	// Determine working directory: use config.Cwd if set, otherwise user home.
+	workDir := config.Cwd
+	if workDir == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			workDir = home
+		}
+	}
+
 	s.title = shellName(shell)
 
 	s.cmd = exec.Command(shell, loginShellArgs(shell)...)
 	s.cmd.Env = ensureTerminalEnv(os.Environ())
+	s.cmd.Dir = workDir
 
 	ptyFile, err := pty.Start(s.cmd)
 	if err != nil {

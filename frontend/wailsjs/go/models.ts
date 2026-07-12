@@ -269,6 +269,7 @@ export namespace session {
 	    rdpSmartSizing: boolean;
 	    rdpEnableNLA: boolean;
 	    shellPath?: string;
+	    cwd?: string;
 	    serialPort?: string;
 	    serialBaudRate?: number;
 	    serialDataBits?: number;
@@ -315,6 +316,7 @@ export namespace session {
 	        this.rdpSmartSizing = source["rdpSmartSizing"];
 	        this.rdpEnableNLA = source["rdpEnableNLA"];
 	        this.shellPath = source["shellPath"];
+	        this.cwd = source["cwd"];
 	        this.serialPort = source["serialPort"];
 	        this.serialBaudRate = source["serialBaudRate"];
 	        this.serialDataBits = source["serialDataBits"];

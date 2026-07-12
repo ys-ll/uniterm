@@ -41,6 +41,8 @@ type ConnectionConfig struct {
 	RdpEnableNLA  bool `json:"rdpEnableNLA"`
 	// Local terminal shell path
 	ShellPath string `json:"shellPath,omitempty"`
+	// Working directory for local terminal (defaults to user home directory if empty)
+	Cwd string `json:"cwd,omitempty"`
 	// Serial port configuration
 	SerialPort     string  `json:"serialPort,omitempty"`
 	SerialBaudRate int     `json:"serialBaudRate,omitempty"`
