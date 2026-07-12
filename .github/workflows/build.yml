@@ -15,8 +15,8 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            platform: windows/amd64
-            slug: windows-amd64
+            platform: windows/amd64,windows/arm64
+            slug: windows
             artifact: uniTerm.exe
           - os: ubuntu-24.04
             platform: linux/amd64
@@ -79,7 +79,7 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Install NSIS and UPX (Windows)
-        if: matrix.platform == 'windows/amd64'
+        if: startsWith(matrix.platform, 'windows')
         shell: bash
         run: |
           choco install nsis upx -y
@@ -97,18 +97,18 @@ jobs:
         run: |
           PLATFORM="${{ matrix.platform }}"
 
-          if [ "$PLATFORM" = "windows/amd64" ]; then
+          if [[ "$PLATFORM" == windows/* ]]; then
             export PATH="/c/Program Files (x86)/NSIS/Bin:$PATH"
           fi
           echo "PATH=$PATH"
 
           BUILD_ARGS="-platform $PLATFORM -ldflags \"-s -w -X main.Version=${{ env.VERSION }}\" -skipbindings"
 
-          if [ "$PLATFORM" = "windows/amd64" ]; then
+          if [[ "$PLATFORM" == windows/* ]]; then
             BUILD_ARGS="$BUILD_ARGS -nsis"
           fi
 
-          if [ "$PLATFORM" = "windows/amd64" ] || [ "${PLATFORM%/*}" = "linux" ]; then
+          if [[ "$PLATFORM" == windows/* ]] || [ "${PLATFORM%/*}" = "linux" ]; then
             BUILD_ARGS="$BUILD_ARGS -upx -upxflags=\"--best --lzma\""
           fi
 
@@ -136,21 +136,27 @@ jobs:
           rm -rf dmg_staging
 
       - name: Package Windows portable
-        if: matrix.platform == 'windows/amd64'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist_tmp | Out-Null
-          Copy-Item build/bin/uniTerm.exe dist_tmp/
-          $VERSION = "${{ env.VERSION }}"
-          Push-Location dist_tmp
-          Compress-Archive -Path uniTerm.exe -DestinationPath "../uniterm-windows-amd64-portable-${VERSION}.zip" -Force
-          Pop-Location
-          Remove-Item -Recurse -Force dist_tmp
-
-      - name: Rename NSIS installer (Windows)
-        if: matrix.platform == 'windows/amd64'
+        if: startsWith(matrix.platform, 'windows')
         shell: bash
-        run: mv build/bin/uniTerm-amd64-installer.exe "uniterm-windows-amd64-installer-$VERSION.exe"
+        run: |
+          VERSION="${{ env.VERSION }}"
+          for arch in amd64 arm64; do
+            cd build/bin
+            mkdir -p ../../dist_tmp
+            cp uniTerm-${arch}.exe ../../dist_tmp/
+            cd ../..
+            (cd dist_tmp && zip -q ../uniterm-windows-${arch}-portable-${VERSION}.zip uniTerm-${arch}.exe)
+            rm -rf dist_tmp
+          done
+
+      - name: Rename NSIS installers (Windows)
+        if: startsWith(matrix.platform, 'windows')
+        shell: bash
+        run: |
+          VERSION="${{ env.VERSION }}"
+          for arch in amd64 arm64; do
+            mv build/bin/uniTerm-${arch}-installer.exe "uniterm-windows-${arch}-installer-${VERSION}.exe"
+          done
 
       - name: Package (Linux)
         if: startsWith(matrix.platform, 'linux')
