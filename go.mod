@@ -3,7 +3,6 @@ module github.com/ys-ll/uniterm
 go 1.26.2
 
 require (
-	github.com/UserExistsError/conpty v0.1.4
 	github.com/cloudsoda/go-smb2 v0.0.0-20260701064823-d8c5600d73b8
 	github.com/creack/pty v1.1.24
 	github.com/go-git/go-git/v5 v5.13.2
@@ -22,6 +21,7 @@ require (
 	github.com/studio-b12/gowebdav v0.12.0
 	github.com/unixshells/mosh-go v0.5.2
 	github.com/wailsapp/wails/v2 v2.12.0
+	github.com/ys-ll/uniterm-conpty v0.0.0-20260712170228-e92402fb98b8
 	github.com/zalando/go-keyring v0.2.8
 	go.bug.st/serial v1.7.1
 	go.mongodb.org/mongo-driver v1.17.9
@@ -114,7 +114,5 @@ require (
 )
 
 replace github.com/unixshells/mosh-go v0.5.2 => github.com/ys-ll/mosh-go v0.0.0-20260702130124-e17b92cd9dab
-
-replace github.com/UserExistsError/conpty v0.1.4 => C:\Users\yowsa\conpty
 
 replace github.com/rhnvrm/simples3 v0.11.1 => github.com/ys-ll/simples3 v0.0.0-20260702065557-1d8c6e314ba9

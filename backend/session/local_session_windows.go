@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/UserExistsError/conpty"
+	"github.com/ys-ll/uniterm-conpty"
 	"golang.org/x/sys/windows"
 )
 

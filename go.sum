@@ -258,6 +258,8 @@ github.com/ys-ll/mosh-go v0.0.0-20260702130124-e17b92cd9dab h1:Ru8ctnV5xIDpn1ooz
 github.com/ys-ll/mosh-go v0.0.0-20260702130124-e17b92cd9dab/go.mod h1:HZno4DV/XO+yAZ6lC3EmzMk0whPxrfgY5uix7jcUFps=
 github.com/ys-ll/simples3 v0.0.0-20260702065557-1d8c6e314ba9 h1:LwBT1YY3EZTJIIjKuhkBZVHxK6rqpiwlZKaf20d79EE=
 github.com/ys-ll/simples3 v0.0.0-20260702065557-1d8c6e314ba9/go.mod h1:c2xW30bukipkBlWNnXG1wDjq3gykQ6ww2AB/9NHMLMY=
+github.com/ys-ll/uniterm-conpty v0.0.0-20260712170228-e92402fb98b8 h1:BWWBeOOvxm9YzrtCKV0VkaK/iuu0FCzIEyskHLtJfWM=
+github.com/ys-ll/uniterm-conpty v0.0.0-20260712170228-e92402fb98b8/go.mod h1:ANjpvsD7p4y6zdU2v9xggSh3fg2nFUFiyyqvxIQtMAM=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/zalando/go-keyring v0.2.8 h1:6sD/Ucpl7jNq10rM2pgqTs0sZ9V3qMrqfIIy5YPccHs=
 github.com/zalando/go-keyring v0.2.8/go.mod h1:tsMo+VpRq5NGyKfxoBVjCuMrG47yj8cmakZDO5QGii0=
