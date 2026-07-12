@@ -11,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	"github.com/ys-ll/uniterm/backend/log"
@@ -60,6 +61,7 @@ func main() {
 		MaxWidth:  maxW,
 		MaxHeight: maxH,
 		Frameless: runtime.GOOS != "darwin",
+		Menu:      &menu.Menu{},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
