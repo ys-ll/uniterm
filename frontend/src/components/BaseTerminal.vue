@@ -995,7 +995,10 @@ onMounted(() => {
   }
   document.addEventListener('auxclick', onTerminalAuxClick)
 
-  // Session data
+  // Session data — keep a small tail buffer to detect clear-screen
+  // sequences (\\x1b[2J) that span two data chunks.
+  let dataTail = ''
+
   unsubscribe = EventsOn('session:data', (payload: { id: string; data: string }) => {
     if (!isActive.value) {
       // Mark notification dot on the tab when inactive terminal receives output
@@ -1077,11 +1080,17 @@ onMounted(() => {
     // For ED2 (clear screen) in the main buffer, replace with scrolling
     // to preserve scrollback history. In alternate screen (vim, less,
     // k9s), pass through unchanged — the app manages its own screen.
-    if (data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
-      const rows = terminal.rows
-      const scrollClear = '\n'.repeat(rows) + '\x1b[H'
-      data = data.replace(/\x1b\[H\x1b\[2J/g, scrollClear)
-      data = data.replace(/\x1b\[2J/g, scrollClear)
+    if (terminal.buffer.active.type !== 'alternate') {
+      const chunk = dataTail + data
+      if (chunk.includes('\x1b[2J')) {
+        const rows = terminal.rows
+        const scrollClear = '\n'.repeat(rows) + '\x1b[H'
+        const replaced = chunk
+          .replace(/\x1b\[H\x1b\[2J/g, scrollClear)
+          .replace(/\x1b\[2J/g, scrollClear)
+        data = replaced.slice(dataTail.length)
+      }
+      dataTail = data.slice(-16)
     }
     if (props.mode === 'sftp') {
       const cleaned = data.replace(/\x1b\]633;S[^\x07]*\x07/g, '')
