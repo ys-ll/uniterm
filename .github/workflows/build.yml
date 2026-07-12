@@ -108,7 +108,7 @@ jobs:
             BUILD_ARGS="$BUILD_ARGS -nsis"
           fi
 
-          if [[ "$PLATFORM" == windows/* ]] || [ "${PLATFORM%/*}" = "linux" ]; then
+          if [ "${PLATFORM%/*}" = "linux" ]; then
             BUILD_ARGS="$BUILD_ARGS -upx -upxflags=\"--best --lzma\""
           fi
 
@@ -135,19 +135,22 @@ jobs:
           hdiutil create -volname uniTerm -srcfolder dmg_staging -ov -format UDZO ../../uniterm-darwin-universal-${VERSION}.dmg
           rm -rf dmg_staging
 
-      - name: Package Windows portable
+      - name: UPX compress Windows AMD64
         if: startsWith(matrix.platform, 'windows')
         shell: bash
+        run: upx --best --lzma build/bin/uniTerm-amd64.exe
+
+      - name: Package Windows portable
+        if: startsWith(matrix.platform, 'windows')
+        shell: pwsh
         run: |
-          VERSION="${{ env.VERSION }}"
-          for arch in amd64 arm64; do
-            cd build/bin
-            mkdir -p ../../dist_tmp
-            cp uniTerm-${arch}.exe ../../dist_tmp/uniTerm.exe
-            cd ../..
-            (cd dist_tmp && zip -q ../uniterm-windows-${arch}-portable-${VERSION}.zip uniTerm.exe)
-            rm -rf dist_tmp
-          done
+          $VERSION = "${{ env.VERSION }}"
+          foreach ($arch in @('amd64', 'arm64')) {
+            New-Item -ItemType Directory -Force -Path dist_tmp | Out-Null
+            Copy-Item "build/bin/uniTerm-$arch.exe" "dist_tmp/uniTerm.exe"
+            Compress-Archive -Path dist_tmp/* -DestinationPath "uniterm-windows-$arch-portable-$VERSION.zip" -Force
+            Remove-Item -Recurse -Force dist_tmp
+          }
 
       - name: Rename NSIS installers (Windows)
         if: startsWith(matrix.platform, 'windows')

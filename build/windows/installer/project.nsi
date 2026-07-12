@@ -8,7 +8,11 @@ ManifestDPIAware true
 !endif
 
 Name "${PRODUCT_NAME}"
-OutFile "..\..\bin\uniTerm-amd64-installer.exe"
+!ifdef ARG_WAILS_AMD64_BINARY
+  OutFile "..\..\bin\uniTerm-amd64-installer.exe"
+!else
+  OutFile "..\..\bin\uniTerm-arm64-installer.exe"
+!endif
 InstallDir "$PROGRAMFILES64\${PRODUCT_NAME}"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
@@ -58,7 +62,11 @@ FunctionEnd
 
 Section "Install"
   SetOutPath "$INSTDIR"
+!ifdef ARG_WAILS_AMD64_BINARY
   File "/oname=${BINARY}" "${ARG_WAILS_AMD64_BINARY}"
+!else
+  File "/oname=${BINARY}" "${ARG_WAILS_ARM64_BINARY}"
+!endif
   CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${BINARY}"
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${BINARY}"
