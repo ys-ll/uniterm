@@ -342,12 +342,12 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, watch, ref, onMounted } from 'vue'
+import { reactive, computed, watch, ref } from 'vue'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import type { ConnectionConfig, PostLoginExpectStep } from '../types/session'
-import { GetPlatform, OpenFileDialog } from '../../wailsjs/go/main/App'
+import { OpenFileDialog } from '../../wailsjs/go/main/App'
 import { Plus, Trash2, ChevronRight, FolderOpen, RefreshCw, Terminal, Monitor, Database, DatabaseZap, Layers, SquareTerminal, Zap, Laptop, Cable, FolderUp, HardDrive, Cloud, Globe, MonitorCloud, MonitorSmartphone } from '@lucide/vue'
 import { ListSerialPorts } from '../../wailsjs/go/main/App'
 
@@ -385,7 +385,7 @@ const allSubTypes = computed(() => ({
     { type: 'webdav', label: 'WebDAV', icon: Globe },
   ],
   remote: [
-    { type: 'rdp', label: 'RDP', icon: Monitor },
+    ...(isWindows.value ? [{ type: 'rdp', label: 'RDP', icon: Monitor }] : []),
     { type: 'vnc', label: 'VNC', icon: MonitorSmartphone },
     { type: 'spice', label: 'SPICE', icon: MonitorCloud },
   ],
@@ -444,7 +444,7 @@ const shellOptions = computed(() =>
   settingsStore.availableShells.map(sh => ({ label: getShellLabel(sh), value: sh }))
 )
 
-const isWindows = ref(true)
+const isWindows = ref(/windows/i.test(navigator.userAgent))
 const passwordInputKey = ref(0)
 const postLoginMode = ref<'script' | 'expect'>('script')
 const showAdvanced = ref(false)
@@ -482,10 +482,6 @@ function queryBaudRateSuggestions(queryString: string, cb: (results: { value: st
     .map(r => ({ value: String(r) }))
   cb(suggestions)
 }
-
-onMounted(async () => {
-  try { isWindows.value = (await GetPlatform()) === 'windows' } catch (_) {}
-})
 
 const props = defineProps<{
   modelValue: boolean
