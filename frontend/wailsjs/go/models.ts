@@ -1137,6 +1137,7 @@ export namespace store {
 	    autoCheckUpdate?: boolean;
 	    sftpBookmarks: SFTPBookmarks;
 	    customTerminalThemes: CustomTerminalTheme[];
+	    defaultLocalShell: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -1152,6 +1153,7 @@ export namespace store {
 	        this.autoCheckUpdate = source["autoCheckUpdate"];
 	        this.sftpBookmarks = this.convertValues(source["sftpBookmarks"], SFTPBookmarks);
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], CustomTerminalTheme);
+	        this.defaultLocalShell = source["defaultLocalShell"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

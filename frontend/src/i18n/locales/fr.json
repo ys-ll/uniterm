@@ -273,6 +273,8 @@
   "settings.colorSchemeDesc": "Palette de couleurs du terminal",
   "settings.fontDesc": "Police du terminal",
   "settings.fontSizeDesc": "Taille de police du terminal",
+  "settings.defaultLocalShell": "Default Local Shell",
+  "settings.defaultLocalShellDesc": "Shell used when clicking the Local Terminal button on the start page",
   "settings.selectionActionDesc": "Action par défaut après la sélection de texte",
   "settings.rightClickDesc": "Comportement du clic droit dans le terminal",
   "settings.middleClick": "Action clic milieu",

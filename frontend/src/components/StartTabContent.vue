@@ -46,26 +46,31 @@
         <el-icon><Plus :size="14" /></el-icon>
         {{ t('header.newConnection') }}
       </button>
-      <el-dropdown trigger="click" placement="bottom-start" :teleported="false">
-        <button class="start-action-btn">
+      <div class="start-action-btn-group">
+        <button class="start-action-btn" @click="handleDefaultLocalTerminal">
           <el-icon><Laptop :size="14" /></el-icon>
           {{ t('conn.localTerminal') }}
         </button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item
-              v-for="sh in settingsStore.availableShells"
-              :key="sh"
-              @click="emit('local-terminal', sh, $event.ctrlKey || $event.metaKey)"
-            >
-              {{ getShellLabel(sh) }}
-            </el-dropdown-item>
-            <el-dropdown-item v-if="settingsStore.availableShells.length === 0" disabled>
-              No shells available
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
+        <el-dropdown trigger="click" placement="bottom-start" :teleported="false">
+          <button class="start-action-btn-dropdown-arrow">
+            <el-icon><ChevronDown :size="12" /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item
+                v-for="sh in settingsStore.availableShells"
+                :key="sh"
+                @click="emit('local-terminal', sh, $event.ctrlKey || $event.metaKey)"
+              >
+                {{ getShellLabel(sh) }}
+              </el-dropdown-item>
+              <el-dropdown-item v-if="settingsStore.availableShells.length === 0" disabled>
+                No shells available
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
       <button class="start-action-btn" @click="emit('connect-serial', $event.ctrlKey || $event.metaKey)">
         <el-icon><Cable :size="14" /></el-icon>
         {{ t('sidebar.connectSerial') }}
@@ -378,7 +383,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import { GetRecentConnections } from '../../wailsjs/go/main/App'
 import { formatConnSubtitle } from '../utils/quickConnect'
-import { Filter, Plus, Laptop, Cable, SquareTerminal, Terminal, Database, DatabaseZap, Layers, Monitor, MonitorSmartphone, MonitorCloud, FolderUp, HardDrive, Cloud, Globe, Server, Folder, FolderOpen, Zap, MoreHorizontal } from '@lucide/vue'
+import { Filter, Plus, Laptop, Cable, SquareTerminal, Terminal, Database, DatabaseZap, Layers, Monitor, MonitorSmartphone, MonitorCloud, FolderUp, HardDrive, Cloud, Globe, Server, Folder, FolderOpen, Zap, MoreHorizontal, ChevronDown } from '@lucide/vue'
 
 const props = defineProps<{
   tab: StartTab
@@ -399,6 +404,21 @@ const { t } = useI18n()
 const connectionStore = useConnectionStore()
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
+
+// ── Default local shell ──
+const effectiveDefaultShell = computed(() => {
+  const shells = settingsStore.availableShells
+  if (shells.length === 0) return ''
+  const preferred = settingsStore.settings.defaultLocalShell
+  return preferred && shells.includes(preferred) ? preferred : shells[0]
+})
+
+function handleDefaultLocalTerminal() {
+  const shell = effectiveDefaultShell.value
+  if (shell) {
+    emit('local-terminal', shell)
+  }
+}
 
 // ── Card subtitle (matches sidebar display format) ──
 function getCardSubtitle(config: ConnectionConfig): string {
@@ -1166,6 +1186,33 @@ async function doDelete(config: ConnectionConfig | null) {
 }
 .start-action-btn.primary:hover {
   filter: brightness(0.9);
+}
+
+.start-action-btn-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.start-action-btn-group > .start-action-btn {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  border-right: none;
+}
+
+.start-action-btn-dropdown-arrow {
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.start-action-btn-dropdown-arrow:hover {
+  background: var(--bg-hover);
 }
 
 .start-breadcrumb {

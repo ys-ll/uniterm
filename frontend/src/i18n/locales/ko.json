@@ -273,6 +273,8 @@
   "settings.colorSchemeDesc": "터미널 색상 구성",
   "settings.fontDesc": "터미널 글꼴 패밀리",
   "settings.fontSizeDesc": "터미널 글꼴 크기",
+  "settings.defaultLocalShell": "Default Local Shell",
+  "settings.defaultLocalShellDesc": "Shell used when clicking the Local Terminal button on the start page",
   "settings.selectionActionDesc": "텍스트 선택 후 기본 동작",
   "settings.rightClickDesc": "터미널에서 오른쪽 클릭 동작",
   "settings.middleClick": "가운데 클릭 동작",

@@ -276,6 +276,8 @@
   "settings.colorSchemeDesc": "终端窗口的配色方案",
   "settings.fontDesc": "终端显示的字体",
   "settings.fontSizeDesc": "终端字体大小",
+  "settings.defaultLocalShell": "默认本地终端",
+  "settings.defaultLocalShellDesc": "在起始页点击本地终端按钮时使用的 Shell",
   "settings.selectionActionDesc": "选中文字后的默认操作",
   "settings.rightClickDesc": "右键点击终端的行为",
   "settings.middleClick": "中键功能",

@@ -273,6 +273,8 @@
   "settings.colorSchemeDesc": "Цветовая схема терминала",
   "settings.fontDesc": "Шрифт терминала",
   "settings.fontSizeDesc": "Размер шрифта терминала",
+  "settings.defaultLocalShell": "Default Local Shell",
+  "settings.defaultLocalShellDesc": "Shell used when clicking the Local Terminal button on the start page",
   "settings.selectionActionDesc": "Действие по умолчанию после выделения текста",
   "settings.rightClickDesc": "Поведение правой кнопки мыши в терминале",
   "settings.middleClick": "Действие средней кнопки",

@@ -131,6 +131,23 @@
 
           <div class="setting-card">
             <div class="setting-info">
+              <div class="setting-title">{{ t('settings.defaultLocalShell') }}</div>
+              <div class="setting-desc">{{ t('settings.defaultLocalShellDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-select v-model="settingsStore.settings.defaultLocalShell" @change="settingsStore.save()">
+                <el-option
+                  v-for="sh in settingsStore.availableShells"
+                  :key="sh"
+                  :label="getShellLabel(sh)"
+                  :value="sh"
+                />
+              </el-select>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
               <div class="setting-title">{{ t('settings.selectionAction') }}</div>
               <div class="setting-desc">{{ t('settings.selectionActionDesc') }}</div>
             </div>
@@ -837,7 +854,12 @@ async function testConnection() {
 }
 
 function getShellLabel(path: string): string {
+  if (!path) return 'Local'
   const lower = path.toLowerCase()
+  if (lower.startsWith('wsl://')) {
+    const distro = path.slice(6)
+    return distro ? `WSL - ${distro}` : 'WSL'
+  }
   if (lower.includes('pwsh')) return 'PowerShell'
   if (lower.includes('powershell')) return 'Windows PowerShell'
   if (lower.includes('bash')) return 'Git Bash'

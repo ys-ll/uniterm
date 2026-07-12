@@ -273,6 +273,8 @@
   "settings.colorSchemeDesc": "ターミナルのカラースキーム",
   "settings.fontDesc": "ターミナルのフォント",
   "settings.fontSizeDesc": "ターミナルのフォントサイズ",
+  "settings.defaultLocalShell": "Default Local Shell",
+  "settings.defaultLocalShellDesc": "Shell used when clicking the Local Terminal button on the start page",
   "settings.selectionActionDesc": "テキスト選択後の既定アクション",
   "settings.rightClickDesc": "ターミナル内での右クリックの動作",
   "settings.middleClick": "中ボタン機能",

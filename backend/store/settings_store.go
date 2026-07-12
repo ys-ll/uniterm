@@ -94,6 +94,7 @@ type AppSettings struct {
 	AutoCheckUpdate      *bool                 `json:"autoCheckUpdate"`
 	SFTPBookmarks        SFTPBookmarks         `json:"sftpBookmarks"`
 	CustomTerminalThemes []CustomTerminalTheme `json:"customTerminalThemes"`
+	DefaultLocalShell    string                `json:"defaultLocalShell"`
 }
 
 type SFTPBookmarks struct {

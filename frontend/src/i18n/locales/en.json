@@ -276,6 +276,8 @@
   "settings.colorSchemeDesc": "Terminal color scheme",
   "settings.fontDesc": "Terminal font family",
   "settings.fontSizeDesc": "Terminal font size",
+  "settings.defaultLocalShell": "Default Local Shell",
+  "settings.defaultLocalShellDesc": "Shell used when clicking the Local Terminal button on the start page",
   "settings.selectionActionDesc": "Default action after selecting text",
   "settings.rightClickDesc": "Right-click behavior in terminal",
   "settings.middleClick": "Middle Click Action",

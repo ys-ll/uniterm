@@ -273,6 +273,8 @@
   "settings.colorSchemeDesc": "終端機視窗的配色方案",
   "settings.fontDesc": "終端機顯示的字型",
   "settings.fontSizeDesc": "終端機字型大小",
+  "settings.defaultLocalShell": "Default Local Shell",
+  "settings.defaultLocalShellDesc": "Shell used when clicking the Local Terminal button on the start page",
   "settings.selectionActionDesc": "選取文字後的預設操作",
   "settings.rightClickDesc": "右鍵點擊終端機的行為",
   "settings.middleClick": "中鍵功能",

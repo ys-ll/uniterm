@@ -228,6 +228,7 @@ function mergeSettings(loaded: AppSettings): AppSettings {
       localPaths: loaded.sftpBookmarks?.localPaths || [],
       remotePaths: loaded.sftpBookmarks?.remotePaths || []
     },
-    customTerminalThemes: loaded.customTerminalThemes || []
+    customTerminalThemes: loaded.customTerminalThemes || [],
+    defaultLocalShell: loaded.defaultLocalShell ?? DEFAULT_SETTINGS.defaultLocalShell
   }
 }
