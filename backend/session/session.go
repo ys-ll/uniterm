@@ -18,8 +18,9 @@ const (
 )
 
 type ConnectionGroup struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	ParentId *string `json:"parentId,omitempty"`
 }
 
 type ConnectionConfig struct {

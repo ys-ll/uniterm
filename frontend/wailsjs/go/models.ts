@@ -364,6 +364,7 @@ export namespace session {
 	export class ConnectionGroup {
 	    id: string;
 	    name: string;
+	    parentId?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConnectionGroup(source);
@@ -373,6 +374,7 @@ export namespace session {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.name = source["name"];
+	        this.parentId = source["parentId"];
 	    }
 	}
 	export class ConnectionStoreData {

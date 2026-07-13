@@ -37,23 +37,21 @@
             <el-form-item :label="t('conn.name')">
               <el-input v-model="form.name" :placeholder="t('conn.namePlaceholder')" />
             </el-form-item>
-            <el-form-item :label="t('conn.group')">
-              <el-select v-model="selectedGroupId" :placeholder="t('conn.noGroup')" clearable @change="onGroupSelect">
-                <el-option
-                  v-for="g in connectionStore.groups"
-                  :key="g.id"
-                  :label="g.name"
-                  :value="g.id"
+            <el-form-item :label="t('conn.moveTo')">
+              <div style="display:flex;gap:6px;width:100%">
+                <el-tree-select
+                  v-model="selectedGroupId"
+                  :data="groupTreeData"
+                  :render-after-expand="false"
+                  check-strictly
+                  clearable
+                  :placeholder="t('conn.noGroup')"
+                  style="flex:1;min-width:0"
                 />
-                <el-option
-                  :label="t('conn.noGroup')"
-                  value="__none__"
-                />
-                <el-option
-                  :label="t('conn.newGroup')"
-                  value="__new__"
-                />
-              </el-select>
+                <el-button style="flex-shrink:0;width:32px;height:32px;padding:0" @click="onGroupSelect('__new__')" :title="t('conn.newGroup')">
+                  <Plus :size="14" />
+                </el-button>
+              </div>
             </el-form-item>
             <el-form-item :label="form.type === 's3' ? 'Endpoint' : t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial'">
               <div class="host-port-row">
@@ -324,13 +322,24 @@
   </el-dialog>
 
   <!-- New group dialog -->
-  <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="360px">
-    <el-form @submit.prevent="confirmNewGroup">
+  <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
+    <el-form label-width="80px" @submit.prevent="confirmNewGroup">
       <el-form-item :label="t('conn.groupName')">
         <el-input
           v-model="newGroupName"
           :placeholder="t('conn.groupNamePlaceholder')"
           @keyup.enter="confirmNewGroup"
+        />
+      </el-form-item>
+      <el-form-item :label="t('conn.parentGroup')">
+        <el-tree-select
+          v-model="newGroupParentId"
+          :data="groupTreeData"
+          :render-after-expand="false"
+          check-strictly
+          clearable
+          :placeholder="t('conn.noGroup')"
+          style="width:100%"
         />
       </el-form-item>
     </el-form>
@@ -348,7 +357,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import type { ConnectionConfig, PostLoginExpectStep } from '../types/session'
 import { OpenFileDialog } from '../../wailsjs/go/main/App'
-import { Plus, Trash2, ChevronRight, FolderOpen, RefreshCw, Terminal, Monitor, Database, DatabaseZap, Layers, SquareTerminal, Zap, Laptop, Cable, FolderUp, HardDrive, Cloud, Globe, MonitorCloud, MonitorSmartphone } from '@lucide/vue'
+import { Plus, Trash2, ChevronDown, ChevronRight, FolderOpen, RefreshCw, Terminal, Monitor, Database, DatabaseZap, Layers, SquareTerminal, Zap, Laptop, Cable, FolderUp, HardDrive, Cloud, Globe, MonitorCloud, MonitorSmartphone } from '@lucide/vue'
 import { ListSerialPorts } from '../../wailsjs/go/main/App'
 
 const { t } = useI18n()
@@ -591,9 +600,34 @@ const rdpResolution = ref('1280 × 720 (HD)')
 
 const selectedGroupId = ref<string | undefined>(undefined)
 
+// Tree data for el-tree-select
+interface TreeOption {
+  value: string
+  label: string
+  children?: TreeOption[]
+}
+
+const groupTreeData = computed<TreeOption[]>(() => {
+  function buildTree(nodes: any[]): TreeOption[] {
+    return nodes.map(node => ({
+      value: node.group.id,
+      label: node.group.name,
+      children: node.children.length > 0 ? buildTree(node.children) : undefined,
+    }))
+  }
+  return buildTree(connectionStore.groupedConnections.roots)
+})
+
+const selectedGroupName = computed(() => {
+  if (!form.groupId) return ''
+  const g = connectionStore.groups.find(g => g.id === form.groupId)
+  return g?.name || form.groupId
+})
+
 // New group dialog
 const showNewGroupDialog = ref(false)
 const newGroupName = ref('')
+const newGroupParentId = ref<string | undefined>(undefined)
 
 watch(() => props.editConfig, (config) => {
   if (config) {
@@ -725,20 +759,22 @@ function resetForm() {
   selectedGroupId.value = undefined
 }
 
+// Sync tree-select value to form
+watch(selectedGroupId, (val) => {
+  form.groupId = val || undefined
+})
+
+function onNodeClick(data: any) {
+  // el-tree-select auto-closes and syncs via v-model
+}
+
 function onGroupSelect(value: string | undefined) {
   if (value === '__new__') {
     showNewGroupDialog.value = true
     newGroupName.value = ''
-    selectedGroupId.value = form.groupId || undefined
+    newGroupParentId.value = undefined
     return
   }
-  if (value === '__none__') {
-    form.groupId = undefined
-    selectedGroupId.value = undefined
-    return
-  }
-  form.groupId = value
-  selectedGroupId.value = value
 }
 
 async function confirmNewGroup() {
@@ -746,13 +782,12 @@ async function confirmNewGroup() {
   if (!name) {
     return
   }
-  if (connectionStore.groups.some(g => g.name === name)) {
-    return
-  }
-  const group = await connectionStore.addGroup(name)
+  showNewGroupDialog.value = false
+  const group = await connectionStore.addGroup(name, newGroupParentId.value)
+  newGroupParentId.value = undefined
+  newGroupName.value = ''
   form.groupId = group.id
   selectedGroupId.value = group.id
-  showNewGroupDialog.value = false
 }
 
 async function selectKeyFile() {
@@ -1138,6 +1173,19 @@ function onConnect() {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+/* ── Group selector row ── */
+.group-select-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.add-group-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
 }
 
 /* ── Dialog overrides ── */

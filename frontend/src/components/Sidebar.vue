@@ -90,49 +90,13 @@
       </Teleport>
 
     <div class="connection-list" tabindex="0" @keydown="onListKeydown" @contextmenu.prevent="onEmptyAreaContextMenu">
-      <!-- Grouped connections -->
-      <template v-for="entry in filteredGrouped.groups" :key="entry.group.id">
-        <div
-          class="group-header"
-          :class="{ 'drag-over': dragOverGroupId === entry.group.id }"
-          @click="toggleGroup(entry.group.id)"
-          @contextmenu.prevent="onGroupContextMenu($event, entry.group)"
-          @dragover.prevent="onGroupDragOver(entry.group.id)"
-          @dragleave="onGroupDragLeave(entry.group.id)"
-          @drop.prevent="onGroupDrop(entry.group.id, $event)"
-        >
-          <span class="group-arrow">
-            <el-icon v-if="expandedGroups.has(entry.group.id)"><ChevronDown :size="14" /></el-icon>
-            <el-icon v-else><ChevronRight :size="14" /></el-icon>
-          </span>
-          <span class="group-name">{{ entry.group.name }}</span>
-        </div>
-        <template v-if="expandedGroups.has(entry.group.id)">
-          <div
-            v-for="conn in entry.connections"
-            :key="conn.id"
-            class="connection-item indented"
-            :class="{
-              active: selectedIds.has(conn.id)
-            }"
-            draggable="true"
-            @dragstart="onDragStart($event, conn)"
-            @dragend="onDragEnd"
-            @click="onItemClick($event, conn)"
-            @dblclick="onItemDblClick(conn)"
-            @contextmenu.prevent="onContextMenu($event, conn)"
-          >
-            <span class="conn-icon"><component :is="connIcon(conn)" :size="14" /></span>
-            <div class="conn-details">
-              <span class="name">{{ conn.name }}</span>
-              <span class="conn-meta">
-                <span class="host">{{ getSubtitle(conn) }}</span>
-              </span>
-            </div>
-            <button class="conn-more-btn" @click.stop="onConnMoreClick($event, conn)" :title="t('terminal.more')"><MoreHorizontal :size="14" /></button>
-          </div>
-        </template>
-      </template>
+      <!-- Nested group tree -->
+      <GroupTreeItem
+        v-for="root in filteredGrouped.roots"
+        :key="root.group.id"
+        :node="root"
+        :depth="0"
+      />
 
       <!-- Virtual (No Group) group - only when real groups exist -->
       <template v-if="connectionStore.groups.length > 0 && filteredGrouped.ungrouped.length > 0">
@@ -338,7 +302,7 @@
       <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doEdit()">{{ t('sidebar.edit') }}</div>
       <div class="menu-item" @click="doDuplicate">{{ t('sidebar.duplicate') }}</div>
       <div class="menu-divider" />
-      <div class="menu-item" @click="doChangeGroup">{{ t('conn.changeGroup') }}</div>
+      <div class="menu-item" @click="doChangeGroup">{{ t('conn.moveTo') }}</div>
       <div class="menu-item" @click="doNewGroup">{{ t('conn.newGroupTitle') }}</div>
       <div class="menu-divider" />
       <div class="menu-item danger" @click="doDelete">{{ t('sidebar.delete') }}</div>
@@ -357,6 +321,7 @@
       <template v-if="selectedGroup && selectedGroup.id !== '__ungrouped__'">
         <div class="menu-divider" />
         <div class="menu-item" @click="doRenameGroup">{{ t('conn.renameGroup') }}</div>
+        <div class="menu-item" @click="doChangeParentGroup">{{ t('conn.moveTo') }}</div>
         <div class="menu-divider" />
         <div class="menu-item danger" @click="doDeleteGroup">{{ t('conn.deleteGroup') }}</div>
       </template>
@@ -378,8 +343,8 @@
       <p>{{ deleteGroupPromptText }}</p>
       <template #footer>
         <el-button @click="showDeleteGroupDialog = false">{{ t('conn.deleteGroupCancel') }}</el-button>
-        <el-button type="warning" @click="confirmDeleteGroup('move-out')">{{ t('conn.deleteGroupMoveOut') }}</el-button>
-        <el-button type="danger" @click="confirmDeleteGroup('delete-connections')">{{ t('conn.deleteGroupDeleteAll') }}</el-button>
+        <el-button type="warning" @click="confirmDeleteGroup('move-out', 'move-up')">{{ t('conn.deleteGroupMoveUp') }}</el-button>
+        <el-button type="danger" @click="confirmDeleteGroup('delete-connections', 'delete-all')">{{ t('conn.deleteGroupDeleteAll') }}</el-button>
       </template>
     </el-dialog>
 
@@ -400,24 +365,17 @@
       </template>
     </el-dialog>
 
-    <!-- Change group dialog -->
-    <el-dialog v-model="showChangeGroupDialog" :title="t('conn.changeGroup')" width="360px">
-      <el-select v-model="changeGroupTargetId" :placeholder="t('conn.noGroup')" clearable style="width:100%">
-        <el-option
-          v-for="g in connectionStore.groups"
-          :key="g.id"
-          :label="g.name"
-          :value="g.id"
-        />
-        <el-option
-          :label="t('conn.noGroup')"
-          value="__none__"
-        />
-        <el-option
-          :label="t('conn.newGroup')"
-          value="__new__"
-        />
-      </el-select>
+    <!-- Move to dialog -->
+    <el-dialog v-model="showChangeGroupDialog" :title="t('conn.moveTo')" width="400px">
+      <el-tree-select
+        v-model="changeGroupTargetId"
+        :data="groupTreeData"
+        :render-after-expand="false"
+        check-strictly
+        clearable
+        :placeholder="t('conn.noGroup')"
+        style="width:100%"
+      />
       <template #footer>
         <el-button @click="showChangeGroupDialog = false">{{ t('conn.cancel') }}</el-button>
         <el-button type="primary" @click="confirmChangeGroup">{{ t('conn.save') }}</el-button>
@@ -425,13 +383,24 @@
     </el-dialog>
 
     <!-- Standalone new group dialog -->
-    <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="360px">
-      <el-form @submit.prevent="confirmNewGroup">
+    <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
+      <el-form label-width="80px" @submit.prevent="confirmNewGroup">
         <el-form-item :label="t('conn.groupName')">
           <el-input
             v-model="newGroupName"
             :placeholder="t('conn.groupNamePlaceholder')"
             @keyup.enter="confirmNewGroup"
+          />
+        </el-form-item>
+        <el-form-item :label="t('conn.parentGroup')">
+          <el-tree-select
+            v-model="newGroupParentId"
+            :data="groupTreeData"
+            :render-after-expand="false"
+            check-strictly
+            clearable
+            :placeholder="t('conn.noGroup')"
+            style="width:100%"
           />
         </el-form-item>
       </el-form>
@@ -442,13 +411,24 @@
     </el-dialog>
 
     <!-- New group dialog (for change group flow) -->
-    <el-dialog v-model="showChangeNewGroupDialog" :title="t('conn.newGroupTitle')" width="360px">
-      <el-form @submit.prevent="confirmChangeNewGroup">
+    <el-dialog v-model="showChangeNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
+      <el-form label-width="80px" @submit.prevent="confirmChangeNewGroup">
         <el-form-item :label="t('conn.groupName')">
           <el-input
             v-model="changeNewGroupName"
             :placeholder="t('conn.groupNamePlaceholder')"
             @keyup.enter="confirmChangeNewGroup"
+          />
+        </el-form-item>
+        <el-form-item :label="t('conn.parentGroup')">
+          <el-tree-select
+            v-model="changeNewGroupParentId"
+            :data="groupTreeData"
+            :render-after-expand="false"
+            check-strictly
+            clearable
+            :placeholder="t('conn.noGroup')"
+            style="width:100%"
           />
         </el-form-item>
       </el-form>
@@ -461,11 +441,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Layers, Activity, Laptop, Cable, Pencil, MoreHorizontal, ArrowRightLeft } from '@lucide/vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide } from 'vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Layers, Activity, Laptop, Cable, Pencil, MoreHorizontal, ArrowRightLeft, FolderTree } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { msg } from '../services/message'
 import { useConnectionStore } from '../stores/connectionStore'
+import type { GroupTreeNode } from '../stores/connectionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import ConnectionForm from './ConnectionForm.vue'
@@ -473,6 +454,7 @@ import QuickCommandsPanel from './QuickCommandsPanel.vue'
 import TunnelsPanel from './TunnelsPanel.vue'
 import HistoryPanel from './HistoryPanel.vue'
 import CustomThemeEditor from './CustomThemeEditor.vue'
+import GroupTreeItem from './GroupTreeItem.vue'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 import { parseQuickConnect, formatConnSubtitle } from '../utils/quickConnect'
 import { FONT_OPTIONS, LANGUAGE_OPTIONS } from '../types/settings'
@@ -617,6 +599,25 @@ async function toggleGroup(groupId: string) {
 const selectedIds = ref<Set<string>>(new Set())
 
 // ── Search filter ──
+function filterTreeNode(node: GroupTreeNode, q: string, matchConn: (c: ConnectionConfig) => boolean): GroupTreeNode | null {
+  const groupNameMatch = node.group.name.toLowerCase().includes(q)
+  const filteredConns = groupNameMatch
+    ? node.connections.filter(matchConn)
+    : node.connections.filter(matchConn)
+  const filteredChildren: GroupTreeNode[] = []
+  for (const child of node.children) {
+    const filtered = filterTreeNode(child, q, matchConn)
+    if (filtered) filteredChildren.push(filtered)
+  }
+  const hasMatchingName = groupNameMatch
+  const hasConnections = filteredConns.length > 0
+  const hasChildren = filteredChildren.length > 0
+  if (hasMatchingName || hasConnections || hasChildren) {
+    return { group: node.group, connections: hasMatchingName ? node.connections.filter(matchConn) : filteredConns, children: filteredChildren }
+  }
+  return null
+}
+
 const filteredGrouped = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   const typeFilter = selectedTypeFilter.value
@@ -628,41 +629,42 @@ const filteredGrouped = computed(() => {
     return textMatch && typeMatch
   }
 
-  const filteredGroups = data.groups
-    .map(entry => ({
-      group: entry.group,
-      connections: entry.connections.filter(matchConn)
-    }))
-    .filter(entry => {
-      const groupNameMatch = entry.group.name.toLowerCase().includes(q)
-      if (groupNameMatch) {
-        // Show all connections in group when group name matches, but still apply type filter
-        entry.connections = data.groups.find(g => g.group.id === entry.group.id)!.connections.filter(matchConn)
-        return true
-      }
-      return entry.connections.length > 0
-    })
+  const filteredRoots: GroupTreeNode[] = []
+  for (const root of data.roots) {
+    const filtered = filterTreeNode(root, q, matchConn)
+    if (filtered) filteredRoots.push(filtered)
+  }
 
   const filteredUngrouped = data.ungrouped.filter(matchConn)
 
-  return { groups: filteredGroups, ungrouped: filteredUngrouped }
+  return { roots: filteredRoots, ungrouped: filteredUngrouped }
 })
 
-const totalFiltered = computed(() => {
+function countTreeNodes(nodes: GroupTreeNode[]): number {
   let count = 0
-  for (const g of filteredGrouped.value.groups) {
-    count += g.connections.length
+  for (const node of nodes) {
+    count += node.connections.length
+    count += countTreeNodes(node.children)
   }
-  count += filteredGrouped.value.ungrouped.length
   return count
+}
+
+const totalFiltered = computed(() => {
+  return countTreeNodes(filteredGrouped.value.roots) + filteredGrouped.value.ungrouped.length
 })
+
+function collectTreeConnIds(nodes: GroupTreeNode[]): string[] {
+  const ids: string[] = []
+  for (const node of nodes) {
+    for (const c of node.connections) ids.push(c.id)
+    ids.push(...collectTreeConnIds(node.children))
+  }
+  return ids
+}
 
 // Update selection when filter changes
 watch(filteredGrouped, () => {
-  const allIds: string[] = []
-  for (const g of filteredGrouped.value.groups) {
-    for (const c of g.connections) allIds.push(c.id)
-  }
+  const allIds = collectTreeConnIds(filteredGrouped.value.roots)
   for (const c of filteredGrouped.value.ungrouped) allIds.push(c.id)
 
   if (allIds.length === 0) {
@@ -679,20 +681,17 @@ const prevGroupIds = ref<Set<string>>(new Set())
 const collapsedStateLoaded = ref(false)
 
 // Sync expanded state when groups change (add/delete/rename) — preserve user collapse choices
-watch(() => connectionStore.groups, (groups) => {
+watch(() => connectionStore.allGroupIds, (ids) => {
   if (!collapsedStateLoaded.value) return
-  const currentIds = new Set<string>()
-  for (const g of groups) {
-    currentIds.add(g.id)
-  }
-  if (groups.length > 0) {
+  const currentIds = new Set<string>(ids)
+  if (connectionStore.groups.length > 0) {
     currentIds.add('__ungrouped__')
   }
 
   // Remove stale group IDs from both expanded and collapsed
   const allKnown = new Set([...expandedGroups.value, ...collapsedGroupIds.value])
   for (const id of allKnown) {
-    if (id === '__ungrouped__' && groups.length === 0) continue
+    if (id === '__ungrouped__' && connectionStore.groups.length === 0) continue
     if (id !== '__ungrouped__' && !currentIds.has(id)) {
       expandedGroups.value.delete(id)
       collapsedGroupIds.value.delete(id)
@@ -721,10 +720,7 @@ async function initCollapseState() {
   }
 
   // Build initial expandedGroups and prevGroupIds
-  const allIds: string[] = []
-  for (const g of connectionStore.groups) {
-    allIds.push(g.id)
-  }
+  const allIds = connectionStore.allGroupIds.slice()
   if (connectionStore.groups.length > 0) {
     allIds.push('__ungrouped__')
   }
@@ -742,18 +738,19 @@ watch(searchQuery, (q) => {
   if (isSearching && !wasSearching.value) {
     // Entering search mode — expand all visually (don't touch collapsedGroupIds)
     expandedGroups.value = new Set()
-    for (const g of filteredGrouped.value.groups) {
-      expandedGroups.value.add(g.group.id)
+    function expandTree(nodes: GroupTreeNode[]) {
+      for (const node of nodes) {
+        expandedGroups.value.add(node.group.id)
+        expandTree(node.children)
+      }
     }
+    expandTree(filteredGrouped.value.roots)
     if (connectionStore.groups.length > 0) {
       expandedGroups.value.add('__ungrouped__')
     }
   } else if (!isSearching && wasSearching.value) {
     // Exiting search mode — restore from persisted collapsed state
-    const allIds: string[] = []
-    for (const g of connectionStore.groups) {
-      allIds.push(g.id)
-    }
+    const allIds = connectionStore.allGroupIds
     if (connectionStore.groups.length > 0) {
       allIds.push('__ungrouped__')
     }
@@ -802,11 +799,15 @@ function onResizeStart(e: MouseEvent) {
 // ── Keyboard navigation ──
 function getAllVisibleIds(): string[] {
   const ids: string[] = []
-  for (const g of filteredGrouped.value.groups) {
-    if (expandedGroups.value.has(g.group.id)) {
-      for (const c of g.connections) ids.push(c.id)
+  function collectVisible(nodes: GroupTreeNode[]) {
+    for (const node of nodes) {
+      if (expandedGroups.value.has(node.group.id)) {
+        for (const c of node.connections) ids.push(c.id)
+        collectVisible(node.children)
+      }
     }
   }
+  collectVisible(filteredGrouped.value.roots)
   if (connectionStore.groups.length > 0) {
     if (expandedGroups.value.has('__ungrouped__')) {
       for (const c of filteredGrouped.value.ungrouped) ids.push(c.id)
@@ -908,12 +909,26 @@ function onGroupDragLeave(groupId: string) {
 }
 
 async function onGroupDrop(groupId: string, e: DragEvent) {
-  const targetGroupId = groupId === '__ungrouped__' ? undefined : groupId
   const raw = e.dataTransfer?.getData('text/plain')
   if (raw) {
-    const ids: string[] = JSON.parse(raw)
-    await connectionStore.setConnectionsGroup(ids, targetGroupId)
-    selectedIds.value = new Set()
+    try {
+      const data = JSON.parse(raw)
+      // Check if dropping a group (to reparent)
+      if (data && data.type === 'group') {
+        const targetParentId = groupId === '__ungrouped__' ? undefined : groupId
+        await connectionStore.reparentGroup(data.id, targetParentId)
+        dragOverGroupId.value = null
+        return
+      }
+      // Otherwise, dropping connections (plain array of IDs)
+      if (Array.isArray(data) && data.length > 0) {
+        const targetGroupId = groupId === '__ungrouped__' ? undefined : groupId
+        await connectionStore.setConnectionsGroup(data, targetGroupId)
+        selectedIds.value = new Set()
+      }
+    } catch {
+      // ignore parse errors
+    }
   }
   dragOverGroupId.value = null
 }
@@ -1211,15 +1226,26 @@ async function doDelete() {
 const showNewGroupDialog = ref(false)
 const newGroupName = ref('')
 
-function doNewGroup() {
-  closeMenu()
-  closeGroupMenu()
-  closeEmptyAreaMenu()
-  newGroupName.value = ''
-  showNewGroupDialog.value = true
+const newConnGroupId = ref<string | undefined>(undefined)
+const newGroupParentId = ref<string | undefined>(undefined)
+
+// Tree data for el-tree-select
+interface TreeOption {
+  value: string
+  label: string
+  children?: TreeOption[]
 }
 
-const newConnGroupId = ref<string | undefined>(undefined)
+const groupTreeData = computed<TreeOption[]>(() => {
+  function buildTree(nodes: GroupTreeNode[]): TreeOption[] {
+    return nodes.map(node => ({
+      value: node.group.id,
+      label: node.group.name,
+      children: node.children.length > 0 ? buildTree(node.children) : undefined,
+    }))
+  }
+  return buildTree(connectionStore.groupedConnections.roots)
+})
 
 function doNewConnInGroup() {
   closeMenu()
@@ -1230,15 +1256,46 @@ function doNewConnInGroup() {
   showForm.value = true
 }
 
+function doNewGroup() {
+  closeMenu()
+  closeGroupMenu()
+  closeEmptyAreaMenu()
+  newGroupName.value = ''
+  // Default parent to selected group if triggered from group context menu
+  newGroupParentId.value = (selectedGroup.value && selectedGroup.value.id !== '__ungrouped__') ? selectedGroup.value.id : undefined
+  showNewGroupDialog.value = true
+}
+
 async function confirmNewGroup() {
   const name = newGroupName.value.trim()
   if (!name) return
-  if (connectionStore.groups.some(g => g.name === name)) {
-    msg.warning(t('conn.groupNameDuplicate'))
-    return
-  }
-  await connectionStore.addGroup(name)
   showNewGroupDialog.value = false
+  const parentId = newGroupParentId.value
+  newGroupParentId.value = undefined
+  newGroupName.value = ''
+  // save in background, don't block dialog close
+  connectionStore.addGroup(name, parentId)
+}
+
+// ── Move to (unified dialog for connections and groups) ──
+const changeDialogMode = ref<'connections' | 'group'>('connections')
+
+function onChangeGroupSelect(value: string | undefined) {
+  if (value === '__new__') {
+    showChangeGroupDialog.value = false
+    changeNewGroupName.value = ''
+    changeNewGroupParentId.value = undefined
+    showChangeNewGroupDialog.value = true
+  }
+}
+
+function doChangeParentGroup() {
+  closeMenu()
+  closeGroupMenu()
+  closeEmptyAreaMenu()
+  changeDialogMode.value = 'group'
+  changeGroupTargetId.value = selectedGroup.value?.parentId
+  showChangeGroupDialog.value = true
 }
 
 // ── Change group ──
@@ -1246,11 +1303,13 @@ const showChangeGroupDialog = ref(false)
 const changeGroupTargetId = ref<string | undefined>(undefined)
 const showChangeNewGroupDialog = ref(false)
 const changeNewGroupName = ref('')
+const changeNewGroupParentId = ref<string | undefined>(undefined)
 const externalChangeGroupIds = ref<string[]>([])
 
 // Open change-group dialog from outside (e.g. StartTab card context menu)
 function openChangeGroupFor(ids: string[]) {
   externalChangeGroupIds.value = ids
+  changeDialogMode.value = 'connections'
   const groups = new Set(ids.map(id => {
     const c = connectionStore.connections.find(c => c.id === id)
     return c?.groupId || '__none__'
@@ -1273,8 +1332,8 @@ function getChangeGroupIds(): string[] {
 
 function doChangeGroup() {
   closeMenu()
+  changeDialogMode.value = 'connections'
   const ids = getSelectedConnectionIds()
-  // Find common group if all selected connections are in the same group
   const groups = new Set(ids.map(id => {
     const c = connectionStore.connections.find(c => c.id === id)
     return c?.groupId || '__none__'
@@ -1288,7 +1347,15 @@ function doChangeGroup() {
   showChangeGroupDialog.value = true
 }
 
-function confirmChangeGroup() {
+async function confirmChangeGroup() {
+  if (changeDialogMode.value === 'group') {
+    if (selectedGroup.value && selectedGroup.value.id !== '__ungrouped__') {
+      await connectionStore.reparentGroup(selectedGroup.value.id, changeGroupTargetId.value)
+    }
+    showChangeGroupDialog.value = false
+    return
+  }
+
   const val = changeGroupTargetId.value
   if (val === '__new__') {
     showChangeNewGroupDialog.value = true
@@ -1307,15 +1374,15 @@ function confirmChangeGroup() {
 async function confirmChangeNewGroup() {
   const name = changeNewGroupName.value.trim()
   if (!name) return
-  if (connectionStore.groups.some(g => g.name === name)) {
-    msg.warning(t('conn.groupNameDuplicate'))
-    return
-  }
-  const group = await connectionStore.addGroup(name)
-  const ids = getChangeGroupIds()
-  connectionStore.setConnectionsGroup(ids, group.id)
-  selectedIds.value = new Set()
   showChangeNewGroupDialog.value = false
+  const group = await connectionStore.addGroup(name, changeNewGroupParentId.value)
+  changeNewGroupParentId.value = undefined
+  changeNewGroupName.value = ''
+  const ids = getChangeGroupIds()
+  if (ids.length > 0) {
+    connectionStore.setConnectionsGroup(ids, group.id)
+    selectedIds.value = new Set()
+  }
   showChangeGroupDialog.value = false
   changeGroupTargetId.value = undefined
   externalChangeGroupIds.value = []
@@ -1391,24 +1458,26 @@ const showDeleteGroupDialog = ref(false)
 const deleteGroupPromptText = computed(() => {
   const g = selectedGroup.value
   if (!g) return ''
-  const count = connectionStore.connections.filter(c => c.groupId === g.id).length
-  return t('conn.deleteGroupPrompt', { name: g.name, count })
+  const connCount = connectionStore.connections.filter(c => c.groupId === g.id).length
+  const childCount = connectionStore.groups.filter(cg => cg.parentId === g.id).length
+  return t('conn.deleteGroupPrompt', { name: g.name, connCount, childCount })
 })
 
 function doDeleteGroup() {
   closeGroupMenu()
   if (!selectedGroup.value) return
-  const count = connectionStore.connections.filter(c => c.groupId === selectedGroup.value!.id).length
-  if (count === 0) {
+  const connCount = connectionStore.connections.filter(c => c.groupId === selectedGroup.value!.id).length
+  const childCount = connectionStore.groups.filter(cg => cg.parentId === selectedGroup.value!.id).length
+  if (connCount === 0 && childCount === 0) {
     connectionStore.deleteGroup(selectedGroup.value.id, 'move-out')
     return
   }
   showDeleteGroupDialog.value = true
 }
 
-async function confirmDeleteGroup(action: 'delete-connections' | 'move-out') {
+async function confirmDeleteGroup(connAction: 'delete-connections' | 'move-out', childAction: 'move-up' | 'delete-all' = 'move-up') {
   if (selectedGroup.value) {
-    await connectionStore.deleteGroup(selectedGroup.value.id, action)
+    await connectionStore.deleteGroup(selectedGroup.value.id, connAction, childAction)
   }
   showDeleteGroupDialog.value = false
   selectedGroup.value = null
@@ -1426,6 +1495,7 @@ function onNewConnCommand(cmd: string) {
   } else if (cmd === 'new-serial') {
     emit('connectSerial')
   } else if (cmd === 'new-group') {
+    newGroupParentId.value = undefined
     showNewGroupDialog.value = true
   }
 }
@@ -1571,7 +1641,38 @@ onUnmounted(() => {
   })
 })
 
-defineExpose({ focusSearch, openChangeGroupFor })
+// Provide to GroupTreeItem (after all refs/functions are defined)
+provide('expandedGroups', expandedGroups)
+provide('selectedIds', selectedIds)
+provide('dragOverGroupId', dragOverGroupId)
+provide('groupHandlers', {
+  onToggleGroup: toggleGroup,
+  onGroupContextMenu,
+  onGroupDragOver,
+  onGroupDragLeave,
+  onGroupDrop,
+  onItemClick,
+  onItemDblClick,
+  onDragStart,
+  onDragEnd,
+  onContextMenu,
+  onConnMoreClick,
+})
+provide('utils', {
+  connIcon,
+  getSubtitle,
+  t,
+})
+
+// Open move-to dialog for a specific group (from StartTabContent)
+function openChangeGroupForGroup(groupId: string) {
+  selectedGroup.value = connectionStore.groups.find(g => g.id === groupId) || null
+  changeDialogMode.value = 'group'
+  changeGroupTargetId.value = selectedGroup.value?.parentId
+  showChangeGroupDialog.value = true
+}
+
+defineExpose({ focusSearch, openChangeGroupFor, openChangeGroupForGroup })
 </script>
 
 <style scoped>
@@ -1941,6 +2042,20 @@ defineExpose({ focusSearch, openChangeGroupFor })
 .theme-select-row .el-select {
   flex: 1;
   min-width: 0;
+}
+
+.tree-option {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 4px;
+}
+.tree-option:hover {
+  background: var(--bg-hover);
+}
+.tree-option.active {
+  color: var(--accent);
+  background: var(--accent-subtle);
 }
 </style>
 

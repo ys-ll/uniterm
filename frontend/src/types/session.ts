@@ -3,6 +3,7 @@ export type SessionStatus = 'connecting' | 'connected' | 'disconnected' | 'error
 export interface ConnectionGroup {
   id: string
   name: string
+  parentId?: string
 }
 
 export interface PostLoginExpectStep {

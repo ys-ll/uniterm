@@ -88,6 +88,7 @@
               @edit-connection="onEditConnection"
               @change-group="onChangeGroupFromStart"
               @change-group-ids="onChangeGroupFromStartIds"
+              @change-group-parent="onChangeGroupParentFromStart"
             />
           </KeepAlive>
         </template>
@@ -863,6 +864,10 @@ function onChangeGroupFromStart(config: ConnectionConfig) {
 
 function onChangeGroupFromStartIds(ids: string[]) {
   sidebarRef.value?.openChangeGroupFor(ids)
+}
+
+function onChangeGroupParentFromStart(groupId: string) {
+  sidebarRef.value?.openChangeGroupForGroup(groupId)
 }
 
 function onToggleAiLock(panelId: string) {

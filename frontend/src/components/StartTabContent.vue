@@ -80,8 +80,14 @@
     <!-- Breadcrumb for group view -->
     <div v-if="tab.viewMode === 'group'" class="start-breadcrumb">
       <span class="link" @click="goHome">{{ t('startTab.backToStart') }}</span>
-      <span class="sep">/</span>
-      <span class="current">{{ getGroupName(tab.groupId || '') }}</span>
+      <template v-for="crumb in breadcrumbPath" :key="crumb.id">
+        <span class="sep">/</span>
+        <span v-if="crumb.id === tab.groupId" class="current">{{ crumb.name }}</span>
+        <span v-else class="link" @click="enterGroupAt(crumb.id)">{{ crumb.name }}</span>
+      </template>
+      <span class="start-add-group-btn" @click="openNewGroupDialog" :title="t('conn.newGroupTitle')">
+        <el-icon><Plus :size="12" /></el-icon>
+      </span>
     </div>
 
     <!-- Home view sections -->
@@ -133,7 +139,7 @@
       <!-- Groups -->
       <div class="start-section-label">
         {{ t('startTab.groups') }}
-        <span class="start-add-group-btn" @click="showNewGroupDialog = true" :title="t('conn.newGroupTitle')"><el-icon><Plus :size="12" /></el-icon></span>
+        <span class="start-add-group-btn" @click="openNewGroupDialog" :title="t('conn.newGroupTitle')"><el-icon><Plus :size="12" /></el-icon></span>
       </div>
       <div class="start-cards-grid">
         <div
@@ -220,6 +226,30 @@
 
     <!-- Group detail view -->
     <template v-if="tab.viewMode === 'group'">
+      <!-- Child groups -->
+      <div v-if="groupCards.groups.length > 0" class="start-section-label">{{ t('startTab.groups') }}</div>
+      <div v-if="groupCards.groups.length > 0" class="start-cards-grid">
+        <div
+          v-for="group in groupCards.groups"
+          :key="group.id"
+          class="start-card"
+          :class="{ focused: isCardFocused('group:' + group.id) }"
+          @click="onGroupClick(group.id)"
+          @dblclick="enterGroup(group.id)"
+          @contextmenu.prevent="onGroupContextMenu($event, group.id, group.name)"
+        >
+          <div class="start-card-top">
+            <div class="start-card-icon group"><el-icon><Folder :size="22" /></el-icon></div>
+            <div>
+              <div class="start-card-name">{{ group.name }}</div>
+              <div class="start-card-meta">{{ t('startTab.connectionsCount', { count: group.count }) }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connections in this group -->
+      <div v-if="filteredConnections.length > 0 || groupCards.ungroupedCount > 0" class="start-section-label">{{ t('startTab.connections') }}</div>
       <div class="start-cards-grid">
         <div
           v-for="{ config } in filteredConnections"
@@ -314,7 +344,7 @@
       <div v-if="contextMenuConfig && contextMenuConfig.type === 'ssh'" class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doConnectMonitor(contextMenuConfig)">{{ t('sidebar.connectMonitor') }}</div>
       <div class="menu-divider" />
       <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doEditConnection(contextMenuConfig)">{{ t('sidebar.edit') }}</div>
-      <div class="menu-item" @click="doChangeGroupBulk">{{ t('conn.changeGroup') }}</div>
+      <div class="menu-item" @click="doChangeGroupBulk">{{ t('conn.moveTo') }}</div>
       <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doDuplicate(contextMenuConfig)">{{ t('sidebar.duplicate') }}</div>
       <div class="menu-divider" />
       <div class="menu-item danger" @click="doDeleteBulk">{{ t('sidebar.delete') }}</div>
@@ -327,10 +357,15 @@
       :style="contextMenuStyle"
       @click.stop
     >
+      <div class="menu-item" @click="doNewGroupFromCtx">{{ t('conn.newGroupTitle') }}</div>
+      <div class="menu-item" @click="doNewConnInGroup">{{ t('sidebar.newConnection') }}</div>
+      <div class="menu-divider" />
       <div class="menu-item" @click="doRenameGroup">{{ t('conn.renameGroup') }}</div>
+      <div class="menu-item" @click="doChangeGroupParent">{{ t('conn.moveTo') }}</div>
       <div class="menu-divider" />
       <div class="menu-item danger" @click="doDeleteGroup">{{ t('conn.deleteGroup') }}</div>
     </div>
+
     </div>
 
     <!-- Rename group dialog -->
@@ -351,11 +386,30 @@
     </el-dialog>
 
     <!-- New group dialog -->
-    <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="360px">
-      <el-input v-model="newGroupDialogName" :placeholder="t('conn.newGroupTitle')" @keyup.enter="doAddGroup" />
+    <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
+      <el-form label-width="80px" @submit.prevent="doAddGroup">
+        <el-form-item :label="t('conn.groupName')">
+          <el-input
+            v-model="newGroupDialogName"
+            :placeholder="t('conn.groupNamePlaceholder')"
+            @keyup.enter="doAddGroup"
+          />
+        </el-form-item>
+        <el-form-item :label="t('conn.parentGroup')">
+          <el-tree-select
+            v-model="newGroupParentId"
+            :data="groupTreeData"
+            :render-after-expand="false"
+            check-strictly
+            clearable
+            :placeholder="t('conn.noGroup')"
+            style="width:100%"
+          />
+        </el-form-item>
+      </el-form>
       <template #footer>
-        <el-button @click="showNewGroupDialog = false">{{ t('conn.deleteGroupCancel') }}</el-button>
-        <el-button type="primary" @click="doAddGroup">{{ t('conn.newGroupTitle') }}</el-button>
+        <el-button @click="showNewGroupDialog = false">{{ t('conn.cancel') }}</el-button>
+        <el-button type="primary" @click="doAddGroup">{{ t('conn.save') }}</el-button>
       </template>
     </el-dialog>
 
@@ -364,7 +418,7 @@
       <p>{{ deleteGroupPromptText }}</p>
       <template #footer>
         <el-button @click="showDeleteGroupDialog = false">{{ t('conn.deleteGroupCancel') }}</el-button>
-        <el-button type="warning" @click="confirmDeleteGroup('move-out')">{{ t('conn.deleteGroupMoveOut') }}</el-button>
+        <el-button type="warning" @click="confirmDeleteGroup('move-out')">{{ t('conn.deleteGroupMoveUp') }}</el-button>
         <el-button type="danger" @click="confirmDeleteGroup('delete-connections')">{{ t('conn.deleteGroupDeleteAll') }}</el-button>
       </template>
     </el-dialog>
@@ -572,18 +626,44 @@ const groupCards = computed(() => {
   const matchFilter = (c: ConnectionConfig) =>
     matchTypeFilter(c, selectedTypeFilter.value) &&
     (!query || c.name.toLowerCase().includes(query) || (c.host || '').toLowerCase().includes(query) || c.type.toLowerCase().includes(query))
+
+  // In-group view: show child groups, or only connections for ungrouped
+  const isGroupView = props.tab.viewMode === 'group' && !!props.tab.groupId
+  const parentFilter = isGroupView
+    ? props.tab.groupId === '__ungrouped__'
+      ? (() => false) as any
+      : (g: ConnectionGroup) => g.parentId === props.tab.groupId
+    : (g: ConnectionGroup) => !g.parentId
+
+  // Recursive subtree count
+  function subtreeMatchCount(groupId: string): number {
+    let count = connectionStore.connections.filter(c => c.groupId === groupId && matchFilter(c)).length
+    for (const child of connectionStore.groups.filter(cg => cg.parentId === groupId)) {
+      count += subtreeMatchCount(child.id)
+    }
+    return count
+  }
+
   let groups = [...connectionStore.groups]
+    .filter(parentFilter)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(g => ({
       ...g,
-      count: connectionStore.connections.filter(c => c.groupId === g.id && matchFilter(c)).length
+      count: subtreeMatchCount(g.id)
     }))
-  // Hide groups with 0 matches when filtering
   if (hasFilter) {
     groups = groups.filter(g => g.count > 0)
   }
-  const ungroupedCount = connectionStore.connections.filter(c => !c.groupId && matchFilter(c)).length
-  return { groups, ungroupedCount }
+
+  // Connection count for current view
+  const connFilter = isGroupView
+    ? props.tab.groupId === '__ungrouped__'
+      ? (c: ConnectionConfig) => !c.groupId && matchFilter(c)
+      : (c: ConnectionConfig) => c.groupId === props.tab.groupId && matchFilter(c)
+    : (c: ConnectionConfig) => !c.groupId && matchFilter(c)
+  const ungroupedCount = connectionStore.connections.filter(connFilter).length
+
+  return { groups, ungroupedCount, isGroupView, currentGroupId: props.tab.groupId }
 })
 
 function getGroupName(groupId: string): string {
@@ -652,6 +732,39 @@ function enterGroup(groupId: string) {
   focusInGrid.value = true
 }
 
+// Breadcrumb: full path from root to current group
+const breadcrumbPath = computed(() => {
+  const path: { id: string; name: string }[] = []
+  if (!props.tab.groupId || props.tab.groupId === '__ungrouped__') return path
+  let currentId: string | undefined = props.tab.groupId
+  while (currentId) {
+    const g = connectionStore.groups.find(g => g.id === currentId)
+    if (!g) break
+    path.unshift({ id: g.id, name: g.name })
+    currentId = g.parentId
+  }
+  return path
+})
+
+function enterGroupAt(groupId: string) {
+  if (groupId === props.tab.groupId) return
+  props.tab.groupId = groupId
+  focusedCardIndex.value = 0
+}
+
+function goParent() {
+  if (!props.tab.groupId || props.tab.groupId === '__ungrouped__') {
+    goHome()
+    return
+  }
+  const currentGroup = connectionStore.groups.find(g => g.id === props.tab.groupId)
+  if (currentGroup?.parentId) {
+    props.tab.groupId = currentGroup.parentId
+  } else {
+    goHome()
+  }
+}
+
 function goHome() {
   const returnGroupId = props.tab.groupId
   props.tab.viewMode = 'home'
@@ -703,7 +816,9 @@ type FocusableItem =
 
 const focusableItems = computed<FocusableItem[]>(() => {
   if (props.tab.viewMode === 'group') {
-    const items: FocusableItem[] = filteredConnections.value.map(({ config }) => ({ kind: 'connection' as const, config }))
+    const items: FocusableItem[] = []
+    for (const group of groupCards.value.groups) items.push({ kind: 'group', groupId: group.id, name: group.name })
+    for (const { config } of filteredConnections.value) items.push({ kind: 'connection' as const, config })
     if (searchQuery.value.trim()) items.push({ kind: 'quick' })
     return items
   }
@@ -770,8 +885,11 @@ function onKeydown(e: KeyboardEvent) {
     return
   }
 
-  if ((e.key === 'Escape' || e.key === 'Backspace') && props.tab.viewMode === 'group') {
+  if (e.key === 'Escape' && props.tab.viewMode === 'group') {
     goHome()
+  }
+  if (e.key === 'Backspace' && props.tab.viewMode === 'group') {
+    goParent()
     focusedCardIndex.value = 0
     focusInGrid.value = true
     return
@@ -918,7 +1036,7 @@ const groupContextTarget = ref<{ id: string; name: string } | null>(null)
 function onGroupContextMenu(e: MouseEvent, groupId: string, groupName: string) {
   closeContextMenu()
   groupContextTarget.value = { id: groupId, name: groupName }
-  const pos = clampMenuPos(e.clientX, e.clientY, 140, 80)
+  const pos = clampMenuPos(e.clientX, e.clientY, 160, 160)
   contextMenuStyle.value = { position: 'fixed', left: pos.left, top: pos.top, zIndex: '10000' }
   groupContextVisible.value = true
 }
@@ -942,25 +1060,77 @@ function confirmRenameGroup() {
 
 const showNewGroupDialog = ref(false)
 const newGroupDialogName = ref('')
+const newGroupParentId = ref<string | undefined>(undefined)
+
+function openNewGroupDialog() {
+  newGroupDialogName.value = ''
+  // Pre-set parent to current group if in a group view
+  newGroupParentId.value = (props.tab.viewMode === 'group' && props.tab.groupId && props.tab.groupId !== '__ungrouped__')
+    ? props.tab.groupId
+    : undefined
+  showNewGroupDialog.value = true
+}
 
 async function doAddGroup() {
   const name = newGroupDialogName.value.trim()
   if (!name) return
-  if (connectionStore.groups.some(g => g.name === name)) {
-    msg.warning(t('conn.groupNameDuplicate'))
-    return
-  }
-  await connectionStore.addGroup(name)
-  newGroupDialogName.value = ''
   showNewGroupDialog.value = false
+  const parentId = newGroupParentId.value
+  newGroupDialogName.value = ''
+  newGroupParentId.value = undefined
+  connectionStore.addGroup(name, parentId)
+}
+
+// Tree data for change parent dialog
+interface TreeOption {
+  value: string
+  label: string
+  children?: TreeOption[]
+}
+const groupTreeData = computed<TreeOption[]>(() => {
+  function buildTree(nodes: any[]): TreeOption[] {
+    return nodes.map((node: any) => ({
+      value: node.group.id,
+      label: node.group.name,
+      children: node.children.length > 0 ? buildTree(node.children) : undefined,
+    }))
+  }
+  return buildTree(connectionStore.groupedConnections.roots)
+})
+
+// Group context menu: New Group (child of current)
+function doNewGroupFromCtx() {
+  if (!groupContextTarget.value) return
+  closeContextMenu()
+  newGroupDialogName.value = ''
+  newGroupParentId.value = groupContextTarget.value.id
+  showNewGroupDialog.value = true
+}
+
+// Group context menu: New Connection in group
+function doNewConnInGroup() {
+  if (!groupContextTarget.value) return
+  closeContextMenu()
+  emit('new-connection', { groupId: groupContextTarget.value.id })
+}
+
+// Group context menu: Change Parent Group
+const showChangeParentDialog = ref(false)
+const changeParentTargetId = ref<string | undefined>(undefined)
+
+function doChangeGroupParent() {
+  if (!groupContextTarget.value) return
+  closeContextMenu()
+  emit('change-group-parent', groupContextTarget.value.id)
 }
 
 async function doDeleteGroup() {
   if (!groupContextTarget.value) return
   closeContextMenu()
   const g = groupContextTarget.value
-  const count = connectionStore.connections.filter(c => c.groupId === g.id).length
-  if (count === 0) {
+  const connCount = connectionStore.connections.filter(c => c.groupId === g.id).length
+  const childCount = connectionStore.groups.filter(cg => cg.parentId === g.id).length
+  if (connCount === 0 && childCount === 0) {
     await connectionStore.deleteGroup(g.id, 'move-out')
     return
   }
@@ -973,8 +1143,9 @@ const deleteGroupTarget = ref<ConnectionGroup | null>(null)
 const deleteGroupPromptText = computed(() => {
   const g = deleteGroupTarget.value
   if (!g) return ''
-  const count = connectionStore.connections.filter(c => c.groupId === g.id).length
-  return t('conn.deleteGroupPrompt', { name: g.name, count })
+  const connCount = connectionStore.connections.filter(c => c.groupId === g.id).length
+  const childCount = connectionStore.groups.filter(cg => cg.parentId === g.id).length
+  return t('conn.deleteGroupPrompt', { name: g.name, connCount, childCount })
 })
 
 async function confirmDeleteGroup(action: 'delete-connections' | 'move-out') {
@@ -990,9 +1161,15 @@ function onDocumentClick() {
   groupContextVisible.value = false
 }
 
+function onGlobalClose() {
+  closeContextMenu()
+  groupContextVisible.value = false
+}
+
 onMounted(() => {
   document.addEventListener('click', onDocumentClick)
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('global:close-context-menus', onGlobalClose)
   updateContentWidth()
   if (startTabRef.value) {
     resizeObserver = new ResizeObserver(() => updateContentWidth())
@@ -1001,16 +1178,10 @@ onMounted(() => {
   nextTick(() => searchInputRef.value?.focus())
 })
 
-watch(focusedCardIndex, () => {
-  nextTick(() => {
-    const el = document.querySelector('.start-card.focused') as HTMLElement | null
-    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  })
-})
-
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('global:close-context-menus', onGlobalClose)
   resizeObserver?.disconnect()
 })
 

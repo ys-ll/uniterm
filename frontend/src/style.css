@@ -633,6 +633,51 @@ body::before {
   box-shadow: var(--shadow-md) !important;
 }
 
+/* ── Tree Select ── */
+.el-tree-select__popper {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+.el-tree-select__popper .el-select-dropdown__item {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 4px 8px !important;
+}
+.el-tree-select__popper .el-select-dropdown__item.hover,
+.el-tree-select__popper .el-select-dropdown__item:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+.el-tree-select__popper .el-select-dropdown__item.selected,
+.el-tree-select__popper .el-select-dropdown__item.is-selected {
+  color: var(--accent) !important;
+  background: var(--accent-subtle) !important;
+}
+.el-tree-select__popper .el-tree {
+  background: transparent !important;
+}
+.el-tree-select__popper .el-tree-node__content:hover {
+  background: var(--bg-hover) !important;
+}
+.el-tree-select__popper .el-tree-node.is-current > .el-tree-node__content {
+  background: var(--accent-subtle) !important;
+}
+.el-tree-select__popper .el-tree-node__label {
+  color: var(--text-secondary) !important;
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.el-tree-select__popper .el-tree-node__expand-icon {
+  color: var(--text-disabled) !important;
+}
+.el-tree-select__popper .el-tree-node__expand-icon.is-leaf {
+  color: transparent !important;
+}
+
 .el-radio-button__original-radio:checked + .el-radio-button__inner {
   background-color: var(--accent-dim) !important;
   border-color: var(--accent-dim) !important;

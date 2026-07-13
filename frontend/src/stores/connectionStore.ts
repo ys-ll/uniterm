@@ -4,8 +4,14 @@ import { SaveConnections, LoadConnections } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 
+export interface GroupTreeNode {
+  group: ConnectionGroup
+  connections: ConnectionConfig[]
+  children: GroupTreeNode[]
+}
+
 export interface GroupedConnections {
-  groups: { group: ConnectionGroup; connections: ConnectionConfig[] }[]
+  roots: GroupTreeNode[]
   ungrouped: ConnectionConfig[]
 }
 
@@ -74,8 +80,17 @@ export const useConnectionStore = defineStore('connection', () => {
     return `grp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
   }
 
-  async function addGroup(name: string): Promise<ConnectionGroup> {
-    const group: ConnectionGroup = { id: generateGroupId(), name }
+  function uniqueGroupName(baseName: string, parentId: string | undefined, excludeId?: string): string {
+    const siblings = groups.value.filter(g => g.parentId === parentId && g.id !== excludeId)
+    if (!siblings.some(g => g.name === baseName)) return baseName
+    let n = 1
+    while (siblings.some(g => g.name === `${baseName} (${n})`)) n++
+    return `${baseName} (${n})`
+  }
+
+  async function addGroup(name: string, parentId?: string): Promise<ConnectionGroup> {
+    const uniqueName = uniqueGroupName(name, parentId)
+    const group: ConnectionGroup = { id: generateGroupId(), name: uniqueName, parentId }
     groups.value.push(group)
     await save()
     return group
@@ -84,13 +99,46 @@ export const useConnectionStore = defineStore('connection', () => {
   async function renameGroup(id: string, name: string) {
     const g = groups.value.find(g => g.id === id)
     if (g) {
-      g.name = name
+      g.name = uniqueGroupName(name, g.parentId, id)
       await save()
     }
   }
 
-  async function deleteGroup(id: string, action: 'delete-connections' | 'move-out') {
-    if (action === 'delete-connections') {
+  async function deleteGroup(id: string, connAction: 'delete-connections' | 'move-out', childAction: 'move-up' | 'delete-all' = 'move-up') {
+    const targetGroup = groups.value.find(g => g.id === id)
+    const parentId = targetGroup?.parentId
+
+    // Handle child groups
+    if (childAction === 'move-up') {
+      for (const g of groups.value) {
+        if (g.parentId === id) {
+          g.parentId = parentId
+        }
+      }
+    } else {
+      // Cascade delete: collect all descendant group IDs
+      const toDelete = new Set<string>()
+      function collectDescendants(gid: string) {
+        for (const g of groups.value) {
+          if (g.parentId === gid) {
+            toDelete.add(g.id)
+            collectDescendants(g.id)
+          }
+        }
+      }
+      toDelete.add(id)
+      collectDescendants(id)
+      connections.value = connections.value.filter(c => {
+        const gid = c.groupId
+        return !gid || !toDelete.has(gid)
+      })
+      groups.value = groups.value.filter(g => !toDelete.has(g.id))
+      await save()
+      return
+    }
+
+    // Handle connections
+    if (connAction === 'delete-connections') {
       connections.value = connections.value.filter(c => c.groupId !== id)
     } else {
       for (const c of connections.value) {
@@ -101,6 +149,34 @@ export const useConnectionStore = defineStore('connection', () => {
     }
     groups.value = groups.value.filter(g => g.id !== id)
     await save()
+  }
+
+  async function reparentGroup(groupId: string, newParentId: string | undefined) {
+    // Prevent self-parenting and cycles
+    if (newParentId === groupId) return
+    if (newParentId && isDescendantOf(groupId, newParentId)) return
+
+    const g = groups.value.find(g => g.id === groupId)
+    if (!g) return
+
+    // Compute new name BEFORE changing parent (check against new siblings)
+    const newName = uniqueGroupName(g.name, newParentId, groupId)
+    g.parentId = newParentId
+    g.name = newName
+    await save()
+  }
+
+  function isDescendantOf(ancestorId: string, targetId: string): boolean {
+    const children = groups.value.filter(g => g.parentId === ancestorId)
+    for (const child of children) {
+      if (child.id === targetId) return true
+      if (isDescendantOf(child.id, targetId)) return true
+    }
+    return false
+  }
+
+  function getChildGroups(parentId: string): ConnectionGroup[] {
+    return groups.value.filter(g => g.parentId === parentId)
   }
 
   async function setConnectionGroup(connectionId: string, groupId: string | undefined) {
@@ -121,32 +197,59 @@ export const useConnectionStore = defineStore('connection', () => {
     await save()
   }
 
-  // ── Derived ──
+  // ── Derived: tree structure ──
 
   const groupedConnections = computed<GroupedConnections>(() => {
-    const groupMap = new Map<string, { group: ConnectionGroup; connections: ConnectionConfig[] }>()
+    const nodeMap = new Map<string, GroupTreeNode>()
     for (const g of groups.value) {
-      groupMap.set(g.id, { group: g, connections: [] })
+      nodeMap.set(g.id, { group: g, connections: [], children: [] })
     }
+
+    // Build tree: identify roots vs children
+    const roots: GroupTreeNode[] = []
+    for (const g of groups.value) {
+      const node = nodeMap.get(g.id)!
+      if (g.parentId && nodeMap.has(g.parentId)) {
+        nodeMap.get(g.parentId)!.children.push(node)
+      } else {
+        roots.push(node)
+      }
+    }
+
+    // Assign connections to their group nodes
     const ungrouped: ConnectionConfig[] = []
     for (const c of connections.value) {
-      if (c.groupId && groupMap.has(c.groupId)) {
-        groupMap.get(c.groupId)!.connections.push(c)
+      if (c.groupId && nodeMap.has(c.groupId)) {
+        nodeMap.get(c.groupId)!.connections.push(c)
       } else {
         ungrouped.push(c)
       }
     }
-    // Sort connections alphabetically within each group
-    for (const entry of groupMap.values()) {
-      entry.connections.sort((a, b) => a.name.localeCompare(b.name))
+
+    // Recursive sort
+    function sortNode(node: GroupTreeNode) {
+      node.connections.sort((a, b) => a.name.localeCompare(b.name))
+      node.children.sort((a, b) => a.group.name.localeCompare(b.group.name))
+      node.children.forEach(sortNode)
     }
-    // Sort groups alphabetically by name
-    const sortedGroups = [...groupMap.values()].sort((a, b) =>
-      a.group.name.localeCompare(b.group.name)
-    )
-    // Sort ungrouped alphabetically
+    roots.forEach(sortNode)
+    roots.sort((a, b) => a.group.name.localeCompare(b.group.name))
     ungrouped.sort((a, b) => a.name.localeCompare(b.name))
-    return { groups: sortedGroups, ungrouped }
+
+    return { roots, ungrouped }
+  })
+
+  // Flat list of all group IDs (for Sidebar expand/collapse management)
+  const allGroupIds = computed<string[]>(() => {
+    const ids: string[] = []
+    function collect(nodes: GroupTreeNode[]) {
+      for (const node of nodes) {
+        ids.push(node.group.id)
+        collect(node.children)
+      }
+    }
+    collect(groupedConnections.value.roots)
+    return ids
   })
 
   // Listen for cross-window connection sync
@@ -170,8 +273,12 @@ export const useConnectionStore = defineStore('connection', () => {
     addGroup,
     renameGroup,
     deleteGroup,
+    reparentGroup,
+    isDescendantOf,
+    getChildGroups,
     setConnectionGroup,
     setConnectionsGroup,
-    groupedConnections
+    groupedConnections,
+    allGroupIds,
   }
 })
