@@ -1,6 +1,7 @@
 import { chat, AVAILABLE_TOOLS, ChatCancelledError } from './llm'
 import { executeCommand, startCommand, captureTerminal, collectOutput, sendTerminalKey } from './terminalAgent'
 import { useAIStore } from '../stores/aiStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { EventsOn } from '../../wailsjs/runtime'
@@ -240,9 +241,9 @@ export async function runAgent(userInput: string) {
   }
 
   let turnCount = 0
-  const maxTurns = 20
+  const maxTurns = useSettingsStore().settings.ai.maxTurns ?? 20
 
-  while (turnCount < maxTurns) {
+  while (maxTurns === 0 || turnCount < maxTurns) {
     turnCount++
 
     if (store.stopRequested) {

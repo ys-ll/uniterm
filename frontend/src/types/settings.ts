@@ -73,6 +73,7 @@ export const USER_AGENT_PRESETS: { label: string; value: string }[] = [
 ]
 
 export interface AISettings {
+  maxTurns: number
   models: AIModelConfig[]
   activeModelId: string
 }
@@ -154,6 +155,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     highlightEnabled: true
   },
   ai: {
+    maxTurns: 20,
     models: [
       {
         id: 'model-default',

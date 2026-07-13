@@ -93,7 +93,7 @@
           </KeepAlive>
         </template>
       </div>
-      <AISidebar ref="aiSidebarRef" />
+      <AISidebar ref="aiSidebarRef" @open-settings="openSettings" />
     </div>
     <ConnectionForm v-model="showConnectionForm" :edit-config="editConfig" :default-group-id="pendingGroupId" @save="onSaveOnly" @connect="(c: ConnectionConfig, ko?: boolean) => { const wasEdit = !!editConfig; editConfig = null; onConnect(c, ko, wasEdit) }" @cancel="editConfig = null" />
     <SerialConnectDialog v-model="showSerialDialog" @connect="(sid: string, portName: string, baudRate: number) => onConnectSerial(sid, portName, baudRate, serialKeepOpen)" />

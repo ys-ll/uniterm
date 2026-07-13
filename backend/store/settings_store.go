@@ -9,6 +9,7 @@ import (
 const settingsFileName = "settings.json"
 
 func boolPtr(b bool) *bool { return &b }
+func intPtr(i int) *int    { return &i }
 
 type TerminalSettings struct {
 	Theme            string `json:"theme"`
@@ -74,6 +75,7 @@ type AIModelConfig struct {
 }
 
 type AISettings struct {
+	MaxTurns      *int            `json:"maxTurns"`
 	Models        []AIModelConfig `json:"models"`
 	ActiveModelID string          `json:"activeModelId"`
 }
@@ -205,6 +207,7 @@ func defaultSettings() AppSettings {
 			MaxHistoryLines:  5000,
 		},
 		AI: AISettings{
+			MaxTurns: intPtr(20),
 			Models: []AIModelConfig{
 				{
 					ID:       "model-default",

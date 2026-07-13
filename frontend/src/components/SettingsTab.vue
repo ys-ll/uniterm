@@ -410,11 +410,26 @@
         <div class="settings-group">
           <div class="setting-card">
             <div class="setting-info">
+              <div class="setting-title">{{ t('settings.maxTurns') }}</div>
+              <div class="setting-desc">{{ t('settings.maxTurnsDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-input-number
+                v-model="settingsStore.settings.ai.maxTurns"
+                :min="0"
+                :max="100"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
               <div class="setting-title">{{ t('settings.modelList') }}</div>
               <div class="setting-desc">{{ t('settings.modelListDesc') }}</div>
             </div>
             <div class="setting-control">
-              <el-button @click="showModelForm = true"><Plus :size="14" /> {{ t('settings.addModel') }}</el-button>
+              <el-button @click="openNewModelForm"><Plus :size="14" /> {{ t('settings.addModel') }}</el-button>
             </div>
           </div>
 
@@ -454,10 +469,20 @@
           <el-input v-model="modelForm.name" />
         </el-form-item>
         <el-form-item :label="t('settings.modelProtocol')">
-          <el-select v-model="modelForm.protocol" style="width: 100%">
-            <el-option label="Anthropic" value="anthropic" />
-            <el-option label="OpenAI" value="openai" />
-          </el-select>
+          <div class="default-toggle-group">
+            <button
+              type="button"
+              class="toggle-btn"
+              :class="{ active: modelForm.protocol === 'anthropic' }"
+              @click="modelForm.protocol = 'anthropic'"
+            >Anthropic</button>
+            <button
+              type="button"
+              class="toggle-btn"
+              :class="{ active: modelForm.protocol === 'openai' }"
+              @click="modelForm.protocol = 'openai'"
+            >OpenAI</button>
+          </div>
         </el-form-item>
         <el-form-item :label="t('settings.modelBaseURL')">
           <el-input v-model="modelForm.baseURL" :placeholder="modelForm.protocol === 'openai' ? 'https://api.openai.com/v1' : 'https://api.anthropic.com/v1'" />
@@ -762,9 +787,19 @@ const modelForm = reactive({
   userAgent: 'uniTerm' as string,
 })
 
+function openNewModelForm() {
+  editingModel.value = null
+  resetModelForm()
+  testResult.value = null
+  testError.value = ''
+  showModelForm.value = true
+}
+
 function editModel(model: AIModelConfig) {
   editingModel.value = model
   modelSuggestions.value = []
+  testResult.value = null
+  testError.value = ''
   Object.assign(modelForm, { ...model })
   showModelForm.value = true
 }
@@ -1284,6 +1319,39 @@ function getShellLabel(path: string): string {
   margin-top: 12px;
   font-size: 13px;
   font-family: var(--font-ui);
+}
+
+.default-toggle-group {
+  display: flex;
+  gap: 0;
+}
+.toggle-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.toggle-btn:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.toggle-btn:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.toggle-btn + .toggle-btn {
+  border-left: none;
+}
+.toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.toggle-btn.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
 }
 
 .kb-key {

@@ -294,6 +294,8 @@
   "settings.testFailed": "接続失敗",
   "settings.highlight": "テキストハイライト",
   "settings.highlightDesc": "タイムスタンプ、IP、キーワード、文字列などをハイライト",
+  "settings.maxTurns": "AI自律対話の最大ラウンド数",
+  "settings.maxTurnsDesc": "AIリクエストあたりの自律的な対話ラウンドの上限。0は無制限。デフォルト：20。",
   "settings.modelList": "モデル一覧",
   "settings.modelListDesc": "AI モデルの設定と管理",
   "settings.addModel": "モデルを追加",

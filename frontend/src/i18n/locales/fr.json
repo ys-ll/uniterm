@@ -294,6 +294,8 @@
   "settings.testFailed": "Échec de la connexion",
   "settings.highlight": "Surlignage du texte",
   "settings.highlightDesc": "Surligner les horodatages, IP, mots-clés, chaînes, etc.",
+  "settings.maxTurns": "Max. de tours autonomes",
+  "settings.maxTurnsDesc": "Nombre maximum de tours d'interaction autonome par requête IA. 0 = illimité. Défaut : 20.",
   "settings.modelList": "Liste des modèles",
   "settings.modelListDesc": "Configurer et gérer les modèles d'IA",
   "settings.addModel": "Ajouter un modèle",

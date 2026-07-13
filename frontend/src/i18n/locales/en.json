@@ -297,6 +297,8 @@
   "settings.testFailed": "Connection failed",
   "settings.highlight": "Text Highlight",
   "settings.highlightDesc": "Highlight timestamps, IPs, keywords, strings, etc.",
+  "settings.maxTurns": "Max Autonomous Rounds",
+  "settings.maxTurnsDesc": "Maximum autonomous interaction rounds per AI request. Set to 0 for unlimited. Default 20.",
   "settings.modelList": "Model List",
   "settings.modelListDesc": "Configure and manage AI models",
   "settings.addModel": "Add Model",

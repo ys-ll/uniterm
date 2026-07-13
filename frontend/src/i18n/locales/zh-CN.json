@@ -297,6 +297,8 @@
   "settings.testFailed": "连接失败",
   "settings.highlight": "文本高亮",
   "settings.highlightDesc": "自动高亮时间、IP、关键词、字符串等模式",
+  "settings.maxTurns": "AI 自主交互最大轮次",
+  "settings.maxTurnsDesc": "AI 自主执行命令与反馈的对话轮数上限。设为 0 表示不限制。默认 20。",
   "settings.modelList": "模型列表",
   "settings.modelListDesc": "配置和管理 AI 模型",
   "settings.addModel": "添加模型",

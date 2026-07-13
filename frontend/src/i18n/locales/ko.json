@@ -294,6 +294,8 @@
   "settings.testFailed": "연결 실패",
   "settings.highlight": "텍스트 강조",
   "settings.highlightDesc": "타임스탬프, IP, 키워드, 문자열 등을 강조 표시",
+  "settings.maxTurns": "AI 자율 상호작용 최대 라운드",
+  "settings.maxTurnsDesc": "AI 요청당 자율 상호작용 라운드의 최대 횟수. 0은 무제한. 기본값: 20.",
   "settings.modelList": "모델 목록",
   "settings.modelListDesc": "AI 모델 구성 및 관리",
   "settings.addModel": "모델 추가",

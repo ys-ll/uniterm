@@ -294,6 +294,8 @@
   "settings.testFailed": "Conexión fallida",
   "settings.highlight": "Resaltado de Texto",
   "settings.highlightDesc": "Resaltar marcas de tiempo, IPs, palabras clave, cadenas, etc.",
+  "settings.maxTurns": "Máx. rondas autónomas",
+  "settings.maxTurnsDesc": "Rondas máximas de interacción autónoma por solicitud de IA. 0 = ilimitado. Predeterminado: 20.",
   "settings.modelList": "Lista de Modelos",
   "settings.modelListDesc": "Configurar y gestionar modelos de IA",
   "settings.addModel": "Agregar Modelo",

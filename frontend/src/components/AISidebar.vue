@@ -116,9 +116,17 @@
                 >
                   {{ m.name }}
                 </el-dropdown-item>
+                <el-dropdown-item class="add-model-item" command="__add_model__" :divided="true">
+                  <Plus :size="14" class="add-model-icon" />
+                  <span>{{ t('settings.addModel') }}</span>
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          <button v-else class="ghost-btn model-btn add-model-btn" @click="onModelChange('__add_model__')">
+            <Plus :size="14" />
+            <span>{{ t('settings.addModel') }}</span>
+          </button>
           <div class="input-actions-right">
             <el-dropdown trigger="click" @command="onModeChange">
               <button class="ghost-btn mode-btn" :title="modeLabel">{{ modeLabel }}</button>
@@ -161,7 +169,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, computed, watch, onMounted, onUnmounted } from 'vue'
-import { X, Trash2, Expand, Shrink, History, MessageSquarePlus, Search, ChevronDown, ChevronUp, ArrowUp, Square } from '@lucide/vue'
+import { X, Trash2, Expand, Shrink, History, MessageSquarePlus, Search, ChevronDown, ChevronUp, ArrowUp, Square, Plus } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTabStore } from '../stores/tabStore'
@@ -325,7 +333,18 @@ function onModeChange(mode: string) {
   aiStore.mode = mode as ExecutionMode
 }
 
+const emit = defineEmits<{
+  'open-settings': []
+}>()
+
 function onModelChange(modelId: string) {
+  if (modelId === '__add_model__') {
+    emit('open-settings')
+    nextTick(() => {
+      settingsStore.openCategory = 'ai'
+    })
+    return
+  }
   settingsStore.setActiveModel(modelId)
   const model = settingsStore.settings.ai.models.find(m => m.id === modelId)
   if (model) {
@@ -890,6 +909,12 @@ defineExpose({ focusInput })
 }
 .model-btn {
   max-width: 96px;
+}
+.add-model-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: none;
 }
 .mode-btn {
   max-width: 108px;
