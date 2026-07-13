@@ -618,11 +618,6 @@ function handleTerminalKey(e: KeyboardEvent): boolean {
   // Check global shortcuts first (Ctrl+Shift+/Alt+ combos)
   if (e.type === 'keydown' && !onTerminalKey(e)) return false
 
-  if ((e.ctrlKey || e.metaKey) && e.key === 'f' && e.type === 'keydown') {
-    openSearch()
-    return false
-  }
-
   // Cmd/Ctrl+V: paste via Wails clipboard (xterm's DOM paste is unreliable in WKWebView).
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V') && e.type === 'keydown') {
     e.preventDefault()

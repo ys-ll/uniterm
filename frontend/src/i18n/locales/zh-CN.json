@@ -673,6 +673,7 @@
   "shortcut.lockAI": "锁定/解锁AI窗口",
   "shortcut.newConnection": "新建标签页",
   "shortcut.duplicateSession": "复制连接",
+  "shortcut.terminalSearch": "终端搜索",
   "shortcut.openSettings": "打开设置",
   "shortcut.title": "快捷键",
   "shortcut.colFunction": "功能",

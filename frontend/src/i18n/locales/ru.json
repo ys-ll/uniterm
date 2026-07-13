@@ -668,6 +668,7 @@
   "shortcut.lockAI": "Заблокировать/разблокировать ИИ-окно",
   "shortcut.newConnection": "Новая вкладка",
   "shortcut.duplicateSession": "Дублировать",
+  "shortcut.terminalSearch": "Поиск в терминале",
   "shortcut.openSettings": "Открыть настройки",
   "shortcut.title": "Горячие клавиши",
   "shortcut.colFunction": "Функция",

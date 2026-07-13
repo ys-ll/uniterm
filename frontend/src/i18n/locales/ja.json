@@ -668,6 +668,7 @@
   "shortcut.lockAI": "AIウィンドウのロック/解除",
   "shortcut.newConnection": "新しいタブ",
   "shortcut.duplicateSession": "複製",
+  "shortcut.terminalSearch": "端末検索",
   "shortcut.openSettings": "設定を開く",
   "shortcut.title": "ショートカット",
   "shortcut.colFunction": "機能",

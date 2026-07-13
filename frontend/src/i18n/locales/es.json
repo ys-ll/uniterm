@@ -668,6 +668,7 @@
   "shortcut.lockAI": "Bloquear/desbloquear ventana IA",
   "shortcut.newConnection": "Nueva pestaña",
   "shortcut.duplicateSession": "Duplicar",
+  "shortcut.terminalSearch": "Buscar en terminal",
   "shortcut.openSettings": "Abrir configuración",
   "shortcut.title": "Atajos",
   "shortcut.colFunction": "Función",

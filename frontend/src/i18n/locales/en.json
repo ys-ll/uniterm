@@ -673,6 +673,7 @@
   "shortcut.lockAI": "Lock/Unlock AI Window",
   "shortcut.newConnection": "New Tab",
   "shortcut.duplicateSession": "Duplicate",
+  "shortcut.terminalSearch": "Terminal Search",
   "shortcut.openSettings": "Open Settings",
   "shortcut.title": "Shortcuts",
   "shortcut.colFunction": "Function",

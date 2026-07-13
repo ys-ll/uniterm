@@ -668,6 +668,7 @@
   "shortcut.lockAI": "Verrouiller/déverrouiller la fenêtre IA",
   "shortcut.newConnection": "Nouvel onglet",
   "shortcut.duplicateSession": "Dupliquer",
+  "shortcut.terminalSearch": "Rechercher dans le terminal",
   "shortcut.openSettings": "Ouvrir les paramètres",
   "shortcut.title": "Raccourcis",
   "shortcut.colFunction": "Fonction",

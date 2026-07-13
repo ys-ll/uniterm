@@ -608,6 +608,10 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
       closeTab(t.id)
     }
   },
+  terminalSearch: () => {
+    const pid = tabStore.getActivePanelId()
+    if (pid) window.dispatchEvent(new CustomEvent('terminal:open-search', { detail: { panelId: pid } }))
+  },
   navigatePrev: () => navigatePanel(-1),
   navigateNext: () => navigatePanel(1),
   duplicateSession: async () => {
