@@ -30,6 +30,8 @@ export interface ConnectionConfig {
   rdpEnableNLA?: boolean
   // Local terminal shell path
   shellPath?: string
+  // Working directory for local terminal (defaults to user home)
+  cwd?: string
   // Serial port
   serialPort?: string
   serialBaudRate?: number

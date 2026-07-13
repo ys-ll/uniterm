@@ -143,6 +143,14 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		shell = defaultShell()
 	}
 
+	// Determine working directory: use config.Cwd if set, otherwise user home.
+	workDir := config.Cwd
+	if workDir == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			workDir = home
+		}
+	}
+
 	s.title = shellName(shell)
 
 	var commandLine string
@@ -176,6 +184,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 	}
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmd.Dir = workDir
 
 	// Try ConPTY first for a real pseudo-terminal experience.
 	if conpty.IsConPtyAvailable() {
@@ -183,7 +192,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		if cols <= 0 || rows <= 0 {
 			cols, rows = 80, 24
 		}
-		c, err := conpty.Start(commandLine, conpty.ConPtyDimensions(cols, rows), conpty.ConPtyEnv(os.Environ()))
+		c, err := conpty.Start(commandLine, conpty.ConPtyDimensions(cols, rows), conpty.ConPtyWorkDir(workDir), conpty.ConPtyEnv(os.Environ()))
 		if err == nil {
 			s.cpty = c
 			if isMSYSBash {
