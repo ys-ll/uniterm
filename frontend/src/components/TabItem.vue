@@ -4,12 +4,14 @@
     :class="{ active: isActive, 'ai-locked': isAILocked }"
     :data-tab-id="tab.id"
     @click="$emit('activate', tab.id)"
+    @mouseenter="hovered = true"
+    @mouseleave="hovered = false"
     draggable="true"
     @dragstart="onDragStart"
     @contextmenu="onContextMenu"
   >
     <button
-      v-if="isActive"
+      v-if="isActive || hovered"
       class="tab-close"
       @click.stop="$emit('close', tab.id)"
     ><X /></button>
@@ -109,6 +111,7 @@ const tabStore = useTabStore()
 const panelStore = usePanelStore()
 const { t } = useI18n()
 
+const hovered = ref(false)
 const contextMenuVisible = ref(false)
 const contextMenuStyle = ref({ left: '0px', top: '0px' })
 
