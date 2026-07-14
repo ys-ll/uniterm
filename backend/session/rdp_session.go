@@ -3,9 +3,11 @@
 package session
 
 import (
-	"runtime"
 	"fmt"
+	"runtime"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -20,45 +22,44 @@ var (
 	procAtlAxWinInit    = atlDll.NewProc("AtlAxWinInit")
 	procAtlAxGetControl = atlDll.NewProc("AtlAxGetControl")
 
-
-	user32Dll              = windows.NewLazySystemDLL("user32.dll")
-	procSetWindowPos       = user32Dll.NewProc("SetWindowPos")
-	procShowWindow         = user32Dll.NewProc("ShowWindow")
-	procDestroyWindow      = user32Dll.NewProc("DestroyWindow")
-	procFindWindowW        = user32Dll.NewProc("FindWindowW")
-	procPeekMessage        = user32Dll.NewProc("PeekMessageW")
-	procTranslateMessage   = user32Dll.NewProc("TranslateMessage")
-	procDispatchMessage    = user32Dll.NewProc("DispatchMessageW")
-	procGetWindowRect      = user32Dll.NewProc("GetWindowRect")
-	procGetClientRect      = user32Dll.NewProc("GetClientRect")
-	procClientToScreen     = user32Dll.NewProc("ClientToScreen")
-	procSetWindowLongPtr   = user32Dll.NewProc("SetWindowLongPtrW")
-	procPostMessageW       = user32Dll.NewProc("PostMessageW")
-	procFindWindowExW      = user32Dll.NewProc("FindWindowExW")
-	procSendMessageW       = user32Dll.NewProc("SendMessageW")
+	user32Dll            = windows.NewLazySystemDLL("user32.dll")
+	procSetWindowPos     = user32Dll.NewProc("SetWindowPos")
+	procShowWindow       = user32Dll.NewProc("ShowWindow")
+	procDestroyWindow    = user32Dll.NewProc("DestroyWindow")
+	procFindWindowW      = user32Dll.NewProc("FindWindowW")
+	procPeekMessage      = user32Dll.NewProc("PeekMessageW")
+	procTranslateMessage = user32Dll.NewProc("TranslateMessage")
+	procDispatchMessage  = user32Dll.NewProc("DispatchMessageW")
+	procGetWindowRect    = user32Dll.NewProc("GetWindowRect")
+	procGetClientRect    = user32Dll.NewProc("GetClientRect")
+	procClientToScreen   = user32Dll.NewProc("ClientToScreen")
+	procSetWindowLongPtr = user32Dll.NewProc("SetWindowLongPtrW")
+	procPostMessageW     = user32Dll.NewProc("PostMessageW")
+	procFindWindowExW    = user32Dll.NewProc("FindWindowExW")
+	procSendMessageW     = user32Dll.NewProc("SendMessageW")
 )
 
 const (
-	WM_CLOSE       = 0x0010
-	SWP_SHOWWINDOW = 0x0040
-	SWP_HIDEWINDOW = 0x0080
-	SWP_NOMOVE     = 0x0002
-	SWP_NOSIZE     = 0x0001
-	SWP_NOACTIVATE = 0x0010
-	SWP_NOZORDER   = 0x0004
+	WM_CLOSE           = 0x0010
+	SWP_SHOWWINDOW     = 0x0040
+	SWP_HIDEWINDOW     = 0x0080
+	SWP_NOMOVE         = 0x0002
+	SWP_NOSIZE         = 0x0001
+	SWP_NOACTIVATE     = 0x0010
+	SWP_NOZORDER       = 0x0004
 	SWP_ASYNCWINDOWPOS = 0x4000 // non-blocking: avoids freezing RDP COM thread
-	WS_EX_TOOLWINDOW  = 0x00000080
-	WS_EX_NOACTIVATE  = 0x08000000
-	WS_POPUP          = 0x80000000
-	WS_CLIPSIBLINGS   = 0x04000000
-	PM_REMOVE         = 0x0001
-	GWLP_HWNDPARENT   = ^uintptr(7) // -8 represented as uintptr for syscall compatibility
-	SW_HIDE           = 0
-	SW_SHOWNOACTIVATE = 4
-	WM_COMMAND        = 0x0111
-	BM_CLICK          = 0x00F5
-	IDYES             = 6
-	IDOK              = 1
+	WS_EX_TOOLWINDOW   = 0x00000080
+	WS_EX_NOACTIVATE   = 0x08000000
+	WS_POPUP           = 0x80000000
+	WS_CLIPSIBLINGS    = 0x04000000
+	PM_REMOVE          = 0x0001
+	GWLP_HWNDPARENT    = ^uintptr(7) // -8 represented as uintptr for syscall compatibility
+	SW_HIDE            = 0
+	SW_SHOWNOACTIVATE  = 4
+	WM_COMMAND         = 0x0111
+	BM_CLICK           = 0x00F5
+	IDYES              = 6
+	IDOK               = 1
 )
 
 type RDPSession struct {
@@ -68,7 +69,7 @@ type RDPSession struct {
 	rdp        *ole.IDispatch
 	config     ConnectionConfig
 	mu         sync.Mutex
-	shown     bool
+	shown      bool
 
 	// Last known position, used by Show() after Hide()
 	trackX, trackY int
@@ -106,8 +107,6 @@ func (s *RDPSession) ClientAreaScreenRect() (x, y, w, h int) {
 func (s *RDPSession) SetParentHwnd(hwnd uintptr) {
 	s.parentHwnd = hwnd
 }
-
-
 
 // autoDismissSecurityDialogs polls for RDP security warning dialogs (e.g.
 // cert prompts or "do you want to connect" dialogs) and dismisses them.
@@ -257,7 +256,7 @@ func (s *RDPSession) Connect(config ConnectionConfig) error {
 
 	createWindowEx := windows.NewLazySystemDLL("user32.dll").NewProc("CreateWindowExW")
 	hwnd, _, _ := createWindowEx.Call(
-		uintptr(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE),
+		uintptr(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE),
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(name)),
 		uintptr(WS_POPUP|WS_CLIPSIBLINGS),
@@ -305,42 +304,85 @@ func (s *RDPSession) Connect(config ConnectionConfig) error {
 		port = 3389
 	}
 
-	// NonScriptable.ClearTextPassword BEFORE AdvancedSettings.
-	s.configureNonScriptable(config.Password)
-
-	dispatch.PutProperty("Server", config.Host)
-	dispatch.PutProperty("UserName", config.User)
-	dispatch.PutProperty("Domain", "")
+	// Set the identity before the password so CredSSP receives the complete
+	// account context. DOMAIN\\user and .\\user are accepted in the form field.
+	user, domain := splitRDPUser(config.User)
+	if _, err := dispatch.PutProperty("Server", config.Host); err != nil {
+		return fmt.Errorf("set RDP server: %w", err)
+	}
+	if _, err := dispatch.PutProperty("UserName", user); err != nil {
+		return fmt.Errorf("set RDP username: %w", err)
+	}
+	if _, err := dispatch.PutProperty("Domain", domain); err != nil {
+		return fmt.Errorf("set RDP domain: %w", err)
+	}
 	dispatch.PutProperty("DesktopWidth", width)
 	dispatch.PutProperty("DesktopHeight", height)
 	dispatch.PutProperty("FullScreen", false)
 
-	// AdvancedSettings2
-	advObj, _ := dispatch.GetProperty("AdvancedSettings2")
-	if advObj != nil {
-		adv := advObj.ToIDispatch()
-		if adv != nil {
-			adv.PutProperty("RDPPort", port)
-			adv.PutProperty("RedirectClipboard", true)
-			adv.PutProperty("RedirectDrives", true)
-			adv.PutProperty("DisplayConnectionBar", false)
-			adv.PutProperty("EnableAutoReconnect", true)
-			if config.RdpEnableNLA {
-				adv.PutProperty("EnableCredSspSupport", true)
-				adv.PutProperty("AuthenticationLevel", 2)
-			} else {
-				adv.PutProperty("EnableCredSspSupport", false)
-				adv.PutProperty("AuthenticationLevel", 0)
-			}
-			adv.PutProperty("WarnOnDirectConnect", false)
-			adv.PutProperty("ContainerHandledFullScreen", true)
-			if config.RdpSmartSizing {
-				adv.PutProperty("SmartSizing", true)
-			}
-			if config.Password != "" {
-				adv.PutProperty("ClearTextPassword", config.Password)
-			}
+	// AdvancedSettings2 is the scriptable interface documented for
+	// ClearTextPassword. It must be set before Connect.
+	advObj, err := dispatch.GetProperty("AdvancedSettings2")
+	if err != nil || advObj == nil {
+		if err == nil {
+			err = fmt.Errorf("property is unavailable")
+		}
+		return fmt.Errorf("get RDP AdvancedSettings2: %w", err)
+	}
+	adv := advObj.ToIDispatch()
+	if adv == nil {
+		return fmt.Errorf("RDP AdvancedSettings2 is not an IDispatch")
+	}
+
+	if _, err := adv.PutProperty("RDPPort", port); err != nil {
+		adv.Release()
+		return fmt.Errorf("set RDP port: %w", err)
+	}
+	adv.PutProperty("RedirectClipboard", true)
+	adv.PutProperty("RedirectDrives", true)
+	adv.PutProperty("DisplayConnectionBar", false)
+	adv.PutProperty("EnableAutoReconnect", true)
+	adv.PutProperty("WarnOnDirectConnect", false)
+	adv.PutProperty("ContainerHandledFullScreen", true)
+	if config.RdpSmartSizing {
+		adv.PutProperty("SmartSizing", true)
+	}
+	if config.Password != "" {
+		if _, err := adv.PutProperty("ClearTextPassword", config.Password); err != nil {
 			adv.Release()
+			return fmt.Errorf("set RDP password: %w", err)
+		}
+		log.Writef("[RDP] AdvancedSettings2 ClearTextPassword accepted, nla=%v", config.RdpEnableNLA)
+	} else {
+		log.Writef("[RDP] no password supplied, ActiveX may show its credential UI")
+	}
+	adv.Release()
+
+	// NonScriptable is a vtable-only COM interface. It owns the credential
+	// prompt switches and is also the documented password injection path.
+	if err := s.configureNonScriptable(config.Password, config.RdpEnableNLA); err != nil {
+		return err
+	}
+
+	// AuthenticationLevel belongs to newer AdvancedSettings interfaces.
+	if authObj, authErr := dispatch.GetProperty("AdvancedSettings4"); authErr == nil && authObj != nil {
+		if auth := authObj.ToIDispatch(); auth != nil {
+			if config.RdpEnableNLA {
+				if _, err := auth.PutProperty("AuthenticationLevel", 2); err != nil {
+					log.Writef("[RDP] AdvancedSettings4 AuthenticationLevel failed: %v", err)
+				}
+			} else {
+				auth.PutProperty("AuthenticationLevel", 0)
+			}
+			auth.Release()
+		}
+	}
+	if credObj, credErr := dispatch.GetProperty("AdvancedSettings6"); credErr == nil && credObj != nil {
+		if cred := credObj.ToIDispatch(); cred != nil {
+			if _, err := cred.PutProperty("EnableCredSspSupport", config.RdpEnableNLA); err != nil {
+				log.Writef("[RDP] AdvancedSettings6 EnableCredSspSupport failed: %v", err)
+			}
+			cred.Release()
 		}
 	}
 
@@ -359,10 +401,8 @@ func (s *RDPSession) Connect(config ConnectionConfig) error {
 		}
 	}
 
-
 	// Suppress server certificate warning at OS level
 	setAuthLevelOverride()
-
 
 	// Auto-dismiss any security dialogs that appear during Connect (e.g.
 	// "网站正在尝试启动远程连接"). The goroutine polls for dialog windows
@@ -497,7 +537,6 @@ func (s *RDPSession) runMessagePump() {
 	}
 	log.Writef("[RDP] message pump exited")
 }
-
 
 func (s *RDPSession) findRdpProgID() string {
 	candidates := []string{
@@ -659,37 +698,128 @@ func elevateRegWrite() {
 	}
 }
 
-func (s *RDPSession) configureNonScriptable(password string) {
-	if s.rdp == nil {
-		return
+func splitRDPUser(value string) (user, domain string) {
+	value = strings.TrimSpace(value)
+	if i := strings.IndexByte(value, '\\'); i > 0 && i < len(value)-1 {
+		return value[i+1:], value[:i]
 	}
-	nsGUIDs := []string{
-		"{C1E6743A-41C1-4A74-832A-0DD06C0C9265}", // IMsTscNonScriptable (base)
-		"{4F5331FB-42F5-48A2-9AFD-4743E3F6D3D7}", // IMsRdpClientNonScriptable5
-		"{F50FA8AA-1C05-471B-9CB5-3BD7A6FD32BD}", // IMsRdpClientNonScriptable4
-		"{B3378D90-0728-45C7-8ED7-B6159FB92219}", // IMsRdpClientNonScriptable3
-	}
-	unk, err := s.rdp.QueryInterface(ole.IID_IUnknown)
-	if err != nil {
-		log.Writef("[RDP] QI IUnknown for NonScriptable: %v", err)
-		return
-	}
-	defer unk.Release()
-	for i, guid := range nsGUIDs {
-		nsGUID := ole.NewGUID(guid)
-		nsUnk, err := unk.QueryInterface(nsGUID)
-		if err != nil || nsUnk == nil {
-			continue
-		}
-		if password != "" {
-			nsUnk.PutProperty("ClearTextPassword", password)
-		}
-		nsUnk.Release()
-		log.Writef("[RDP] NonScriptable[%d] configured, password=%v", i, password != "")
-		break
-	}
+	return value, ""
 }
 
+func comInterface(obj *ole.IDispatch, iid *ole.GUID) (uintptr, error) {
+	this := uintptr(unsafe.Pointer(obj))
+	vtable := *(*uintptr)(unsafe.Pointer(this))
+	queryInterface := *(*uintptr)(unsafe.Pointer(vtable))
+
+	var result uintptr
+	hr, _, _ := syscall.SyscallN(
+		queryInterface,
+		this,
+		uintptr(unsafe.Pointer(iid)),
+		uintptr(unsafe.Pointer(&result)),
+	)
+	if hr != 0 {
+		return 0, ole.NewError(hr)
+	}
+	return result, nil
+}
+
+func comRelease(obj uintptr) {
+	if obj == 0 {
+		return
+	}
+	vtable := *(*uintptr)(unsafe.Pointer(obj))
+	release := *(*uintptr)(unsafe.Pointer(vtable + 2*unsafe.Sizeof(uintptr(0))))
+	syscall.SyscallN(release, obj)
+}
+
+func comHRESULT(obj uintptr, slot uintptr, args ...uintptr) error {
+	vtable := *(*uintptr)(unsafe.Pointer(obj))
+	method := *(*uintptr)(unsafe.Pointer(vtable + slot*unsafe.Sizeof(uintptr(0))))
+	callArgs := make([]uintptr, 0, len(args)+1)
+	callArgs = append(callArgs, obj)
+	callArgs = append(callArgs, args...)
+	hr, _, _ := syscall.SyscallN(method, callArgs...)
+	if hr != 0 {
+		return ole.NewError(hr)
+	}
+	return nil
+}
+
+func variantBool(value bool) uintptr {
+	if value {
+		return uintptr(0xffff) // VARIANT_TRUE is -1
+	}
+	return 0
+}
+
+func (s *RDPSession) configureNonScriptable(password string, nla bool) error {
+	if s.rdp == nil {
+		return fmt.Errorf("RDP control is unavailable")
+	}
+
+	// IMsTscNonScriptable is vtable-only. Its first method after IUnknown is
+	// put_ClearTextPassword (slot 3); it must run before Connect.
+	baseIID := ole.NewGUID("{C1E6743A-41C1-4A74-832A-0DD06C1C7A0E}")
+	base, err := comInterface(s.rdp, baseIID)
+	if err != nil {
+		return fmt.Errorf("query IMsTscNonScriptable: %w", err)
+	}
+	defer comRelease(base)
+
+	if password != "" {
+		bstr := ole.SysAllocStringLen(password)
+		if bstr == nil {
+			return fmt.Errorf("allocate RDP password")
+		}
+		defer ole.SysFreeString(bstr)
+		if err := comHRESULT(base, 3, uintptr(unsafe.Pointer(bstr))); err != nil {
+			return fmt.Errorf("set IMsTscNonScriptable ClearTextPassword: %w", err)
+		}
+	}
+
+	// IMsRdpClientNonScriptable3 inherits the password interface. Its vtable
+	// slots 19 and 23 are put_PromptForCredentials and
+	// put_EnableCredSspSupport respectively.
+	ns3IID := ole.NewGUID("{B3378D90-0728-45C7-8ED7-B6159FB92219}")
+	ns3, err := comInterface(s.rdp, ns3IID)
+	if err != nil {
+		return fmt.Errorf("query IMsRdpClientNonScriptable3: %w", err)
+	}
+	defer comRelease(ns3)
+
+	if err := comHRESULT(ns3, 19, variantBool(false)); err != nil {
+		return fmt.Errorf("disable RDP credential prompt: %w", err)
+	}
+	if err := comHRESULT(ns3, 23, variantBool(nla)); err != nil {
+		return fmt.Errorf("set RDP CredSSP: %w", err)
+	}
+
+	// Newer controls expose two additional prompt gates. They are optional for
+	// older controls, but disabling both prevents the ActiveX host from falling
+	// back to a Windows credential dialog when the supplied credential fails.
+	ns4IID := ole.NewGUID("{F50FA8AA-1C7D-4F59-B15C-A90CACAE1FCB}")
+	if ns4, queryErr := comInterface(s.rdp, ns4IID); queryErr == nil {
+		defer comRelease(ns4)
+		if err := comHRESULT(ns4, 47, variantBool(false)); err != nil {
+			log.Writef("[RDP] disable PromptForCredsOnClient failed: %v", err)
+		}
+		if err := comHRESULT(ns4, 45, variantBool(false)); err != nil {
+			log.Writef("[RDP] disable credential saving failed: %v", err)
+		}
+	}
+
+	ns5IID := ole.NewGUID("{4F6996D5-D7B1-412C-B0FF-063718566907}")
+	if ns5, queryErr := comInterface(s.rdp, ns5IID); queryErr == nil {
+		defer comRelease(ns5)
+		if err := comHRESULT(ns5, 63, variantBool(false)); err != nil {
+			log.Writef("[RDP] disable AllowPromptingForCredentials failed: %v", err)
+		}
+	}
+
+	log.Writef("[RDP] NonScriptable configured: password=%v prompt=false credssp=%v", password != "", nla)
+	return nil
+}
 
 type point struct{ X, Y int32 }
 
