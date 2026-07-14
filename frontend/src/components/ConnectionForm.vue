@@ -37,7 +37,7 @@
             <el-form-item :label="t('conn.name')">
               <el-input v-model="form.name" :placeholder="t('conn.namePlaceholder')" />
             </el-form-item>
-            <el-form-item :label="t('conn.moveTo')">
+            <el-form-item :label="t('conn.group')">
               <div style="display:flex;gap:6px;width:100%">
                 <el-tree-select
                   v-model="selectedGroupId"
@@ -615,7 +615,10 @@ const groupTreeData = computed<TreeOption[]>(() => {
       children: node.children.length > 0 ? buildTree(node.children) : undefined,
     }))
   }
-  return buildTree(connectionStore.groupedConnections.roots)
+  return [
+    { value: '__none__', label: t('conn.noGroup') },
+    ...buildTree(connectionStore.groupedConnections.roots),
+  ]
 })
 
 const selectedGroupName = computed(() => {
@@ -761,7 +764,7 @@ function resetForm() {
 
 // Sync tree-select value to form
 watch(selectedGroupId, (val) => {
-  form.groupId = val || undefined
+  form.groupId = val === '__none__' ? undefined : (val || undefined)
 })
 
 function onNodeClick(data: any) {

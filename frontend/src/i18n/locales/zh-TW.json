@@ -62,7 +62,7 @@
   "conn.expectRemoveStep": "移除步驟",
   "conn.expectVariableHint": "變數：${password}、${user}、${host}。Expect 比對忽略大小寫。",
   "conn.sftpMaxConcurrency": "SFTP 最大並行傳輸",
-  "conn.group": "所屬分組",
+  "conn.group": "分組",
   "conn.noGroup": "(無分組)",
   "conn.newGroup": "+ 新增分組",
   "conn.newGroupTitle": "新增分組",

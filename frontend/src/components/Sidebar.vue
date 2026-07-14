@@ -366,7 +366,7 @@
     </el-dialog>
 
     <!-- Move to dialog -->
-    <el-dialog v-model="showChangeGroupDialog" :title="t('conn.moveTo')" width="400px">
+    <el-dialog v-model="showChangeGroupDialog" :title="t('conn.group')" width="400px">
       <el-tree-select
         v-model="changeGroupTargetId"
         :data="groupTreeData"
@@ -1244,7 +1244,10 @@ const groupTreeData = computed<TreeOption[]>(() => {
       children: node.children.length > 0 ? buildTree(node.children) : undefined,
     }))
   }
-  return buildTree(connectionStore.groupedConnections.roots)
+  return [
+    { value: '__none__', label: t('conn.noGroup') },
+    ...buildTree(connectionStore.groupedConnections.roots),
+  ]
 })
 
 function doNewConnInGroup() {
@@ -1270,7 +1273,7 @@ async function confirmNewGroup() {
   const name = newGroupName.value.trim()
   if (!name) return
   showNewGroupDialog.value = false
-  const parentId = newGroupParentId.value
+  const parentId = newGroupParentId.value === '__none__' ? undefined : newGroupParentId.value
   newGroupParentId.value = undefined
   newGroupName.value = ''
   // save in background, don't block dialog close
@@ -1375,7 +1378,8 @@ async function confirmChangeNewGroup() {
   const name = changeNewGroupName.value.trim()
   if (!name) return
   showChangeNewGroupDialog.value = false
-  const group = await connectionStore.addGroup(name, changeNewGroupParentId.value)
+  const parentId = changeNewGroupParentId.value === '__none__' ? undefined : changeNewGroupParentId.value
+  const group = await connectionStore.addGroup(name, parentId)
   changeNewGroupParentId.value = undefined
   changeNewGroupName.value = ''
   const ids = getChangeGroupIds()

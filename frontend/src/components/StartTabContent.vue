@@ -1075,7 +1075,7 @@ async function doAddGroup() {
   const name = newGroupDialogName.value.trim()
   if (!name) return
   showNewGroupDialog.value = false
-  const parentId = newGroupParentId.value
+  const parentId = newGroupParentId.value === '__none__' ? undefined : newGroupParentId.value
   newGroupDialogName.value = ''
   newGroupParentId.value = undefined
   connectionStore.addGroup(name, parentId)
@@ -1095,7 +1095,10 @@ const groupTreeData = computed<TreeOption[]>(() => {
       children: node.children.length > 0 ? buildTree(node.children) : undefined,
     }))
   }
-  return buildTree(connectionStore.groupedConnections.roots)
+  return [
+    { value: '__none__', label: t('conn.noGroup') },
+    ...buildTree(connectionStore.groupedConnections.roots),
+  ]
 })
 
 // Group context menu: New Group (child of current)
