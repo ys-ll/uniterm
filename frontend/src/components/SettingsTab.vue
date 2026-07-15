@@ -51,6 +51,24 @@
               </el-select>
             </div>
           </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.closeTabPrompt') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-switch v-model="settingsStore.settings.closeTabPrompt" @change="settingsStore.save()" />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.closeAppPrompt') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-switch v-model="settingsStore.settings.closeAppPrompt" @change="settingsStore.save()" />
+            </div>
+          </div>
         </div>
       </div>
 

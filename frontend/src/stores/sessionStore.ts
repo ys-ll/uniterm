@@ -58,7 +58,9 @@ export const useSessionStore = defineStore('session', () => {
   function initSession(id: string) {
     const existing = sessionState.sessions.get(id)
     if (existing) {
-      existing.status = 'connecting'
+      if (existing.status !== 'connected') {
+        existing.status = 'connecting'
+      }
     } else {
       sessionState.sessions.set(id, { id, status: 'connecting', data: [], seq: 0 })
     }

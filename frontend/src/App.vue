@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted, provide } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, provide, h } from 'vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import zhTw from 'element-plus/es/locale/lang/zh-tw'
 import enUs from 'element-plus/es/locale/lang/en'
@@ -156,7 +156,7 @@ import SyncConflictDialog from './components/SyncConflictDialog.vue'
 import SerialConnectDialog from './components/SerialConnectDialog.vue'
 import CredentialPrompt from './components/CredentialPrompt.vue'
 import type { CredentialResult } from './components/CredentialPrompt.vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElCheckbox } from 'element-plus'
 import { useConnectionStore } from './stores/connectionStore'
 import { useTabStore } from './stores/tabStore'
 import { usePanelStore } from './stores/panelStore'
@@ -690,14 +690,28 @@ async function closeTab(tabId: string) {
       return sessionStore.getStatus(p.sessionId) === 'connected'
     })
     if (hasConnected) {
-      try {
-        await ElMessageBox.confirm(
-          t('tab.closeConnectedConfirm'),
-          t('tab.closeConfirmTitle'),
-          { confirmButtonText: t('tab.close'), cancelButtonText: t('conn.cancel'), type: 'warning' }
-        )
-      } catch {
-        return
+      if (!settingsStore.settings.closeTabPrompt) {
+        // skip dialog, proceed to close
+      } else {
+        const dontShowAgain = ref(false)
+        try {
+          await ElMessageBox.confirm(
+            h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, [
+              h('span', t('tab.closeConnectedConfirm')),
+              h(ElCheckbox, {
+                'onUpdate:modelValue': (v: boolean) => { dontShowAgain.value = v }
+              }, () => t('tab.dontShowAgain'))
+            ]),
+            t('tab.closeConfirmTitle'),
+            { confirmButtonText: t('tab.close'), cancelButtonText: t('conn.cancel'), type: 'warning' }
+          )
+        } catch {
+          return
+        }
+        if (dontShowAgain.value) {
+          settingsStore.settings.closeTabPrompt = false
+          settingsStore.save()
+        }
       }
     }
   }

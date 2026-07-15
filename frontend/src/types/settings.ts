@@ -138,6 +138,8 @@ export interface AppSettings {
   ai: AISettings
   keyboard: KeyboardSettings
   autoCheckUpdate: boolean
+  closeTabPrompt: boolean
+  closeAppPrompt: boolean
   sftpBookmarks: SFTPBookmarks
   customTerminalThemes: CustomTerminalTheme[]
   defaultLocalShell: string
@@ -173,6 +175,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   keyboard: { ...DEFAULT_KEYBOARD },
   autoCheckUpdate: true,
+  closeTabPrompt: true,
+  closeAppPrompt: true,
   sftpBookmarks: {
     localPaths: [],
     remotePaths: []

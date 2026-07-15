@@ -44,11 +44,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, h } from 'vue'
 import { Settings, PanelLeft, Bot } from '@lucide/vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElCheckbox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { useTabStore } from '../stores/tabStore'
+import { usePanelStore } from '../stores/panelStore'
+import { useSessionStore } from '../stores/sessionStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import WindowControls from './WindowControls.vue'
 import TabsList from './TabsList.vue'
 import {
@@ -69,10 +72,20 @@ import { SaveWindowState } from '../../wailsjs/go/main/App'
 
 const { t } = useI18n()
 const tabStore = useTabStore()
+const panelStore = usePanelStore()
+const sessionStore = useSessionStore()
+const settingsStore = useSettingsStore()
 
-// Count non-start, non-settings tabs (actual connection tabs)
 const hasActiveConnections = computed(() =>
-  tabStore.tabs.some(t => t.type !== 'start' && t.type !== 'settings')
+  tabStore.tabs.some(t => {
+    if (t.type === 'start' || t.type === 'settings') return false
+    const panelIds = t.type === 'workspace' ? t.panelIds : 'panelId' in t ? [t.panelId] : []
+    return panelIds.some(pid => {
+      const p = panelStore.getPanel(pid)
+      if (!p?.sessionId) return false
+      return sessionStore.getStatus(p.sessionId) === 'connected'
+    })
+  })
 )
 
 const emit = defineEmits<{
@@ -152,14 +165,28 @@ async function saveWindowState() {
 
 async function onClose() {
   if (hasActiveConnections.value) {
-    try {
-      await ElMessageBox.confirm(
-        t('app.closeConfirm'),
-        t('app.closeTitle'),
-        { confirmButtonText: t('tab.close'), cancelButtonText: t('conn.cancel'), type: 'warning' }
-      )
-    } catch {
-      return // user cancelled
+    if (!settingsStore.settings.closeAppPrompt) {
+      // skip dialog, proceed to quit
+    } else {
+      const dontShowAgain = ref(false)
+      try {
+        await ElMessageBox.confirm(
+          h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, [
+            h('span', t('app.closeConfirm')),
+            h(ElCheckbox, {
+              'onUpdate:modelValue': (v: boolean) => { dontShowAgain.value = v }
+            }, () => t('app.dontShowAgain'))
+          ]),
+          t('app.closeTitle'),
+          { confirmButtonText: t('tab.close'), cancelButtonText: t('conn.cancel'), type: 'warning' }
+        )
+      } catch {
+        return // user cancelled
+      }
+      if (dontShowAgain.value) {
+        settingsStore.settings.closeAppPrompt = false
+        settingsStore.save()
+      }
     }
   }
   await saveWindowState()

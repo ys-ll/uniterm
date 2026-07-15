@@ -25,7 +25,7 @@
       />
       <span v-if="!isActive && hasNotification" class="tab-notification-dot" />
     </span>
-    <span v-if="!editing" class="tab-name" @dblclick.stop="startEdit">
+    <span v-if="!editing" class="tab-name" :class="{ 'tab-disconnected': isDisconnected }" @dblclick.stop="startEdit">
       <ArrowDownUp v-if="hasActiveTransfers" class="transfer-indicator" :size="14" title="Transferring..." />
       {{ tab.name }}
     </span> 
@@ -88,6 +88,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
+import { useSessionStore } from '../stores/sessionStore'
 import { useI18n } from '../i18n'
 import { CreateSession, SetSerialLogEnabled, IsSerialLogEnabled, PickSerialLogSavePath } from '../../wailsjs/go/main/App'
 import { msg } from '../services/message'
@@ -109,6 +110,7 @@ const emit = defineEmits<{
 
 const tabStore = useTabStore()
 const panelStore = usePanelStore()
+const sessionStore = useSessionStore()
 const { t } = useI18n()
 
 const hovered = ref(false)
@@ -166,6 +168,18 @@ const hasActiveTransfers = computed(() => {
   if (props.tab.type === 'workspace') return false
   const tasks = panelStore.getTransferTasks(props.tab.panelId)
   return tasks.some(t => t.status === 'running' || t.status === 'paused')
+})
+
+const isDisconnected = computed(() => {
+  if (props.tab.type === 'start' || props.tab.type === 'settings') return false
+  const panelIds: string[] = props.tab.type === 'workspace' ? props.tab.panelIds : 'panelId' in props.tab ? [props.tab.panelId] : []
+  if (panelIds.length === 0) return false
+  return panelIds.every(pid => {
+    const p = panelStore.getPanel(pid)
+    if (!p?.sessionId) return true
+    const s = sessionStore.getStatus(p.sessionId)
+    return s === 'disconnected' || s === 'error'
+  })
 })
 
 // Track the live state of the serial session's log file so the menu
@@ -450,6 +464,9 @@ onUnmounted(() => {
   gap: 6px;
   margin-right: 4px;
   font-weight: 500;
+}
+.tab-disconnected {
+  opacity: 0.5;
 }
 .tab-icon-wrapper {
   position: relative;
