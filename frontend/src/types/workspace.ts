@@ -31,6 +31,7 @@ export interface TerminalTab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface SettingsTab {
@@ -38,6 +39,7 @@ export interface SettingsTab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface WorkspaceTab {
@@ -47,6 +49,7 @@ export interface WorkspaceTab {
   panelIds: string[]
   layout: PanelLayout
   activePanelId: string | null
+  locked?: boolean
 }
 
 export interface SFTPTab {
@@ -54,6 +57,7 @@ export interface SFTPTab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface RDPTab {
@@ -61,6 +65,7 @@ export interface RDPTab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface VNCTab {
@@ -68,6 +73,7 @@ export interface VNCTab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface DBTab {
@@ -75,6 +81,7 @@ export interface DBTab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface SPICETab {
@@ -82,6 +89,7 @@ export interface SPICETab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface MongoDBTab {
@@ -89,6 +97,7 @@ export interface MongoDBTab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface MonitorTab {
@@ -96,6 +105,7 @@ export interface MonitorTab {
   id: string
   panelId: string
   name: string
+  locked?: boolean
 }
 
 export interface StartTab {
@@ -104,4 +114,5 @@ export interface StartTab {
   name: string
   viewMode: 'home' | 'group'
   groupId?: string
+  locked?: boolean
 }

@@ -600,6 +600,7 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   closePanel: () => {
     const t = tabStore.activeTab
     if (!t) return
+    if (t.locked) return
     if (t.type === 'workspace' && t.panelIds.length > 1) {
       const panelId = t.activePanelId || t.panelIds[t.panelIds.length - 1]
       tabStore.removePanelFromWorkspaceTab(t.id, panelId)
@@ -672,6 +673,7 @@ function openSettings() {
 async function closeTab(tabId: string) {
   // Close session before removing panel to clean up Go-side resources
   const tab = tabStore.tabs.find(t => t.id === tabId)
+  if (tab?.locked) return
   if (tab && tab.type === 'start') {
     tabStore.closeTab(tabId)
     nextTick(() => {

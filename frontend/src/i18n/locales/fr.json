@@ -86,6 +86,8 @@
   "tab.closeLeft": "Fermer les onglets à gauche",
   "tab.closeOther": "Fermer les autres onglets",
   "tab.close": "Fermer",
+  "tab.lock": "Verrouiller l'onglet",
+  "tab.unlock": "Déverrouiller l'onglet",
   "tab.closeConfirmTitle": "Confirmer la fermeture",
   "tab.closeConnectedConfirm": "Cet onglet est connecté. Le fermer déconnectera la session. Continuer ?",
   "tab.more": "Plus d'onglets",

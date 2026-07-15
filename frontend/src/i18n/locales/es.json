@@ -86,6 +86,8 @@
   "tab.closeLeft": "Cerrar pestañas a la izquierda",
   "tab.closeOther": "Cerrar otras pestañas",
   "tab.close": "Cerrar",
+  "tab.lock": "Bloquear pestaña",
+  "tab.unlock": "Desbloquear pestaña",
   "tab.closeConfirmTitle": "Confirmar Cierre",
   "tab.closeConnectedConfirm": "Esta pestaña está conectada. Al cerrarla se desconectará. ¿Continuar?",
   "tab.more": "Más pestañas",

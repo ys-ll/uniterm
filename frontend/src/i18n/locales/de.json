@@ -86,6 +86,8 @@
   "tab.closeLeft": "Tabs links schließen",
   "tab.closeOther": "Andere Tabs schließen",
   "tab.close": "Schließen",
+  "tab.lock": "Tab sperren",
+  "tab.unlock": "Tab entsperren",
   "tab.closeConfirmTitle": "Schließen bestätigen",
   "tab.closeConnectedConfirm": "Dieser Tab hat eine aktive Verbindung. Beim Schließen wird die Verbindung getrennt. Wirklich schließen?",
   "tab.more": "Weitere Tabs",

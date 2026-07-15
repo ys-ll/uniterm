@@ -88,6 +88,8 @@
   "tab.closeLeft": "关闭左侧标签",
   "tab.closeOther": "关闭其他标签",
   "tab.close": "关闭",
+  "tab.lock": "锁定标签",
+  "tab.unlock": "解锁标签",
   "tab.closeConfirmTitle": "关闭确认",
   "tab.closeConnectedConfirm": "该窗口已连接，关闭将断开连接。确定要关闭吗？",
   "tab.more": "更多标签",

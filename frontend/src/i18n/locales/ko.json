@@ -86,6 +86,8 @@
   "tab.closeLeft": "왼쪽 탭 닫기",
   "tab.closeOther": "다른 탭 닫기",
   "tab.close": "닫기",
+  "tab.lock": "탭 잠금",
+  "tab.unlock": "탭 잠금 해제",
   "tab.closeConfirmTitle": "닫기 확인",
   "tab.closeConnectedConfirm": "이 탭은 연결되어 있습니다. 닫으면 연결이 끊어집니다. 계속하시겠습니까?",
   "tab.more": "더 많은 탭",

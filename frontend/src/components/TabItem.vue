@@ -11,7 +11,7 @@
     @contextmenu="onContextMenu"
   >
     <button
-      v-if="isActive || hovered"
+      v-if="(isActive || hovered) && !tab.locked"
       class="tab-close"
       @click.stop="$emit('close', tab.id)"
     ><X /></button>
@@ -20,10 +20,10 @@
       class="tab-icon-wrapper"
     >
       <component
-        :is="tabIcon"
+        :is="tab.locked ? Lock : tabIcon"
         class="tab-type-icon"
       />
-      <span v-if="!isActive && hasNotification" class="tab-notification-dot" />
+      <span v-if="!isActive && hasNotification && !tab.locked" class="tab-notification-dot" />
     </span>
     <span v-if="!editing" class="tab-name" @dblclick.stop="startEdit">
       <ArrowDownUp v-if="hasActiveTransfers" class="transfer-indicator" :size="14" title="Transferring..." />
@@ -75,7 +75,10 @@
         <div v-if="tab.type === 'terminal'" class="menu-item" @click="triggerExport">{{ t('terminal.export') }}</div>
         <div v-if="tab.type === 'terminal'" class="menu-item" @click="startEdit">{{ t('tab.rename') }}</div>
         <div v-if="tab.type === 'terminal'" class="menu-divider" />
-        <div class="menu-item" @click="closeTab">{{ t('tab.close') }}</div>
+        <div v-if="tab.type !== 'start' && tab.type !== 'settings'" class="menu-item" @click="toggleLock">
+          {{ tab.locked ? t('tab.unlock') : t('tab.lock') }}
+        </div>
+        <div class="menu-item" :class="{ 'menu-item-disabled': tab.locked }" @click="tab.locked ? null : closeTab()">{{ t('tab.close') }}</div>
         <div class="menu-item" @click="closeOther">{{ t('tab.closeOther') }}</div>
         <div class="menu-item" @click="closeRight">{{ t('tab.closeRight') }}</div>
         <div class="menu-item" @click="closeLeft">{{ t('tab.closeLeft') }}</div>
@@ -92,7 +95,7 @@ import { useI18n } from '../i18n'
 import { CreateSession, SetSerialLogEnabled, IsSerialLogEnabled, PickSerialLogSavePath } from '../../wailsjs/go/main/App'
 import { msg } from '../services/message'
 import type { TerminalTab, SettingsTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, WorkspaceTab } from '../types/workspace'
-import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Sparkles, Database, DatabaseZap, Layers, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus } from '@lucide/vue'
+import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Sparkles, Database, DatabaseZap, Layers, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus, Lock } from '@lucide/vue'
 
 const props = defineProps<{
   tab: TerminalTab | SettingsTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | WorkspaceTab
@@ -252,6 +255,11 @@ function cancelEdit() {
   editing.value = false
 }
 
+function toggleLock() {
+  tabStore.toggleTabLock(props.tab.id)
+  closeContextMenu()
+}
+
 function closeTab() {
   emit('close', props.tab.id)
   closeContextMenu()
@@ -260,7 +268,7 @@ function closeTab() {
 function closeOther() {
   const allTabs = tabStore.tabs
   const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  const others = allTabs.filter((_, i) => i !== currentIdx)
+  const others = allTabs.filter((t, i) => i !== currentIdx && !t.locked)
   others.forEach(t => emit('close', t.id))
   closeContextMenu()
 }
@@ -268,14 +276,14 @@ function closeOther() {
 function closeRight() {
   const allTabs = tabStore.tabs
   const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  allTabs.slice(currentIdx + 1).forEach(t => emit('close', t.id))
+  allTabs.slice(currentIdx + 1).filter(t => !t.locked).forEach(t => emit('close', t.id))
   closeContextMenu()
 }
 
 function closeLeft() {
   const allTabs = tabStore.tabs
   const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  allTabs.slice(0, currentIdx).forEach(t => emit('close', t.id))
+  allTabs.slice(0, currentIdx).filter(t => !t.locked).forEach(t => emit('close', t.id))
   closeContextMenu()
 }
 
@@ -565,6 +573,14 @@ onUnmounted(() => {
 .tab-context-menu .menu-item:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+.tab-context-menu .menu-item-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.tab-context-menu .menu-item-icon {
+  margin-right: 6px;
+  vertical-align: middle;
 }
 .tab-context-menu .menu-divider {
   height: 1px;

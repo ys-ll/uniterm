@@ -520,6 +520,13 @@ export const useTabStore = defineStore('tab', () => {
     wsTab.panelIds = collectPanelIds(tempLayout.root)
   }
 
+  // ── Tab lock ──
+
+  function toggleTabLock(tabId: string) {
+    const t = tabState.tabs.find(x => x.id === tabId)
+    if (t) t.locked = !t.locked
+  }
+
   // ── AI lock ──
 
   function setAILockedPanel(panelId: string | null) {
@@ -637,6 +644,7 @@ export const useTabStore = defineStore('tab', () => {
     movePanelInWorkspace,
     setAILockedPanel,
     getAILockedPanel,
+    toggleTabLock,
     broadcastWorkspaceId,
     toggleBroadcast,
     isBroadcasting,

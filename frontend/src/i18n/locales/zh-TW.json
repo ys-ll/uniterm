@@ -86,6 +86,8 @@
   "tab.closeLeft": "關閉左側分頁",
   "tab.closeOther": "關閉其他分頁",
   "tab.close": "關閉",
+  "tab.lock": "鎖定標籤",
+  "tab.unlock": "解鎖標籤",
   "tab.closeConfirmTitle": "關閉確認",
   "tab.closeConnectedConfirm": "該視窗已連線，關閉將中斷連線。確定要關閉嗎？",
   "tab.more": "更多分頁",

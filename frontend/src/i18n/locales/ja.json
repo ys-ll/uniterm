@@ -86,6 +86,8 @@
   "tab.closeLeft": "左側のタブを閉じる",
   "tab.closeOther": "他のタブを閉じる",
   "tab.close": "閉じる",
+  "tab.lock": "タブをロック",
+  "tab.unlock": "ロック解除",
   "tab.closeConfirmTitle": "閉じる確認",
   "tab.closeConnectedConfirm": "このタブは接続中です。閉じると切断されます。本当に閉じますか？",
   "tab.more": "他のタブ",
