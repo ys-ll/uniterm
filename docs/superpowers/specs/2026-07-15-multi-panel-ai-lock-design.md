@@ -153,14 +153,81 @@ AVAILABLE PANELS:
 
 SSH 信息从 `panel.config.host/user/port` 读取。非 SSH 面板不显示。
 
-## 6. 文件清单
+## 6. AI 如何决定命令目标
+
+AI 通过两个信号自行判断：
+
+1. **上下文面板列表**——AI 知道每个面板的标题、shell 类型、SSH 目标。用户指令中提到了面板名，AI 用 `panel` 参数指定。
+2. **默认规则**——省略 `panel` = 第一个锁定面板（或活跃面板）。
+
+```
+用户: "在 Server-A 上检查磁盘"
+AI:   execute_command("df -h", panel: "Server-A")   ← 明确指定
+
+用户: "看看磁盘使用"
+AI:   execute_command("df -h")                      ← 走默认面板
+```
+
+**当 AI 不确定目标时**，调用 `ask_user` 让用户选择：
+
+```
+用户: "对比两台服务器的磁盘使用"
+AI:   ask_user(
+        question: "Which two servers should I compare?",
+        options: [{label: "Server-A", description: "Bash"},
+                  {label: "Server-B", description: "SSH: root@10.0.0.1"}],
+        multiSelect: true
+      )
+```
+
+上下文中的面板列表即为 `ask_user` 的选项数据源。
+
+## 7. 输入框终端引用（# 命令）
+
+输入框支持 `#` 触发面板建议，用户可快速引用关联终端。
+
+### 交互
+
+输入 `#` 后弹出关联终端下拉列表（使用 Element Plus `el-autocomplete` 或自定义 popover）：
+
+```
+┌──────────────────────────────────────┐
+│ #Ser█                                │
+│ ┌─ 终端列表 ────────────────────────┐ │
+│ │ Server-A  [Bash]                  │ │
+│ │ Server-B  [SSH: root@10.0.0.1]   │ │
+│ └──────────────────────────────────┘ │
+└──────────────────────────────────────┘
+```
+
+- 下拉数据源 = 所有终端/SSH 面板（不限于已关联的）
+- 选中后插入 `#面板标题` 文本
+- 支持多次触发，一条消息可引用多个面板
+
+### 语义
+
+`#` 引用是纯文本标记，AI 通过自然语言理解对应到上下文中的面板：
+
+| 用户输入 | AI 行为 |
+|---|---|
+| `#Server-A 磁盘检查` | `execute_command("df -h", panel: "Server-A")` |
+| `#Server-A 是环境一，#Server-B 是环境二，对比系统差异` | 两端分别执行，对比输出 |
+
+### 实现（AISidebar.vue）
+
+- 监听输入框 `input` 事件，检测 `#` 位置
+- 弹出自定义 popover，位置跟随光标
+- 下拉列表过滤：用户继续输入时按面板标题模糊匹配
+- `Esc` 关闭下拉
+
+## 8. 文件清单
 
 | 文件 | 改动 |
 |---|---|
 | `tabStore.ts` | `aiLockedPanelId` → `aiLockedPanelIds: Set`；新增 add/remove/clear/isLocked；保留 `aiLockedPanelId` computed |
 | `Panel.vue` | `isAILocked` 改为 check set |
 | `TabItem.vue` | locked 判断改为 any match |
-| `AISidebar.vue` | 新增关联终端标签区域 |
+| `AISidebar.vue` | 新增关联终端标签区域；输入框 `#` 面板引用 |
 | `terminalAgent.ts` | `resolveActiveSession` 加可选 `panelTitle` 参数 |
 | `llm.ts` | 6 个终端工具 schema 加可选 `panel` |
 | `agent.ts` | `buildDynamicContext` 列所有可用面板；dispatch 传 `panel` |
@@ -169,10 +236,11 @@ SSH 信息从 `panel.config.host/user/port` 读取。非 SSH 面板不显示。
 | `WorkspaceContent.vue` | 同上 |
 | `TabBar.vue` | 同上 |
 
-## 7. 向后兼容
+## 9. 向后兼容
 
 - `aiLockedPanelId` computed 返回第一个锁定面板或 null，依赖它的代码无需改动
 - `panel` 参数可选——省略时走默认逻辑（和现在完全一致）
+- `#` 引用不影响现有输入行为——不输入 `#` 时完全无感
 - 不勾任何面板 = 现在的不锁定行为
 - 勾一个面板 = 现在的锁定行为
 - 勾多个面板 = 新功能
