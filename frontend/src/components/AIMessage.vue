@@ -61,6 +61,56 @@
           </div>
         </div>
       </div>
+
+      <div v-if="pendingQ" class="question-box">
+        <div v-if="pendingQ.header" class="question-header">{{ pendingQ.header }}</div>
+        <div class="question-text">{{ pendingQ.question }}</div>
+        <div class="question-options">
+          <label
+            v-for="(opt, i) in pendingQ.options"
+            :key="i"
+            class="question-option"
+            :class="{ selected: selectedOptions.includes(i) }"
+            @click="toggleOption(i, !pendingQ.multiSelect)"
+          >
+            <span v-if="pendingQ.multiSelect" class="option-check">
+              <el-icon v-if="selectedOptions.includes(i)"><Check :size="14" /></el-icon>
+              <span v-else class="option-check-empty"></span>
+            </span>
+            <span v-else class="option-radio" :class="{ on: selectedOptions.includes(i) }"></span>
+            <span class="option-body">
+              <span class="option-label">{{ opt.label }}</span>
+              <span class="option-desc">{{ opt.description }}</span>
+            </span>
+          </label>
+          <label
+            class="question-option"
+            :class="{ selected: otherSelected }"
+            @click="toggleOther"
+          >
+            <span v-if="pendingQ.multiSelect" class="option-check">
+              <el-icon v-if="otherSelected"><Check :size="14" /></el-icon>
+              <span v-else class="option-check-empty"></span>
+            </span>
+            <span v-else class="option-radio" :class="{ on: otherSelected }"></span>
+            <span class="option-body">
+              <span class="option-label">{{ t('ai.other') }}</span>
+              <input
+                ref="otherInputRef"
+                class="other-input"
+                :placeholder="t('ai.otherPlaceholder')"
+                :value="otherText"
+                @click.stop
+                @input="onOtherInput"
+              />
+            </span>
+          </label>
+        </div>
+        <div class="question-actions">
+          <el-button type="primary" @click="handleAnswer">{{ t('ai.confirm') }}</el-button>
+          <el-button @click="handleDismiss">{{ t('ai.skip') }}</el-button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -77,6 +127,8 @@ const emit = defineEmits<{
   (e: 'approve', messageId: string): void
   (e: 'reject', messageId: string): void
   (e: 'continue'): void
+  (e: 'answer', selectedLabels: string[], customText?: string): void
+  (e: 'dismiss'): void
 }>()
 
 const isInterrupted = computed(() => props.message.role === 'tool' && props.message.content === '[INTERRUPTED]')
@@ -85,6 +137,73 @@ const isPending = computed(() =>
   aiStore.pendingCommand?.messageId === props.message.id
 )
 const pendingCmd = computed(() => isPending.value ? aiStore.pendingCommand! : null)
+
+const isPendingQ = computed(() =>
+  aiStore.pendingQuestion?.messageId === props.message.id
+)
+const pendingQ = computed(() => isPendingQ.value ? aiStore.pendingQuestion! : null)
+
+// Question state
+const selectedOptions = ref<number[]>([])
+const otherSelected = ref(false)
+const otherText = ref('')
+const otherInputRef = ref<HTMLInputElement | null>(null)
+
+function toggleOption(i: number, single: boolean) {
+  if (single) {
+    selectedOptions.value = [i]
+    otherSelected.value = false
+    otherText.value = ''
+    return
+  }
+  const idx = selectedOptions.value.indexOf(i)
+  if (idx >= 0) {
+    selectedOptions.value.splice(idx, 1)
+  } else {
+    selectedOptions.value.push(i)
+  }
+}
+
+function toggleOther() {
+  if (pendingQ.value?.multiSelect) {
+    otherSelected.value = !otherSelected.value
+    if (otherSelected.value) {
+      setTimeout(() => otherInputRef.value?.focus(), 50)
+    } else {
+      otherText.value = ''
+    }
+  } else {
+    otherSelected.value = true
+    selectedOptions.value = []
+    setTimeout(() => otherInputRef.value?.focus(), 50)
+  }
+}
+
+function onOtherInput(e: Event) {
+  otherText.value = (e.target as HTMLInputElement).value
+}
+
+function handleAnswer() {
+  const labels: string[] = []
+  if (selectedOptions.value.length > 0 && pendingQ.value) {
+    for (const i of selectedOptions.value) {
+      labels.push(pendingQ.value.options[i].label)
+    }
+  }
+  if (otherSelected.value) {
+    if (otherText.value.trim()) {
+      labels.push(otherText.value.trim())
+    } else {
+      labels.push('Other')
+    }
+  }
+  if (labels.length === 0) return
+  emit('answer', labels, otherSelected.value ? otherText.value : undefined)
+}
+
+function handleDismiss() {
+  emit('dismiss')
+}
 
 function handleApprove() {
   emit('approve', props.message.id)
@@ -182,6 +301,8 @@ function formatToolBody(tc: { function: { name: string; arguments: string } }): 
       }
       case 'interrupt_command':
         return 'Ctrl+C'
+      case 'ask_user':
+        return args.question || ''
       default:
         return JSON.stringify(args, null, 2)
     }
@@ -912,5 +1033,124 @@ function escapeHtml(text: string): string {
 }
 .continue-box {
   margin-top: 8px;
+}
+
+/* Question box (ask_user) */
+.question-box {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-glow);
+  border-radius: var(--radius-sm);
+}
+.question-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.question-text {
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.question-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+.question-option:hover {
+  border-color: var(--accent-glow);
+  background: var(--accent-subtle);
+}
+.question-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.option-radio {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-hover);
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.option-radio.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--bg-surface);
+}
+.option-check {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-hover);
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  transition: border-color 0.15s, background 0.15s;
+}
+.question-option.selected .option-check {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.option-check-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.option-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.option-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.other-input {
+  width: 100%;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border-hover);
+  border-radius: 3px;
+  outline: none;
+  margin-top: 4px;
+}
+.other-input:focus {
+  border-color: var(--accent);
+}
+.question-actions {
+  display: flex;
+  gap: 8px;
 }
 </style>

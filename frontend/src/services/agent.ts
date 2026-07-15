@@ -61,7 +61,7 @@ function hasActiveSession(): boolean {
 type RiskLevel = 'read' | 'write' | 'dangerous'
 
 function getRisk(tu: { name: string; input: Record<string, unknown> }): RiskLevel {
-  if (tu.name !== 'execute_command') return 'write'
+  if (tu.name !== 'execute_command' && tu.name !== 'start_command') return 'write'
   const risk = tu.input.risk as string | undefined
   if (risk === 'read' || risk === 'write' || risk === 'dangerous') return risk
   return 'write' // conservative fallback
@@ -190,7 +190,7 @@ export async function runAgent(userInput: string) {
     return
   }
 
-  // Auto-reject any pending command from previous turn
+  // Auto-reject any pending command/question from previous turn
   if (userInput && store.pendingCommand) {
     store.addMessage({
       id: `msg-${Date.now()}`,
@@ -199,6 +199,15 @@ export async function runAgent(userInput: string) {
       tool_call_id: store.pendingCommand.toolId
     })
     store.clearPendingCommand()
+  }
+  if (userInput && store.pendingQuestion) {
+    store.addMessage({
+      id: `msg-${Date.now()}`,
+      role: 'tool',
+      content: 'User started a new conversation. Previous question was dismissed.',
+      tool_call_id: store.pendingQuestion.toolId
+    })
+    store.clearPendingQuestion()
   }
 
   store.resetStop()
@@ -401,6 +410,7 @@ export async function runAgent(userInput: string) {
         store.setPendingCommand({
           messageId: assistantMsg.id,
           toolId: tu.id,
+          toolName: tu.name,
           command,
           risk,
           dangerous: risk === 'dangerous'
@@ -432,10 +442,11 @@ export async function runAgent(userInput: string) {
           cleanupStreamListeners()
           return
         }
+        const status = result.timedOut ? '[COMMAND TIMED OUT]' : '[COMMAND COMPLETED]'
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output,
+          content: `${status}\n${result.output}`,
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -448,6 +459,31 @@ export async function runAgent(userInput: string) {
       }
     } else if (tu.name === 'start_command') {
       const command = tu.input.command as string
+      const risk = getRisk(tu)
+
+      if (shouldConfirm(risk)) {
+        store.setPendingCommand({
+          messageId: assistantMsg.id,
+          toolId: tu.id,
+          toolName: tu.name,
+          command,
+          risk,
+          dangerous: risk === 'dangerous'
+        })
+        store.status = 'confirming'
+        assistantMsg.tool_calls = [{
+          id: tu.id,
+          type: 'function' as const,
+          function: {
+            name: tu.name,
+            arguments: JSON.stringify(tu.input)
+          }
+        }]
+        store.isRunning = false
+        cleanupStreamListeners()
+        return
+      }
+
       try {
         store.status = 'executing'
         const result = await startCommand(command)
@@ -491,11 +527,22 @@ export async function runAgent(userInput: string) {
       const tailLines = (tu.input.tail_lines as number) ?? 300
       try {
         store.status = 'executing'
-        const result = await collectOutput(timeoutMs, headLines, tailLines)
+        const result = await collectOutput(timeoutMs, headLines, tailLines, () => store.stopRequested)
+        if (store.stopRequested) {
+          store.addMessage({
+            id: `msg-${Date.now()}`,
+            role: 'tool',
+            content: '[INTERRUPTED]'
+          })
+          store.isRunning = false
+          cleanupStreamListeners()
+          return
+        }
+        const status = result.completed ? '[COMMAND COMPLETED]' : '[COMMAND STILL RUNNING]'
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output,
+          content: `${status}\n${result.output}`,
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -549,6 +596,32 @@ export async function runAgent(userInput: string) {
           tool_call_id: tu.id
         })
       }
+    } else if (tu.name === 'ask_user') {
+      const question = tu.input.question as string
+      const header = tu.input.header as string | undefined
+      const options = (tu.input.options as Array<{ label: string; description: string }>) || []
+      const multiSelect = (tu.input.multiSelect as boolean) || false
+
+      store.setPendingQuestion({
+        messageId: assistantMsg.id,
+        toolId: tu.id,
+        question,
+        header,
+        options,
+        multiSelect,
+      })
+      assistantMsg.tool_calls = [{
+        id: tu.id,
+        type: 'function' as const,
+        function: {
+          name: tu.name,
+          arguments: JSON.stringify(tu.input)
+        }
+      }]
+      store.status = 'confirming'
+      store.isRunning = false
+      cleanupStreamListeners()
+      return
     }
   }
 
@@ -596,13 +669,24 @@ export async function approveTool(_messageId: string) {
   store.status = 'executing'
 
   try {
-    const result = await executeCommand(cmd.command)
-    store.addMessage({
-      id: `msg-${Date.now()}`,
-      role: 'tool',
-      content: result.output,
-      tool_call_id: cmd.toolId
-    })
+    if (cmd.toolName === 'start_command') {
+      const result = await startCommand(cmd.command)
+      store.addMessage({
+        id: `msg-${Date.now()}`,
+        role: 'tool',
+        content: result.output || '(command started)',
+        tool_call_id: cmd.toolId
+      })
+    } else {
+      const result = await executeCommand(cmd.command)
+      const status = result.timedOut ? '[COMMAND TIMED OUT]' : '[COMMAND COMPLETED]'
+      store.addMessage({
+        id: `msg-${Date.now()}`,
+        role: 'tool',
+        content: `${status}\n${result.output}`,
+        tool_call_id: cmd.toolId
+      })
+    }
   } catch (e: any) {
     store.addMessage({
       id: `msg-${Date.now()}`,
@@ -626,6 +710,49 @@ export function rejectTool(_messageId: string) {
     role: 'tool',
     content: 'User rejected this command.',
     tool_call_id: cmd.toolId
+  })
+
+  setTimeout(() => runAgent(''), 0)
+}
+
+export function answerQuestion(selectedLabels: string[], customText?: string) {
+  const store = useAIStore()
+  const q = store.pendingQuestion
+  if (!q) return
+
+  store.clearPendingQuestion()
+
+  let answer: string
+  if (customText !== undefined && customText.trim() !== '') {
+    answer = `User chose "Other": ${customText.trim()}`
+  } else if (q.multiSelect && selectedLabels.length > 1) {
+    answer = `User selected: ${selectedLabels.join(', ')}`
+  } else {
+    answer = `User chose: ${selectedLabels[0]}`
+  }
+
+  store.addMessage({
+    id: `msg-${Date.now()}`,
+    role: 'tool',
+    content: answer,
+    tool_call_id: q.toolId
+  })
+
+  setTimeout(() => runAgent(''), 0)
+}
+
+export function dismissQuestion() {
+  const store = useAIStore()
+  const q = store.pendingQuestion
+  if (!q) return
+
+  store.clearPendingQuestion()
+
+  store.addMessage({
+    id: `msg-${Date.now()}`,
+    role: 'tool',
+    content: 'User dismissed this question.',
+    tool_call_id: q.toolId
   })
 
   setTimeout(() => runAgent(''), 0)

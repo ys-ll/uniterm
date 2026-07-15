@@ -150,16 +150,21 @@ export const AVAILABLE_TOOLS = [
   },
   {
     name: 'start_command',
-    description: 'Start a background/long-running command and return its initial output (first 3 seconds). Use this for servers (npm run dev, redis-server, python -m http.server) or any command you do NOT want to wait for.',
+    description: 'Start a background/long-running command and return its initial output (first 3 seconds). Use this for servers (npm run dev, redis-server, python -m http.server) or any command you do NOT want to wait for. You MUST classify every command with a risk level.',
     input_schema: {
       type: 'object',
       properties: {
         command: {
           type: 'string',
           description: 'The shell command to start. It will keep running after this tool returns.'
+        },
+        risk: {
+          type: 'string',
+          enum: ['read', 'write', 'dangerous'],
+          description: 'The risk level of this command:\n- "read": only inspects/views data, absolutely no modifications\n- "write": modifies or creates data but not system-destructive\n- "dangerous": potentially destructive or system-altering'
         }
       },
-      required: ['command']
+      required: ['command', 'risk']
     }
   },
   {
@@ -224,6 +229,48 @@ export const AVAILABLE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {}
+    }
+  },
+  {
+    name: 'ask_user',
+    description: 'Ask the user a question with predefined options. Use this when you need the user to make a choice, confirm an action, or provide input. The user can select from your options or type a custom answer via the always-present "Other" option.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        question: {
+          type: 'string',
+          description: 'The question to ask the user. Be clear and specific. End with a question mark.'
+        },
+        header: {
+          type: 'string',
+          description: 'Short label displayed as a chip/tag, max 12 chars. Examples: "Auth method", "Library", "Approach".'
+        },
+        options: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              label: {
+                type: 'string',
+                description: 'Display text for this option. Concise, 1-5 words.'
+              },
+              description: {
+                type: 'string',
+                description: 'Explanation of what this option means or what will happen if chosen.'
+              }
+            },
+            required: ['label', 'description']
+          },
+          minItems: 2,
+          maxItems: 4,
+          description: 'Available choices. 2-4 options. An "Other" option is always appended automatically for custom answers.'
+        },
+        multiSelect: {
+          type: 'boolean',
+          description: 'Set to true to allow the user to select multiple options. Default false.'
+        }
+      },
+      required: ['question', 'options']
     }
   }
 ]

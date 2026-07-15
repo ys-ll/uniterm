@@ -353,30 +353,34 @@ export function captureTerminal(tailLines: number = 200): CaptureResult {
 export interface CollectResult {
   output: string
   timedOut: boolean
+  completed: boolean
 }
 
+// Collect output passively — no command is sent. Detects completion by watching
+// for the shell prompt to reappear (same idle heuristic as watchOutput), so the
+// call returns as soon as the running command finishes instead of always waiting
+// for the full timeout.
 export async function collectOutput(
   timeoutMs: number = 30000,
   headLines: number = 100,
-  tailLines: number = 300
+  tailLines: number = 300,
+  shouldCancel?: () => boolean
 ): Promise<CollectResult> {
   const { sessionId } = resolveActiveSession()
+  const promptLine = capturePromptLine(sessionId)
 
-  return new Promise((resolve) => {
-    let output = ''
-    const unsubscribe = EventsOn('session:data', (payload: { id: string; data: string }) => {
-      if (payload.id !== sessionId) return
-      output += payload.data
-    })
+  const { promise } = watchOutput(sessionId, promptLine, timeoutMs, shouldCancel)
+  const result = await promise
 
-    setTimeout(() => {
-      unsubscribe()
-      resolve({
-        output: truncateOutput(stripAnsi(output).trim(), headLines, tailLines),
-        timedOut: true,
-      })
-    }, timeoutMs)
-  })
+  if (result.cancelled) {
+    return { output: '', timedOut: false, completed: false }
+  }
+
+  return {
+    output: truncateOutput(result.output, headLines, tailLines),
+    timedOut: result.timedOut,
+    completed: !result.timedOut,
+  }
 }
 
 interface SendKeyResult {

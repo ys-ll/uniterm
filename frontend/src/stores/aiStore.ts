@@ -155,9 +155,18 @@ export const useAIStore = defineStore('ai', () => {
   const pendingCommand = ref<{
     messageId: string
     toolId: string
+    toolName: string
     command: string
     risk: string
     dangerous: boolean
+  } | null>(null)
+  const pendingQuestion = ref<{
+    messageId: string
+    toolId: string
+    question: string
+    header?: string
+    options: Array<{ label: string; description: string }>
+    multiSelect: boolean
   } | null>(null)
   const lastPanelContext = ref<{ panelId: string; shellPath: string } | null>(null)
   const queuedMessages = ref<{ id: string; content: string }[]>([])
@@ -222,6 +231,14 @@ export const useAIStore = defineStore('ai', () => {
 
   function clearPendingCommand() {
     pendingCommand.value = null
+  }
+
+  function setPendingQuestion(q: { messageId: string; toolId: string; question: string; header?: string; options: Array<{ label: string; description: string }>; multiSelect: boolean }) {
+    pendingQuestion.value = q
+  }
+
+  function clearPendingQuestion() {
+    pendingQuestion.value = null
   }
 
   function toggle() {
@@ -624,6 +641,9 @@ export const useAIStore = defineStore('ai', () => {
     pendingCommand,
     setPendingCommand,
     clearPendingCommand,
+    pendingQuestion,
+    setPendingQuestion,
+    clearPendingQuestion,
     initialized,
     init,
     lastPanelContext,

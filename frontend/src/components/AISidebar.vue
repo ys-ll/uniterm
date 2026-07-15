@@ -65,8 +65,10 @@
         @approve="onApprove"
         @reject="onReject"
         @continue="onContinue"
+        @answer="onAnswer"
+        @dismiss="onDismiss"
       />
-      <div v-if="aiStore.isRunning || aiStore.pendingCommand" class="ai-thinking">
+      <div v-if="aiStore.isRunning || aiStore.pendingCommand || aiStore.pendingQuestion" class="ai-thinking">
         <div class="thinking-text">{{ statusText }}</div>
       </div>
     </div>
@@ -175,7 +177,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useI18n } from '../i18n'
-import { runAgent, approveTool, rejectTool, continueAgent } from '../services/agent'
+import { runAgent, approveTool, rejectTool, continueAgent, answerQuestion, dismissQuestion } from '../services/agent'
 import { CancelChatStream } from '../../wailsjs/go/main/App'
 import type { ExecutionMode } from '../types/ai'
 import AIMessage from './AIMessage.vue'
@@ -275,6 +277,7 @@ watch(() => [searchText.value, visibleMessages.value.length], () => {
 })
 const statusText = computed(() => {
   if (aiStore.pendingCommand) return t('ai.confirming')
+  if (aiStore.pendingQuestion) return t('ai.awaitingAnswer')
   const key = `ai.${aiStore.status}` as any
   return t(key) || t('ai.thinking')
 })
@@ -327,7 +330,7 @@ const currentModelName = computed(() => {
   return m?.name || 'Model'
 })
 
-const busy = computed(() => aiStore.isRunning || !!aiStore.pendingCommand)
+const busy = computed(() => aiStore.isRunning || !!aiStore.pendingCommand || !!aiStore.pendingQuestion)
 
 function onModeChange(mode: string) {
   aiStore.mode = mode as ExecutionMode
@@ -492,6 +495,11 @@ function onStop() {
     aiStore.clearQueue()
     return
   }
+  if (aiStore.pendingQuestion) {
+    dismissQuestion()
+    aiStore.clearQueue()
+    return
+  }
   CancelChatStream().catch(() => { /* ignore */ })
   aiStore.stop()
 }
@@ -503,6 +511,16 @@ async function onApprove(messageId: string) {
 
 function onReject(messageId: string) {
   rejectTool(messageId)
+  scrollToBottom()
+}
+
+function onAnswer(selectedLabels: string[], customText?: string) {
+  answerQuestion(selectedLabels, customText)
+  scrollToBottom()
+}
+
+function onDismiss() {
+  dismissQuestion()
   scrollToBottom()
 }
 
