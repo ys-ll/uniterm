@@ -342,6 +342,7 @@ function onTabDrop(e: DragEvent, targetTabId: string, index: number) {
   justify-content: center;
   transition: background 0.15s, color 0.15s;
   margin-left: 2px;
+  --wails-draggable: no-drag;
 }
 .tab-add-btn:hover {
   background: var(--bg-hover);
