@@ -242,6 +242,7 @@ import { usePanelStore } from '../stores/panelStore'
 import { SessionWrite } from '../../wailsjs/go/main/App'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
+import { focusActivePanelTerminal } from '../composables/useFocusTerminal'
 import QuickCommandEditDialog from './QuickCommandEditDialog.vue'
 
 const { t } = useI18n()
@@ -415,6 +416,10 @@ async function sendCommand(cmd: QuickCommand, mode: 'run' | 'paste') {
       if (i < lines.length - 1) await new Promise(r => setTimeout(r, 100))
     }
   }
+  // Return focus to the terminal so the user can press Enter/edit without
+  // an extra mouse click (issue #285). In broadcast mode, focus the active
+  // panel — the one the user is looking at.
+  focusActivePanelTerminal()
 }
 
 function runCommand(cmd: QuickCommand) { sendCommand(cmd, 'run') }

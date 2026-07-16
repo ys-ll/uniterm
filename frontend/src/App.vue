@@ -167,6 +167,7 @@ import { useQuickCommandStore } from './stores/quickCommandStore'
 import { useTunnelStore } from './stores/tunnelStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
 import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
+import { focusPanelTerminal, installTerminalFocusRestore } from './composables/useFocusTerminal'
 import type { ShortcutAction } from './types/settings'
 import { useI18n } from './i18n'
 import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFocus, LoadLocalState, SaveLocalState, RecordRecentConnection } from '../wailsjs/go/main/App'
@@ -183,6 +184,7 @@ const sessionStore = useSessionStore()
 const aiStore = useAIStore()
 const settingsStore = useSettingsStore()
 const updateCheck = useUpdateCheck()
+let uninstallFocusRestore: (() => void) | null = null
 const { t, locale } = useI18n()
 const EL_LOCALE_MAP: Record<string, typeof enUs> = {
   'zh-CN': zhCn, 'zh-TW': zhTw, en: enUs, ja, ko, de, es, fr, ru,
@@ -562,6 +564,10 @@ onMounted(async () => {
   applyKeybindings()
   installGlobalListener()
 
+  // Restore terminal focus after window drags and sidebar scrollbar clicks
+  // (issue #285) — see composables/useFocusTerminal.ts for the policy.
+  uninstallFocusRestore = installTerminalFocusRestore()
+
   // RDP blur/focus: notify Go side so it can manage focus on the native RDP window
   window.addEventListener('blur', () => {
     const sid = getActiveRdpSessionId()
@@ -614,16 +620,6 @@ onMounted(async () => {
   }) as EventListener)
 
 })
-
-function focusPanelTerminal(panelId: string, attempt = 0) {
-  if (attempt > 10) return
-  const el = document.querySelector(`[data-panel-id="${panelId}"] .xterm-helper-textarea`)
-  if (el instanceof HTMLTextAreaElement) {
-    el.focus()
-  } else {
-    setTimeout(() => focusPanelTerminal(panelId, attempt + 1), 100)
-  }
-}
 
 function navigatePanel(dir: number) {
   const t = tabStore.activeTab
@@ -723,6 +719,7 @@ function applyKeybindings() {
 
 onUnmounted(() => {
   uninstallGlobalListener()
+  uninstallFocusRestore?.()
   window.removeEventListener('input:contextmenu', onInputContextMenu)
   window.removeEventListener('global:close-context-menus', closeInputMenu)
   document.removeEventListener('click', closeInputMenu)

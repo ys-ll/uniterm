@@ -78,6 +78,7 @@ import { useQuickCommandStore } from '../stores/quickCommandStore'
 import { SessionWrite } from '../../wailsjs/go/main/App'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
+import { focusActivePanelTerminal } from '../composables/useFocusTerminal'
 import QuickCommandEditDialog from './QuickCommandEditDialog.vue'
 
 const { t } = useI18n()
@@ -216,6 +217,8 @@ function runCommand(entry: HistoryEntry) {
   for (const sid of sids) {
     SessionWrite(sid, text)
   }
+  // Return focus to the terminal (issue #285).
+  focusActivePanelTerminal()
 }
 
 function pasteCommand(entry: HistoryEntry) {
@@ -224,6 +227,8 @@ function pasteCommand(entry: HistoryEntry) {
   for (const sid of sids) {
     SessionWrite(sid, entry.command)
   }
+  // Return focus to the terminal (issue #285).
+  focusActivePanelTerminal()
 }
 
 async function copyCommand(entry: HistoryEntry) {
