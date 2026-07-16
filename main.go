@@ -52,6 +52,16 @@ func main() {
 		maxW, maxH = 9999, 9999
 	}
 
+	// Only set an (empty) app menu on macOS — this is the trick that hides
+	// Wails' default Edit/Window menus there. On Linux (GTK) a non-nil Menu
+	// makes the backend create an empty GtkMenuBar at the top of the window,
+	// which shows up as a thin white line in the Frameless window. Leaving
+	// Menu as nil elsewhere avoids that. See issue #291.
+	var appMenu *menu.Menu
+	if runtime.GOOS == "darwin" {
+		appMenu = &menu.Menu{}
+	}
+
 	err := wails.Run(&options.App{
 		Title:     "uniTerm",
 		Width:     1200,
@@ -61,7 +71,7 @@ func main() {
 		MaxWidth:  maxW,
 		MaxHeight: maxH,
 		Frameless: runtime.GOOS != "darwin",
-		Menu:      &menu.Menu{},
+		Menu:      appMenu,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
