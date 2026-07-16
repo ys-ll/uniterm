@@ -15,7 +15,6 @@
 
   /* Accent - electric cyan */
   --accent: #22d3ee;
-  --accent-dim: #0891b2;
   --accent-glow: rgba(34, 211, 238, 0.15);
   --accent-subtle: rgba(34, 211, 238, 0.08);
 
@@ -69,6 +68,13 @@
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
 
   /* Element Plus theme overrides */
+  /* Primary color family - align Element Plus internals (el-select focus ring,
+     el-input focus border, el-input-tag focus ring, etc.) with our --accent so
+     they follow the active theme instead of falling back to EP's default #409eff.
+     Kept in :root only; the value resolves against whatever --accent the
+     currently-applied [data-theme] defines. */
+  --el-color-primary: var(--accent);
+  --el-input-focus-border-color: var(--accent);
   --el-bg-color: #14171d;
   --el-bg-color-page: #14171d;
   --el-fill-color-blank: #1f222b;
@@ -105,7 +111,6 @@
   --text-disabled: #64708a;
 
   --accent: #38bdf8;
-  --accent-dim: #0284c7;
   --accent-glow: rgba(56, 189, 248, 0.18);
   --accent-subtle: rgba(56, 189, 248, 0.08);
 
@@ -171,7 +176,6 @@
 
   /* Accent - Windows-style blue */
   --accent: #0078d4;
-  --accent-dim: #005a9e;
   --accent-glow: rgba(0, 120, 212, 0.22);
   --accent-subtle: rgba(0, 120, 212, 0.08);
 
@@ -412,8 +416,8 @@ body::before {
 
 /* Primary - the one accent-filled action per view */
 .btn-primary {
-  background: var(--accent-dim);
-  border-color: var(--accent-dim);
+  background: var(--accent);
+  border-color: var(--accent);
   color: var(--on-accent);
 }
 .btn-primary:hover:not(:disabled) {
@@ -567,7 +571,7 @@ body::before {
 .el-input-number .el-input__wrapper.is-focus,
 .el-select .el-input.is-focus .el-input__wrapper,
 .el-textarea__inner:focus {
-  box-shadow: 0 0 0 1px var(--accent-dim) inset, 0 0 0 3px var(--accent-glow) !important;
+  box-shadow: 0 0 0 1px var(--accent) inset, 0 0 0 3px var(--accent-glow) !important;
 }
 
 /* --- tags --- */
@@ -679,15 +683,15 @@ body::before {
 }
 
 .el-radio-button__original-radio:checked + .el-radio-button__inner {
-  background-color: var(--accent-dim) !important;
-  border-color: var(--accent-dim) !important;
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
   color: #fff !important;
-  box-shadow: -1px 0 0 0 var(--accent-dim) !important;
+  box-shadow: -1px 0 0 0 var(--accent) !important;
 }
 
 .el-button--primary {
-  background: var(--accent-dim) !important;
-  border-color: var(--accent-dim) !important;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
 }
 .el-button--primary:hover {
   background: var(--accent) !important;

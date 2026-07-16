@@ -202,7 +202,7 @@ function onMoreClick(e: MouseEvent, conn: ConnectionConfig) {
 }
 .connection-item.active {
   background: var(--accent-subtle);
-  box-shadow: inset 0 0 0 1px var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .connection-item.active .name {
   color: var(--accent);

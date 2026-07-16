@@ -141,7 +141,7 @@ function onPanelDragStart(e: DragEvent, panelId: string) {
   img.style.cssText = `
     position: fixed; left: -9999px; top: -9999px;
     padding: 6px 14px; background: var(--bg-surface);
-    border: 1px solid var(--accent-dim); border-radius: var(--radius-sm);
+    border: 1px solid var(--accent); border-radius: var(--radius-sm);
     color: var(--text-primary); font-size: 12px; font-family: var(--font-ui);
     box-shadow: var(--shadow-md); white-space: nowrap; pointer-events: none;
   `

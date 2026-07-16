@@ -307,7 +307,7 @@ watch(() => props.isActive, (active) => {
 }
 .panel-active .panel-header {
   background: var(--bg-elevated);
-  border-bottom-color: var(--accent-dim);
+  border-bottom-color: var(--accent);
 }
 .panel-header.ai-locked {
   border-left: 3px solid var(--warning);
@@ -329,7 +329,7 @@ watch(() => props.isActive, (active) => {
   font-family: inherit;
   color: var(--text-primary);
   background: var(--bg-base);
-  border: 1px solid var(--accent-dim);
+  border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 2px 6px;
   width: 120px;

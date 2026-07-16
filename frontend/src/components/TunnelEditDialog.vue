@@ -256,7 +256,7 @@ function resetForm() {
   border-color: var(--border-default);
 }
 .mode-btn.active {
-  background: linear-gradient(135deg, var(--accent-dim), var(--accent));
+  background: linear-gradient(135deg, var(--accent), var(--accent));
   color: var(--on-accent);
   border-color: var(--accent-glow);
   box-shadow: 0 0 0 1px var(--accent-glow), 0 2px 8px var(--accent-glow);

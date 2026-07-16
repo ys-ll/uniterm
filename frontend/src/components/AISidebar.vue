@@ -1376,7 +1376,7 @@ defineExpose({ focusInput })
   transition: background 0.12s ease, opacity 0.12s ease;
 }
 .send-btn:hover:not(:disabled) {
-  background: var(--accent-dim);
+  background: var(--accent);
 }
 .send-btn:disabled {
   background: var(--bg-active);

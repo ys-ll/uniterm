@@ -452,7 +452,7 @@ onUnmounted(() => {
 .tab-item.active {
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 .tab-item.ai-locked {
   box-shadow: inset 2px 0 0 var(--warning);
@@ -460,7 +460,7 @@ onUnmounted(() => {
 .tab-item.active.ai-locked {
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--accent-dim), inset 2px 0 0 var(--warning);
+  box-shadow: inset 0 0 0 1px var(--accent), inset 2px 0 0 var(--warning);
 }
 .tab-name {
   font-size: 12px;
@@ -514,7 +514,7 @@ onUnmounted(() => {
   font-family: inherit;
   color: var(--text-primary);
   background: var(--bg-base);
-  border: 1px solid var(--accent-dim);
+  border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 2px 6px;
   width: 120px;

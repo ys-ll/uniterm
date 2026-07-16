@@ -309,7 +309,7 @@ function clearDragState() {
 }
 .tab-bar.drag-over {
   background: var(--accent-subtle);
-  border-bottom-color: var(--accent-dim);
+  border-bottom-color: var(--accent);
 }
 .tabs-list {
   display: flex;

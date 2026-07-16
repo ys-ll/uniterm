@@ -662,7 +662,7 @@ watch(searchQuery, (q) => {
 
 .qc-item.active {
   background: var(--accent-subtle);
-  box-shadow: inset 0 0 0 1px var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .qc-item.active .qc-item-name {

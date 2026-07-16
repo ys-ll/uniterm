@@ -1532,7 +1532,7 @@ async function doDelete(config: ConnectionConfig | null) {
 .start-card-icon.database { color: var(--warning); }
 .start-card-icon.rdp,
 .start-card-icon.vnc,
-.start-card-icon.spice { color: var(--accent-dim); }
+.start-card-icon.spice { color: var(--accent); }
 .start-card-icon.serial { color: var(--success-dim); }
 .start-card-icon.group { color: var(--text-secondary); }
 .start-card-icon.ungrouped { color: var(--text-muted); }

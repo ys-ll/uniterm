@@ -764,7 +764,7 @@ function escapeHtml(text: string): string {
 .text :deep(blockquote) {
   margin: 8px 0;
   padding: 6px 8px 6px 12px;
-  border-left: 3px solid var(--accent-dim);
+  border-left: 3px solid var(--accent);
   background: var(--bg-overlay);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--text-secondary);
@@ -917,7 +917,7 @@ function escapeHtml(text: string): string {
   background: var(--accent-subtle);
 }
 .out-box .tool-box-label {
-  background: var(--accent-dim);
+  background: var(--accent);
   color: var(--on-accent);
 }
 .tool-pairs {
