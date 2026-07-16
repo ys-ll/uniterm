@@ -625,11 +625,11 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
       { ...panel.config } as ConnectionConfig,
       panel.type
     )
-    newPanel.title = panel.title
+    panelStore.updateTitle(newPanel.id, panel.title)
     try {
       const info = await CreateSession(panel.config.type, panel.config)
       panelStore.bindSession(newPanel.id, info.id)
-      const newTab = tabStore.createTerminalTab(panel.title, newPanel.id)
+      const newTab = tabStore.createTerminalTab(newPanel.title, newPanel.id)
       panelStore.movePanelToTab(newPanel.id, newTab.id)
     } catch (e) {
       console.error('Failed to duplicate session:', e)
@@ -665,7 +665,7 @@ function openSettings() {
   }
 
   const panel = panelStore.createPanel(null, 'settings')
-  panel.title = t('settings.title')
+  panelStore.updateTitle(panel.id, t('settings.title'))
   const tab = tabStore.createSettingsTab(t('settings.title'), panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
 }
@@ -851,12 +851,12 @@ async function onConnect(config: ConnectionConfig, keepOpen?: boolean, wasEdit?:
     : config.type === 'telnet'
     ? `${config.host}:${config.port}`
     : `${config.user}@${config.host}`)
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   panelStore.bindSession(panel.id, sessionId)
   sessionStore.initSession(sessionId)
   const tab = prev?.type === 'start'
-    ? tabStore.replaceStartTab(prev.id, displayTitle, panel.id)
-    : tabStore.createTerminalTab(displayTitle, panel.id)
+    ? tabStore.replaceStartTab(prev.id, panel.title, panel.id)
+    : tabStore.createTerminalTab(panel.title, panel.id)
   panelStore.movePanelToTab(panel.id, tab.id)
   RecordRecentConnection(config.id)
 }
@@ -912,10 +912,10 @@ function onChangeGroupParentFromStart(groupId: string) {
 }
 
 function onToggleAiLock(panelId: string) {
-  if (tabStore.aiLockedPanelId === panelId) {
-    tabStore.setAILockedPanel(null)
+  if (tabStore.isPanelAILocked(panelId)) {
+    tabStore.removeAILockedPanel(panelId)
   } else {
-    tabStore.setAILockedPanel(panelId)
+    tabStore.addAILockedPanel(panelId)
   }
 }
 
@@ -926,7 +926,7 @@ function onTabDragStart(_e: DragEvent, _tabId: string) {
 async function createLocalTerminal(shellPath?: string, keepOpen?: boolean) {
   const panel = panelStore.createPanel(null, 'local')
   const shellName = getShellLabel(shellPath)
-  panel.title = shellName
+  panelStore.updateTitle(panel.id, shellName)
 
   try {
     // Use a stable ID based on shell type so repeated local terminals
@@ -970,7 +970,7 @@ async function onConnectSftp(config: ConnectionConfig, prevStart?: any) {
 
   const panel = panelStore.createPanel(config, 'sftp')
   const displayTitle = config.name || `${config.user}@${config.host}`
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createSFPTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -995,7 +995,7 @@ async function onConnectFtp(config: ConnectionConfig, prevStart?: any) {
   config = resolved
   const panel = panelStore.createPanel(config, 'sftp')
   const displayTitle = config.name || `${config.user}@${config.host}`
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createFtpTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1020,7 +1020,7 @@ async function onConnectSmb(config: ConnectionConfig, prevStart?: any) {
   config = resolved
   const panel = panelStore.createPanel(config, 'sftp')
   const displayTitle = config.name || `${config.user}@${config.host}`
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createFtpTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1045,7 +1045,7 @@ async function onConnectWebdav(config: ConnectionConfig, prevStart?: any) {
   config = resolved
   const panel = panelStore.createPanel(config, 'sftp')
   const displayTitle = config.name || `${config.user}@${config.host}`
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createFtpTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1067,7 +1067,7 @@ async function onConnectS3(config: ConnectionConfig, prevStart?: any) {
 
   const panel = panelStore.createPanel(config, 'sftp')
   const displayTitle = config.name || (config.s3Bucket ? `s3://${config.s3Bucket}` : config.host)
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createFtpTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1094,7 +1094,7 @@ async function onConnectRDP(config: ConnectionConfig, prevStart?: any) {
   const displayTitle = config.name || `${config.user}@${config.host}`
 
   const panel = panelStore.createPanel(config, 'rdp')
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createRDPTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1122,7 +1122,7 @@ async function onConnectVNC(config: ConnectionConfig, prevStart?: any) {
   const displayTitle = config.name || config.host
 
   const panel = panelStore.createPanel(config, 'vnc')
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createVNCTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1150,7 +1150,7 @@ async function onConnectSPICE(config: ConnectionConfig, prevStart?: any) {
   const displayTitle = config.name || config.host
 
   const panel = panelStore.createPanel(config, 'spice')
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createSPICETab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1177,7 +1177,7 @@ async function onConnectMonitor(config: ConnectionConfig, prevStart?: any) {
 
   const panel = panelStore.createPanel(config, 'monitor')
   const displayTitle = config.name || `${config.user}@${config.host}`
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createMonitorTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1208,7 +1208,7 @@ async function onConnectDB(config: ConnectionConfig, prevStart?: any) {
   const displayTitle = config.name || `${config.dbType}:${config.user}@${config.host}`
 
   const panel = panelStore.createPanel(config, 'database')
-  panel.title = displayTitle
+  panelStore.updateTitle(panel.id, displayTitle)
   const reposition = prevStart ? closeStartAndReposition(prevStart) : null
   const tab = tabStore.createDBTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
@@ -1251,7 +1251,7 @@ async function onConnectSerial(sessionId: string, portName: string, baudRate: nu
     authType: 'password' as any,
   }
   const panel = panelStore.createPanel(config, 'serial')
-  panel.title = `${portName} (${baudRate})`
+  panelStore.updateTitle(panel.id, `${portName} (${baudRate})`)
   panelStore.bindSession(panel.id, sessionId)
   sessionStore.initSession(sessionId)
   const prev = tabStore.activeTab

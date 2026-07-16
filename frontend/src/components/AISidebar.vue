@@ -86,7 +86,63 @@
     </div>
 
     <div class="ai-input">
+      <!-- Panel tags area -->
+      <div class="ai-panel-tags">
+        <div class="panel-tags-list">
+          <template v-if="lockedPanels.length === 0 && currentIsTerminal">
+            <span class="panel-tag panel-tag-default">{{ currentTerminalLabel }}</span>
+          </template>
+          <template v-else-if="lockedPanels.length > 0">
+            <span
+              v-for="pid in lockedPanels"
+              :key="pid"
+              class="panel-tag"
+            >
+              {{ getPanelDisplayName(pid) }}
+              <button class="panel-tag-close" @click="onRemovePanelTag(pid)">&times;</button>
+            </span>
+          </template>
+          <template v-else>
+            <span class="no-terminal-hint">{{ t('ai.noTerminalHint') }}</span>
+          </template>
+          <el-dropdown trigger="click" @command="onAddPanelTag">
+            <button class="panel-tag-add-btn" :title="t('ai.addTerminal')">+</button>
+            <template #dropdown>
+              <el-dropdown-menu class="dark-dropdown">
+                <el-dropdown-item
+                  v-for="p in availableTerminalPanels"
+                  :key="p.id"
+                  :command="p.id"
+                  :class="{ selected: lockedPanels.includes(p.id) }"
+                >
+                  <span>{{ getPanelDisplayName(p.id) }}</span>
+                  <span class="panel-shell-hint">{{ getPanelShellHint(p.id) }}</span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </div>
+
       <div class="input-container">
+        <!-- # reference dropdown -->
+        <div
+          v-if="hashDropdownVisible && hashMatchingPanels.length > 0"
+          class="hash-dropdown"
+        >
+          <div
+            v-for="(p, i) in hashMatchingPanels"
+            :key="p.id"
+            class="hash-dropdown-item"
+            :class="{ highlighted: i === hashHighlightIndex }"
+            @mousedown.prevent="onSelectHashPanel(p.title)"
+          >
+            <span class="hash-panel-name">#{{ p.title }}</span>
+            <span v-if="lockedPanels.includes(p.id)" class="hash-associated-badge">已关联</span>
+            <span class="hash-panel-hint">{{ getPanelShellHint(p.id) }}</span>
+          </div>
+        </div>
+
         <div v-if="aiStore.queuedMessages.length" class="queued-area">
           <div v-for="q in aiStore.queuedMessages" :key="q.id" class="queued-chip">
             <span class="queued-text">{{ q.content }}</span>
@@ -96,39 +152,44 @@
           </div>
         </div>
         <div class="textarea-wrap">
-          <el-input
-            ref="chatInputRef"
-            v-model="input"
-            type="textarea"
-            :autosize="{ minRows: 3, maxRows: 8 }"
-            :placeholder="t('ai.placeholder')"
-            @keydown.enter="onKeydownEnter"
+          <div
+            ref="editableRef"
+            class="ai-editable"
+            contenteditable="true"
+            :data-placeholder="t('ai.placeholder')"
+            @input="onEditableInput"
+            @keydown="onKeydown"
           />
         </div>
         <div class="input-actions">
-          <el-dropdown trigger="click" @command="onModelChange" v-if="settingsStore.settings.ai.models.length > 0">
-            <button class="ghost-btn model-btn" :title="currentModelName">{{ currentModelName }}</button>
-            <template #dropdown>
-              <el-dropdown-menu class="dark-dropdown">
-                <el-dropdown-item
-                  v-for="m in settingsStore.settings.ai.models"
-                  :key="m.id"
-                  :command="m.id"
-                  :class="{ active: m.id === settingsStore.settings.ai.activeModelId }"
-                >
-                  {{ m.name }}
-                </el-dropdown-item>
-                <el-dropdown-item class="add-model-item" command="__add_model__" :divided="true">
-                  <Plus :size="14" class="add-model-icon" />
-                  <span>{{ t('settings.addModel') }}</span>
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          <button v-else class="ghost-btn model-btn add-model-btn" @click="onModelChange('__add_model__')">
+          <div class="input-actions-left">
+            <button class="ghost-btn hash-btn" title="引用终端" @click="onHashButtonClick">
+              <span class="hash-btn-icon">#</span>
+            </button>
+            <el-dropdown trigger="click" @command="onModelChange" v-if="settingsStore.settings.ai.models.length > 0">
+              <button class="ghost-btn model-btn" :title="currentModelName">{{ currentModelName }}</button>
+              <template #dropdown>
+                <el-dropdown-menu class="dark-dropdown">
+                  <el-dropdown-item
+                    v-for="m in settingsStore.settings.ai.models"
+                    :key="m.id"
+                    :command="m.id"
+                    :class="{ active: m.id === settingsStore.settings.ai.activeModelId }"
+                  >
+                    {{ m.name }}
+                  </el-dropdown-item>
+                  <el-dropdown-item class="add-model-item" command="__add_model__" :divided="true">
+                    <Plus :size="14" class="add-model-icon" />
+                    <span>{{ t('settings.addModel') }}</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <button v-else class="ghost-btn model-btn add-model-btn" @click="onModelChange('__add_model__')">
             <Plus :size="14" />
             <span>{{ t('settings.addModel') }}</span>
           </button>
+          </div>
           <div class="input-actions-right">
             <el-dropdown trigger="click" @command="onModeChange">
               <button class="ghost-btn mode-btn" :title="modeLabel">{{ modeLabel }}</button>
@@ -150,9 +211,9 @@
               </template>
             </el-dropdown>
             <button
-              v-if="!(busy && !input.trim())"
+              v-if="!(busy && !inputText.trim())"
               class="send-btn"
-              :disabled="!input.trim()"
+              :disabled="!inputText.trim()"
               :title="busy ? t('ai.queue') : t('ai.send')"
               @click="onSend"
             >
@@ -187,28 +248,73 @@ const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
 const panelStore = usePanelStore()
 const { t } = useI18n()
-const input = ref('')
-const chatInputRef = ref<any>(null)
+const editableRef = ref<HTMLDivElement | null>(null)
+
+// Derive plain text from contenteditable div (hash-tag spans contribute #PanelName)
+function getEditableText(): string {
+  const el = editableRef.value
+  if (!el) return ''
+  let text = ''
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent || ''
+    } else if (node instanceof HTMLElement) {
+      if (node.classList.contains('hash-tag')) {
+        text += node.getAttribute('data-ref') || node.textContent || ''
+      } else {
+        node.childNodes.forEach(walk)
+      }
+    }
+  }
+  el.childNodes.forEach(walk)
+  return text
+}
+
+// Create a hash-tag span with scoped CSS attribute so styles apply
+function createHashTagSpan(panelTitle: string): HTMLSpanElement {
+  const span = document.createElement('span')
+  span.className = 'hash-tag'
+  span.setAttribute('data-ref', '#' + panelTitle)
+  span.contentEditable = 'false'
+  span.textContent = '#' + panelTitle
+  // Copy scoped style attribute from editable div so Vue scoped CSS matches
+  const el = editableRef.value
+  if (el) {
+    for (const attr of el.attributes) {
+      if (attr.name.startsWith('data-v-') || attr.name.startsWith('data-v')) {
+        span.setAttribute(attr.name, '')
+        break
+      }
+    }
+  }
+  return span
+}
+
+// Computed: input text (for watch)
+const inputText = ref('')
+function syncInputText() {
+  inputText.value = getEditableText()
+}
+
+function onEditableInput() {
+  syncInputText(); refreshHashDropdown()
+  refreshHashDropdown()
+}
+
+// MutationObserver as backup — catches changes that don't fire 'input' event
+onMounted(() => {
+  if (editableRef.value) {
+    mutationObserver = new MutationObserver(() => { syncInputText(); refreshHashDropdown() })
+    mutationObserver.observe(editableRef.value, { childList: true, subtree: true, characterData: true })
+  }
+})
+onUnmounted(() => {
+  mutationObserver?.disconnect()
+})
 
 function focusInput() {
   nextTick(() => {
-    const el = chatInputRef.value?.$el?.querySelector('textarea')
-    if (el instanceof HTMLTextAreaElement) {
-      el.focus()
-    }
-  })
-}
-
-function resizeTextarea() {
-  nextTick(() => {
-    const el = chatInputRef.value?.$el?.querySelector('textarea')
-    if (el instanceof HTMLTextAreaElement) {
-      el.style.height = 'auto'
-      requestAnimationFrame(() => {
-        el.style.height = 'auto'
-        el.style.height = el.scrollHeight + 'px'
-      })
-    }
+    editableRef.value?.focus()
   })
 }
 
@@ -332,6 +438,267 @@ const currentModelName = computed(() => {
 
 const busy = computed(() => aiStore.isRunning || !!aiStore.pendingCommand || !!aiStore.pendingQuestion)
 
+// Panel tags
+const lockedPanels = computed(() => [...tabStore.aiLockedPanelIds])
+
+const currentIsTerminal = computed(() => {
+  const tab = tabStore.activeTab
+  return tab?.type === 'terminal' || tab?.type === 'settings'
+})
+
+const currentTerminalLabel = computed(() => {
+  const tab = tabStore.activeTab
+  if (!tab) return t('ai.currentTerminal')
+  let panelId: string | undefined
+  if (tab.type === 'terminal' || tab.type === 'settings') {
+    panelId = (tab as any).panelId
+  } else if (tab.type === 'workspace') {
+    panelId = (tab as any).activePanelId
+  }
+  if (!panelId) return t('ai.currentTerminal')
+  const panel = panelStore.getPanel(panelId)
+  return panel ? `${t('ai.currentTerminal')}: ${panel.title}` : t('ai.currentTerminal')
+})
+
+const availableTerminalPanels = computed(() => {
+  const result: Array<{ id: string; title: string; type: string; shellPath?: string; config?: any }> = []
+  const seen = new Set<string>()
+  for (const tab of tabStore.tabs) {
+    if (tab.type === 'terminal' && (tab as any).panelId) {
+      const p = panelStore.getPanel((tab as any).panelId)
+      if (p && (p.type === 'ssh' || p.type === 'local') && !seen.has(p.id)) {
+        seen.add(p.id)
+        result.push({ id: p.id, title: p.title, type: p.type, shellPath: p.config?.shellPath, config: p.config })
+      }
+    }
+    if (tab.type === 'workspace' && (tab as any).panelIds) {
+      for (const pid of (tab as any).panelIds) {
+        const p = panelStore.getPanel(pid)
+        if (p && (p.type === 'ssh' || p.type === 'local') && !seen.has(p.id)) {
+          seen.add(p.id)
+          result.push({ id: p.id, title: p.title, type: p.type, shellPath: p.config?.shellPath, config: p.config })
+        }
+      }
+    }
+  }
+  return result
+})
+
+function getPanelDisplayName(panelId: string): string {
+  const p = panelStore.getPanel(panelId)
+  if (!p) return panelId
+  const dup = availableTerminalPanels.value.filter(ap => ap.title === p.title)
+  return dup.length > 1 ? `${p.title} (id: ${p.id})` : p.title
+}
+
+function getPanelShellHint(panelId: string): string {
+  const p = panelStore.getPanel(panelId)
+  if (!p) return ''
+  const shellPath = p.config?.shellPath
+  if (shellPath) {
+    const lower = shellPath.toLowerCase()
+    if (lower.includes('bash') || lower.includes('sh')) return 'Bash'
+    if (lower.includes('powershell') || lower.includes('pwsh')) return 'PowerShell'
+    if (lower.includes('cmd')) return 'CMD'
+    if (lower.includes('zsh')) return 'Zsh'
+    return shellPath.split(/[\\/]/).pop() || 'Shell'
+  }
+  if (p.type === 'ssh') return 'SSH'
+  return ''
+}
+
+function onRemovePanelTag(panelId: string) {
+  tabStore.removeAILockedPanel(panelId)
+}
+
+function onAddPanelTag(panelId: string) {
+  if (tabStore.isPanelAILocked(panelId)) {
+    tabStore.removeAILockedPanel(panelId)
+  } else {
+    tabStore.addAILockedPanel(panelId)
+  }
+}
+
+// # reference state
+const hashQuery = ref('')
+const hashDropdownVisible = ref(false)
+const hashHighlightIndex = ref(0)
+
+const hashMatchingPanels = computed(() => {
+  const src = hashDropdownVisible.value && !hashQuery.value
+    ? availableTerminalPanels.value
+    : availableTerminalPanels.value
+  let list = hashQuery.value
+    ? src.filter(p => p.title.toLowerCase().includes(hashQuery.value.toLowerCase()))
+    : [...src]
+  // Sort: associated panels first
+  list = [...list].sort((a, b) => {
+    const aLocked = lockedPanels.value.includes(a.id) ? 0 : 1
+    const bLocked = lockedPanels.value.includes(b.id) ? 0 : 1
+    return aLocked - bLocked
+  })
+  return list
+})
+
+function findLastHashIndex(text: string): number {
+  for (let i = text.length - 1; i >= 0; i--) {
+    if (text[i] === '#') {
+      if (i === 0 || /[\s,;:.(\{\[]/.test(text[i - 1])) {
+        return i
+      }
+    }
+  }
+  return -1
+}
+
+// Detect an active #query at the caret. Works on the DOM text node the caret
+// sits in, so an adjacent hash-tag span never interferes with the check.
+function detectHashQuery(): string | null {
+  const sel = window.getSelection()
+  const el = editableRef.value
+  if (!sel || !sel.rangeCount || !el) return null
+  const node = sel.anchorNode
+  if (!node || node.nodeType !== Node.TEXT_NODE || !el.contains(node)) return null
+  const caret = sel.anchorOffset
+  const before = (node.textContent || '').slice(0, caret)
+  // Find last # in this text node before the caret
+  const hashIdx = before.lastIndexOf('#')
+  if (hashIdx < 0) return null
+  const query = before.slice(hashIdx + 1)
+  // query must not contain whitespace
+  if (/\s/.test(query)) return null
+  // char before # (within this node) must be empty or a separator
+  if (hashIdx > 0 && !/[\s,;:.(\{\[]/.test(before[hashIdx - 1])) return null
+  return query
+}
+
+function refreshHashDropdown() {
+  const query = detectHashQuery()
+  if (query !== null) {
+    hashDropdownVisible.value = true
+    hashQuery.value = query
+    hashHighlightIndex.value = 0
+  } else {
+    hashDropdownVisible.value = false
+    hashQuery.value = ''
+  }
+}
+
+function onSelectHashPanel(panelTitle: string) {
+  const el = editableRef.value
+  if (!el) return
+
+  const text = getEditableText()
+  const lastHashIdx = -1
+
+  if (lastHashIdx >= 0) {
+    // Text-triggered: replace #query with tag span
+    const before = text.slice(0, lastHashIdx)
+    const after = text.slice(lastHashIdx + 1)
+    const spaceIdx = after.indexOf(' ')
+    const rest = spaceIdx >= 0 ? after.slice(spaceIdx) : ' '
+
+    const tagSpan = createHashTagSpan(panelTitle)
+
+    // Rebuild content
+    el.innerHTML = ''
+    if (before) el.appendChild(document.createTextNode(before))
+    el.appendChild(tagSpan)
+    if (rest) el.appendChild(document.createTextNode(rest))
+    // Place cursor after tag, delay to let DOM settle
+    nextTick(() => {
+      const sel2 = window.getSelection()
+      if (sel2) {
+        const range = document.createRange()
+        range.setStartAfter(tagSpan)
+        range.collapse(true)
+        sel2.removeAllRanges()
+        sel2.addRange(range)
+      }
+    })
+  } else {
+    // Button-triggered: append tag span at cursor position
+    const sel = window.getSelection()
+    // Remove the typed #query first (caret text node), then insert the tag
+    if (sel && sel.rangeCount > 0 && sel.anchorNode && sel.anchorNode.nodeType === Node.TEXT_NODE && el.contains(sel.anchorNode)) {
+      const tn = sel.anchorNode as Text
+      const caretPos = sel.anchorOffset
+      const c = tn.textContent || ''
+      const hi = c.slice(0, caretPos).lastIndexOf('#')
+      if (hi >= 0) {
+        const delRange = document.createRange()
+        delRange.setStart(tn, hi)
+        delRange.setEnd(tn, caretPos)
+        delRange.deleteContents()
+        sel.removeAllRanges()
+        sel.addRange(delRange)
+      }
+    }
+    if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+      const range = sel.getRangeAt(0)
+      range.collapse(false) // collapse to end
+
+      const tagSpan = createHashTagSpan(panelTitle)
+
+      range.insertNode(tagSpan)
+      const trailingBtn = document.createTextNode(' ')
+      tagSpan.after(trailingBtn)
+      range.setStart(trailingBtn, 0)
+      range.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    } else {
+      // Fallback: append at end
+      const tagSpan = createHashTagSpan(panelTitle)
+      el.appendChild(tagSpan)
+      el.appendChild(document.createTextNode(' '))
+    }
+  }
+
+  syncInputText(); refreshHashDropdown()
+  hashDropdownVisible.value = false
+  hashQuery.value = ''
+  hashHighlightIndex.value = 0
+
+  // Auto-add to locked panels
+  const panel = availableTerminalPanels.value.find(p => p.title === panelTitle)
+  if (panel && !tabStore.isPanelAILocked(panel.id)) {
+    tabStore.addAILockedPanel(panel.id)
+  }
+}
+
+function onHashButtonClick() {
+  const el = editableRef.value
+  if (!el) return
+  el.focus()
+
+  const sel = window.getSelection()
+  if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+    const range = sel.getRangeAt(0)
+    range.deleteContents()
+    const textNode = document.createTextNode('#')
+    range.insertNode(textNode)
+    range.setStart(textNode, 1)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  } else {
+    const textNode = document.createTextNode('#')
+    el.appendChild(textNode)
+    const range = document.createRange()
+    range.setStart(textNode, 1)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  }
+  syncInputText(); refreshHashDropdown()
+}
+
+function onEscHashDropdown() {
+  hashDropdownVisible.value = false
+  hashQuery.value = ''
+}
+
 function onModeChange(mode: string) {
   aiStore.mode = mode as ExecutionMode
 }
@@ -427,7 +794,9 @@ function aiCopySelection() {
 function aiAskSelection() {
   const selection = window.getSelection()
   if (selection && selection.toString()) {
-    input.value = selection.toString()
+    const el = editableRef.value
+    if (el) el.textContent = selection.toString()
+    syncInputText(); refreshHashDropdown()
     if (!aiStore.visible) {
       aiStore.visible = true
     }
@@ -450,7 +819,7 @@ watch(() => aiStore.currentSessionId, () => {
 
 watch(() => aiStore.visible, (visible) => {
   if (visible) {
-    resizeTextarea()
+    nextTick(() => editableRef.value?.focus())
   }
   if (!visible && isMaximized.value) {
     isMaximized.value = false
@@ -459,24 +828,55 @@ watch(() => aiStore.visible, (visible) => {
   }
 })
 
-function onKeydownEnter(e: KeyboardEvent) {
-  if (e.shiftKey) {
-    return
+function onKeydown(e: KeyboardEvent) {
+  // Hash dropdown navigation
+  if (hashDropdownVisible.value) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onEscHashDropdown()
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      hashHighlightIndex.value = Math.min(hashHighlightIndex.value + 1, hashMatchingPanels.value.length - 1)
+      return
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      hashHighlightIndex.value = Math.max(hashHighlightIndex.value - 1, 0)
+      return
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (hashMatchingPanels.value.length > 0) {
+        onSelectHashPanel(hashMatchingPanels.value[hashHighlightIndex.value].title)
+      }
+      return
+    }
   }
-  e.preventDefault()
-  onSend()
+
+  // Normal Enter to send
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    onSend()
+  }
+}
+
+function clearInput() {
+  const el = editableRef.value
+  if (el) el.innerHTML = ''
+  syncInputText(); refreshHashDropdown()
 }
 
 async function onSend() {
-  const text = input.value.trim()
+  const text = getEditableText().trim()
   if (!text) return
   if (busy.value) {
     aiStore.enqueueMessage(text)
-    input.value = ''
-    resizeTextarea()
+    clearInput()
     return
   }
-  input.value = ''
+  clearInput()
   scrollToBottom()
   await runAgent(text)
   scrollToBottom()
@@ -560,7 +960,9 @@ function onResizeStart(e: MouseEvent) {
 function onAskAI(e: Event) {
   const text = (e as CustomEvent).detail as string
   if (text) {
-    input.value = text
+    const el = editableRef.value
+    if (el) el.textContent = text
+    syncInputText(); refreshHashDropdown()
     if (!aiStore.visible) {
       aiStore.visible = true
     }
@@ -856,38 +1258,54 @@ defineExpose({ focusInput })
 .ai-input {
   padding: 10px 16px;
   flex-shrink: 0;
+  position: relative;
 }
 .input-container {
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-top-color: transparent;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: var(--bg-elevated);
   transition: border-color 0.15s ease;
+  position: relative;
 }
 .input-container:focus-within {
   border-color: var(--accent);
+  border-top-color: var(--accent);
 }
-.textarea-wrap :deep(.el-textarea) {
-  box-shadow: none;
-  border: none;
+.textarea-wrap {
+  position: relative;
 }
-.textarea-wrap :deep(.el-textarea__inner) {
+.ai-editable {
   padding: 12px 16px;
   font-size: 13px;
-  border: none!important;
-  box-shadow: none !important;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
   background: transparent;
-  border-radius: 0;
-  resize: none;
+  border: none;
   outline: none;
+  min-height: 60px;
+  max-height: 220px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
 }
-.textarea-wrap :deep(.el-textarea__inner:focus) {
-  border: none !important;
-  box-shadow: none !important;
-  outline: none;
-}
-.textarea-wrap :deep(.el-textarea__inner::placeholder) {
-  font-size: 13px;
+.ai-editable:empty::before {
+  content: attr(data-placeholder);
   color: var(--text-muted);
+  pointer-events: none;
+}
+.hash-tag {
+  display: inline;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  user-select: none;
+  margin: 0 2px;
 }
 .input-actions {
   display: flex;
@@ -895,6 +1313,11 @@ defineExpose({ focusInput })
   gap: 8px;
   align-items: center;
   padding: 0 8px 8px 8px;
+}
+.input-actions-left {
+  display: flex;
+  gap: 2px;
+  align-items: center;
 }
 .input-actions-right {
   display: flex;
@@ -1012,6 +1435,127 @@ defineExpose({ focusInput })
 .ai-menu-item:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+.ai-panel-tags {
+  padding: 4px 12px;
+  background: var(--bg-overlay);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.panel-tags-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 22px;
+}
+.panel-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid var(--accent-glow);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+.panel-tag-default {
+  background: var(--bg-overlay);
+  color: var(--text-muted);
+  border-color: var(--border-subtle);
+}
+.panel-tag-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+.panel-tag-close:hover {
+  color: var(--text-primary);
+}
+.panel-tag-add-btn {
+  background: none;
+  border: 1px dashed var(--border-hover);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.panel-tag-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.no-terminal-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.panel-shell-hint {
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.hash-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: -1px;
+  right: -1px;
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--accent-glow);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  margin-bottom: 4px;
+}
+.hash-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.1s;
+}
+.hash-dropdown-item:hover,
+.hash-dropdown-item.highlighted {
+  background: var(--accent-subtle);
+}
+.hash-panel-name {
+  color: var(--accent);
+  font-weight: 500;
+}
+.hash-panel-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.hash-associated-badge {
+  font-size: 9px;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  padding: 0 4px;
+  border-radius: 2px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+.hash-btn-icon {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
 }
 .queued-area {
   display: flex;

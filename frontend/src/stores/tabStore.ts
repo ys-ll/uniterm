@@ -7,13 +7,13 @@ import { t } from '../i18n'
 const tabState = reactive<{
   tabs: Tab[]
   activeTabId: string | null
-  aiLockedPanelId: string | null
+  aiLockedPanelIds: Set<string>
   broadcastWorkspaceId: string | null
   tabNotifications: Record<string, boolean>
 }>({
   tabs: [],
   activeTabId: null,
-  aiLockedPanelId: null,
+  aiLockedPanelIds: new Set<string>(),
   broadcastWorkspaceId: null,
   tabNotifications: {}
 })
@@ -38,7 +38,11 @@ export const useTabStore = defineStore('tab', () => {
   const activeTab = computed(() =>
     tabState.tabs.find(t => t.id === tabState.activeTabId) || null
   )
-  const aiLockedPanelId = computed(() => tabState.aiLockedPanelId)
+  const aiLockedPanelId = computed(() => {
+    const ids = [...tabState.aiLockedPanelIds]
+    return ids.length > 0 ? ids[0] : null
+  })
+  const aiLockedPanelIds = computed(() => tabState.aiLockedPanelIds)
   const broadcastWorkspaceId = computed(() => tabState.broadcastWorkspaceId)
 
   function toggleBroadcast(workspaceId: string) {
@@ -277,8 +281,8 @@ export const useTabStore = defineStore('tab', () => {
       return [removed.panelId]
     })()
 
-    if (tabState.aiLockedPanelId && removedPanelIds.includes(tabState.aiLockedPanelId)) {
-      tabState.aiLockedPanelId = null
+    for (const pid of removedPanelIds) {
+      tabState.aiLockedPanelIds.delete(pid)
     }
 
     return removedPanelIds
@@ -340,7 +344,7 @@ export const useTabStore = defineStore('tab', () => {
     if (t && t.type === 'terminal') {
       const panelStore = usePanelStore()
       const panel = panelStore.getPanel(t.panelId)
-      if (panel) panel.title = name
+      if (panel) panelStore.updateTitle(panel.id, name)
     }
   }
 
@@ -529,12 +533,36 @@ export const useTabStore = defineStore('tab', () => {
 
   // ── AI lock ──
 
-  function setAILockedPanel(panelId: string | null) {
-    tabState.aiLockedPanelId = panelId
+  function getAILockedPanels(): string[] {
+    return [...tabState.aiLockedPanelIds]
   }
 
+  function isPanelAILocked(panelId: string): boolean {
+    return tabState.aiLockedPanelIds.has(panelId)
+  }
+
+  function addAILockedPanel(panelId: string) {
+    tabState.aiLockedPanelIds.add(panelId)
+  }
+
+  function removeAILockedPanel(panelId: string) {
+    tabState.aiLockedPanelIds.delete(panelId)
+  }
+
+  function clearAILockedPanels() {
+    tabState.aiLockedPanelIds.clear()
+  }
+
+  // Keep old setter for backward compat
+  function setAILockedPanel(panelId: string | null) {
+    tabState.aiLockedPanelIds.clear()
+    if (panelId) tabState.aiLockedPanelIds.add(panelId)
+  }
+
+  // Keep old getter for backward compat
   function getAILockedPanel(): string | null {
-    return tabState.aiLockedPanelId
+    const ids = [...tabState.aiLockedPanelIds]
+    return ids.length > 0 ? ids[0] : null
   }
 
   // ── Layout helpers ──
@@ -614,6 +642,7 @@ export const useTabStore = defineStore('tab', () => {
     activeTabId,
     activeTab,
     aiLockedPanelId,
+    aiLockedPanelIds,
     createTerminalTab,
     createTerminalTabAt,
     replaceStartTab,
@@ -644,6 +673,11 @@ export const useTabStore = defineStore('tab', () => {
     movePanelInWorkspace,
     setAILockedPanel,
     getAILockedPanel,
+    getAILockedPanels,
+    isPanelAILocked,
+    addAILockedPanel,
+    removeAILockedPanel,
+    clearAILockedPanels,
     toggleTabLock,
     broadcastWorkspaceId,
     toggleBroadcast,

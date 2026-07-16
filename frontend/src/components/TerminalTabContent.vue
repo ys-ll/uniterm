@@ -56,10 +56,10 @@ function handleClose(_panelId: string) {
 }
 
 function onToggleAiLock(panelId: string) {
-  if (tabStore.aiLockedPanelId === panelId) {
-    tabStore.setAILockedPanel(null)
+  if (tabStore.isPanelAILocked(panelId)) {
+    tabStore.removeAILockedPanel(panelId)
   } else {
-    tabStore.setAILockedPanel(panelId)
+    tabStore.addAILockedPanel(panelId)
   }
 }
 

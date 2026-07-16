@@ -22,9 +22,18 @@ export interface WatchResult {
 // style redraws (which overwrite the line with bare \r) collapse to their
 // final state — the same way the text appears on screen.
 function toDisplayLines(clean: string): string[] {
-  return clean.split(/\r?\n/).map((line) => {
+  // Normalize \r\n to \n, then handle bare \r (progress-bar redraws).
+  // Bare \r (not at end of line) means the line was overwritten — keep only
+  // the text after the last such \r.  Trailing \r (from \r\n that was already
+  // normalized) is just stripped.
+  const normalized = clean.replace(/\r\n/g, '\n')
+  return normalized.split('\n').map((line) => {
+    // If the only \r is at the very end, just strip it (it's a trailing \r).
+    // Otherwise keep the text after the last \r (progress-bar style).
     const cr = line.lastIndexOf('\r')
-    return cr >= 0 ? line.slice(cr + 1) : line
+    if (cr < 0) return line
+    if (cr === line.length - 1) return line.slice(0, -1)
+    return line.slice(cr + 1)
   })
 }
 
@@ -178,24 +187,44 @@ export function truncateOutput(
   return `${head}\n\n─────── [截断: 共 ${total} 行, 已省略 ${omitted} 行] ────────\n调整 head_lines / tail_lines 参数可查看更多内容。\n\n${tail}`
 }
 
-function resolveActiveSession(): { sessionId: string; shellPath?: string } {
+function resolveActiveSession(panelTitle?: string): { sessionId: string; shellPath?: string } {
   const tabStore = useTabStore()
   const panelStore = usePanelStore()
 
-  const lockedPanelId = tabStore.getAILockedPanel()
-  let panel = lockedPanelId ? panelStore.getPanel(lockedPanelId) : null
+  let panel
 
-  if (!panel) {
-    const activeTab = tabStore.activeTab
-    if (activeTab?.type === 'terminal' || activeTab?.type === 'settings') {
-      panel = panelStore.getPanel(activeTab.panelId)
-    } else if (activeTab?.type === 'workspace' && activeTab.activePanelId) {
-      panel = panelStore.getPanel(activeTab.activePanelId)
+  if (panelTitle) {
+    // Match by title. panelStore.panels is a Map<string, Panel>
+    const allPanels = [...panelStore.panels.values()]
+    // Try exact title match first
+    panel = allPanels.find(p => p.title === panelTitle)
+    // Try suffix match for duplicate names: "title (id: xxx)"
+    if (!panel) {
+      const suffixMatch = panelTitle.match(/^(.+)\s+\(id:\s*(.+)\)$/)
+      if (suffixMatch) {
+        panel = allPanels.find(p => p.title === suffixMatch[1] && p.id === suffixMatch[2])
+      }
     }
-  }
-
-  if (!panel || !panel.sessionId) {
-    throw new Error('No active terminal session')
+    if (!panel || !panel.sessionId) {
+      throw new Error(`Panel "${panelTitle}" not found or has no active session`)
+    }
+  } else {
+    // Default logic: first locked panel > active panel
+    const lockedPanels = tabStore.getAILockedPanels()
+    if (lockedPanels.length > 0) {
+      panel = panelStore.getPanel(lockedPanels[0])
+    }
+    if (!panel) {
+      const activeTab = tabStore.activeTab
+      if (activeTab?.type === 'terminal' || activeTab?.type === 'settings') {
+        panel = panelStore.getPanel(activeTab.panelId)
+      } else if (activeTab?.type === 'workspace' && activeTab.activePanelId) {
+        panel = panelStore.getPanel(activeTab.activePanelId)
+      }
+    }
+    if (!panel || !panel.sessionId) {
+      throw new Error('No active terminal session')
+    }
   }
 
   return { sessionId: panel.sessionId, shellPath: panel.config?.shellPath }
@@ -235,9 +264,10 @@ export async function executeCommand(
   timeoutMs: number = 60000,
   headLines: number = 50,
   tailLines: number = 300,
-  shouldCancel?: () => boolean
+  shouldCancel?: () => boolean,
+  panelTitle?: string
 ): Promise<ExecuteResult> {
-  const { sessionId, shellPath } = resolveActiveSession()
+  const { sessionId, shellPath } = resolveActiveSession(panelTitle)
   const promptLine = capturePromptLine(sessionId)
   const fullCommand = buildCommand(command, shellPath)
   const newline = getShellNewline(shellPath)
@@ -282,8 +312,8 @@ export interface StartResult {
   started: boolean
 }
 
-export async function startCommand(command: string): Promise<StartResult> {
-  const { sessionId, shellPath } = resolveActiveSession()
+export async function startCommand(command: string, panelTitle?: string): Promise<StartResult> {
+  const { sessionId, shellPath } = resolveActiveSession(panelTitle)
   const newline = getShellNewline(shellPath)
 
   await SessionWrite(sessionId, command + newline)
@@ -310,8 +340,8 @@ export interface CaptureResult {
   output: string
 }
 
-export function captureTerminal(tailLines: number = 200): CaptureResult {
-  const { sessionId } = resolveActiveSession()
+export function captureTerminal(tailLines: number = 200, panelTitle?: string): CaptureResult {
+  const { sessionId } = resolveActiveSession(panelTitle)
 
   const managed = getManagedTerminal(sessionId)
   if (!managed || !managed.terminal) {
@@ -364,9 +394,10 @@ export async function collectOutput(
   timeoutMs: number = 30000,
   headLines: number = 100,
   tailLines: number = 300,
-  shouldCancel?: () => boolean
+  shouldCancel?: () => boolean,
+  panelTitle?: string
 ): Promise<CollectResult> {
-  const { sessionId } = resolveActiveSession()
+  const { sessionId } = resolveActiveSession(panelTitle)
   const promptLine = capturePromptLine(sessionId)
 
   const { promise } = watchOutput(sessionId, promptLine, timeoutMs, shouldCancel)
@@ -390,9 +421,10 @@ interface SendKeyResult {
 export async function sendTerminalKey(
   input?: string,
   control?: 'ctrl_c' | 'ctrl_d' | 'enter',
-  sendEnter: boolean = true
+  sendEnter: boolean = true,
+  panelTitle?: string
 ): Promise<SendKeyResult> {
-  const { sessionId, shellPath } = resolveActiveSession()
+  const { sessionId, shellPath } = resolveActiveSession(panelTitle)
 
   let data: string
   if (control) {

@@ -111,45 +111,65 @@ function getShellGuidance(shellPath?: string, isWindowsShell?: boolean): string 
  */
 function buildDynamicContext(): string {
   const store = useAIStore()
-  const activePanel = getActivePanel()
+  const tabStore = useTabStore()
+  const panelStore = usePanelStore()
 
-  if (!activePanel) return ''
+  const lockedPanels = tabStore.getAILockedPanels()
+  const panelIds = lockedPanels.length > 0
+    ? lockedPanels
+    : (() => {
+        const activePanel = getActivePanel()
+        return activePanel ? [activePanel.id] : []
+      })()
+
+  if (panelIds.length === 0) return ''
 
   const parts: string[] = []
-  const shellPath = activePanel.config?.shellPath
+  parts.push('AVAILABLE PANELS:')
 
-  const shellName = shellPath
-    ? getShellName(shellPath)
-    : (activePanel.type === 'ssh' ? 'SSH (Unix-like)' : 'Unknown')
+  // Collect panels, dedupe titles with id suffix
+  const titleCounts = new Map<string, number>()
+  const panels = panelIds.map(id => panelStore.getPanel(id)).filter(Boolean)
 
-  const isWindowsShell = !!shellPath && (
-    shellPath.toLowerCase().includes('powershell') ||
-    shellPath.toLowerCase().includes('pwsh') ||
-    shellPath.toLowerCase().includes('cmd')
-  )
-
-  const syntaxStyle = isWindowsShell
-    ? (shellPath!.toLowerCase().includes('cmd')
-      ? 'Windows CMD (dir, cd, type, wmic)'
-      : 'Windows PowerShell (cmdlets like Get-ChildItem, Set-Location)')
-    : 'Unix (ls, cat, grep, df, find)'
-
-  parts.push(`========================================`)
-  parts.push(`CURRENT SHELL: ${shellName}`)
-  parts.push(`SYNTAX: ${syntaxStyle}`)
-  parts.push(`PANEL: ${activePanel.title} (id: ${activePanel.id})`)
-  parts.push(`========================================`)
-
-  if (activePanel.type === 'ssh' && activePanel.config) {
-    parts.push(`Connected to: ${activePanel.config.user}@${activePanel.config.host}:${activePanel.config.port}`)
+  // First pass: count titles to detect duplicates
+  for (const p of panels) {
+    titleCounts.set(p!.title, (titleCounts.get(p!.title) || 0) + 1)
   }
 
-  // Detect terminal switch and inject explicit notice
+  // Second pass: build display names
+  let idx = 1
+  for (const p of panels) {
+    if (!p) continue
+    const shellPath = p.config?.shellPath
+    const shellName = shellPath
+      ? getShellName(shellPath)
+      : (p.type === 'ssh' ? 'SSH (Unix-like)' : 'Unknown')
+
+    const displayName = titleCounts.get(p.title)! > 1
+      ? `${p.title} (id: ${p.id})`
+      : p.title
+
+    const lineParts: string[] = []
+    lineParts.push(`  ${idx}. "${displayName}" [${shellName}]`)
+
+    if (p.type === 'ssh' && p.config) {
+      lineParts.push(` [SSH: ${p.config.user}@${p.config.host}:${p.config.port}]`)
+    }
+
+    parts.push(lineParts.join(''))
+    idx++
+  }
+
+  parts.push('\n' + '='.repeat(40))
+
+  // Terminal switch detection
   const lastCtx = store.lastPanelContext
-  if (lastCtx && lastCtx.panelId !== activePanel.id) {
+  if (lastCtx && lockedPanels.length > 0 && !lockedPanels.includes(lastCtx.panelId)) {
     const prev = lastCtx.shellPath ? getShellName(lastCtx.shellPath) : 'another terminal'
-    const curr = shellPath ? getShellName(shellPath) : (activePanel.type === 'ssh' ? 'SSH' : 'local terminal')
-    parts.push(`\n【TERMINAL SWITCHED】The user has switched from "${prev}" to "${curr}". This is a DIFFERENT terminal environment. Reassess the environment from scratch.`)
+    const firstPanel = panelStore.getPanel(lockedPanels[0])
+    const currShell = firstPanel?.config?.shellPath
+    const curr = currShell ? getShellName(currShell) : (firstPanel?.type === 'ssh' ? 'SSH' : 'local terminal')
+    parts.push(`\n【NOTICE】User changed AI panel selection from "${prev}" to "${curr}". Now targeting "${firstPanel?.title || 'unknown'}". Reassess the environment from scratch.`)
   }
 
   return parts.join('\n')
@@ -215,9 +235,14 @@ export async function runAgent(userInput: string) {
   store.status = 'thinking'
 
   // Record current panel context so buildDynamicContext can detect terminal switches
+  const tabStore = useTabStore()
+  const lockedPanels = tabStore.getAILockedPanels()
   const activePanel = getActivePanel()
-  if (activePanel) {
-    store.setLastPanelContext(activePanel.id, activePanel.config?.shellPath || '')
+  const trackPanelId = lockedPanels.length > 0 ? lockedPanels[0] : activePanel?.id
+  if (trackPanelId) {
+    const panelStore = usePanelStore()
+    const tp = panelStore.getPanel(trackPanelId)
+    store.setLastPanelContext(trackPanelId, tp?.config?.shellPath || '')
   }
 
   if (userInput) {
@@ -431,7 +456,8 @@ export async function runAgent(userInput: string) {
 
       try {
         store.status = 'executing'
-        const result = await executeCommand(command, timeoutMs, headLines, tailLines, () => store.stopRequested)
+        const panelTitle = tu.input.panel as string | undefined
+        const result = await executeCommand(command, timeoutMs, headLines, tailLines, () => store.stopRequested, panelTitle)
         if (result.cancelled || store.stopRequested) {
           store.addMessage({
             id: `msg-${Date.now()}`,
@@ -486,7 +512,8 @@ export async function runAgent(userInput: string) {
 
       try {
         store.status = 'executing'
-        const result = await startCommand(command)
+        const panelTitle = tu.input.panel as string | undefined
+        const result = await startCommand(command, panelTitle)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -505,7 +532,8 @@ export async function runAgent(userInput: string) {
       const tailLines = (tu.input.tail_lines as number) ?? 200
       try {
         store.status = 'executing'
-        const result = captureTerminal(tailLines)
+        const panelTitle = tu.input.panel as string | undefined
+        const result = captureTerminal(tailLines, panelTitle)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -527,7 +555,8 @@ export async function runAgent(userInput: string) {
       const tailLines = (tu.input.tail_lines as number) ?? 300
       try {
         store.status = 'executing'
-        const result = await collectOutput(timeoutMs, headLines, tailLines, () => store.stopRequested)
+        const panelTitle = tu.input.panel as string | undefined
+        const result = await collectOutput(timeoutMs, headLines, tailLines, () => store.stopRequested, panelTitle)
         if (store.stopRequested) {
           store.addMessage({
             id: `msg-${Date.now()}`,
@@ -559,10 +588,12 @@ export async function runAgent(userInput: string) {
       const sendEnter = (tu.input.send_enter as boolean) ?? true
       try {
         store.status = 'executing'
+        const panelTitle = tu.input.panel as string | undefined
         const result = await sendTerminalKey(
           input,
           control as 'ctrl_c' | 'ctrl_d' | 'enter' | undefined,
-          sendEnter
+          sendEnter,
+          panelTitle
         )
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -581,7 +612,8 @@ export async function runAgent(userInput: string) {
     } else if (tu.name === 'interrupt_command') {
       try {
         store.status = 'executing'
-        const result = await sendTerminalKey(undefined, 'ctrl_c')
+        const panelTitle = tu.input.panel as string | undefined
+        const result = await sendTerminalKey(undefined, 'ctrl_c', true, panelTitle)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',

@@ -39,6 +39,16 @@ const panelState = reactive<{
 })
 
 export const usePanelStore = defineStore('panel', () => {
+  function makeTitleUnique(title: string, excludePanelId?: string): string {
+    const others = [...panelState.panels.values()]
+      .filter(p => p.id !== excludePanelId)
+      .map(p => p.title)
+    if (!others.includes(title)) return title
+    let n = 2
+    while (others.includes(`${title} (${n})`)) n++
+    return `${title} (${n})`
+  }
+
   function createPanel(config: ConnectionConfig | null, type: Panel['type'] = 'ssh'): Panel {
     const id = `panel-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     let title: string
@@ -49,12 +59,13 @@ export const usePanelStore = defineStore('panel', () => {
     } else {
       title = 'New Panel'
     }
+    const uniqueTitle = makeTitleUnique(title)
     const panel: Panel = {
       id,
       tabId: '',
       type,
       sessionId: null,
-      title,
+      title: uniqueTitle,
       status: 'disconnected',
       config
     }
@@ -82,7 +93,8 @@ export const usePanelStore = defineStore('panel', () => {
 
   function updateTitle(panelId: string, title: string) {
     const p = panelState.panels.get(panelId)
-    if (p) p.title = title
+    if (!p) return
+    p.title = makeTitleUnique(title, panelId)
   }
 
   function movePanelToTab(panelId: string, tabId: string) {

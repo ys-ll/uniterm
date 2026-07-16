@@ -159,11 +159,11 @@ const tabIcon = computed(() => {
 
 const isAILocked = computed(() => {
   if (props.tab.type === 'workspace') {
-    if (!tabStore.aiLockedPanelId) return false
-    return props.tab.panelIds.includes(tabStore.aiLockedPanelId)
+    if (tabStore.aiLockedPanelIds.size === 0) return false
+    return props.tab.panelIds.some(id => tabStore.isPanelAILocked(id))
   }
   if (props.tab.type !== 'terminal') return false
-  return tabStore.aiLockedPanelId === props.tab.panelId
+  return tabStore.isPanelAILocked(props.tab.panelId)
 })
 
 
@@ -305,7 +305,7 @@ async function duplicateTab() {
   const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
   if (!panel) return
   const newPanel = panelStore.createPanel(panel.config, panel.type)
-  newPanel.title = panel.title
+  panelStore.updateTitle(newPanel.id, panel.title)
   if (panel.config) {
     try {
       const info = await CreateSession(panel.config.type, panel.config)
@@ -314,7 +314,7 @@ async function duplicateTab() {
       console.error('Failed to duplicate session:', e)
     }
   }
-  const newTab = tabStore.createTerminalTab(panel.title, newPanel.id)
+  const newTab = tabStore.createTerminalTab(newPanel.title, newPanel.id)
   panelStore.movePanelToTab(newPanel.id, newTab.id)
   closeContextMenu()
 }

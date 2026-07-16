@@ -143,6 +143,10 @@ export const AVAILABLE_TOOLS = [
         tail_lines: {
           type: 'number',
           description: 'Number of lines to keep from the END of output when truncation occurs. Default 300. Increase to see more recent output (errors usually at the end).'
+        },
+        panel: {
+          type: 'string',
+          description: 'Target panel by its title. Use the exact title from AVAILABLE PANELS in context. Omit to use the default panel.'
         }
       },
       required: ['command', 'risk']
@@ -162,6 +166,10 @@ export const AVAILABLE_TOOLS = [
           type: 'string',
           enum: ['read', 'write', 'dangerous'],
           description: 'The risk level of this command:\n- "read": only inspects/views data, absolutely no modifications\n- "write": modifies or creates data but not system-destructive\n- "dangerous": potentially destructive or system-altering'
+        },
+        panel: {
+          type: 'string',
+          description: 'Target panel by its title. Use the exact title from AVAILABLE PANELS in context. Omit to use the default panel.'
         }
       },
       required: ['command', 'risk']
@@ -176,6 +184,10 @@ export const AVAILABLE_TOOLS = [
         tail_lines: {
           type: 'number',
           description: 'Lines from the bottom of the buffer. Default 200. Increase to see more of the recent output.'
+        },
+        panel: {
+          type: 'string',
+          description: 'Target panel by its title. Use the exact title from AVAILABLE PANELS in context. Omit to use the default panel.'
         }
       }
     }
@@ -197,6 +209,10 @@ export const AVAILABLE_TOOLS = [
         tail_lines: {
           type: 'number',
           description: 'Tail lines to keep on truncation. Default 300.'
+        },
+        panel: {
+          type: 'string',
+          description: 'Target panel by its title. Use the exact title from AVAILABLE PANELS in context. Omit to use the default panel.'
         }
       }
     }
@@ -219,6 +235,10 @@ export const AVAILABLE_TOOLS = [
         send_enter: {
           type: 'boolean',
           description: 'Whether to send an Enter/Return key after the input text to submit it. Default true. Set to false only when you need to send partial input without submitting (e.g., typing a password character by character). Ignored when using control.'
+        },
+        panel: {
+          type: 'string',
+          description: 'Target panel by its title. Use the exact title from AVAILABLE PANELS in context. Omit to use the default panel.'
         }
       }
     }
@@ -228,7 +248,12 @@ export const AVAILABLE_TOOLS = [
     description: 'Send Ctrl+C to cancel the currently running command. Use this when a command is stuck, hanging, or needs to be stopped before running a different command.',
     input_schema: {
       type: 'object',
-      properties: {}
+      properties: {
+        panel: {
+          type: 'string',
+          description: 'Target panel by its title. Use the exact title from AVAILABLE PANELS in context. Omit to use the default panel.'
+        }
+      }
     }
   },
   {

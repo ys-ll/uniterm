@@ -120,7 +120,7 @@ const settingsStore = useSettingsStore()
 const showCredentialDialog = inject<(title: string, subtitle: string, fields: ('user' | 'password')[], initialUser?: string, initialPassword?: string) => Promise<CredentialResult | null>>('showCredentialDialog', () => Promise.resolve(null))
 
 const isAILocked = computed(() =>
-  tabStore.aiLockedPanelId === props.panel.id
+  tabStore.isPanelAILocked(props.panel.id)
 )
 
 const baseTerminalRef = ref<InstanceType<typeof BaseTerminal> | null>(null)

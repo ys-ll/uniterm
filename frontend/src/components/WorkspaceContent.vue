@@ -66,10 +66,10 @@ async function closePanel(panelId: string) {
 }
 
 function onToggleAiLock(panelId: string) {
-  if (tabStore.aiLockedPanelId === panelId) {
-    tabStore.setAILockedPanel(null)
+  if (tabStore.isPanelAILocked(panelId)) {
+    tabStore.removeAILockedPanel(panelId)
   } else {
-    tabStore.setAILockedPanel(panelId)
+    tabStore.addAILockedPanel(panelId)
   }
 }
 
@@ -81,14 +81,14 @@ async function onDuplicatePanel(panelId: string) {
     panel.config ? { ...panel.config } as ConnectionConfig : null,
     panel.type
   )
-  newPanel.title = panel.title
+  panelStore.updateTitle(newPanel.id, panel.title)
 
   if (panel.config) {
     try {
       const info = await CreateSession(panel.config.type, panel.config)
       panelStore.bindSession(newPanel.id, info.id)
       // Create tab AFTER session is bound, so BaseTerminal mounts with valid sessionId
-      const newTab = tabStore.createTerminalTab(panel.title, newPanel.id)
+      const newTab = tabStore.createTerminalTab(newPanel.title, newPanel.id)
       panelStore.movePanelToTab(newPanel.id, newTab.id)
     } catch (e) {
       console.error('Failed to duplicate session:', e)
