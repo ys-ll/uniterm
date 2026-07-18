@@ -309,6 +309,13 @@
                 />
               </el-select>
             </el-form-item>
+            <el-form-item
+              v-if="['ssh','telnet','serial','mosh','local'].includes(form.type)"
+              :label="t('conn.logOnConnect')"
+            >
+              <el-switch v-model="form.logOnConnect" />
+              <div class="field-hint">{{ t('conn.logOnConnectDesc') }}</div>
+            </el-form-item>
             </template>
           </el-form>
         </div>
@@ -540,7 +547,7 @@ const showTunnel = computed(() =>
   !TUNNEL_UNSUPPORTED.includes(form.type)
 )
 const showAdvancedToggle = computed(() =>
-  showTunnel.value || form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'ftp'
+  showTunnel.value || form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'serial' || form.type === 'ftp'
 )
 
 const defaultParamsHint = computed(() => {
@@ -584,6 +591,7 @@ const form = reactive<ConnectionConfig>({
   webdavUseSSL: true,
   s3Region: 'us-east-1',
   s3Bucket: '',
+  logOnConnect: false,
 })
 
 const rdpResolutions = [
@@ -758,6 +766,7 @@ function resetForm() {
   form.serialParity = 'none'
   serialBaudRateInput.value = ''
   form.tunnelSSHConnId = undefined
+  form.logOnConnect = false
   rdpResolution.value = '1280 × 720 (HD)'
   selectedGroupId.value = undefined
 }

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
 import type { Panel, PanelStatus, ConnectionConfig } from '../types/workspace'
+import { DisableSessionOutputLog, RegisterSessionForPanel, UnregisterSession } from '../../wailsjs/go/main/App'
 
 export interface TransferTaskUI {
   id: string
@@ -74,6 +75,14 @@ export const usePanelStore = defineStore('panel', () => {
   }
 
   function removePanel(id: string) {
+    const p = panelState.panels.get(id)
+    // Close any active output log so the footer banner is written and
+    // the file handle is released. Fire-and-forget; the backend logs
+    // any error via its own facilities.
+    DisableSessionOutputLog(id).catch(() => {})
+    if (p?.sessionId) {
+      UnregisterSession(p.sessionId).catch(() => {})
+    }
     panelState.panels.delete(id)
   }
 
@@ -83,7 +92,18 @@ export const usePanelStore = defineStore('panel', () => {
 
   function bindSession(panelId: string, sessionId: string) {
     const p = panelState.panels.get(panelId)
-    if (p) p.sessionId = sessionId
+    if (!p) return
+    const prev = p.sessionId
+    p.sessionId = sessionId
+    // Tell the backend which panel this session belongs to so per-panel
+    // output logging survives reconnects. The previous session's binding
+    // is dropped best-effort — if it's already gone the backend no-ops.
+    if (prev && prev !== sessionId) {
+      UnregisterSession(prev).catch(() => {})
+    }
+    if (sessionId) {
+      RegisterSessionForPanel(sessionId, panelId).catch(() => {})
+    }
   }
 
   function updateStatus(panelId: string, status: PanelStatus) {
@@ -95,6 +115,11 @@ export const usePanelStore = defineStore('panel', () => {
     const p = panelState.panels.get(panelId)
     if (!p) return
     p.title = makeTitleUnique(title, panelId)
+  }
+
+  function setOutputLog(panelId: string, state: { enabled: boolean; path: string }) {
+    const p = panelState.panels.get(panelId)
+    if (p) p.outputLog = state
   }
 
   function movePanelToTab(panelId: string, tabId: string) {
@@ -183,6 +208,7 @@ export const usePanelStore = defineStore('panel', () => {
     bindSession,
     updateStatus,
     updateTitle,
+    setOutputLog,
     movePanelToTab,
     setProxyAddr,
     getProxyAddr,

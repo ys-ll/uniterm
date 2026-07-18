@@ -82,6 +82,11 @@ type ConnectionConfig struct {
 	// Terminal character encoding for ssh/telnet:
 	// "" / "utf-8"(default) | "gbk" | "gb2312" | "gb18030" | "big5" | "shift-jis" | "euc-jp" | "euc-kr"
 	Encoding string `json:"encoding,omitempty"`
+	// LogOnConnect, when true, tells the App layer to enable the
+	// session output log automatically the first time this panel binds
+	// a session. It has no effect on later reconnects — a manually
+	// stopped log stays stopped for the life of the panel.
+	LogOnConnect bool `json:"logOnConnect,omitempty"`
 }
 
 // ConnectionStoreData is the top-level structure persisted to connections.json.
@@ -129,6 +134,16 @@ type baseSession struct {
 	pendingRows      int
 	zmodemMode       bool
 	lastReadTime     atomic.Int64
+	// outputLogWriter, if non-nil, receives a copy of every byte emitted
+	// via emitData. It is set by the App layer and lives longer than any
+	// single session — a reconnect re-uses the same underlying logger by
+	// installing the same writer on the new session.
+	outputLogWriter func([]byte)
+	outputLogMu     sync.RWMutex
+	// logOnConnect mirrors ConnectionConfig.LogOnConnect so the App
+	// layer can query it via AutoLogOnConnect() and decide whether to
+	// enable the log the first time this session binds to a panel.
+	logOnConnect bool
 }
 
 func (s *baseSession) ID() string            { return s.id }
@@ -159,6 +174,12 @@ func (s *baseSession) setStatus(st SessionStatus) {
 }
 
 func (s *baseSession) emitData(data []byte) {
+	s.outputLogMu.RLock()
+	w := s.outputLogWriter
+	s.outputLogMu.RUnlock()
+	if w != nil {
+		w(data)
+	}
 	s.mu.RLock()
 	cb := s.onDataCallback
 	s.mu.RUnlock()
@@ -166,6 +187,25 @@ func (s *baseSession) emitData(data []byte) {
 		cb(data)
 	}
 }
+
+// SetOutputLogWriter installs (or clears with nil) the sink that
+// receives each byte emitted via emitData. Ownership of the underlying
+// logger lives at the App layer so it can outlive any single session
+// and survive reconnects.
+func (s *baseSession) SetOutputLogWriter(w func([]byte)) {
+	s.outputLogMu.Lock()
+	s.outputLogWriter = w
+	s.outputLogMu.Unlock()
+}
+
+// SetLogOnConnect records the per-connection auto-log preference so
+// the App layer can read it via AutoLogOnConnect(). Each session type
+// calls this from Connect based on ConnectionConfig.LogOnConnect.
+func (s *baseSession) SetLogOnConnect(v bool) { s.logOnConnect = v }
+
+// AutoLogOnConnect reports whether this session was created from a
+// connection configured to start logging automatically.
+func (s *baseSession) AutoLogOnConnect() bool { return s.logOnConnect }
 
 func (s *baseSession) SetPendingSize(cols, rows int) {
 	s.mu.Lock()

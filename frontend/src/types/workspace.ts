@@ -12,6 +12,7 @@ export interface Panel {
   title: string
   status: PanelStatus
   config: ConnectionConfig | null
+  outputLog?: { enabled: boolean; path: string }
 }
 
 export interface PanelLayout {

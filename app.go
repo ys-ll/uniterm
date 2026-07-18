@@ -55,12 +55,32 @@ type App struct {
 	chatCancel           context.CancelFunc // active stream cancellation
 	chatCancelMu         stdsync.Mutex      // guards chatCancel
 	moveResizeCh         chan string        // defer EventsEmit from WndProc
-	logDirPrefMu         stdsync.Mutex      // guards lastSerialLogDir
-	lastSerialLogDir     string             // remembered dir for the next save dialog
+
+	// Session output log state (issue #227). Logs are keyed by panelID so
+	// they survive reconnects — a single panel may cycle through many
+	// session objects and the log file spans all of them. sessionToPanel
+	// tracks the current session→panel binding so emitData can look up
+	// the right logger. panelAutoTriggered records which panels have
+	// already been considered for the LogOnConnect auto-enable so
+	// reconnects don't re-enable a log the user manually stopped.
+	panelLogs          map[string]*session.OutputLogger
+	sessionToPanel     map[string]string
+	panelAutoTriggered map[string]bool
+	panelLogMu         stdsync.Mutex
+	// customLogDir, when non-empty, overrides defaultSessionLogDir()
+	// as the target for new session logs. Set from settings via
+	// SetDefaultSessionLogDir; ongoing logs are not migrated.
+	customLogDir   string
+	customLogDirMu stdsync.RWMutex
 }
 
 func NewApp(webviewDataPath string) *App {
-	return &App{webviewDataPath: webviewDataPath}
+	return &App{
+		webviewDataPath:    webviewDataPath,
+		panelLogs:          make(map[string]*session.OutputLogger),
+		sessionToPanel:     make(map[string]string),
+		panelAutoTriggered: make(map[string]bool),
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -113,6 +133,13 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.settingsStore = ss
+
+	// Prime the session-log directory override from persisted settings
+	// so a log Enable that lands before the settings UI opens still
+	// respects the user's choice from a prior run.
+	if settings, err := ss.Load(); err == nil {
+		a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
+	}
 
 	// Init terminal history store (same config dir as other stores)
 	configDir, _ := os.UserConfigDir()
@@ -711,6 +738,12 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 		return nil, err
 	}
 	log.Writef("[CreateSession] session created, id=%s", s.ID())
+	// Record the LogOnConnect preference synchronously so the frontend's
+	// subsequent RegisterSessionForPanel can consult it — the actual
+	// Connect() goroutine may not have run yet at Register time.
+	if setter, ok := s.(interface{ SetLogOnConnect(bool) }); ok {
+		setter.SetLogOnConnect(config.LogOnConnect)
+	}
 	// Apply terminal character encoding (SSH only). No-op for utf-8/empty.
 	if ssh, ok := s.(*session.SSHSession); ok {
 		ssh.SetEncoding(config.Encoding)
@@ -2413,120 +2446,270 @@ func (a *App) ConnectSerial(portName string, baudRate int, dataBits int, stopBit
 	}, nil
 }
 
-// PickSerialLogSavePath opens a native Save dialog for the user to choose
-// where to save the serial session log. suggestedName is pre-filled as the
-// default filename (e.g. "COM3_2026-07-09_143012.log") so the user can just
-// confirm or type a new name. The dialog defaults to the directory used
-// last time, falling back to ~/.uniterm/serial-logs/.
-//
-// Returns the chosen full path, or "" if the user cancelled the dialog.
-func (a *App) PickSerialLogSavePath(suggestedName string) (string, error) {
-	a.logDirPrefMu.Lock()
-	lastDir := a.lastSerialLogDir
-	a.logDirPrefMu.Unlock()
+// \u2500\u2500 Session output log \u2500\u2500
 
-	defaultDir := lastDir
-	if defaultDir == "" {
-		var err error
-		defaultDir, err = defaultSerialLogDir()
-		if err != nil {
-			defaultDir = ""
+// SessionLogInfo describes the current session-log state for a panel.
+// Path is "" when Enabled is false.
+type SessionLogInfo struct {
+	Enabled bool   `json:"enabled"`
+	Path    string `json:"path"`
+}
+
+// RegisterSessionForPanel binds a session to a panel and, if the panel
+// already has an active log, attaches the log writer to the session so
+// output starts landing in the log immediately. The frontend calls this
+// right after CreateSession succeeds, and on every reconnect.
+//
+// On the first Register for a panel (i.e. not a reconnect), if the
+// session was created from a connection with LogOnConnect=true, the
+// log is enabled automatically. Later Registers for the same panel
+// never re-trigger — the user's manual stop is respected across
+// reconnects for the life of the panel.
+func (a *App) RegisterSessionForPanel(sessionID, panelID string) {
+	if sessionID == "" || panelID == "" {
+		return
+	}
+	a.panelLogMu.Lock()
+	a.sessionToPanel[sessionID] = panelID
+	logger := a.panelLogs[panelID]
+	autoTriggered := a.panelAutoTriggered[panelID]
+	a.panelLogMu.Unlock()
+
+	// Existing logger (reconnect case): rewire writer, don't re-enable.
+	if logger != nil {
+		a.installWriter(sessionID, logger)
+		return
+	}
+
+	// First Register for this panel: check LogOnConnect and auto-enable.
+	if !autoTriggered {
+		a.panelLogMu.Lock()
+		a.panelAutoTriggered[panelID] = true
+		a.panelLogMu.Unlock()
+		if a.sessionWantsAutoLog(sessionID) {
+			// EnableSessionOutputLog handles the writer install internally.
+			if _, err := a.EnableSessionOutputLog(panelID, ""); err != nil {
+				log.Writef("[RegisterSessionForPanel] auto-enable log failed: %v", err)
+			}
 		}
 	}
-
-	chosen, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:                "Save serial log as\u2026",
-		DefaultDirectory:     defaultDir,
-		DefaultFilename:      suggestedName,
-		CanCreateDirectories: true,
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Log files (*.log)", Pattern: "*.log"},
-			{DisplayName: "Text files (*.txt)", Pattern: "*.txt"},
-			{DisplayName: "All files (*.*)", Pattern: "*.*"},
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-	if chosen == "" {
-		return "", nil
-	}
-
-	// Remember the chosen dir for the next save dialog.
-	if dir := filepath.Dir(chosen); dir != "" {
-		a.logDirPrefMu.Lock()
-		a.lastSerialLogDir = dir
-		a.logDirPrefMu.Unlock()
-	}
-	return chosen, nil
 }
 
-// SetSerialLogEnabled toggles real-time I/O logging for a connected serial
-// session. When enabled, all RX/TX bytes are appended to the file at path
-// (typically the result of a native Save dialog from
-// PickSerialLogSavePath). When disabled, the open log file is closed cleanly
-// (a SYS footer is written) and no further data is captured.
-//
-// path is required to enable. Passing an empty path while enabled is
-// treated as a no-op (returns "", nil) so callers can pass through a
-// cancelled dialog result without special-casing.
-//
-// The session must be a serial session. Returns the current log file path
-// when enabling (empty if the log could not be created) and an empty string
-// when disabling.
-func (a *App) SetSerialLogEnabled(sessionID string, enabled bool, path string) (string, error) {
+// sessionWantsAutoLog reports whether the session was created from a
+// connection that opted in to LogOnConnect. Returns false for missing
+// or non-terminal sessions.
+func (a *App) sessionWantsAutoLog(sessionID string) bool {
 	if a.sessionManager == nil {
-		return "", fmt.Errorf("session manager not initialized")
+		return false
 	}
 	s, ok := a.sessionManager.Get(sessionID)
 	if !ok {
-		return "", fmt.Errorf("session not found: %s", sessionID)
+		return false
 	}
-	serSess, ok := s.(*session.SerialSession)
+	if q, ok := s.(interface{ AutoLogOnConnect() bool }); ok {
+		return q.AutoLogOnConnect()
+	}
+	return false
+}
+
+// UnregisterSession clears the session\u2192panel binding and detaches any
+// writer from the session. The logger itself is unaffected: it stays on
+// the panel, waiting for the next session (reconnect) to register.
+func (a *App) UnregisterSession(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	a.panelLogMu.Lock()
+	delete(a.sessionToPanel, sessionID)
+	a.panelLogMu.Unlock()
+	a.installWriter(sessionID, nil)
+}
+
+// installWriter finds the given session and installs (or clears) the
+// output-log writer callback. Non-terminal session types silently
+// ignore the request.
+func (a *App) installWriter(sessionID string, logger *session.OutputLogger) {
+	if a.sessionManager == nil {
+		return
+	}
+	s, ok := a.sessionManager.Get(sessionID)
 	if !ok {
-		return "", fmt.Errorf("session is not a serial session: %s", sessionID)
+		return
 	}
-	if !enabled {
-		serSess.StopLog()
-		return "", nil
+	setter, ok := s.(interface{ SetOutputLogWriter(func([]byte)) })
+	if !ok {
+		return
 	}
+	if logger == nil {
+		setter.SetOutputLogWriter(nil)
+		return
+	}
+	setter.SetOutputLogWriter(logger.WriteOutput)
+}
+
+// panelLogTitle picks the filename base for a panel's log. Uses the
+// current session's Title if available, otherwise a short synthetic
+// name derived from panelID.
+func (a *App) panelLogTitle(panelID string) (name, protocol string) {
+	a.panelLogMu.Lock()
+	var sessionID string
+	for sid, pid := range a.sessionToPanel {
+		if pid == panelID {
+			sessionID = sid
+			break
+		}
+	}
+	a.panelLogMu.Unlock()
+	if sessionID != "" && a.sessionManager != nil {
+		if s, ok := a.sessionManager.Get(sessionID); ok {
+			return s.Title(), s.Type()
+		}
+	}
+	suffix := panelID
+	if len(suffix) > 8 {
+		suffix = suffix[:8]
+	}
+	return "panel_" + suffix, "session"
+}
+
+// EnableSessionOutputLog starts writing terminal output for the given
+// panel to a .log file. If dir is empty, the default session log
+// directory is used. Returns the final path after sanitization and
+// same-second collision suffixing.
+//
+// The log is bound to the panel, not the session \u2014 so a reconnect
+// (which creates a fresh session under the same panel) keeps writing
+// to the same file.
+func (a *App) EnableSessionOutputLog(panelID, dir string) (string, error) {
+	if panelID == "" {
+		return "", fmt.Errorf("panelID required")
+	}
+	// When the caller didn't pin a directory, fall back to the user's
+	// configured override; if that is also empty, OutputLogger.Enable
+	// will pick the OS default.
+	if dir == "" {
+		a.customLogDirMu.RLock()
+		dir = a.customLogDir
+		a.customLogDirMu.RUnlock()
+	}
+	name, protocol := a.panelLogTitle(panelID)
+
+	a.panelLogMu.Lock()
+	logger := a.panelLogs[panelID]
+	if logger == nil {
+		logger = &session.OutputLogger{}
+		a.panelLogs[panelID] = logger
+	}
+	// Find any session currently bound to this panel so we can wire the
+	// writer while we still hold the lock (avoids a race with concurrent
+	// register/unregister calls).
+	var sessionID string
+	for sid, pid := range a.sessionToPanel {
+		if pid == panelID {
+			sessionID = sid
+			break
+		}
+	}
+	a.panelLogMu.Unlock()
+
+	path, err := logger.Enable(dir, name, protocol)
+	if err != nil {
+		return "", err
+	}
+	if sessionID != "" {
+		a.installWriter(sessionID, logger)
+	}
+	return path, nil
+}
+
+// DisableSessionOutputLog closes the log file for the given panel,
+// writes a footer banner, detaches the writer from any active session,
+// and drops the panel's logger. Idempotent.
+func (a *App) DisableSessionOutputLog(panelID string) error {
+	if panelID == "" {
+		return nil
+	}
+	a.panelLogMu.Lock()
+	logger := a.panelLogs[panelID]
+	delete(a.panelLogs, panelID)
+	var sessionID string
+	for sid, pid := range a.sessionToPanel {
+		if pid == panelID {
+			sessionID = sid
+			break
+		}
+	}
+	a.panelLogMu.Unlock()
+	if sessionID != "" {
+		a.installWriter(sessionID, nil)
+	}
+	if logger != nil {
+		logger.Disable()
+	}
+	return nil
+}
+
+// GetSessionOutputLogInfo returns the current log state for a panel.
+// Returns zero value when the panel has no active log.
+func (a *App) GetSessionOutputLogInfo(panelID string) SessionLogInfo {
+	if panelID == "" {
+		return SessionLogInfo{}
+	}
+	a.panelLogMu.Lock()
+	logger := a.panelLogs[panelID]
+	a.panelLogMu.Unlock()
+	if logger == nil {
+		return SessionLogInfo{}
+	}
+	return SessionLogInfo{Enabled: logger.Enabled(), Path: logger.Path()}
+}
+
+// OpenPathInExplorer reveals the given file in the platform file
+// manager. On Windows uses `explorer /select,<path>`; macOS uses
+// `open -R`; Linux uses `xdg-open <dir>` (no selection semantic in
+// xdg-open, so the parent directory is opened).
+func (a *App) OpenPathInExplorer(path string) error {
 	if path == "" {
-		return "", nil
+		return fmt.Errorf("empty path")
 	}
-	return serSess.StartLogAtPath(path), nil
-}
-
-// IsSerialLogEnabled reports whether the given session is currently writing
-// to a log file. Used by the UI to show the right menu label.
-func (a *App) IsSerialLogEnabled(sessionID string) bool {
-	if a.sessionManager == nil {
-		return false
-	}
-	s, ok := a.sessionManager.Get(sessionID)
-	if !ok {
-		return false
-	}
-	serSess, ok := s.(*session.SerialSession)
-	if !ok {
-		return false
-	}
-	return serSess.IsLogEnabled()
-}
-
-// defaultSerialLogDir returns the directory used to store serial session
-// logs. It is created if missing so the user can drop the right-click toggle
-// without any further interaction. The path lives under the user's home
-// directory next to other uniterm state.
-func defaultSerialLogDir() (string, error) {
-	home, err := os.UserHomeDir()
+	abs, err := filepath.Abs(path)
 	if err != nil {
-		return "", err
+		abs = path
 	}
-	dir := filepath.Join(home, ".uniterm", "serial-logs")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", err
+	switch goruntime.GOOS {
+	case "windows":
+		// explorer.exe returns exit code 1 on success; ignore Run's error.
+		_ = exec.Command("explorer", "/select,", abs).Run()
+		return nil
+	case "darwin":
+		return exec.Command("open", "-R", abs).Run()
+	default:
+		return exec.Command("xdg-open", filepath.Dir(abs)).Run()
 	}
-	return dir, nil
+}
+
+// SetDefaultSessionLogDir installs a user-configured override for the
+// directory used by new session logs. Empty clears the override and
+// restores the OS default. Existing log files are not migrated; the
+// change only affects logs enabled after this call.
+func (a *App) SetDefaultSessionLogDir(dir string) {
+	a.customLogDirMu.Lock()
+	a.customLogDir = dir
+	a.customLogDirMu.Unlock()
+}
+
+// GetDefaultSessionLogDir returns the directory a fresh session log
+// would land in: the user's override if set, otherwise the OS default
+// (~/Documents/uniTerm/logs on all platforms). Used by the settings UI
+// to show the current default path as a placeholder.
+func (a *App) GetDefaultSessionLogDir() string {
+	a.customLogDirMu.RLock()
+	custom := a.customLogDir
+	a.customLogDirMu.RUnlock()
+	if custom != "" {
+		return custom
+	}
+	return session.DefaultSessionLogDir()
 }
 
 // ── Database methods ──

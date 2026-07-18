@@ -230,6 +230,20 @@ export namespace main {
 	        this.display_name = source["display_name"];
 	    }
 	}
+	export class SessionLogInfo {
+	    enabled: boolean;
+	    path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionLogInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.path = source["path"];
+	    }
+	}
 
 }
 
@@ -294,6 +308,7 @@ export namespace session {
 	    s3Region?: string;
 	    s3Bucket?: string;
 	    encoding?: string;
+	    logOnConnect?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ConnectionConfig(source);
@@ -341,6 +356,7 @@ export namespace session {
 	        this.s3Region = source["s3Region"];
 	        this.s3Bucket = source["s3Bucket"];
 	        this.encoding = source["encoding"];
+	        this.logOnConnect = source["logOnConnect"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1119,6 +1135,7 @@ export namespace store {
 	    maxHistoryLines: number;
 	    smartCompletion?: boolean;
 	    highlightEnabled?: boolean;
+	    sessionLogDir?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TerminalSettings(source);
@@ -1134,6 +1151,7 @@ export namespace store {
 	        this.maxHistoryLines = source["maxHistoryLines"];
 	        this.smartCompletion = source["smartCompletion"];
 	        this.highlightEnabled = source["highlightEnabled"];
+	        this.sessionLogDir = source["sessionLogDir"];
 	    }
 	}
 	export class AppSettings {

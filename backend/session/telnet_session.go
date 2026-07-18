@@ -51,8 +51,13 @@ func NewTelnetSession(id string) *TelnetSession {
 }
 
 func (s *TelnetSession) Connect(config ConnectionConfig) error {
+	s.SetLogOnConnect(config.LogOnConnect)
 	s.setStatus(StatusConnecting)
-	s.title = fmt.Sprintf("%s:%d", config.Host, config.Port)
+	if config.Name != "" {
+		s.title = config.Name
+	} else {
+		s.title = fmt.Sprintf("%s:%d", config.Host, config.Port)
+	}
 
 	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	dialer := net.Dialer{Timeout: 15 * time.Second}

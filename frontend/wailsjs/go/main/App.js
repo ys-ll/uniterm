@@ -66,6 +66,10 @@ export function DeleteTerminalHistoryEntry(arg1) {
   return window['go']['main']['App']['DeleteTerminalHistoryEntry'](arg1);
 }
 
+export function DisableSessionOutputLog(arg1) {
+  return window['go']['main']['App']['DisableSessionOutputLog'](arg1);
+}
+
 export function DropColumn(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['DropColumn'](arg1, arg2, arg3, arg4);
 }
@@ -84,6 +88,10 @@ export function DropTable(arg1, arg2, arg3) {
 
 export function DropView(arg1, arg2, arg3) {
   return window['go']['main']['App']['DropView'](arg1, arg2, arg3);
+}
+
+export function EnableSessionOutputLog(arg1, arg2) {
+  return window['go']['main']['App']['EnableSessionOutputLog'](arg1, arg2);
 }
 
 export function ExecuteQuery(arg1, arg2, arg3) {
@@ -122,6 +130,10 @@ export function GetDatabases(arg1) {
   return window['go']['main']['App']['GetDatabases'](arg1);
 }
 
+export function GetDefaultSessionLogDir() {
+  return window['go']['main']['App']['GetDefaultSessionLogDir']();
+}
+
 export function GetDefaultShell() {
   return window['go']['main']['App']['GetDefaultShell']();
 }
@@ -154,6 +166,10 @@ export function GetRecentConnections() {
   return window['go']['main']['App']['GetRecentConnections']();
 }
 
+export function GetSessionOutputLogInfo(arg1) {
+  return window['go']['main']['App']['GetSessionOutputLogInfo'](arg1);
+}
+
 export function GetSystemFonts() {
   return window['go']['main']['App']['GetSystemFonts']();
 }
@@ -164,10 +180,6 @@ export function GetTableSchema(arg1, arg2, arg3) {
 
 export function GetTables(arg1, arg2) {
   return window['go']['main']['App']['GetTables'](arg1, arg2);
-}
-
-export function IsSerialLogEnabled(arg1) {
-  return window['go']['main']['App']['IsSerialLogEnabled'](arg1);
 }
 
 export function KillProcess(arg1, arg2, arg3) {
@@ -298,8 +310,8 @@ export function OpenMultipleFilesDialog() {
   return window['go']['main']['App']['OpenMultipleFilesDialog']();
 }
 
-export function PickSerialLogSavePath(arg1) {
-  return window['go']['main']['App']['PickSerialLogSavePath'](arg1);
+export function OpenPathInExplorer(arg1) {
+  return window['go']['main']['App']['OpenPathInExplorer'](arg1);
 }
 
 export function RDPHide(arg1) {
@@ -434,6 +446,10 @@ export function RedisZSetRemove(arg1, arg2, arg3) {
   return window['go']['main']['App']['RedisZSetRemove'](arg1, arg2, arg3);
 }
 
+export function RegisterSessionForPanel(arg1, arg2) {
+  return window['go']['main']['App']['RegisterSessionForPanel'](arg1, arg2);
+}
+
 export function RemoveTempFile(arg1) {
   return window['go']['main']['App']['RemoveTempFile'](arg1);
 }
@@ -502,16 +518,16 @@ export function SessionWriteBinary(arg1, arg2) {
   return window['go']['main']['App']['SessionWriteBinary'](arg1, arg2);
 }
 
+export function SetDefaultSessionLogDir(arg1) {
+  return window['go']['main']['App']['SetDefaultSessionLogDir'](arg1);
+}
+
 export function SetMonitorActiveTab(arg1, arg2) {
   return window['go']['main']['App']['SetMonitorActiveTab'](arg1, arg2);
 }
 
 export function SetMonitorPaused(arg1, arg2) {
   return window['go']['main']['App']['SetMonitorPaused'](arg1, arg2);
-}
-
-export function SetSerialLogEnabled(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SetSerialLogEnabled'](arg1, arg2, arg3);
 }
 
 export function SftpCancelTransfer(arg1, arg2) {
@@ -660,6 +676,10 @@ export function SyncVerifyPassword(arg1, arg2, arg3) {
 
 export function TruncateTable(arg1, arg2, arg3) {
   return window['go']['main']['App']['TruncateTable'](arg1, arg2, arg3);
+}
+
+export function UnregisterSession(arg1) {
+  return window['go']['main']['App']['UnregisterSession'](arg1);
 }
 
 export function WriteFileBase64(arg1, arg2) {

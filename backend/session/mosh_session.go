@@ -34,8 +34,13 @@ func NewMoshSession(id string) *MoshSession {
 }
 
 func (s *MoshSession) Connect(config ConnectionConfig) error {
+	s.SetLogOnConnect(config.LogOnConnect)
 	s.setStatus(StatusConnecting)
-	s.title = fmt.Sprintf("%s@%s (mosh)", config.User, config.Host)
+	if config.Name != "" {
+		s.title = config.Name
+	} else {
+		s.title = fmt.Sprintf("%s@%s (mosh)", config.User, config.Host)
+	}
 
 	// Step 1: SSH to remote and start mosh-server to get key + UDP port.
 	authMethods := makeSSHAuthMethods(config, nil)

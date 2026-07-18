@@ -78,8 +78,13 @@ func shouldPromptForSSHPassword(config ConnectionConfig) bool {
 }
 
 func (s *SSHSession) Connect(config ConnectionConfig) error {
+	s.SetLogOnConnect(config.LogOnConnect)
 	s.setStatus(StatusConnecting)
-	s.title = fmt.Sprintf("%s@%s", config.User, config.Host)
+	if config.Name != "" {
+		s.title = config.Name
+	} else {
+		s.title = fmt.Sprintf("%s@%s", config.User, config.Host)
+	}
 
 	// Set up keyboard-interactive auth input channel.
 	s.mu.Lock()

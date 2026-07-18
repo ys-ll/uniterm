@@ -20,6 +20,10 @@ type TerminalSettings struct {
 	MaxHistoryLines  int    `json:"maxHistoryLines"`
 	SmartCompletion  *bool  `json:"smartCompletion"`
 	HighlightEnabled *bool  `json:"highlightEnabled"`
+	// SessionLogDir overrides the default directory used for session
+	// output logs (issue #227). Empty means: use the OS-appropriate
+	// default under ~/Documents/uniTerm/logs.
+	SessionLogDir string `json:"sessionLogDir,omitempty"`
 }
 
 // TerminalThemeColors mirrors xterm.js's ITheme shape: the 4 base colors

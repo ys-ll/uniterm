@@ -89,6 +89,7 @@ func NewLocalSession(id string) *LocalSession {
 }
 
 func (s *LocalSession) Connect(config ConnectionConfig) error {
+	s.SetLogOnConnect(config.LogOnConnect)
 	s.setStatus(StatusConnecting)
 
 	shell := config.ShellPath

@@ -65,6 +65,9 @@ export interface ConnectionConfig {
   s3Bucket?: string
   // Terminal encoding (SSH/Telnet)
   encoding?: string // "utf-8" | "gbk" | "gb2312" | "gb18030" | "big5" | "shift-jis" | "euc-jp" | "euc-kr"
+  // Enable session output log automatically on first connect. Applies
+  // to terminal-stream types (ssh/telnet/serial/mosh/local).
+  logOnConnect?: boolean
 }
 
 export interface SessionInfo {

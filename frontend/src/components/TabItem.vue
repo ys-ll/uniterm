@@ -23,7 +23,12 @@
         :is="tab.locked ? Lock : tabIcon"
         class="tab-type-icon"
       />
-      <span v-if="!isActive && hasNotification && !tab.locked" class="tab-notification-dot" />
+      <span
+        v-if="isOutputLogOn"
+        class="tab-log-dot"
+        :title="t('session.recording', { path: outputLogPath })"
+      />
+      <span v-else-if="!isActive && hasNotification && !tab.locked" class="tab-notification-dot" />
     </span>
     <span v-if="!editing" class="tab-name" :class="{ 'tab-disconnected': isDisconnected }" @dblclick.stop="startEdit">
       <ArrowDownUp v-if="hasActiveTransfers" class="transfer-indicator" :size="14" title="Transferring..." />
@@ -68,8 +73,11 @@
         <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="openSftp">{{ t('sidebar.connectSftp') }}</div>
         <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="uploadFileRz">{{ t('terminal.uploadFileRz') }}</div>
         <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="openMonitor">{{ t('sidebar.connectMonitor') }}</div>
-        <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'serial'" class="menu-item" @click="toggleSerialLog">
-          {{ isSerialLogOn ? t('serial.stopLog') : t('serial.saveLog') }}
+        <div v-if="supportsOutputLog" class="menu-item" @click="toggleOutputLog">
+          {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
+        </div>
+        <div v-if="supportsOutputLog && isOutputLogOn" class="menu-item" @click="openLogDir">
+          {{ t('session.openLogDir') }}
         </div>
         <div v-if="tab.type === 'terminal'" class="menu-item" @click="triggerSearch">{{ t('terminal.searchText') }}</div>
         <div v-if="tab.type === 'terminal'" class="menu-item" @click="triggerExport">{{ t('terminal.export') }}</div>
@@ -93,7 +101,13 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useI18n } from '../i18n'
-import { CreateSession, SetSerialLogEnabled, IsSerialLogEnabled, PickSerialLogSavePath } from '../../wailsjs/go/main/App'
+import {
+  CreateSession,
+  EnableSessionOutputLog,
+  DisableSessionOutputLog,
+  GetSessionOutputLogInfo,
+  OpenPathInExplorer,
+} from '../../wailsjs/go/main/App'
 import { msg } from '../services/message'
 import type { TerminalTab, SettingsTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, WorkspaceTab } from '../types/workspace'
 import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Sparkles, Database, DatabaseZap, Layers, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus, Lock } from '@lucide/vue'
@@ -185,14 +199,16 @@ const isDisconnected = computed(() => {
   })
 })
 
-// Track the live state of the serial session's log file so the menu
-// indicator is correct when the user opens it. The value defaults to false
-// (matches the default for new sessions) and is refreshed from the backend
-// each time the menu opens.
-const isSerialLogOn = ref(false)
-const isSerialTab = computed(
-  () => props.tab.type === 'terminal' && panelStore.getPanel((props.tab as TerminalTab).panelId)?.type === 'serial'
-)
+// Session output log state. Refreshed lazily when the right-click menu
+// opens; also written after enable/disable so the REC badge stays in
+// sync without an extra round-trip.
+const isOutputLogOn = ref(false)
+const outputLogPath = ref('')
+const supportsOutputLog = computed(() => {
+  if (props.tab.type !== 'terminal') return false
+  const p = panelStore.getPanel((props.tab as TerminalTab).panelId)
+  return !!p && ['ssh', 'telnet', 'serial', 'mosh', 'local'].includes(p.type)
+})
 
 function onDragStart(e: DragEvent) {
   e.dataTransfer?.setData('application/tab-id', props.tab.id)
@@ -220,21 +236,26 @@ function onContextMenu(e: MouseEvent) {
   window.dispatchEvent(new CustomEvent('global:close-context-menus'))
   contextMenuStyle.value = { left: e.clientX + 'px', top: e.clientY + 'px' }
   contextMenuVisible.value = true
-  if (isSerialTab.value) {
-    refreshSerialLogState()
+  if (supportsOutputLog.value) {
+    refreshOutputLogState()
   }
 }
 
-async function refreshSerialLogState() {
+async function refreshOutputLogState() {
   const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
-  if (!panel || !panel.sessionId) {
-    isSerialLogOn.value = false
+  if (!panel) {
+    isOutputLogOn.value = false
+    outputLogPath.value = ''
     return
   }
   try {
-    isSerialLogOn.value = await IsSerialLogEnabled(panel.sessionId)
+    const info = await GetSessionOutputLogInfo(panel.id)
+    isOutputLogOn.value = !!info.enabled
+    outputLogPath.value = info.path || ''
+    panelStore.setOutputLog(panel.id, { enabled: isOutputLogOn.value, path: outputLogPath.value })
   } catch {
-    isSerialLogOn.value = false
+    isOutputLogOn.value = false
+    outputLogPath.value = ''
   }
 }
 
@@ -340,70 +361,42 @@ function openMonitor() {
   closeContextMenu()
 }
 
-async function toggleSerialLog() {
+async function toggleOutputLog() {
   closeContextMenu()
   const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
-  if (!panel || !panel.sessionId) return
-  const desired = !isSerialLogOn.value
+  if (!panel) return
   try {
-    if (!desired) {
-      await SetSerialLogEnabled(panel.sessionId, false, '')
-      isSerialLogOn.value = false
-      msg.info(t('serial.logStopped'))
+    if (isOutputLogOn.value) {
+      await DisableSessionOutputLog(panel.id)
+      isOutputLogOn.value = false
+      const prev = outputLogPath.value
+      outputLogPath.value = ''
+      panelStore.setOutputLog(panel.id, { enabled: false, path: '' })
+      msg.info(t('session.logStopped', { path: prev }))
       return
     }
-    // Enabling: ask the user where to save via a native Save dialog. The
-    // suggested name is "<port>_<YYYY-MM-DD_HHMMSS>.log" so a quick confirm
-    // works, but the user is free to pick any other directory or name.
-    const port = sanitizeForFilename(
-      (panel.config as any)?.serialPort || panel.title || 'serial'
-    )
-    const stamp = formatStamp(new Date())
-    const suggested = `${port}_${stamp}.log`
-    const chosen = await PickSerialLogSavePath(suggested)
-    if (!chosen) return // user cancelled
-    const path = await SetSerialLogEnabled(panel.sessionId, true, chosen)
+    const path = await EnableSessionOutputLog(panel.id, '')
     if (!path) {
-      msg.error(t('serial.logFailed', { error: 'open log file' }))
+      msg.error(t('session.logFailed', { error: 'unknown' }))
       return
     }
-    isSerialLogOn.value = true
-    msg.success(t('serial.logStarted', { path }))
+    isOutputLogOn.value = true
+    outputLogPath.value = path
+    panelStore.setOutputLog(panel.id, { enabled: true, path })
+    msg.success(t('session.logStarted', { path }))
   } catch (e: any) {
-    msg.error(t('serial.logFailed', { error: String(e?.message ?? e) }))
+    msg.error(t('session.logFailed', { error: String(e?.message ?? e) }))
   }
 }
 
-// Mirror of backend sanitizeForFilename: keep alnum + -_. else underscore.
-// Kept local so the suggested default name matches what the log writer
-// would generate, avoiding any surprise underscores in the dialog.
-function sanitizeForFilename(s: string): string {
-  const out: string[] = []
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i)
-    const isAlnum =
-      (c >= 0x30 && c <= 0x39) ||
-      (c >= 0x41 && c <= 0x5a) ||
-      (c >= 0x61 && c <= 0x7a)
-    if (isAlnum || c === 0x2d || c === 0x5f || c === 0x2e) {
-      out.push(s[i])
-    } else {
-      out.push('_')
-    }
+async function openLogDir() {
+  closeContextMenu()
+  if (!outputLogPath.value) return
+  try {
+    await OpenPathInExplorer(outputLogPath.value)
+  } catch (e: any) {
+    msg.error(String(e?.message ?? e))
   }
-  return out.length ? out.join('') : 'serial'
-}
-
-function formatStamp(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return (
-    d.getFullYear() +
-    '-' + pad(d.getMonth() + 1) +
-    '-' + pad(d.getDate()) +
-    '_' + pad(d.getHours()) +
-    pad(d.getMinutes()) +
-    pad(d.getSeconds())
-  )
 }
 
 function triggerSearch() {
@@ -416,9 +409,12 @@ function triggerExport() {
   closeContextMenu()
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('global:close-context-menus', closeContextMenu)
   document.addEventListener('click', closeContextMenu)
+  if (supportsOutputLog.value) {
+    await refreshOutputLogState()
+  }
 })
 
 onUnmounted(() => {
@@ -500,6 +496,17 @@ onUnmounted(() => {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 1px var(--bg-base);
+}
+.tab-log-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 6px;
+  height: 6px;
+  background: #e5484d;
+  border-radius: 50%;
+  border: 1px solid var(--bg-primary, #fff);
+  pointer-events: auto;
 }
 .tab-item.active .tab-type-icon {
   color: var(--accent);

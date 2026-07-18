@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { AppSettings, AIModelConfig, CustomTerminalTheme } from '../types/settings'
 import { DEFAULT_SETTINGS, DEFAULT_KEYBOARD } from '../types/settings'
-import { SaveSettings, LoadSettings, GetAvailableShells } from '../../wailsjs/go/main/App'
+import { SaveSettings, LoadSettings, GetAvailableShells, SetDefaultSessionLogDir } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 import { setLocale } from '../i18n'
 
@@ -50,6 +50,10 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch {
       availableShells.value = []
     }
+    // Push the persisted log directory override to the backend so
+    // logs enabled before the user opens the settings tab already
+    // respect it. Fire-and-forget; the backend has a safe empty fallback.
+    SetDefaultSessionLogDir(settings.value.terminal.sessionLogDir || '').catch(() => {})
     applyTheme()
     setLocale(settings.value.language)
   }
@@ -57,6 +61,9 @@ export const useSettingsStore = defineStore('settings', () => {
   async function save() {
     try {
       await SaveSettings(settings.value)
+      // Keep the backend override in sync on every save. Cheap and
+      // avoids the need for a dedicated watcher on this single field.
+      SetDefaultSessionLogDir(settings.value.terminal.sessionLogDir || '').catch(() => {})
     } catch {
       // ignore save errors
     }

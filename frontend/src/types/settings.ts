@@ -52,6 +52,9 @@ export interface TerminalSettings {
   smartCompletion: boolean
   highlightEnabled: boolean
   cursorBlink: boolean
+  // Override for the session output log directory. Empty means the
+  // OS default under ~/Documents/uniTerm/logs.
+  sessionLogDir: string
 }
 
 export interface AIModelConfig {
@@ -163,7 +166,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     maxHistoryLines: 2500,
     smartCompletion: true,
     highlightEnabled: true,
-    cursorBlink: true
+    cursorBlink: true,
+    sessionLogDir: ''
   },
   ai: {
     maxTurns: 20,

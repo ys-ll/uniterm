@@ -250,6 +250,22 @@
             </div>
           </div>
 
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.sessionLogDir') }}</div>
+              <div class="setting-desc">{{ t('settings.sessionLogDirDesc', { path: defaultLogDir }) }}</div>
+            </div>
+            <div class="setting-control setting-control-wide">
+              <el-input
+                v-model="settingsStore.settings.terminal.sessionLogDir"
+                :placeholder="defaultLogDir"
+                @change="settingsStore.save()"
+                clearable
+              />
+              <el-button @click="pickLogDir">{{ t('settings.browse') }}</el-button>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -580,7 +596,7 @@
 import { ref, reactive, watch, computed, onMounted } from 'vue'
 import { Settings, Monitor, MessageCircleMore, Info, RefreshCw, Pencil, Trash2, Globe, Keyboard, Plus, BookOpen } from '@lucide/vue'
 import { msg } from '../services/message'
-import { FetchModels, ChatCompletion, GetPlatform, GetSystemFonts } from '../../wailsjs/go/main/App'
+import { FetchModels, ChatCompletion, GetPlatform, GetSystemFonts, GetDefaultSessionLogDir, OpenDirectoryDialog } from '../../wailsjs/go/main/App'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSyncStore } from '../stores/syncStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
@@ -666,7 +682,30 @@ onMounted(async () => {
   } catch {
     // Fall back to FONT_OPTIONS
   }
+  try {
+    defaultLogDir.value = await GetDefaultSessionLogDir()
+  } catch {
+    defaultLogDir.value = ''
+  }
 })
+
+// Session log directory: shown as placeholder when the setting is
+// empty. Value comes from backend on mount and reflects the OS
+// default plus any current override (so if the user cleared their
+// override, the placeholder shows the fallback path).
+const defaultLogDir = ref('')
+
+async function pickLogDir() {
+  try {
+    const chosen = await OpenDirectoryDialog()
+    if (chosen) {
+      settingsStore.settings.terminal.sessionLogDir = chosen
+      await settingsStore.save()
+    }
+  } catch (e: any) {
+    msg.error(String(e?.message ?? e))
+  }
+}
 
 watch(() => settingsStore.openCategory, (cat) => {
   if (cat && (cat === 'basic' || cat === 'terminal' || cat === 'ai' || cat === 'sync' || cat === 'about' || cat === 'keyboard')) {
@@ -1058,6 +1097,17 @@ function getShellLabel(path: string): string {
 .setting-control {
   flex-shrink: 0;
   min-width: 210px;
+}
+
+.setting-control-wide {
+  display: flex;
+  gap: 8px;
+  min-width: 380px;
+  align-items: center;
+}
+
+.setting-control-wide .el-input {
+  flex: 1;
 }
 
 .setting-control .el-select,

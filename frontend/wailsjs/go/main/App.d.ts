@@ -39,6 +39,8 @@ export function DBUpdateRow(arg1:string,arg2:string,arg3:string,arg4:Record<stri
 
 export function DeleteTerminalHistoryEntry(arg1:Array<string>):Promise<void>;
 
+export function DisableSessionOutputLog(arg1:string):Promise<void>;
+
 export function DropColumn(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function DropDatabase(arg1:string,arg2:string):Promise<void>;
@@ -48,6 +50,8 @@ export function DropIndexOp(arg1:string,arg2:string,arg3:string,arg4:string,arg5
 export function DropTable(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DropView(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function EnableSessionOutputLog(arg1:string,arg2:string):Promise<string>;
 
 export function ExecuteQuery(arg1:string,arg2:string,arg3:string):Promise<database.QueryResult>;
 
@@ -67,6 +71,8 @@ export function GetDBCapabilities(arg1:string):Promise<database.DBCapabilities>;
 
 export function GetDatabases(arg1:string):Promise<Array<string>>;
 
+export function GetDefaultSessionLogDir():Promise<string>;
+
 export function GetDefaultShell():Promise<string>;
 
 export function GetDesktopPath():Promise<string>;
@@ -83,13 +89,13 @@ export function GetProcessDetail(arg1:string,arg2:number):Promise<Record<string,
 
 export function GetRecentConnections():Promise<Array<string>>;
 
+export function GetSessionOutputLogInfo(arg1:string):Promise<main.SessionLogInfo>;
+
 export function GetSystemFonts():Promise<Array<string>>;
 
 export function GetTableSchema(arg1:string,arg2:string,arg3:string):Promise<database.SchemaResult>;
 
 export function GetTables(arg1:string,arg2:string):Promise<Array<database.TableInfo>>;
-
-export function IsSerialLogEnabled(arg1:string):Promise<boolean>;
 
 export function KillProcess(arg1:string,arg2:number,arg3:string):Promise<void>;
 
@@ -155,7 +161,7 @@ export function OpenFileDialogFiltered(arg1:string,arg2:string,arg3:string):Prom
 
 export function OpenMultipleFilesDialog():Promise<Array<string>>;
 
-export function PickSerialLogSavePath(arg1:string):Promise<string>;
+export function OpenPathInExplorer(arg1:string):Promise<void>;
 
 export function RDPHide(arg1:string):Promise<void>;
 
@@ -223,6 +229,8 @@ export function RedisZSetAdd(arg1:string,arg2:string,arg3:Array<session.ScoredMe
 
 export function RedisZSetRemove(arg1:string,arg2:string,arg3:Array<string>):Promise<number>;
 
+export function RegisterSessionForPanel(arg1:string,arg2:string):Promise<void>;
+
 export function RemoveTempFile(arg1:string):Promise<void>;
 
 export function SaveAIConfig(arg1:store.AIConfig):Promise<void>;
@@ -257,11 +265,11 @@ export function SessionWrite(arg1:string,arg2:string):Promise<void>;
 
 export function SessionWriteBinary(arg1:string,arg2:string):Promise<void>;
 
+export function SetDefaultSessionLogDir(arg1:string):Promise<void>;
+
 export function SetMonitorActiveTab(arg1:string,arg2:string):Promise<void>;
 
 export function SetMonitorPaused(arg1:string,arg2:boolean):Promise<void>;
-
-export function SetSerialLogEnabled(arg1:string,arg2:boolean,arg3:string):Promise<string>;
 
 export function SftpCancelTransfer(arg1:string,arg2:string):Promise<void>;
 
@@ -336,6 +344,8 @@ export function SyncTestConnection():Promise<void>;
 export function SyncVerifyPassword(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function TruncateTable(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function UnregisterSession(arg1:string):Promise<void>;
 
 export function WriteFileBase64(arg1:string,arg2:string):Promise<void>;
 
