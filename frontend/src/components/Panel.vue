@@ -7,17 +7,27 @@
     @dragstart="emit('dragstart', $event)"
   >
     <div v-if="showHeader" class="panel-header" :class="{ 'ai-locked': isAILocked }" @dblclick.stop>
-      <span v-if="!editing" class="panel-title" @dblclick.stop="startEdit">{{ panel.title }}</span>
-      <input
-        v-else
-        ref="editInputRef"
-        v-model="editName"
-        class="panel-title-input"
-        @keydown.enter="confirmEdit"
-        @keydown.escape="cancelEdit"
-        @blur="confirmEdit"
-        @click.stop
-      />
+      <div class="panel-header-left">
+        <span class="panel-icon-wrapper">
+          <component :is="panelIcon" class="panel-type-icon" />
+          <span
+            v-if="isOutputLogOn"
+            class="panel-log-dot"
+            :title="t('session.recording', { path: outputLogPath })"
+          />
+        </span>
+        <span v-if="!editing" class="panel-title" @dblclick.stop="startEdit">{{ panel.title }}</span>
+        <input
+          v-else
+          ref="editInputRef"
+          v-model="editName"
+          class="panel-title-input"
+          @keydown.enter="confirmEdit"
+          @keydown.escape="cancelEdit"
+          @blur="confirmEdit"
+          @click.stop
+        />
+      </div>
       <div class="panel-header-actions">
         <button
           v-if="(panel.type === 'ssh' || panel.type === 'local') && workspaceId"
@@ -29,7 +39,6 @@
           <Radio :size="14" />
         </button>
         <button
-          v-if="panel.type === 'ssh' || panel.type === 'local'"
           class="panel-ai-lock"
           :class="{ locked: isAILocked }"
           @click.stop="emit('toggleAiLock', panel.id)"
@@ -37,7 +46,7 @@
         >
           <Sparkles :size="14" />
         </button>
-        <div v-if="panel.type === 'ssh' || panel.type === 'local'" class="panel-more-wrapper">
+        <div class="panel-more-wrapper">
           <button
             class="panel-more"
             @click.stop="toggleMoreMenu"
@@ -50,6 +59,12 @@
             <div v-if="panel.type === 'ssh'" class="menu-item" @click="connectSftp(); moreMenuVisible = false">{{ t('sidebar.connectSftp') }}</div>
             <div v-if="panel.type === 'ssh'" class="menu-item" @click="uploadFileRz(); moreMenuVisible = false">{{ t('terminal.uploadFileRz') }}</div>
             <div v-if="panel.type === 'ssh'" class="menu-item" @click="connectMonitor(); moreMenuVisible = false">{{ t('sidebar.connectMonitor') }}</div>
+            <div class="menu-item" @click="toggleOutputLog(); moreMenuVisible = false">
+              {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
+            </div>
+            <div v-if="isOutputLogOn" class="menu-item" @click="openLogDir(); moreMenuVisible = false">
+              {{ t('session.openLogDir') }}
+            </div>
             <div class="menu-item" @click="triggerSearch(); moreMenuVisible = false">{{ t('terminal.searchText') }}</div>
             <div class="menu-item" @click="triggerExport(); moreMenuVisible = false">{{ t('terminal.export') }}</div>
           </div>
@@ -71,13 +86,20 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onMounted, onUnmounted, inject } from 'vue'
-import { Radio, Sparkles, MoreHorizontal, X } from '@lucide/vue'
+import { Radio, Sparkles, MoreHorizontal, X, SquareTerminal, Laptop, Cable, Terminal, Zap } from '@lucide/vue'
 import BaseTerminal from './BaseTerminal.vue'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { CreateSession } from '../../wailsjs/go/main/App'
+import {
+  CreateSession,
+  EnableSessionOutputLog,
+  DisableSessionOutputLog,
+  GetSessionOutputLogInfo,
+  OpenPathInExplorer,
+} from '../../wailsjs/go/main/App'
+import { msg } from '../services/message'
 import { useI18n } from '../i18n'
 import type { Panel } from '../types/workspace'
 import type { ConnectionConfig } from '../types/session'
@@ -146,8 +168,71 @@ const editName = ref('')
 const editInputRef = ref<HTMLInputElement>()
 const moreMenuVisible = ref(false)
 
+// Session output log state — mirrors TabItem so both surfaces stay in sync
+// via panelStore.setOutputLog. Refreshed when the more menu opens and on mount.
+const isOutputLogOn = ref(false)
+const outputLogPath = ref('')
+
+const panelIcon = computed(() => {
+  const t = props.panel.type
+  if (t === 'local') return Laptop
+  if (t === 'serial') return Cable
+  if (t === 'telnet') return Terminal
+  if (t === 'mosh') return Zap
+  return SquareTerminal
+})
+
 function toggleMoreMenu() {
   moreMenuVisible.value = !moreMenuVisible.value
+  if (moreMenuVisible.value) {
+    refreshOutputLogState()
+  }
+}
+
+async function refreshOutputLogState() {
+  try {
+    const info = await GetSessionOutputLogInfo(props.panel.id)
+    isOutputLogOn.value = !!info.enabled
+    outputLogPath.value = info.path || ''
+    panelStore.setOutputLog(props.panel.id, { enabled: isOutputLogOn.value, path: outputLogPath.value })
+  } catch {
+    isOutputLogOn.value = false
+    outputLogPath.value = ''
+  }
+}
+
+async function toggleOutputLog() {
+  try {
+    if (isOutputLogOn.value) {
+      await DisableSessionOutputLog(props.panel.id)
+      const prev = outputLogPath.value
+      isOutputLogOn.value = false
+      outputLogPath.value = ''
+      panelStore.setOutputLog(props.panel.id, { enabled: false, path: '' })
+      msg.info(t('session.logStopped', { path: prev }))
+      return
+    }
+    const path = await EnableSessionOutputLog(props.panel.id, '')
+    if (!path) {
+      msg.error(t('session.logFailed', { error: 'unknown' }))
+      return
+    }
+    isOutputLogOn.value = true
+    outputLogPath.value = path
+    panelStore.setOutputLog(props.panel.id, { enabled: true, path })
+    msg.success(t('session.logStarted', { path }))
+  } catch (e: any) {
+    msg.error(t('session.logFailed', { error: String(e?.message ?? e) }))
+  }
+}
+
+async function openLogDir() {
+  if (!outputLogPath.value) return
+  try {
+    await OpenPathInExplorer(outputLogPath.value)
+  } catch (e: any) {
+    msg.error(String(e?.message ?? e))
+  }
 }
 
 function connectSftp() {
@@ -277,6 +362,7 @@ async function retryConnection(silent = false) {
 
 onMounted(() => {
   document.addEventListener('click', onDocumentClick)
+  refreshOutputLogState()
 })
 
 onUnmounted(() => {
@@ -298,6 +384,18 @@ watch(() => props.isActive, (active) => {
     nextTick(() => baseTerminalRef.value?.focus())
   }
 })
+
+// Keep local log state in sync when TabItem (or anyone else) toggles the log
+// via panelStore.setOutputLog — the header dot updates without reopening the menu.
+watch(() => props.panel.outputLog, (val) => {
+  if (val) {
+    isOutputLogOn.value = !!val.enabled
+    outputLogPath.value = val.path || ''
+  } else {
+    isOutputLogOn.value = false
+    outputLogPath.value = ''
+  }
+}, { deep: true })
 </script>
 
 <style scoped>
@@ -321,6 +419,11 @@ watch(() => props.isActive, (active) => {
 .panel-header:active {
   cursor: grabbing;
 }
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
 .panel-active .panel-header {
   background: var(--bg-elevated);
   border-bottom-color: var(--accent);
@@ -336,6 +439,34 @@ watch(() => props.isActive, (active) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: text;
+}
+.panel-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+.panel-type-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+.panel-active .panel-type-icon {
+  color: var(--accent);
+}
+.panel-log-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 6px;
+  height: 6px;
+  background: #e5484d;
+  border-radius: 50%;
+  pointer-events: auto;
 }
 .panel-active .panel-title {
   color: var(--text-primary);

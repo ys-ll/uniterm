@@ -525,7 +525,6 @@ onUnmounted(() => {
   height: 6px;
   background: #e5484d;
   border-radius: 50%;
-  border: 1px solid var(--bg-primary, #fff);
   pointer-events: auto;
 }
 .tab-item.active .tab-type-icon {
