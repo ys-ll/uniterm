@@ -39,6 +39,8 @@
   "conn.password": "パスワード",
   "conn.keyPath": "鍵のパス",
   "conn.keyPathPlaceholder": "例: ~/.ssh/id_rsa",
+  "conn.keyPassphrase": "鍵のパスフレーズ",
+  "conn.keyPassphrasePlaceholder": "秘密鍵にパスワードがない場合は空欄",
   "conn.selectKeyFile": "鍵ファイルを選択",
   "conn.cancel": "キャンセル",
   "conn.saveConnect": "保存して接続",

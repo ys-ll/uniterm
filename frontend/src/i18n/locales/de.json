@@ -39,6 +39,8 @@
   "conn.password": "Passwort",
   "conn.keyPath": "Schlüsselpfad",
   "conn.keyPathPlaceholder": "z. B. ~/.ssh/id_rsa",
+  "conn.keyPassphrase": "Schlüsselpasswort",
+  "conn.keyPassphrasePlaceholder": "Leer lassen, wenn der Schlüssel nicht verschlüsselt ist",
   "conn.selectKeyFile": "Schlüsseldatei auswählen",
   "conn.cancel": "Abbrechen",
   "conn.saveConnect": "Speichern & Verbinden",

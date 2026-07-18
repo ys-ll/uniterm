@@ -39,6 +39,8 @@
   "conn.password": "密碼",
   "conn.keyPath": "金鑰路徑",
   "conn.keyPathPlaceholder": "例如 ~/.ssh/id_rsa",
+  "conn.keyPassphrase": "金鑰密碼",
+  "conn.keyPassphrasePlaceholder": "私鑰無密碼可留空",
   "conn.selectKeyFile": "選擇金鑰檔案",
   "conn.cancel": "取消",
   "conn.saveConnect": "儲存並連線",

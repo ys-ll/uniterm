@@ -39,6 +39,8 @@
   "conn.password": "Mot de passe",
   "conn.keyPath": "Chemin de la clé",
   "conn.keyPathPlaceholder": "ex. ~/.ssh/id_rsa",
+  "conn.keyPassphrase": "Phrase secrète de la clé",
+  "conn.keyPassphrasePlaceholder": "Laisser vide si la clé n'est pas chiffrée",
   "conn.selectKeyFile": "Sélectionner le fichier de clé",
   "conn.cancel": "Annuler",
   "conn.saveConnect": "Enregistrer et connecter",

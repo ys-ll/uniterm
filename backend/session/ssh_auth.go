@@ -13,23 +13,10 @@ func makeSSHAuthMethods(config ConnectionConfig, kbCallback ssh.KeyboardInteract
 	case "password":
 		methods = append(methods, ssh.Password(config.Password))
 	case "key":
-		key, err := os.ReadFile(config.KeyPath)
-		if err != nil {
-			methods = append(methods, ssh.Password(config.Password))
-			break
+		if signer, ok := parsePrivateKeyFile(config.KeyPath, config.Password); ok {
+			methods = append(methods, ssh.PublicKeys(signer))
 		}
-		signer, err := ssh.ParsePrivateKey(key)
-		if err != nil {
-			methods = append(methods, ssh.Password(config.Password))
-			break
-		}
-		methods = append(methods, ssh.PublicKeys(signer))
-	case "agent":
-		methods = append(methods, ssh.Password(config.Password))
-	default:
-		methods = append(methods, ssh.Password(config.Password))
 	}
-
 
 	// Keyboard-interactive as fallback for password-less or failed-password scenarios.
 	if kbCallback != nil {
@@ -37,4 +24,27 @@ func makeSSHAuthMethods(config ConnectionConfig, kbCallback ssh.KeyboardInteract
 	}
 
 	return methods
+}
+
+// parsePrivateKeyFile reads the private key at path and parses it, using
+// passphrase when the key is encrypted. Returns (nil, false) on any error;
+// the caller is expected to fall back to other auth methods so the SSH
+// handshake surfaces a meaningful error to the user.
+func parsePrivateKeyFile(path, passphrase string) (ssh.Signer, bool) {
+	key, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	if passphrase != "" {
+		signer, err := ssh.ParsePrivateKeyWithPassphrase(key, []byte(passphrase))
+		if err != nil {
+			return nil, false
+		}
+		return signer, true
+	}
+	signer, err := ssh.ParsePrivateKey(key)
+	if err != nil {
+		return nil, false
+	}
+	return signer, true
 }

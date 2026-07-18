@@ -39,6 +39,8 @@
   "conn.password": "Contraseña",
   "conn.keyPath": "Ruta de la Clave",
   "conn.keyPathPlaceholder": "p. ej. ~/.ssh/id_rsa",
+  "conn.keyPassphrase": "Contraseña de la clave",
+  "conn.keyPassphrasePlaceholder": "Dejar vacío si la clave no está cifrada",
   "conn.selectKeyFile": "Seleccionar archivo de clave",
   "conn.cancel": "Cancelar",
   "conn.saveConnect": "Guardar y Conectar",
