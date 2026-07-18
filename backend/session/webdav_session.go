@@ -127,17 +127,32 @@ func (s *WebDAVSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 	if err != nil {
 		return FileListResult{}, err
 	}
-	fi, err := s.client.Stat(target)
+	// ReadDir doubles as an existence + is-dir check, and gowebdav's
+	// internal PROPFIND handles trailing-slash normalization that
+	// Stat() does not (Apache mod_dav returns 301 for /dir without a
+	// slash, which gowebdav treats as an error).
+	entries, err := s.client.ReadDir(target)
 	if err != nil {
-		return FileListResult{}, fmt.Errorf("no such directory: %s", target)
-	}
-	if !fi.IsDir() {
-		return FileListResult{}, fmt.Errorf("not a directory: %s", target)
+		return FileListResult{}, err
 	}
 	s.mu.Lock()
 	s.cwd = target
 	s.mu.Unlock()
-	return s.ListRemote(target)
+	files := make([]FileItem, 0, len(entries))
+	for _, e := range entries {
+		modTime := ""
+		if !e.ModTime().IsZero() {
+			modTime = e.ModTime().Format(time.RFC3339)
+		}
+		files = append(files, FileItem{
+			Name:    e.Name(),
+			Size:    e.Size(),
+			ModTime: modTime,
+			Mode:    e.Mode().String(),
+			IsDir:   e.IsDir(),
+		})
+	}
+	return FileListResult{Files: files, Dir: target}, nil
 }
 
 func (s *WebDAVSession) MakeDir(dir string) error {
