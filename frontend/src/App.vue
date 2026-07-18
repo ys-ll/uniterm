@@ -889,6 +889,15 @@ function closeStartAndReposition(prevTab: any): (newTabId: string) => void {
 async function onConnect(config: ConnectionConfig, keepOpen?: boolean, wasEdit?: boolean) {
   const prev = tabStore.activeTab
   const prevStart = (prev?.type === 'start' && !keepOpen) ? prev : undefined
+  // Persist form changes BEFORE dispatching by type. The type-specific
+  // handlers below only call connectionStore.add(), which is a silent
+  // no-op for existing ids and would otherwise drop edits made in the
+  // "Save & Connect" flow.
+  if (wasEdit) {
+    connectionStore.update(config.id, config)
+  } else {
+    connectionStore.add(config)
+  }
   if (config.type === 'ftp') { await onConnectFtp(config, prevStart); return }
   if (config.type === 'smb') { await onConnectSmb(config, prevStart); return }
   if (config.type === 'webdav') { await onConnectWebdav(config, prevStart); return }
@@ -897,11 +906,6 @@ async function onConnect(config: ConnectionConfig, keepOpen?: boolean, wasEdit?:
   if (config.type === 'vnc') { await onConnectVNC(config, prevStart); return }
   if (config.type === 'spice') { await onConnectSPICE(config, prevStart); return }
   if (config.type === 'database') { await onConnectDB(config, prevStart); return }
-  if (wasEdit) {
-    connectionStore.update(config.id, config)
-  } else {
-    connectionStore.add(config)
-  }
 
   // Credential check
   const resolved = await ensureCredentials(config)
