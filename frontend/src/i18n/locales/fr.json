@@ -107,6 +107,7 @@
   "terminal.aiLockedToPanel": "IA verrouillée sur ce panneau",
   "terminal.lockAIToPanel": "Verrouiller l'IA sur ce panneau",
   "terminal.broadcastInput": "Diffuser la saisie vers tous les panneaux",
+  "terminal.broadcastCtrlHint": "Ctrl+Clic : basculer uniquement ce terminal",
   "terminal.searchPlaceholder": "Rechercher...",
   "terminal.searchPrev": "Précédent",
   "terminal.searchNext": "Suivant",

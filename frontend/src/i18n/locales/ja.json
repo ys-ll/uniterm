@@ -107,6 +107,7 @@
   "terminal.aiLockedToPanel": "AI をこのパネルにロック中",
   "terminal.lockAIToPanel": "AI をこのパネルにロック",
   "terminal.broadcastInput": "すべてのパネルに入力をブロードキャスト",
+  "terminal.broadcastCtrlHint": "Ctrl+クリック：このターミナルのみ切り替え",
   "terminal.searchPlaceholder": "検索...",
   "terminal.searchPrev": "前へ",
   "terminal.searchNext": "次へ",

@@ -107,6 +107,7 @@
   "terminal.aiLockedToPanel": "KI an dieses Panel gebunden",
   "terminal.lockAIToPanel": "KI an dieses Panel binden",
   "terminal.broadcastInput": "Eingabe an alle Panels senden",
+  "terminal.broadcastCtrlHint": "Strg+Klick: nur dieses Terminal umschalten",
   "terminal.searchPlaceholder": "Suchen...",
   "terminal.searchPrev": "Vorheriges",
   "terminal.searchNext": "Nächstes",

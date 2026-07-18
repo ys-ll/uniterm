@@ -8,13 +8,13 @@ const tabState = reactive<{
   tabs: Tab[]
   activeTabId: string | null
   aiLockedPanelIds: Set<string>
-  broadcastWorkspaceId: string | null
+  broadcastPanelIds: Set<string>
   tabNotifications: Record<string, boolean>
 }>({
   tabs: [],
   activeTabId: null,
   aiLockedPanelIds: new Set<string>(),
-  broadcastWorkspaceId: null,
+  broadcastPanelIds: new Set<string>(),
   tabNotifications: {}
 })
 
@@ -43,18 +43,55 @@ export const useTabStore = defineStore('tab', () => {
     return ids.length > 0 ? ids[0] : null
   })
   const aiLockedPanelIds = computed(() => tabState.aiLockedPanelIds)
-  const broadcastWorkspaceId = computed(() => tabState.broadcastWorkspaceId)
+  const broadcastPanelIds = computed(() => tabState.broadcastPanelIds)
 
+  // Panel-level: whether a specific panel is participating in broadcast.
+  function isPanelBroadcasting(panelId: string): boolean {
+    return tabState.broadcastPanelIds.has(panelId)
+  }
+
+  // Workspace-level: any panel in the workspace is participating.
+  // Used for the button's active-highlight fallback and for legacy
+  // "if broadcasting, send to all" call sites (history / quick commands).
+  function isBroadcasting(workspaceId: string): boolean {
+    const tab = tabState.tabs.find(t => t.id === workspaceId)
+    if (!tab || tab.type !== 'workspace') return false
+    return tab.panelIds.some(id => tabState.broadcastPanelIds.has(id))
+  }
+
+  // Return the set of panels broadcasting within a given workspace.
+  function getBroadcastPanelIdsInWorkspace(workspaceId: string): string[] {
+    const tab = tabState.tabs.find(t => t.id === workspaceId)
+    if (!tab || tab.type !== 'workspace') return []
+    return tab.panelIds.filter(id => tabState.broadcastPanelIds.has(id))
+  }
+
+  // Plain click: if any panel in this workspace broadcasts, turn all off;
+  // otherwise turn all ssh/local panels on.
   function toggleBroadcast(workspaceId: string) {
-    if (tabState.broadcastWorkspaceId === workspaceId) {
-      tabState.broadcastWorkspaceId = null
+    const tab = tabState.tabs.find(t => t.id === workspaceId)
+    if (!tab || tab.type !== 'workspace') return
+    const panelStore = usePanelStore()
+    const anyOn = tab.panelIds.some(id => tabState.broadcastPanelIds.has(id))
+    if (anyOn) {
+      for (const id of tab.panelIds) tabState.broadcastPanelIds.delete(id)
     } else {
-      tabState.broadcastWorkspaceId = workspaceId
+      for (const id of tab.panelIds) {
+        const p = panelStore.getPanel(id)
+        if (p && (p.type === 'ssh' || p.type === 'local')) {
+          tabState.broadcastPanelIds.add(id)
+        }
+      }
     }
   }
 
-  function isBroadcasting(workspaceId: string): boolean {
-    return tabState.broadcastWorkspaceId === workspaceId
+  // Ctrl+click: toggle just this panel's participation.
+  function toggleBroadcastPanel(panelId: string) {
+    if (tabState.broadcastPanelIds.has(panelId)) {
+      tabState.broadcastPanelIds.delete(panelId)
+    } else {
+      tabState.broadcastPanelIds.add(panelId)
+    }
   }
 
   // ── Create tabs ──
@@ -283,6 +320,7 @@ export const useTabStore = defineStore('tab', () => {
 
     for (const pid of removedPanelIds) {
       tabState.aiLockedPanelIds.delete(pid)
+      tabState.broadcastPanelIds.delete(pid)
     }
 
     return removedPanelIds
@@ -471,6 +509,7 @@ export const useTabStore = defineStore('tab', () => {
 
     // Remove panel from workspace
     wsTab.panelIds = wsTab.panelIds.filter(id => id !== panelId)
+    tabState.broadcastPanelIds.delete(panelId)
     if (wsTab.activePanelId === panelId) {
       wsTab.activePanelId = wsTab.panelIds[0] || null
     }
@@ -679,9 +718,12 @@ export const useTabStore = defineStore('tab', () => {
     removeAILockedPanel,
     clearAILockedPanels,
     toggleTabLock,
-    broadcastWorkspaceId,
+    broadcastPanelIds,
     toggleBroadcast,
+    toggleBroadcastPanel,
     isBroadcasting,
+    isPanelBroadcasting,
+    getBroadcastPanelIdsInWorkspace,
     markTabNotification,
     clearTabNotification,
     hasTabNotification,

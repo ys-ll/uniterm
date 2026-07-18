@@ -5,7 +5,6 @@
       :panel-ids="panelIds"
       :active-panel-id="activePanelId"
       :tab-id="tabId"
-      :broadcast-active="broadcastActive"
       @close-panel="$emit('closePanel', $event)"
       @toggle-ai-lock="$emit('toggleAiLock', $event)"
       @duplicate="$emit('duplicate', $event)"
@@ -26,7 +25,6 @@ defineProps<{
   panelIds: string[]
   activePanelId: string | null
   tabId: string
-  broadcastActive: boolean
 }>()
 
 defineEmits<{

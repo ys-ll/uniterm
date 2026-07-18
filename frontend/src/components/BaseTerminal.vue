@@ -417,14 +417,12 @@ async function applySuggestion(item: ReturnType<typeof suggestions.getSelectedIt
     // replacement is exactly the currentToken; for multi-token input (e.g.
     // "git che" → "git checkout") backspaces leave the earlier text behind.
     if (props.broadcastActive && props.workspaceId) {
-      const tab = tabStore.tabs.find(t => t.id === props.workspaceId)
-      if (tab && tab.type === 'workspace') {
-        for (const pid of tab.panelIds) {
-          const p = panelStore.getPanel(pid)
-          if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
-            SessionWrite(p.sessionId, '\x15')
-            SessionWrite(p.sessionId, item.value)
-          }
+      const targets = tabStore.getBroadcastPanelIdsInWorkspace(props.workspaceId)
+      for (const pid of targets) {
+        const p = panelStore.getPanel(pid)
+        if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
+          SessionWrite(p.sessionId, '\x15')
+          SessionWrite(p.sessionId, item.value)
         }
       }
     } else if (sid) {
@@ -609,9 +607,9 @@ function writeTerminalInput(data: string, inAlternateScreen: boolean) {
   if (!sid || !filtered) return
 
   if (props.broadcastActive && props.workspaceId) {
-    const tab = tabStore.tabs.find(t => t.id === props.workspaceId)
-    if (tab && tab.type === 'workspace') {
-      for (const pid of tab.panelIds) {
+    const targets = tabStore.getBroadcastPanelIdsInWorkspace(props.workspaceId)
+    if (targets.length > 0) {
+      for (const pid of targets) {
         const p = panelStore.getPanel(pid)
         if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
           SessionWrite(p.sessionId, filtered)
@@ -1560,10 +1558,10 @@ const menu = useTerminalMenu({
   onPaste: async (text) => {
     if (props.mode === 'ssh' || props.mode === 'local') {
       if (props.broadcastActive && props.workspaceId) {
-        const tab = tabStore.tabs.find(t => t.id === props.workspaceId)
-        if (tab && tab.type === 'workspace') {
+        const targets = tabStore.getBroadcastPanelIdsInWorkspace(props.workspaceId)
+        if (targets.length > 0) {
           const filtered = filterTerminalInput(text, false)
-          for (const pid of tab.panelIds) {
+          for (const pid of targets) {
             const p = panelStore.getPanel(pid)
             if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
               // Bracket per target session — each has its own paste mode.
@@ -1571,6 +1569,8 @@ const menu = useTerminalMenu({
               SessionWrite(p.sessionId, wrap ? '\x1b[200~' + filtered + '\x1b[201~' : filtered)
             }
           }
+        } else {
+          await pasteToSession(text)
         }
       } else {
         await pasteToSession(text)

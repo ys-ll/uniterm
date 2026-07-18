@@ -107,6 +107,7 @@
   "terminal.aiLockedToPanel": "ИИ закреплен за этой панелью",
   "terminal.lockAIToPanel": "Закрепить ИИ за этой панелью",
   "terminal.broadcastInput": "Транслировать ввод на все панели",
+  "terminal.broadcastCtrlHint": "Ctrl+клик: переключить только этот терминал",
   "terminal.searchPlaceholder": "Поиск...",
   "terminal.searchPrev": "Назад",
   "terminal.searchNext": "Вперед",

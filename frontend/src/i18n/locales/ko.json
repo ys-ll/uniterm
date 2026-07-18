@@ -107,6 +107,7 @@
   "terminal.aiLockedToPanel": "AI가 이 패널에 잠김",
   "terminal.lockAIToPanel": "AI를 이 패널에 잠그기",
   "terminal.broadcastInput": "모든 패널에 입력 브로드캐스트",
+  "terminal.broadcastCtrlHint": "Ctrl+클릭: 이 터미널만 전환",
   "terminal.searchPlaceholder": "검색...",
   "terminal.searchPrev": "이전",
   "terminal.searchNext": "다음",

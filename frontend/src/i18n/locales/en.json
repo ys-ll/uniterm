@@ -110,6 +110,7 @@
   "terminal.aiLockedToPanel": "AI locked to this panel",
   "terminal.lockAIToPanel": "Lock AI to this panel",
   "terminal.broadcastInput": "Broadcast input to all panels",
+  "terminal.broadcastCtrlHint": "Ctrl+Click: toggle this terminal only",
   "terminal.searchPlaceholder": "Search...",
   "terminal.searchPrev": "Previous",
   "terminal.searchNext": "Next",

@@ -22,9 +22,9 @@
         <button
           v-if="(panel.type === 'ssh' || panel.type === 'local') && workspaceId"
           class="panel-broadcast"
-          :class="{ active: broadcastActive }"
-          @click.stop="tabStore.toggleBroadcast(workspaceId)"
-          :title="t('terminal.broadcastInput')"
+          :class="{ active: panelBroadcastActive }"
+          @click.stop="onBroadcastClick"
+          :title="broadcastTitle"
         >
           <Radio :size="14" />
         </button>
@@ -62,7 +62,7 @@
       :mode="panel.type === 'local' ? 'local' : 'ssh'"
       :session-id="panel.sessionId"
       :on-session-status="onSessionStatus"
-      :broadcast-active="broadcastActive"
+      :broadcast-active="panelBroadcastActive"
       :workspace-id="workspaceId"
       :panel-id="panel.id"
     />
@@ -98,7 +98,6 @@ const props = defineProps<{
   panel: Panel
   showHeader: boolean
   isActive: boolean
-  broadcastActive?: boolean
   workspaceId?: string
 }>()
 
@@ -122,6 +121,23 @@ const showCredentialDialog = inject<(title: string, subtitle: string, fields: ('
 const isAILocked = computed(() =>
   tabStore.isPanelAILocked(props.panel.id)
 )
+
+const panelBroadcastActive = computed(() =>
+  tabStore.isPanelBroadcasting(props.panel.id)
+)
+
+const broadcastTitle = computed(() =>
+  `${t('terminal.broadcastInput')}\n${t('terminal.broadcastCtrlHint')}`
+)
+
+function onBroadcastClick(e: MouseEvent) {
+  if (!props.workspaceId) return
+  if (e.ctrlKey || e.metaKey) {
+    tabStore.toggleBroadcastPanel(props.panel.id)
+  } else {
+    tabStore.toggleBroadcast(props.workspaceId)
+  }
+}
 
 const baseTerminalRef = ref<InstanceType<typeof BaseTerminal> | null>(null)
 

@@ -13,7 +13,6 @@
         :panel="panel"
         :show-header="isMultiPanel"
         :is-active="activePanelId === panel.id"
-        :broadcast-active="broadcastActive"
         :workspace-id="tabId"
         :key="`${panel.id}-${tabId}`"
         @close="handleClosePanel(panel.id)"
@@ -38,7 +37,6 @@
         :panel-ids="panelIds"
         :active-panel-id="activePanelId"
         :tab-id="tabId"
-        :broadcast-active="broadcastActive"
         @close-panel="(id) => $emit('closePanel', id)"
         @toggle-ai-lock="(id) => $emit('toggleAiLock', id)"
         @duplicate="(id) => $emit('duplicate', id)"
@@ -70,7 +68,6 @@ const props = defineProps<{
   panelIds: string[]
   activePanelId: string | null
   tabId: string
-  broadcastActive: boolean
 }>()
 
 const emit = defineEmits<{

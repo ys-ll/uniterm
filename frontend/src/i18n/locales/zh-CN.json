@@ -109,6 +109,7 @@
   "terminal.aiLockedToPanel": "AI 已锁定到此面板",
   "terminal.lockAIToPanel": "锁定 AI 到此面板",
   "terminal.broadcastInput": "广播输入到所有面板",
+  "terminal.broadcastCtrlHint": "Ctrl+点击：单独切换此终端",
   "terminal.searchPlaceholder": "搜索...",
   "terminal.searchPrev": "上一个",
   "terminal.searchNext": "下一个",

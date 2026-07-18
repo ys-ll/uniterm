@@ -107,6 +107,7 @@
   "terminal.aiLockedToPanel": "IA bloqueada en este panel",
   "terminal.lockAIToPanel": "Bloquear IA en este panel",
   "terminal.broadcastInput": "Difundir entrada a todos los paneles",
+  "terminal.broadcastCtrlHint": "Ctrl+Clic: alternar solo esta terminal",
   "terminal.searchPlaceholder": "Buscar...",
   "terminal.searchPrev": "Anterior",
   "terminal.searchNext": "Siguiente",
