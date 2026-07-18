@@ -303,8 +303,6 @@ export namespace session {
 	    ftpEncoding?: string;
 	    smbDomain?: string;
 	    smbShare?: string;
-	    webdavUrl?: string;
-	    webdavUseSSL: boolean;
 	    s3Region?: string;
 	    s3Bucket?: string;
 	    encoding?: string;
@@ -351,8 +349,6 @@ export namespace session {
 	        this.ftpEncoding = source["ftpEncoding"];
 	        this.smbDomain = source["smbDomain"];
 	        this.smbShare = source["smbShare"];
-	        this.webdavUrl = source["webdavUrl"];
-	        this.webdavUseSSL = source["webdavUseSSL"];
 	        this.s3Region = source["s3Region"];
 	        this.s3Bucket = source["s3Bucket"];
 	        this.encoding = source["encoding"];

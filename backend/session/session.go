@@ -73,9 +73,6 @@ type ConnectionConfig struct {
 	// SMB-specific fields
 	SmbDomain string `json:"smbDomain,omitempty"`
 	SmbShare  string `json:"smbShare,omitempty"`
-	// WebDAV-specific fields
-	WebdavURL   string `json:"webdavUrl,omitempty"`
-	WebdavUseSSL bool  `json:"webdavUseSSL"` // default true
 	// S3-specific fields
 	S3Region string `json:"s3Region,omitempty"`
 	S3Bucket string `json:"s3Bucket,omitempty"`

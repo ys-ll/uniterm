@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,15 +41,7 @@ func NewWebDAVSession(id string) *WebDAVSession {
 func (s *WebDAVSession) Connect(config ConnectionConfig) error {
 	s.setStatus(StatusConnecting)
 
-	port := config.Port
-	if port <= 0 {
-		port = 443
-	}
-	scheme := "https"
-	if !config.WebdavUseSSL {
-		scheme = "http"
-	}
-	url := fmt.Sprintf("%s://%s:%d", scheme, config.Host, port)
+	url := strings.TrimSuffix(config.Host, "/")
 	s.title = fmt.Sprintf("%s@%s", config.User, url)
 
 	client := gowebdav.NewClient(url, config.User, config.Password)

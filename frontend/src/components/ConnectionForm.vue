@@ -53,10 +53,10 @@
                 </el-button>
               </div>
             </el-form-item>
-            <el-form-item :label="form.type === 's3' ? 'Endpoint' : t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial'">
+            <el-form-item :label="form.type === 's3' ? 'Endpoint' : form.type === 'webdav' ? 'URL' : t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial'">
               <div class="host-port-row">
-                <el-input v-model="form.host" class="host-input" :placeholder="form.type === 's3' ? 'e.g. s3.amazonaws.com' : t('conn.hostPlaceholder')" />
-                <template v-if="form.type !== 's3'">
+                <el-input v-model="form.host" class="host-input" :placeholder="form.type === 's3' ? 'e.g. s3.amazonaws.com' : form.type === 'webdav' ? 'https://dav.example.com/dav/' : t('conn.hostPlaceholder')" />
+                <template v-if="form.type !== 's3' && form.type !== 'webdav'">
                   <span class="host-port-sep">:</span>
                   <el-input-number v-model="form.port" :min="0" :max="65535" class="port-input" />
                 </template>
@@ -158,11 +158,6 @@
               </el-form-item>
               <el-form-item label="Share">
                 <el-input v-model="form.smbShare" placeholder="Share name (leave empty to browse all)" />
-              </el-form-item>
-            </template>
-            <template v-if="form.type === 'webdav'">
-              <el-form-item label="SSL">
-                <el-switch v-model="form.webdavUseSSL" />
               </el-form-item>
             </template>
             <template v-if="form.type === 's3'">
@@ -590,8 +585,6 @@ const form = reactive<ConnectionConfig>({
   shellPath: '',
   smbDomain: 'WORKGROUP',
   smbShare: '',
-  webdavURL: '',
-  webdavUseSSL: true,
   s3Region: 'us-east-1',
   s3Bucket: '',
   logOnConnect: false,
@@ -696,7 +689,6 @@ watch(() => form.type, (newType) => {
   else if (newType === 'database') form.port = 3306
   else if (newType === 'ftp') form.port = 21
   else if (newType === 'smb') form.port = 445
-  else if (newType === 'webdav') form.port = 443
   if (REMOTE_TYPES.includes(newType) || newType === 'database') {
     form.authType = 'password'
   }

@@ -57,9 +57,6 @@ export interface ConnectionConfig {
   // SMB-specific
   smbDomain?: string
   smbShare?: string
-  // WebDAV-specific
-  webdavURL?: string
-  webdavUseSSL?: boolean
   // S3-specific
   s3Region?: string
   s3Bucket?: string
