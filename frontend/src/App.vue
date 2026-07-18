@@ -1029,8 +1029,8 @@ async function createLocalTerminal(shellPath?: string, keepOpen?: boolean) {
     // Create tab AFTER session is bound so BaseTerminal mounts with valid sessionId
     const prev = tabStore.activeTab
     const tab = prev?.type === 'start' && !keepOpen
-      ? tabStore.replaceStartTab(prev.id, shellName, panel.id)
-      : tabStore.createTerminalTab(shellName, panel.id)
+      ? tabStore.replaceStartTab(prev.id, panel.title, panel.id)
+      : tabStore.createTerminalTab(panel.title, panel.id)
     panelStore.movePanelToTab(panel.id, tab.id)
   } catch (e) {
     console.error('Failed to create local terminal:', e)

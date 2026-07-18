@@ -11,7 +11,7 @@
     @contextmenu="onContextMenu"
   >
     <button
-      v-if="(isActive || hovered) && !tab.locked"
+      v-if="hovered && !tab.locked"
       class="tab-close"
       @click.stop="$emit('close', tab.id)"
     ><X /></button>
@@ -30,20 +30,6 @@
       />
       <span v-else-if="!isActive && hasNotification && !tab.locked" class="tab-notification-dot" />
     </span>
-    <span v-if="!editing" class="tab-name" :class="{ 'tab-disconnected': isDisconnected }" @dblclick.stop="startEdit">
-      <ArrowDownUp v-if="hasActiveTransfers" class="transfer-indicator" :size="14" title="Transferring..." />
-      {{ tab.name }}
-    </span> 
-    <input
-      v-else
-      ref="editInputRef"
-      v-model="editName"
-      class="tab-name-input"
-      @keydown.enter="confirmEdit"
-      @keydown.escape="cancelEdit"
-      @blur="confirmEdit"
-      @click.stop
-    />
     <button
       v-if="tab.type === 'terminal'"
       class="tab-ai-lock"
@@ -60,6 +46,27 @@
     >
       <Sparkles :size="14" />
     </span>
+    <span v-if="!editing" class="tab-name" :class="{ 'tab-disconnected': isDisconnected }" @dblclick.stop="startEdit">
+      <ArrowDownUp v-if="hasActiveTransfers" class="transfer-indicator" :size="14" title="Transferring..." />
+      {{ tab.name }}
+    </span>
+    <input
+      v-else
+      ref="editInputRef"
+      v-model="editName"
+      class="tab-name-input"
+      @keydown.enter="confirmEdit"
+      @keydown.escape="cancelEdit"
+      @blur="confirmEdit"
+      @click.stop
+    />
+    <button
+      class="tab-more"
+      @click.stop="onMoreClick"
+      :title="t('terminal.more')"
+    >
+      <MoreHorizontal :size="14" />
+    </button>
 
     <Teleport to="body">
       <div
@@ -110,7 +117,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import { msg } from '../services/message'
 import type { TerminalTab, SettingsTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, WorkspaceTab } from '../types/workspace'
-import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Sparkles, Database, DatabaseZap, Layers, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus, Lock } from '@lucide/vue'
+import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Sparkles, Database, DatabaseZap, Layers, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus, Lock, MoreHorizontal } from '@lucide/vue'
 
 const props = defineProps<{
   tab: TerminalTab | SettingsTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | WorkspaceTab
@@ -235,6 +242,18 @@ function onContextMenu(e: MouseEvent) {
   e.stopPropagation()
   window.dispatchEvent(new CustomEvent('global:close-context-menus'))
   contextMenuStyle.value = { left: e.clientX + 'px', top: e.clientY + 'px' }
+  contextMenuVisible.value = true
+  if (supportsOutputLog.value) {
+    refreshOutputLogState()
+  }
+}
+
+function onMoreClick(e: MouseEvent) {
+  e.stopPropagation()
+  const btn = e.currentTarget as HTMLElement
+  const rect = btn.getBoundingClientRect()
+  window.dispatchEvent(new CustomEvent('global:close-context-menus'))
+  contextMenuStyle.value = { left: rect.left + 'px', top: rect.bottom + 4 + 'px' }
   contextMenuVisible.value = true
   if (supportsOutputLog.value) {
     refreshOutputLogState()
@@ -429,6 +448,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 2px;
   height: 28px;
+  min-width: 120px;
   padding: 0 12px;
   margin: 0 1px;
   cursor: pointer;
@@ -437,7 +457,7 @@ onUnmounted(() => {
   position: relative;
   color: var(--text-secondary);
   font-size: 12px;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
   flex-shrink: 0;
   --wails-draggable: no-drag;
 }
@@ -528,7 +548,11 @@ onUnmounted(() => {
   outline: none;
 }
 .tab-ai-lock {
-  background: none;
+  position: absolute;
+  left: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-hover);
   border: none;
   color: var(--text-muted);
   cursor: pointer;
@@ -536,18 +560,26 @@ onUnmounted(() => {
   height: 18px;
   padding: 0;
   border-radius: 3px;
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
-.tab-ai-lock .ai-lock-icon {
-  display: block;
+.tab-item:hover .tab-ai-lock {
+  display: inline-flex;
+}
+.tab-ai-lock.locked {
+  position: static;
+  transform: none;
+  display: inline-flex;
+  background: transparent;
+  color: var(--warning);
+  margin-right: 2px;
 }
 .tab-ai-lock:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
 }
-.tab-ai-lock.locked {
+.tab-ai-lock.locked:hover {
   color: var(--warning);
 }
 .tab-close {
@@ -568,6 +600,30 @@ onUnmounted(() => {
 }
 .tab-close:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.tab-more {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: var(--bg-hover);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tab-item:hover .tab-more {
+  display: inline-flex;
+}
+.tab-more:hover {
   color: var(--text-primary);
 }
 </style>
