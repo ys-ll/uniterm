@@ -445,14 +445,19 @@ const lockedPanels = computed(() => [...tabStore.aiLockedPanelIds])
 
 const currentIsTerminal = computed(() => {
   const tab = tabStore.activeTab
-  return tab?.type === 'terminal' || tab?.type === 'settings'
+  if (tab?.type === 'terminal') return true
+  if (tab?.type === 'workspace') {
+    const pid = (tab as any).activePanelId
+    return !!(pid && panelStore.getPanel(pid))
+  }
+  return false
 })
 
 const currentTerminalLabel = computed(() => {
   const tab = tabStore.activeTab
   if (!tab) return t('ai.currentTerminal')
   let panelId: string | undefined
-  if (tab.type === 'terminal' || tab.type === 'settings') {
+  if (tab.type === 'terminal') {
     panelId = (tab as any).panelId
   } else if (tab.type === 'workspace') {
     panelId = (tab as any).activePanelId
