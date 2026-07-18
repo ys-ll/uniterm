@@ -108,15 +108,8 @@ export function watchOutput(
         resolve({ output: '', timedOut: false, cancelled: true })
         return
       }
-      if (timedOut) {
-        resolve({ output: stripAnsi(output).trim(), timedOut: true })
-        return
-      }
-      const lastInfo = getLastDisplayLine(output)
-      const result = lastInfo
-        ? toDisplayLines(stripAnsi(output)).slice(0, lastInfo.index).join('\n').trim()
-        : stripAnsi(output).trim()
-      resolve({ output: result, timedOut: false })
+      const normalized = toDisplayLines(stripAnsi(output)).join('\n').trim()
+      resolve({ output: normalized, timedOut })
     }
 
     const checkIdle = () => {
@@ -487,7 +480,7 @@ function buildCommand(command: string, shellPath?: string): string {
 function stripAnsi(str: string): string {
   return str
     .replace(/\x1B\[[0-9;?]*[A-Za-z]/g, '')
-    .replace(/\x1B][0-9;]*(?:\x07|\x1B\\)/g, '')
+    .replace(/\x1B\][\s\S]*?(?:\x07|\x1B\\)/g, '')
     .replace(/\x1B[()[\]#\^%@>=]/g, '')
     .replace(/\x1B[/!_]./g, '')
     .replace(/\x1B./g, '')
