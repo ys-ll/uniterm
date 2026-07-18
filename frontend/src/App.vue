@@ -1290,9 +1290,9 @@ async function onConnectDB(config: ConnectionConfig, prevStart?: any) {
   const tab = tabStore.createDBTab(displayTitle, panel.id)
   if (reposition) reposition(tab.id)
   if (config.dbType === 'redis') {
-    tab.type = 'redis' as any
+    tab.type = 'redis'
   } else if (config.dbType === 'mongodb') {
-    tab.type = 'mongodb' as any
+    tab.type = 'mongodb'
   }
   panelStore.movePanelToTab(panel.id, tab.id)
   RecordRecentConnection(config.id)

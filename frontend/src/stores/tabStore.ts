@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive, computed } from 'vue'
-import type { Tab, TerminalTab, SettingsTab, WorkspaceTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MongoDBTab, MonitorTab, StartTab, PanelLayout, LayoutNode } from '../types/workspace'
+import type { Tab, TerminalTab, SettingsTab, WorkspaceTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, StartTab, PanelLayout, LayoutNode } from '../types/workspace'
 import { usePanelStore } from './panelStore'
 import { t } from '../i18n'
 
@@ -236,18 +236,6 @@ export const useTabStore = defineStore('tab', () => {
     const tab: DBTab = {
       type: 'database',
       id: genId('db-tab'),
-      panelId,
-      name
-    }
-    tabState.tabs.push(tab)
-    tabState.activeTabId = tab.id
-    return tab
-  }
-
-  function createMongoDBTab(name: string, panelId: string): MongoDBTab {
-    const tab: MongoDBTab = {
-      type: 'mongodb',
-      id: genId('mongo-tab'),
       panelId,
       name
     }
@@ -693,7 +681,6 @@ export const useTabStore = defineStore('tab', () => {
     createVNCTab,
     createSPICETab,
     createDBTab,
-    createMongoDBTab,
     createMonitorTab,
     createStartTab,
     createWorkspaceTab,

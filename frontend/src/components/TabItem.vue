@@ -76,7 +76,7 @@
         :style="contextMenuStyle"
         @click.stop
       >
-        <div v-if="tab.type === 'terminal'" class="menu-item" @click="duplicateTab">{{ t('tab.duplicate') }}</div>
+        <div v-if="canDuplicate" class="menu-item" @click="duplicateTab">{{ t('tab.duplicate') }}</div>
         <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="openSftp">{{ t('sidebar.connectSftp') }}</div>
         <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="uploadFileRz">{{ t('terminal.uploadFileRz') }}</div>
         <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="openMonitor">{{ t('sidebar.connectMonitor') }}</div>
@@ -217,6 +217,13 @@ const supportsOutputLog = computed(() => {
   return !!p && ['ssh', 'telnet', 'serial', 'mosh', 'local'].includes(p.type)
 })
 
+// Duplicate is supported for tabs backed by a reproducible connection:
+// terminals, file transfer, and database (incl. mongodb/redis variants).
+const canDuplicate = computed(() => {
+  const type = props.tab.type
+  return type === 'terminal' || type === 'sftp' || type === 'database' || type === 'mongodb' || type === 'redis'
+})
+
 function onDragStart(e: DragEvent) {
   e.dataTransfer?.setData('application/tab-id', props.tab.id)
   e.dataTransfer?.setData('application/tab-type', props.tab.type)
@@ -342,21 +349,49 @@ function closeLeft() {
 }
 
 async function duplicateTab() {
-  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
+  closeContextMenu()
+  const tab = props.tab
+  if (!('panelId' in tab)) return
+  const panel = panelStore.getPanel(tab.panelId)
   if (!panel) return
+
   const newPanel = panelStore.createPanel(panel.config, panel.type)
   panelStore.updateTitle(newPanel.id, panel.title)
+
+  let newTab
+  if (tab.type === 'terminal') {
+    newTab = tabStore.createTerminalTab(newPanel.title, newPanel.id)
+  } else if (tab.type === 'sftp') {
+    newTab = tabStore.createFtpTab(newPanel.title, newPanel.id)
+  } else if (tab.type === 'database' || tab.type === 'mongodb' || tab.type === 'redis') {
+    newTab = tabStore.createDBTab(newPanel.title, newPanel.id)
+    newTab.type = tab.type
+  } else {
+    return
+  }
+  panelStore.movePanelToTab(newPanel.id, newTab.id)
+
   if (panel.config) {
     try {
-      const info = await CreateSession(panel.config.type, panel.config)
+      const sessionType = resolveSessionType(tab.type, panel.config)
+      const info = await CreateSession(sessionType, panel.config)
       panelStore.bindSession(newPanel.id, info.id)
+      if (tab.type !== 'terminal') sessionStore.initSession(info.id)
     } catch (e) {
       console.error('Failed to duplicate session:', e)
     }
   }
-  const newTab = tabStore.createTerminalTab(newPanel.title, newPanel.id)
-  panelStore.movePanelToTab(newPanel.id, newTab.id)
-  closeContextMenu()
+}
+
+// The session-type argument to CreateSession isn't always panel.config.type:
+// database panels split into mysql/postgres/redis/mongodb by dbType.
+function resolveSessionType(tabType: string, config: any): string {
+  if (tabType === 'database' || tabType === 'mongodb' || tabType === 'redis') {
+    if (config?.dbType === 'redis') return 'redis'
+    if (config?.dbType === 'mongodb') return 'mongodb'
+    return 'database'
+  }
+  return config?.type
 }
 
 function openSftp() {
