@@ -575,7 +575,6 @@ watch(searchQuery, (q) => {
   gap: 4px;
   padding: 0 10px 6px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .qc-search-input {

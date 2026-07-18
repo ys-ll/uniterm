@@ -295,7 +295,7 @@ function onGroupDrop(groupId: string, e: DragEvent) {
 
 <style scoped>
 .tunnels-panel { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.tn-toolbar { display: flex; align-items: center; gap: 4px; padding: 0 10px 6px; flex-shrink: 0; border-bottom: 1px solid var(--border-subtle); }
+.tn-toolbar { display: flex; align-items: center; gap: 4px; padding: 0 10px 6px; flex-shrink: 0; }
 .tn-search-input { flex: 1; min-width: 0; }
 .tn-icon-btn { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
 .tn-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
