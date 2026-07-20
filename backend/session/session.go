@@ -79,6 +79,12 @@ type ConnectionConfig struct {
 	// Terminal character encoding for ssh/telnet:
 	// "" / "utf-8"(default) | "gbk" | "gb2312" | "gb18030" | "big5" | "shift-jis" | "euc-jp" | "euc-kr"
 	Encoding string `json:"encoding,omitempty"`
+	// K8s-specific fields
+	K8sConfigPath   string `json:"k8sConfigPath,omitempty"`   // File 模式：kubeconfig 文件路径
+	K8sConfigInline string `json:"k8sConfigInline,omitempty"` // Inline 模式：kubeconfig YAML 全文（明文存储，同其他连接密码策略）
+	K8sContext      string `json:"k8sContext,omitempty"`      // 选中的 context 名，为空则用 current-context
+	K8sNamespace    string `json:"k8sNamespace,omitempty"`    // 默认 namespace，"" = all
+	K8sInsecureTls  bool   `json:"k8sInsecureTls,omitempty"`  // 覆盖 kubeconfig 中的 insecure-skip-tls-verify
 	// LogOnConnect, when true, tells the App layer to enable the
 	// session output log automatically the first time this panel binds
 	// a session. It has no effect on later reconnects — a manually

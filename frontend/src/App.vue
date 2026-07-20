@@ -76,6 +76,12 @@
               :key="activeTab.id"
               :session-id="getPanelSessionId(activeTab.panelId) || ''"
             />
+            <K8sTabContent
+              v-else-if="activeTab.type === 'k8s'"
+              :key="activeTab.id"
+              :tab="activeTab"
+              :connection="k8sConnectionForTab(activeTab)"
+            />
             <StartTabContent
               v-else-if="activeTab.type === 'start'"
               :key="activeTab.id"
@@ -149,6 +155,7 @@ import DBTabContent from './components/DBTabContent.vue'
 import RedisTabContent from './components/RedisTabContent.vue'
 import MongoDBTabContent from './components/MongoDBTabContent.vue'
 import MonitorTabContent from './components/MonitorTabContent.vue'
+import K8sTabContent from './components/K8sTabContent.vue'
 import StartTabContent from './components/StartTabContent.vue'
 import ConnectionForm from './components/ConnectionForm.vue'
 import AISidebar from './components/AISidebar.vue'
@@ -863,6 +870,23 @@ function getPanelSessionId(panelId: string): string | null {
   return panelStore.getPanel(panelId)?.sessionId || null
 }
 
+function k8sConnectionForTab(tab: any): ConnectionConfig {
+  const conn = connectionStore.connections.find((c: ConnectionConfig) => c.id === tab.connectionId)
+  return conn || ({
+    id: tab.connectionId,
+    name: tab.name,
+    type: 'k8s',
+    host: '',
+    port: 0,
+    user: '',
+    authType: 'password',
+    k8sConfigPath: '',
+    k8sConfigInline: '',
+    k8sContext: '',
+    k8sNamespace: '',
+  } as ConnectionConfig)
+}
+
 function onSaveOnly(config: ConnectionConfig) {
   if (editConfig.value) {
     connectionStore.update(config.id, config)
@@ -906,6 +930,7 @@ async function onConnect(config: ConnectionConfig, keepOpen?: boolean, wasEdit?:
   if (config.type === 'vnc') { await onConnectVNC(config, prevStart); return }
   if (config.type === 'spice') { await onConnectSPICE(config, prevStart); return }
   if (config.type === 'database') { await onConnectDB(config, prevStart); return }
+  if (config.type === 'k8s') { await onConnectK8s(config, prevStart); return }
 
   // Credential check
   const resolved = await ensureCredentials(config)
@@ -1319,6 +1344,20 @@ async function onConnectDB(config: ConnectionConfig, prevStart?: any) {
     panelStore.updateStatus(panel.id, 'error')
     msg.error(`${t('db.connectFailed')}: ${errMsg}`)
   }
+}
+
+async function onConnectK8s(config: ConnectionConfig, prevStart?: any) {
+  connectionStore.add(config)
+
+  const displayTitle = config.name || 'K8s'
+  const panel = panelStore.createPanel(config, 'k8s')
+  panelStore.updateTitle(panel.id, displayTitle)
+  const reposition = prevStart ? closeStartAndReposition(prevStart) : null
+  const nsDefault = config.k8sNamespace || 'default'
+  const tab = tabStore.createK8sTab(displayTitle, panel.id, config.id, nsDefault)
+  if (reposition) reposition(tab.id)
+  panelStore.movePanelToTab(panel.id, tab.id)
+  RecordRecentConnection(config.id)
 }
 
 async function onConnectSerial(sessionId: string, portName: string, baudRate: number, keepOpen?: boolean) {

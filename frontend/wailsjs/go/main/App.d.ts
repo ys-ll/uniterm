@@ -4,6 +4,7 @@ import {database} from '../models';
 import {update} from '../models';
 import {session} from '../models';
 import {main} from '../models';
+import {k8s} from '../models';
 import {store} from '../models';
 import {sync} from '../models';
 
@@ -96,6 +97,18 @@ export function GetSystemFonts():Promise<Array<string>>;
 export function GetTableSchema(arg1:string,arg2:string,arg3:string):Promise<database.SchemaResult>;
 
 export function GetTables(arg1:string,arg2:string):Promise<Array<database.TableInfo>>;
+
+export function K8sConnect(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
+
+export function K8sDisconnect(arg1:string):Promise<void>;
+
+export function K8sListContexts(arg1:string,arg2:boolean):Promise<Array<k8s.ContextInfo>>;
+
+export function K8sRequest(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.K8sResponse>;
+
+export function K8sStartWatch(arg1:string,arg2:string):Promise<string>;
+
+export function K8sStopWatch(arg1:string):Promise<void>;
 
 export function KillProcess(arg1:string,arg2:number,arg3:string):Promise<void>;
 

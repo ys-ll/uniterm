@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { reactive, computed } from 'vue'
 import type { Tab, TerminalTab, SettingsTab, WorkspaceTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, StartTab, PanelLayout, LayoutNode } from '../types/workspace'
+import type { K8sTab } from '../types/k8s'
 import { usePanelStore } from './panelStore'
 import { t } from '../i18n'
 
@@ -250,6 +251,21 @@ export const useTabStore = defineStore('tab', () => {
       id: genId('monitor-tab'),
       panelId,
       name
+    }
+    tabState.tabs.push(tab)
+    tabState.activeTabId = tab.id
+    return tab
+  }
+
+  function createK8sTab(name: string, panelId: string, connectionId: string, namespace: string): K8sTab {
+    const tab: K8sTab = {
+      type: 'k8s',
+      id: genId('k8s-tab'),
+      panelId,
+      name,
+      connectionId,
+      connId: null,
+      namespace,
     }
     tabState.tabs.push(tab)
     tabState.activeTabId = tab.id
@@ -682,6 +698,7 @@ export const useTabStore = defineStore('tab', () => {
     createSPICETab,
     createDBTab,
     createMonitorTab,
+    createK8sTab,
     createStartTab,
     createWorkspaceTab,
     closeTab,

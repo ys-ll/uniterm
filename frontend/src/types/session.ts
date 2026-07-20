@@ -16,7 +16,7 @@ export interface PostLoginExpectStep {
 export interface ConnectionConfig {
   id: string
   name: string
-  type: 'ssh' | 'telnet' | 'mosh' | 'rdp' | 'vnc' | 'spice' | 'database' | 'local' | 'sftp' | 'monitor' | 'ftp' | 'serial' | 'smb' | 'webdav' | 's3'
+  type: 'ssh' | 'telnet' | 'mosh' | 'rdp' | 'vnc' | 'spice' | 'database' | 'local' | 'sftp' | 'monitor' | 'ftp' | 'serial' | 'smb' | 'webdav' | 's3' | 'k8s'
   host: string
   port: number
   user: string
@@ -65,6 +65,12 @@ export interface ConnectionConfig {
   // Enable session output log automatically on first connect. Applies
   // to terminal-stream types (ssh/telnet/serial/mosh/local).
   logOnConnect?: boolean
+  // Kubernetes-specific
+  k8sConfigPath?: string
+  k8sConfigInline?: string
+  k8sContext?: string
+  k8sNamespace?: string
+  k8sInsecureTls?: boolean
 }
 
 export interface SessionInfo {

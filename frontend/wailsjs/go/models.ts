@@ -200,6 +200,31 @@ export namespace database {
 
 }
 
+export namespace k8s {
+	
+	export class ContextInfo {
+	    name: string;
+	    cluster: string;
+	    user: string;
+	    namespace: string;
+	    current: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ContextInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.cluster = source["cluster"];
+	        this.user = source["user"];
+	        this.namespace = source["namespace"];
+	        this.current = source["current"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
 	export class AppInfo {
@@ -214,6 +239,20 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.version = source["version"];
+	    }
+	}
+	export class K8sResponse {
+	    status: number;
+	    body: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new K8sResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.body = source["body"];
 	    }
 	}
 	export class ModelInfo {
@@ -306,6 +345,11 @@ export namespace session {
 	    s3Region?: string;
 	    s3Bucket?: string;
 	    encoding?: string;
+	    k8sConfigPath?: string;
+	    k8sConfigInline?: string;
+	    k8sContext?: string;
+	    k8sNamespace?: string;
+	    k8sInsecureTls?: boolean;
 	    logOnConnect?: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -352,6 +396,11 @@ export namespace session {
 	        this.s3Region = source["s3Region"];
 	        this.s3Bucket = source["s3Bucket"];
 	        this.encoding = source["encoding"];
+	        this.k8sConfigPath = source["k8sConfigPath"];
+	        this.k8sConfigInline = source["k8sConfigInline"];
+	        this.k8sContext = source["k8sContext"];
+	        this.k8sNamespace = source["k8sNamespace"];
+	        this.k8sInsecureTls = source["k8sInsecureTls"];
 	        this.logOnConnect = source["logOnConnect"];
 	    }
 	
