@@ -57,8 +57,8 @@ const detailYaml = ref('')
 
 const ns = computed(() => props.tab.namespace)
 
-const pods = computed(() => store.getPods(connId.value, ns.value))
-const listError = computed(() => connId.value ? store.getError(connId.value, ns.value) : '')
+const pods = computed(() => store.getItems(connId.value, 'pods', ns.value))
+const listError = computed(() => connId.value ? store.getError(connId.value, 'pods', ns.value) : '')
 const filtered = computed(() => {
   const f = filter.value.trim().toLowerCase()
   if (!f) return pods.value
@@ -106,8 +106,8 @@ async function openDetail(pod: any) {
 
 async function refresh() {
   if (!connId.value) return
-  store.unsubscribePods(connId.value, ns.value)
-  await store.subscribePods(connId.value, ns.value)
+  store.unsubscribe(connId.value, 'pods', ns.value)
+  await store.subscribe(connId.value, 'pods', ns.value)
 }
 
 async function connect() {
@@ -134,7 +134,7 @@ async function connect() {
       tunnelUser,
       tunnelPassword
     )
-    await store.subscribePods(connId.value, ns.value)
+    await store.subscribe(connId.value, 'pods', ns.value)
   } catch (e: any) {
     error.value = String(e?.message || e)
   }
@@ -143,7 +143,7 @@ async function connect() {
 onMounted(connect)
 onBeforeUnmount(() => {
   if (connId.value) {
-    store.unsubscribePods(connId.value, ns.value)
+    store.unsubscribe(connId.value, 'pods', ns.value)
     k8sClient.disconnect(connId.value)
   }
 })
@@ -151,8 +151,8 @@ onBeforeUnmount(() => {
 // 命名空间切换
 watch(ns, async (newNs, oldNs) => {
   if (!connId.value) return
-  store.unsubscribePods(connId.value, oldNs)
-  await store.subscribePods(connId.value, newNs)
+  store.unsubscribe(connId.value, 'pods', oldNs)
+  await store.subscribe(connId.value, 'pods', newNs)
 })
 </script>
 
