@@ -3,7 +3,7 @@
     <div class="content">
       <div class="text" v-html="renderedContent" @click="onTextClick" />
 
-      <div v-if="message.role === 'assistant' && message.content" class="copy-action">
+      <div v-if="message.role === 'assistant' && message.content?.trim()" class="copy-action">
         <button class="copy-md-btn" @click="copyAsMarkdown" :title="t('ai.copyMarkdown')">
           <el-icon><Copy :size="14" /></el-icon>
           <span class="copy-md-label">{{ copyMdLabel }}</span>
