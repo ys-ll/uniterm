@@ -8,6 +8,7 @@
   "app.dontShowAgain": "不再提示（可在设置中开启）",
   "sidebar.collapse": "收起",
   "sidebar.personalization": "个性化",
+  "sidebar.newConnection": "新建连接",
   "sidebar.noConnections": "暂无连接",
   "sidebar.noSearchResults": "无匹配结果",
   "sidebar.searchPlaceholder": "搜索或快捷连接...",
