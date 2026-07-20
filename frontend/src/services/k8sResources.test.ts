@@ -49,3 +49,46 @@ describe('k8sResources', () => {
     expect(RESOURCES.find(r => r.key === 'pods')).toBeTruthy()
   })
 })
+
+describe('k8sResources completeness', () => {
+  const EXPECTED_KEYS = [
+    'pods', 'deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs', 'replicasets',
+    'services', 'ingresses',
+    'configmaps', 'secrets',
+    'persistentvolumeclaims', 'persistentvolumes',
+    'nodes', 'namespaces', 'events',
+  ]
+
+  it('contains all 16 built-in resources', () => {
+    const keys = RESOURCES.map(r => r.key).sort()
+    expect(keys).toEqual([...EXPECTED_KEYS].sort())
+  })
+
+  it('cluster-scoped resources are marked namespaced: false', () => {
+    const clusterScoped = ['nodes', 'persistentvolumes', 'namespaces']
+    for (const k of clusterScoped) {
+      const r = getResource(k)!
+      expect(r.namespaced).toBe(false)
+    }
+  })
+
+  it('every descriptor: listPath/watchPath return strings, columns non-empty', () => {
+    for (const r of RESOURCES) {
+      const lp = r.listPath(r.namespaced ? 'default' : '')
+      expect(typeof lp).toBe('string')
+      expect(lp.length).toBeGreaterThan(0)
+      const wp = r.watchPath(r.namespaced ? 'default' : '', '1')
+      expect(wp).toContain('watch=true')
+      expect(r.columns.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('every column value fn tolerates a mostly-empty object', () => {
+    const empty = { metadata: { name: 'x', namespace: 'default', uid: 'u', creationTimestamp: new Date().toISOString() } }
+    for (const r of RESOURCES) {
+      for (const c of r.columns) {
+        expect(() => c.value(empty)).not.toThrow()
+      }
+    }
+  })
+})

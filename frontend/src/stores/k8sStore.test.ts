@@ -77,7 +77,12 @@ describe('k8sStore.subscribe (generic)', () => {
   })
 
   it('cluster-scoped resource (nodes) stores state under empty ns regardless of passed ns', async () => {
-    // 占位：Task 4 之后补断言。此测在 Task 3 时先通过。
-    expect(true).toBe(true)
+    requestJSON.mockResolvedValue({ status: 200, data: { items: [], metadata: { resourceVersion: '1' } }, raw: '' })
+    const s = useK8sStore()
+    await s.subscribe('c1', 'nodes', 'default')
+    // 传 'default'，但 nodes 是集群级：state 挂在空 ns 下
+    expect(s.getItems('c1', 'nodes', 'anything-else')).toEqual([])
+    // 请求 URL 里没有 namespaces/
+    expect(requestJSON).toHaveBeenCalledWith('c1', 'GET', '/api/v1/nodes?limit=500')
   })
 })
