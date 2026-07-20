@@ -94,6 +94,7 @@
   "tab.unlock": "解鎖標籤",
   "tab.closeConfirmTitle": "關閉確認",
   "tab.closeConnectedConfirm": "該視窗已連線，關閉將中斷連線。確定要關閉嗎？",
+  "tab.closeConnectedBatchConfirm": "本次將關閉 {count} 個已連線的工作階段，全部中斷連線。確定要關閉嗎？",
   "tab.more": "更多分頁",
   "tab.dontShowAgain": "不再提示（可在設定中開啟）",
   "terminal.duplicate": "複製連接",

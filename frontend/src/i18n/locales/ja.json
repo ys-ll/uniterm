@@ -94,6 +94,7 @@
   "tab.unlock": "ロック解除",
   "tab.closeConfirmTitle": "閉じる確認",
   "tab.closeConnectedConfirm": "このタブは接続中です。閉じると切断されます。本当に閉じますか？",
+  "tab.closeConnectedBatchConfirm": "接続中の {count} 個のセッションを閉じて切断します。よろしいですか？",
   "tab.more": "他のタブ",
   "tab.dontShowAgain": "今後表示しない（設定で再開可能）",
   "terminal.duplicate": "複製",

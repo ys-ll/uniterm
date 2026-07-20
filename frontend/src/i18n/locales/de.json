@@ -94,6 +94,7 @@
   "tab.unlock": "Tab entsperren",
   "tab.closeConfirmTitle": "Schließen bestätigen",
   "tab.closeConnectedConfirm": "Dieser Tab hat eine aktive Verbindung. Beim Schließen wird die Verbindung getrennt. Wirklich schließen?",
+  "tab.closeConnectedBatchConfirm": "{count} verbundene Sitzungen werden getrennt. Wirklich schließen?",
   "tab.more": "Weitere Tabs",
   "tab.dontShowAgain": "Nicht mehr anzeigen (in Einstellungen wieder aktivierbar)",
   "terminal.duplicate": "Duplizieren",

@@ -94,6 +94,7 @@
   "tab.unlock": "Déverrouiller l'onglet",
   "tab.closeConfirmTitle": "Confirmer la fermeture",
   "tab.closeConnectedConfirm": "Cet onglet est connecté. Le fermer déconnectera la session. Continuer ?",
+  "tab.closeConnectedBatchConfirm": "{count} sessions connectées seront déconnectées. Confirmer la fermeture ?",
   "tab.more": "Plus d'onglets",
   "tab.dontShowAgain": "Ne plus afficher (réactivable dans les paramètres)",
   "terminal.duplicate": "Dupliquer",

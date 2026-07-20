@@ -1157,6 +1157,8 @@ export namespace store {
 	    ai: AISettings;
 	    keyboard: Record<string, KeyBinding>;
 	    autoCheckUpdate?: boolean;
+	    closeTabPrompt?: boolean;
+	    closeAppPrompt?: boolean;
 	    sftpBookmarks: SFTPBookmarks;
 	    customTerminalThemes: CustomTerminalTheme[];
 	    defaultLocalShell: string;
@@ -1173,6 +1175,8 @@ export namespace store {
 	        this.ai = this.convertValues(source["ai"], AISettings);
 	        this.keyboard = this.convertValues(source["keyboard"], KeyBinding, true);
 	        this.autoCheckUpdate = source["autoCheckUpdate"];
+	        this.closeTabPrompt = source["closeTabPrompt"];
+	        this.closeAppPrompt = source["closeAppPrompt"];
 	        this.sftpBookmarks = this.convertValues(source["sftpBookmarks"], SFTPBookmarks);
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], CustomTerminalTheme);
 	        this.defaultLocalShell = source["defaultLocalShell"];

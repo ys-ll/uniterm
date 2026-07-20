@@ -94,6 +94,7 @@
   "tab.unlock": "Открепить вкладку",
   "tab.closeConfirmTitle": "Подтверждение закрытия",
   "tab.closeConnectedConfirm": "Эта вкладка подключена. Закрытие приведёт к разрыву соединения. Продолжить?",
+  "tab.closeConnectedBatchConfirm": "Будут отключены {count} активных сеансов. Закрыть их?",
   "tab.more": "Еще вкладки",
   "tab.dontShowAgain": "Больше не показывать (можно включить в настройках)",
   "terminal.duplicate": "Дублировать",

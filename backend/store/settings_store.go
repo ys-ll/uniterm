@@ -99,6 +99,8 @@ type AppSettings struct {
 	AI                   AISettings            `json:"ai"`
 	Keyboard             map[string]KeyBinding `json:"keyboard"`
 	AutoCheckUpdate      *bool                 `json:"autoCheckUpdate"`
+	CloseTabPrompt       *bool                 `json:"closeTabPrompt"`
+	CloseAppPrompt       *bool                 `json:"closeAppPrompt"`
 	SFTPBookmarks        SFTPBookmarks         `json:"sftpBookmarks"`
 	CustomTerminalThemes []CustomTerminalTheme `json:"customTerminalThemes"`
 	DefaultLocalShell    string                `json:"defaultLocalShell"`
@@ -191,6 +193,14 @@ func (s *SettingsStore) Load() (AppSettings, error) {
 		settings.AutoCheckUpdate = boolPtr(true)
 		needsSave = true
 	}
+	if settings.CloseTabPrompt == nil {
+		settings.CloseTabPrompt = boolPtr(true)
+		needsSave = true
+	}
+	if settings.CloseAppPrompt == nil {
+		settings.CloseAppPrompt = boolPtr(true)
+		needsSave = true
+	}
 	if needsSave {
 		jsonData, _ := json.MarshalIndent(settings, "", "  ")
 		_ = os.WriteFile(s.filePath(), jsonData, 0600)
@@ -227,6 +237,8 @@ func defaultSettings() AppSettings {
 		},
 		Keyboard:        defaultKeyboard(),
 		AutoCheckUpdate: boolPtr(true),
+		CloseTabPrompt:  boolPtr(true),
+		CloseAppPrompt:  boolPtr(true),
 		SFTPBookmarks: SFTPBookmarks{
 			LocalPaths:  []string{},
 			RemotePaths: []string{},

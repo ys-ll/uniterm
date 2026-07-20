@@ -17,6 +17,7 @@
     <div class="header-tabs" :class="{ 'tabs-centered': platform === 'darwin' }">
       <TabsList
         @close-tab="(id: string) => emit('close-tab', id)"
+        @close-tab-batch="(ids: string[]) => emit('close-tab-batch', ids)"
         @toggle-ai-lock="(panelId: string) => emit('toggle-ai-lock', panelId)"
         @tab-dragstart="(e: DragEvent, tabId: string) => emit('tab-dragstart', e, tabId)"
       />
@@ -93,6 +94,7 @@ const emit = defineEmits<{
   'toggle-sidebar': []
   'open-settings': []
   'close-tab': [id: string]
+  'close-tab-batch': [ids: string[]]
   'toggle-ai-lock': [panelId: string]
   'tab-dragstart': [e: DragEvent, tabId: string]
 }>()

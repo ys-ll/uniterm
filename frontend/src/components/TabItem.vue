@@ -123,6 +123,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   activate: [id: string]
   close: [id: string]
+  closeBatch: [ids: string[]]
   toggleAiLock: [panelId: string]
 }>()
 
@@ -330,22 +331,24 @@ function closeTab() {
 function closeOther() {
   const allTabs = tabStore.tabs
   const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  const others = allTabs.filter((t, i) => i !== currentIdx && !t.locked)
-  others.forEach(t => emit('close', t.id))
+  const ids = allTabs.filter((t, i) => i !== currentIdx && !t.locked).map(t => t.id)
+  if (ids.length) emit('closeBatch', ids)
   closeContextMenu()
 }
 
 function closeRight() {
   const allTabs = tabStore.tabs
   const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  allTabs.slice(currentIdx + 1).filter(t => !t.locked).forEach(t => emit('close', t.id))
+  const ids = allTabs.slice(currentIdx + 1).filter(t => !t.locked).map(t => t.id)
+  if (ids.length) emit('closeBatch', ids)
   closeContextMenu()
 }
 
 function closeLeft() {
   const allTabs = tabStore.tabs
   const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  allTabs.slice(0, currentIdx).filter(t => !t.locked).forEach(t => emit('close', t.id))
+  const ids = allTabs.slice(0, currentIdx).filter(t => !t.locked).map(t => t.id)
+  if (ids.length) emit('closeBatch', ids)
   closeContextMenu()
 }
 

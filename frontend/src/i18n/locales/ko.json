@@ -94,6 +94,7 @@
   "tab.unlock": "탭 잠금 해제",
   "tab.closeConfirmTitle": "닫기 확인",
   "tab.closeConnectedConfirm": "이 탭은 연결되어 있습니다. 닫으면 연결이 끊어집니다. 계속하시겠습니까?",
+  "tab.closeConnectedBatchConfirm": "연결된 세션 {count}개가 끊깁니다. 계속하시겠습니까?",
   "tab.more": "더 많은 탭",
   "tab.dontShowAgain": "다시 표시하지 않음 (설정에서 다시 활성화 가능)",
   "terminal.duplicate": "복제",

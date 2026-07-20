@@ -6,6 +6,7 @@
       @toggle-sidebar="sidebarVisible = !sidebarVisible"
       @open-settings="openSettings"
       @close-tab="closeTab"
+      @close-tab-batch="closeTabBatch"
       @toggle-ai-lock="onToggleAiLock"
       @tab-dragstart="onTabDragStart"
     />
@@ -764,7 +765,7 @@ function openSettings() {
   panelStore.movePanelToTab(panel.id, tab.id)
 }
 
-async function closeTab(tabId: string) {
+async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
   // Close session before removing panel to clean up Go-side resources
   const tab = tabStore.tabs.find(t => t.id === tabId)
   if (tab?.locked) return
@@ -778,7 +779,7 @@ async function closeTab(tabId: string) {
     return
   }
   // Confirm before closing connected sessions to prevent accidental disconnect
-  if (tab && tab.type !== 'settings') {
+  if (tab && tab.type !== 'settings' && !opts.skipConfirm) {
     const panelIds = tab.type === 'workspace' ? tab.panelIds : 'panelId' in tab ? [tab.panelId] : []
     const hasConnected = panelIds.some(pid => {
       const p = panelStore.getPanel(pid)
@@ -870,6 +871,54 @@ async function closeTab(tabId: string) {
       tabStore.createStartTab()
     }
   })
+}
+
+// Batch close (close left/right/others). Consolidate the "has connected
+// sessions" confirmation into a single dialog so users don't get one prompt
+// per tab, and honor "don't show again" for the current batch too.
+async function closeTabBatch(tabIds: string[]) {
+  if (!tabIds.length) return
+  const targets = tabIds
+    .map(id => tabStore.tabs.find(t => t.id === id))
+    .filter((t): t is NonNullable<typeof t> => !!t && !t.locked)
+  if (!targets.length) return
+
+  const connectedCount = targets.reduce((n, tab) => {
+    if (tab.type === 'settings' || tab.type === 'start') return n
+    const panelIds = tab.type === 'workspace' ? tab.panelIds : 'panelId' in tab ? [tab.panelId] : []
+    const hit = panelIds.some(pid => {
+      const p = panelStore.getPanel(pid)
+      if (!p?.sessionId) return false
+      return sessionStore.getStatus(p.sessionId) === 'connected'
+    })
+    return hit ? n + 1 : n
+  }, 0)
+
+  if (connectedCount > 0 && settingsStore.settings.closeTabPrompt) {
+    const dontShowAgain = ref(false)
+    try {
+      await ElMessageBox.confirm(
+        h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, [
+          h('span', t('tab.closeConnectedBatchConfirm', { count: connectedCount })),
+          h(ElCheckbox, {
+            'onUpdate:modelValue': (v: boolean) => { dontShowAgain.value = v }
+          }, () => t('tab.dontShowAgain'))
+        ]),
+        t('tab.closeConfirmTitle'),
+        { confirmButtonText: t('tab.close'), cancelButtonText: t('conn.cancel'), type: 'warning' }
+      )
+    } catch {
+      return
+    }
+    if (dontShowAgain.value) {
+      settingsStore.settings.closeTabPrompt = false
+      settingsStore.save()
+    }
+  }
+
+  for (const tab of targets) {
+    await closeTab(tab.id, { skipConfirm: true })
+  }
 }
 
 function getPanelConfig(panelId: string): ConnectionConfig | null {

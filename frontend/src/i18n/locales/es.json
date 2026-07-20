@@ -94,6 +94,7 @@
   "tab.unlock": "Desbloquear pestaña",
   "tab.closeConfirmTitle": "Confirmar Cierre",
   "tab.closeConnectedConfirm": "Esta pestaña está conectada. Al cerrarla se desconectará. ¿Continuar?",
+  "tab.closeConnectedBatchConfirm": "Se desconectarán {count} sesiones activas. ¿Cerrarlas?",
   "tab.more": "Más pestañas",
   "tab.dontShowAgain": "No mostrar de nuevo (se puede reactivar en ajustes)",
   "terminal.duplicate": "Duplicar",

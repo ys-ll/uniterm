@@ -96,6 +96,7 @@
   "tab.unlock": "解锁标签",
   "tab.closeConfirmTitle": "关闭确认",
   "tab.closeConnectedConfirm": "该窗口已连接，关闭将断开连接。确定要关闭吗？",
+  "tab.closeConnectedBatchConfirm": "本次将关闭 {count} 个已连接的会话，全部断开连接。确定要关闭吗？",
   "tab.more": "更多标签",
   "tab.dontShowAgain": "不再提示（可在设置中开启）",
   "terminal.duplicate": "复制连接",
