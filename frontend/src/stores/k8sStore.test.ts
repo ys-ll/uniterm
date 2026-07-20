@@ -85,4 +85,41 @@ describe('k8sStore.subscribe (generic)', () => {
     // 请求 URL 里没有 namespaces/
     expect(requestJSON).toHaveBeenCalledWith('c1', 'GET', '/api/v1/nodes?limit=500')
   })
+
+  it('subscribe survives unsubscribe mid-list (no NPE, no orphan watch)', async () => {
+    // requestJSON never resolves until we let it — simulate a slow list call.
+    let resolveList: (v: any) => void = () => {}
+    requestJSON.mockImplementation(() => new Promise(r => { resolveList = r }))
+
+    const s = useK8sStore()
+    const subP = s.subscribe('c1', 'pods', 'default')  // hangs on await
+    // Unsubscribe before list resolves.
+    s.unsubscribe('c1', 'pods', 'default')
+    // Now let the list finish; subscribe should notice state is gone and bail.
+    resolveList({ status: 200, data: { items: [{ metadata: { uid: 'p1', name: 'p1' } }], metadata: { resourceVersion: '1' } }, raw: '' })
+    await subP
+    // No items visible (state was torn down).
+    expect(s.getItems('c1', 'pods', 'default')).toEqual([])
+    // Watch never started (guarded by the post-list identity check).
+    expect(startWatch).not.toHaveBeenCalled()
+  })
+
+  it('subscribe survives unsubscribe mid-startWatch (calls stop on the orphan handle)', async () => {
+    requestJSON.mockResolvedValue({ status: 200, data: { items: [], metadata: { resourceVersion: '1' } }, raw: '' })
+    // Slow startWatch.
+    let resolveWatch: (v: any) => void = () => {}
+    const orphanStop = vi.fn()
+    startWatch.mockImplementation(() => new Promise(r => { resolveWatch = r }))
+
+    const s = useK8sStore()
+    const subP = s.subscribe('c1', 'pods', 'default')
+    // Let list finish, but startWatch hangs — unsubscribe now.
+    await Promise.resolve()  // yield so list resolves
+    await Promise.resolve()  // extra tick for chained then
+    s.unsubscribe('c1', 'pods', 'default')
+    resolveWatch({ id: 'w-orphan', stop: orphanStop })
+    await subP
+    // Orphan watch handle's stop() was called.
+    expect(orphanStop).toHaveBeenCalled()
+  })
 })

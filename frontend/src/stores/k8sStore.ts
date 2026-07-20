@@ -45,10 +45,14 @@ export const useK8sStore = defineStore('k8s', () => {
     }
     st = { items: new Map(), resourceVersion: '', watch: null, refCount: 1, error: '' }
     states.value.set(key, st)
+    // reactive Map 会为对象值包一层 proxy；读回作为身份基准，后续 !== 比较才成立
+    st = states.value.get(key)!
 
     // 初始 list
     const listPath = desc.listPath(effectiveNs)
     const { status, data, raw } = await client.requestJSON<any>(connID, 'GET', listPath)
+    // 竞态守卫：期间被 unsubscribe（或换订阅）就丢弃结果
+    if (states.value.get(key) !== st) return
     if (status !== 200 || !data) {
       st.error = `list ${desc.kind} HTTP ${status}: ${raw?.slice(0, 400) || ''}`
       bump(key, st)
@@ -59,11 +63,18 @@ export const useK8sStore = defineStore('k8s', () => {
     }
     st.resourceVersion = data.metadata?.resourceVersion || ''
     bump(key, st)
+    // bump 换了 slot，重新读回作为当前追踪句柄
     st = states.value.get(key)!
 
     // watch
     const watchPath = desc.watchPath(effectiveNs, st.resourceVersion)
-    st.watch = await client.startWatch(connID, watchPath, (ev) => handleEvent(key, ev))
+    const handle = await client.startWatch(connID, watchPath, (ev) => handleEvent(key, ev))
+    // 竞态守卫：startWatch 期间 state 已消失/被替换，停掉孤儿 watch
+    if (states.value.get(key) !== st) {
+      handle.stop()
+      return
+    }
+    st.watch = handle
   }
 
   function handleEvent(key: string, ev: K8sWatchEvent) {
