@@ -1,113 +1,78 @@
 <template>
-  <div class="k8s-tab">
-    <div v-if="error" class="err">{{ error }}</div>
-    <div v-else-if="!connId" class="loading">Connecting…</div>
-    <template v-else>
-      <div v-if="listError" class="err">{{ listError }}</div>
-      <div class="toolbar">
-        <span class="title">Pods ({{ pods.length }})</span>
-        <input v-model="filter" placeholder="filter" class="filter" />
-        <button @click="refresh">↻</button>
+  <div class="db-tab-content">
+    <div v-if="error" class="k8s-fatal">{{ error }}</div>
+    <div v-else-if="!connId" class="k8s-connecting">Connecting…</div>
+    <div v-else class="db-main">
+      <div class="db-left" :style="{ width: leftWidth + 'px' }">
+        <K8sTree v-model="currentResourceKey" />
       </div>
-      <table class="list">
-        <thead><tr><th>Name</th><th>Namespace</th><th>Ready</th><th>Status</th><th>Restarts</th><th>Age</th></tr></thead>
-        <tbody>
-          <tr v-for="p in filtered" :key="p.metadata.uid" @click="openDetail(p)" class="row">
-            <td>{{ p.metadata.name }}</td>
-            <td>{{ p.metadata.namespace }}</td>
-            <td>{{ readyString(p) }}</td>
-            <td>{{ p.status?.phase || '' }}</td>
-            <td>{{ totalRestarts(p) }}</td>
-            <td>{{ age(p.metadata.creationTimestamp) }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-if="!pods.length && !listError" class="empty">
-        No pods in namespace <code>{{ ns || '(all)' }}</code>.
+      <div class="db-resizer" @mousedown="onResizeStart" />
+      <div class="db-right">
+        <K8sResourceList
+          :conn-id="connId"
+          :resource-key="currentResourceKey"
+          :initial-namespace="initialNamespace"
+          :namespace-options="namespaceOptions"
+          @row-click="onRowClick"
+        />
       </div>
+    </div>
 
-      <div v-if="detail" class="drawer">
-        <div class="drawer-head">
-          <span>{{ detail.metadata.namespace }} / {{ detail.metadata.name }}</span>
-          <button @click="detail = null">✕</button>
-        </div>
-        <pre class="yaml">{{ detailYaml }}</pre>
-      </div>
-    </template>
+    <K8sYamlDrawer :obj="detail" @close="detail = null" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useK8sStore } from '../stores/k8sStore'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as k8sClient from '../services/k8sClient'
 import { useTunnelCredentials } from '../composables/useTunnelCredentials'
+import K8sTree from './K8sTree.vue'
+import K8sResourceList from './K8sResourceList.vue'
+import K8sYamlDrawer from './K8sYamlDrawer.vue'
 import type { K8sTab } from '../types/k8s'
 import type { ConnectionConfig } from '../types/session'
 
 const props = defineProps<{ tab: K8sTab; connection: ConnectionConfig }>()
 
-const store = useK8sStore()
 const { resolveTunnelCredentials } = useTunnelCredentials()
+
 const connId = ref<string>('')
 const error = ref('')
-const filter = ref('')
+const currentResourceKey = ref<string>('pods')
 const detail = ref<any | null>(null)
-const detailYaml = ref('')
+const initialNamespace = ref<string>(props.tab.namespace || '')
 
-const ns = computed(() => props.tab.namespace)
-
-const pods = computed(() => store.getItems(connId.value, 'pods', ns.value))
-const listError = computed(() => connId.value ? store.getError(connId.value, 'pods', ns.value) : '')
-const filtered = computed(() => {
-  const f = filter.value.trim().toLowerCase()
-  if (!f) return pods.value
-  return pods.value.filter(p => (p.metadata?.name || '').toLowerCase().includes(f))
+// 静态候选 + 打开时选中的 ns，后续 PR 再动态拉 /api/v1/namespaces。
+const namespaceOptions = computed(() => {
+  const set = new Set<string>(['default', 'kube-system', 'kube-public'])
+  if (initialNamespace.value) set.add(initialNamespace.value)
+  return Array.from(set)
 })
 
-function readyString(pod: any): string {
-  const cs = pod.status?.containerStatuses || []
-  const ready = cs.filter((c: any) => c.ready).length
-  return `${ready}/${cs.length}`
+// 左侧宽度 + resizer（抄 DBTabContent）
+const leftWidth = ref(220)
+let resizeStartX = 0
+let resizeStartWidth = 0
+let resizing = false
+function onResizeStart(e: MouseEvent) {
+  resizeStartX = e.clientX
+  resizeStartWidth = leftWidth.value
+  resizing = true
+  document.addEventListener('mousemove', onResizeMove)
+  document.addEventListener('mouseup', onResizeEnd)
+}
+function onResizeMove(e: MouseEvent) {
+  const dx = e.clientX - resizeStartX
+  leftWidth.value = Math.max(150, Math.min(500, resizeStartWidth + dx))
+}
+function onResizeEnd() {
+  resizing = false
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
 }
 
-function totalRestarts(pod: any): number {
-  const cs = pod.status?.containerStatuses || []
-  return cs.reduce((sum: number, c: any) => sum + (c.restartCount || 0), 0)
-}
-
-function age(ts: string | undefined): string {
-  if (!ts) return '—'
-  const diff = Date.now() - new Date(ts).getTime()
-  const s = Math.floor(diff / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
-
-async function openDetail(pod: any) {
-  detail.value = pod
-  const path = `/api/v1/namespaces/${pod.metadata.namespace}/pods/${pod.metadata.name}`
-  const { status, raw } = await k8sClient.requestJSON(connId.value, 'GET', path)
-  if (status === 200) {
-    // 简单展示为格式化 JSON（P2 换 YAML editor）
-    try {
-      detailYaml.value = JSON.stringify(JSON.parse(raw), null, 2)
-    } catch {
-      detailYaml.value = raw
-    }
-  } else {
-    detailYaml.value = `HTTP ${status}\n${raw}`
-  }
-}
-
-async function refresh() {
-  if (!connId.value) return
-  store.unsubscribe(connId.value, 'pods', ns.value)
-  await store.subscribe(connId.value, 'pods', ns.value)
+function onRowClick(obj: any) {
+  detail.value = obj
 }
 
 async function connect() {
@@ -134,7 +99,6 @@ async function connect() {
       tunnelUser,
       tunnelPassword
     )
-    await store.subscribe(connId.value, 'pods', ns.value)
   } catch (e: any) {
     error.value = String(e?.message || e)
   }
@@ -142,34 +106,58 @@ async function connect() {
 
 onMounted(connect)
 onBeforeUnmount(() => {
+  if (resizing) {
+    document.removeEventListener('mousemove', onResizeMove)
+    document.removeEventListener('mouseup', onResizeEnd)
+  }
   if (connId.value) {
-    store.unsubscribe(connId.value, 'pods', ns.value)
+    // K8sResourceList 内部 onBeforeUnmount 已经 unsubscribe 当前订阅。
     k8sClient.disconnect(connId.value)
   }
-})
-
-// 命名空间切换
-watch(ns, async (newNs, oldNs) => {
-  if (!connId.value) return
-  store.unsubscribe(connId.value, 'pods', oldNs)
-  await store.subscribe(connId.value, 'pods', newNs)
 })
 </script>
 
 <style scoped>
-.k8s-tab { display: flex; flex-direction: column; height: 100%; }
-.toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--el-border-color-lighter, #333); }
-.title { font-weight: 500; }
-.filter { flex: 1; max-width: 220px; padding: 4px 8px; }
-.list { width: 100%; border-collapse: collapse; }
-.list th, .list td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--el-border-color-lighter, #333); font-size: 13px; }
-.row { cursor: pointer; }
-.row:hover { background: rgba(255,255,255,0.03); }
-.drawer { position: absolute; right: 0; top: 0; bottom: 0; width: 60%; background: var(--el-bg-color, #1e1e1e); border-left: 1px solid var(--el-border-color-lighter, #333); display: flex; flex-direction: column; }
-.drawer-head { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--el-border-color-lighter, #333); }
-.yaml { flex: 1; overflow: auto; padding: 12px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
-.err { color: var(--el-color-danger, #f56); padding: 12px; }
-.loading { padding: 12px; opacity: 0.7; }
-.empty { padding: 24px; text-align: center; opacity: 0.55; font-size: 13px; }
-.empty code { padding: 1px 6px; background: rgba(255,255,255,0.06); border-radius: 3px; font-family: monospace; }
+/* 直接抄 DBTabContent 的骨架 CSS，class 同名 */
+.db-tab-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+.db-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.db-left {
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-subtle, #333);
+  overflow: hidden;
+}
+.db-resizer {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.db-resizer:hover {
+  background: var(--border-subtle, #333);
+}
+.db-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.k8s-fatal {
+  color: var(--el-color-danger, #f56);
+  padding: 12px;
+}
+.k8s-connecting {
+  padding: 12px;
+  opacity: 0.7;
+}
 </style>
