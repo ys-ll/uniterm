@@ -81,6 +81,7 @@ import { SessionWrite, SessionResize, SessionEndZmodem } from '../../wailsjs/go/
 import { WriteFileBase64, SaveFileDialog, FrontendLog, WriteTempFile } from '../../wailsjs/go/main/App'
 import { EventsOn, BrowserOpenURL, ClipboardGetText } from '../../wailsjs/runtime'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useLocalStateStore } from '../stores/localStateStore'
 import { highlight } from '../composables/useHighlight'
 import { onTerminalKey } from '../composables/useKeyboardShortcuts'
 import { useSessionStore } from '../stores/sessionStore'
@@ -123,6 +124,7 @@ const sessionStore = useSessionStore()
 const tabStore = useTabStore()
 const panelStore = usePanelStore()
 const zmodemStore = useZmodemStore()
+const localStateStore = useLocalStateStore()
 const { t } = useI18n()
 
 // Prevent deactivated (KeepAlive-cached) components from processing
@@ -1464,13 +1466,22 @@ function onSearchPrev() {
   getSearchAddon()?.findPrevious(searchText.value, { decorations: searchDecoOptions })
 }
 
+function applyXtermTheme(themeName: string) {
+  if (!terminal) return
+  const theme = getXtermTheme(themeName, settingsStore.settings.customTerminalThemes)
+  if (localStateStore.state.backgroundEnabled && localStateStore.state.backgroundImage) {
+    theme.background = 'rgba(0,0,0,0)'
+  }
+  terminal.options.theme = theme
+}
+
 // Watch terminal settings changes
 watch(() => settingsStore.settings.terminal, (ts) => {
   if (!terminal) return
   if (ts.fontSize) terminal.options.fontSize = ts.fontSize
   if (ts.fontFamily) terminal.options.fontFamily = ts.fontFamily
   if (ts.maxHistoryLines) terminal.options.scrollback = ts.maxHistoryLines
-  if (ts.theme) terminal.options.theme = getXtermTheme(ts.theme, settingsStore.settings.customTerminalThemes)
+  if (ts.theme) applyXtermTheme(ts.theme)
   if (typeof ts.cursorBlink === 'boolean') {
     terminal.options.cursorBlink = ts.cursorBlink
     // xterm keeps an internal blink state set by DECSET 12; if the
@@ -1481,6 +1492,12 @@ watch(() => settingsStore.settings.terminal, (ts) => {
   }
   resize()
 }, { deep: true })
+
+// Watch for background image toggling to update terminal transparency
+watch(
+  () => localStateStore.state.backgroundEnabled,
+  () => applyXtermTheme(settingsStore.settings.terminal.theme || 'dark')
+)
 
 // Detach terminal before Vue nulls template refs.
 // In Vue 3, onUnmounted fires AFTER template refs are set to null,

@@ -8,6 +8,7 @@ import '@xterm/xterm/css/xterm.css'
 import { SessionWrite, SessionResize } from '../../wailsjs/go/main/App'
 import { EventsOn, BrowserOpenURL } from '../../wailsjs/runtime'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useLocalStateStore } from '../stores/localStateStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { highlight } from './useHighlight'
 import { stripCursorBlink } from '../utils/cursor'
@@ -340,15 +341,21 @@ export function useTerminal(
 
   function getTerminalOptions() {
     const ts = settingsStore.settings.terminal
+    const ls = useLocalStateStore()
     const themeName = ts.theme || 'uniterm-dark'
+    const theme = getXtermTheme(themeName, settingsStore.settings.customTerminalThemes)
+    if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
+      theme.background = 'rgba(0,0,0,0)'
+    }
     return {
       fontSize: ts.fontSize || 13,
       fontFamily: ts.fontFamily || 'Consolas, "Courier New", monospace',
-      theme: getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
+      theme,
       cursorBlink: ts.cursorBlink ?? true,
       rightClickSelectsWord: false,
       scrollback: ts.maxHistoryLines || 2500,
-      allowProposedApi: true
+      allowProposedApi: true,
+      allowTransparency: true,
     }
   }
 
@@ -659,19 +666,36 @@ export function useTerminal(
     }
   })
 
+  function applyXtermTheme(themeName: string) {
+    if (!terminal) return
+    const ls = useLocalStateStore()
+    const theme = getXtermTheme(themeName, settingsStore.settings.customTerminalThemes)
+    if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
+      theme.background = 'rgba(0,0,0,0)'
+    }
+    terminal.options.theme = theme
+  }
+
   // Watch terminal settings changes
   watch(() => settingsStore.settings.terminal, (ts) => {
     if (!terminal) return
     if (ts.fontSize) terminal.options.fontSize = ts.fontSize
     if (ts.fontFamily) terminal.options.fontFamily = ts.fontFamily
     if (ts.maxHistoryLines) terminal.options.scrollback = ts.maxHistoryLines
-    if (ts.theme) terminal.options.theme = getXtermTheme(ts.theme, settingsStore.settings.customTerminalThemes)
+    if (ts.theme) applyXtermTheme(ts.theme)
     if (typeof ts.cursorBlink === 'boolean') {
       terminal.options.cursorBlink = ts.cursorBlink
       if (!ts.cursorBlink) terminal.write('\x1b[?12l')
     }
     resize()
   }, { deep: true })
+
+  // Watch for background image toggling to update terminal transparency
+  const localStateStore = useLocalStateStore()
+  watch(
+    () => localStateStore.state.backgroundEnabled,
+    () => applyXtermTheme(settingsStore.settings.terminal.theme || 'dark')
+  )
 
   onUnmounted(() => {
     resizeObserver?.disconnect()
