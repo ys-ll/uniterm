@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <el-dialog append-to-body
     v-model="visible"
     :title="editingId ? t('quickCommands.editCommand') : t('quickCommands.addCommand')"
     width="480px"
@@ -48,7 +48,7 @@
   </el-dialog>
 
   <!-- New group dialog -->
-  <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="360px" :close-on-click-modal="false">
+  <el-dialog append-to-body v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="360px" :close-on-click-modal="false">
     <el-form @submit.prevent="confirmNewGroup">
       <el-form-item :label="t('conn.groupName')">
         <el-input v-model="newGroupName" :placeholder="t('conn.groupNamePlaceholder')" @keyup.enter="confirmNewGroup" />

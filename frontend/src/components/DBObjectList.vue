@@ -51,7 +51,7 @@
     </el-table>
 
     <!-- Confirm dialog (type-to-confirm), mirrors the tree context menu -->
-    <el-dialog v-model="confirmVisible" :title="confirmTitle" width="420px">
+    <el-dialog append-to-body v-model="confirmVisible" :title="confirmTitle" width="420px">
       <div class="confirm-body">
         <p class="confirm-text">{{ confirmText }}</p>
         <p class="confirm-hint">{{ t('db.typeToConfirm', { name: confirmName }) }}</p>
@@ -66,7 +66,7 @@
     </el-dialog>
 
     <!-- New Table dialog -->
-    <el-dialog v-model="newTableVisible" :title="t('db.newTable')" width="380px">
+    <el-dialog append-to-body v-model="newTableVisible" :title="t('db.newTable')" width="380px">
       <el-form label-width="80px">
         <el-form-item :label="t('db.tableName')">
           <el-input v-model="newTableName" />

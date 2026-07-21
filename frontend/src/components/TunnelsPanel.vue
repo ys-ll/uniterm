@@ -112,7 +112,7 @@
     </div>
 
     <!-- Delete group dialog -->
-    <el-dialog v-model="deleteGroupDialogVisible" :title="t('tunnels.deleteGroupTitle')" width="400px" :close-on-click-modal="false">
+    <el-dialog append-to-body v-model="deleteGroupDialogVisible" :title="t('tunnels.deleteGroupTitle')" width="400px" :close-on-click-modal="false">
       <p>{{ t('tunnels.deleteGroupDesc') }}</p>
       <div class="delete-group-actions">
         <el-button @click="doDeleteGroup(false)">{{ t('tunnels.moveToUngrouped') }}</el-button>
@@ -121,7 +121,7 @@
     </el-dialog>
 
     <!-- Group name dialog -->
-    <el-dialog v-model="groupNameDialogVisible" :title="renamingGroup ? t('tunnels.renameGroup') : t('tunnels.addGroup')" width="360px" :close-on-click-modal="false">
+    <el-dialog append-to-body v-model="groupNameDialogVisible" :title="renamingGroup ? t('tunnels.renameGroup') : t('tunnels.addGroup')" width="360px" :close-on-click-modal="false">
       <el-input v-model="groupNameInput" :placeholder="t('tunnels.groupName')" maxlength="30" @keyup.enter="doSaveGroupName" />
       <template #footer>
         <el-button @click="groupNameDialogVisible = false">{{ t('tunnels.cancel') }}</el-button>

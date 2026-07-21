@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="isEdit ? t('theme.editTitle') : t('theme.newTitle')" width="640px" class="theme-editor-dialog">
+  <el-dialog append-to-body v-model="visible" :title="isEdit ? t('theme.editTitle') : t('theme.newTitle')" width="640px" class="theme-editor-dialog">
     <div class="theme-editor">
       <div class="theme-editor-top">
         <el-input v-model="draft.name" :placeholder="t('theme.namePlaceholder')" class="theme-name-input" />

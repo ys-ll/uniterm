@@ -190,7 +190,7 @@
     </div>
 
     <!-- Delete group dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="deleteGroupDialogVisible"
       :title="t('quickCommands.deleteGroupTitle')"
       width="400px"
@@ -204,7 +204,7 @@
     </el-dialog>
 
     <!-- Group name dialog (add + rename) -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="groupNameDialogVisible"
       :title="renamingGroup ? t('quickCommands.renameGroup') : t('quickCommands.addGroup')"
       width="360px"

@@ -260,7 +260,7 @@
     </div>
 
     <!-- Confirm dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="confirmVisible"
       :title="confirmTitle"
       width="420px"
@@ -279,7 +279,7 @@
     </el-dialog>
 
     <!-- New Collection dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="newColDialogVisible"
       :title="t('mongodb.newCollection')"
       width="380px"
@@ -298,7 +298,7 @@
     </el-dialog>
 
     <!-- Create Index dialog -->
-    <el-dialog v-model="newIndexDialogVisible" :title="t('db.addIndex')" width="400px">
+    <el-dialog append-to-body v-model="newIndexDialogVisible" :title="t('db.addIndex')" width="400px">
       <el-form label-width="80px">
         <el-form-item :label="t('db.colName')">
           <el-input v-model="newIndexName" placeholder="index_name" />
@@ -319,7 +319,7 @@
     </el-dialog>
 
     <!-- New Database dialog -->
-    <el-dialog v-model="newDbDialogVisible" :title="t('db.newDatabase')" width="380px">
+    <el-dialog append-to-body v-model="newDbDialogVisible" :title="t('db.newDatabase')" width="380px">
       <el-form label-width="80px">
         <el-form-item :label="t('db.databases')">
           <el-input v-model="newDbName" :placeholder="t('db.databases')" />
@@ -337,7 +337,7 @@
     </el-dialog>
 
     <!-- Document editor dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="docDialogVisible"
       :title="docDialogMode === 'insert' ? t('mongodb.newDocument') : t('mongodb.editDocument')"
       width="600px"

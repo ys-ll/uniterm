@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('serial.title')" width="420px">
+  <el-dialog append-to-body v-model="visible" :title="t('serial.title')" width="420px">
     <el-form label-width="100px" @submit.prevent="onConnect">
       <el-form-item :label="t('serial.portLabel')">
         <el-select

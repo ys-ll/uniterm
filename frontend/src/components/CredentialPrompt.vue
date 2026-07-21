@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <el-dialog append-to-body
     :model-value="visible"
     @update:model-value="(v: boolean) => !v && onCancel()"
     :title="title"

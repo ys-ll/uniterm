@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <el-dialog append-to-body
     v-model="visible"
     :title="t('sync.conflictTitle')"
     width="480px"

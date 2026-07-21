@@ -165,7 +165,7 @@
     </div>
 
     <!-- New Key Dialog -->
-    <el-dialog v-model="showNewKeyDialog" :title="t('redis.newKey')" width="500px">
+    <el-dialog append-to-body v-model="showNewKeyDialog" :title="t('redis.newKey')" width="500px">
       <el-form label-width="80px">
         <el-form-item :label="t('redis.keyName')">
           <el-input v-model="newKeyName" />

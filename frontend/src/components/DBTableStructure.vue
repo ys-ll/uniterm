@@ -69,7 +69,7 @@
         </el-table>
       </div>
 
-      <el-dialog v-model="editDialogVisible" :title="t('db.editColumn')" width="450px">
+      <el-dialog append-to-body v-model="editDialogVisible" :title="t('db.editColumn')" width="450px">
         <el-form v-if="editingColumn" label-width="100px">
           <el-form-item :label="t('db.colName')">
             <el-input v-model="editingColumn.name" disabled />
@@ -117,7 +117,7 @@
         </template>
       </el-dialog>
 
-      <el-dialog v-model="addColVisible" :title="t('db.addColumn')" width="450px">
+      <el-dialog append-to-body v-model="addColVisible" :title="t('db.addColumn')" width="450px">
         <el-form label-width="100px">
           <el-form-item :label="t('db.colName')">
             <el-input v-model="addColName" />
@@ -165,7 +165,7 @@
         </template>
       </el-dialog>
 
-      <el-dialog v-model="addIdxVisible" :title="t('db.addIndex')" width="400px">
+      <el-dialog append-to-body v-model="addIdxVisible" :title="t('db.addIndex')" width="400px">
         <el-form label-width="100px">
           <el-form-item :label="t('db.idxName')">
             <el-input v-model="addIdxName" />

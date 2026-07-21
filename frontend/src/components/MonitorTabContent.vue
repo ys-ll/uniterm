@@ -278,7 +278,7 @@
     </div>
 
     <!-- Kill Confirmation Dialog -->
-    <el-dialog v-model="killDialogVisible" :title="killType === 'kill' ? t('monitor.forceKill') : t('monitor.kill')" width="360px" align-center>
+    <el-dialog append-to-body v-model="killDialogVisible" :title="killType === 'kill' ? t('monitor.forceKill') : t('monitor.kill')" width="360px" align-center>
       <p>{{ killMessage }}</p>
       <template #footer>
         <el-button @click="killDialogVisible = false">{{ t('common.cancel') }}</el-button>

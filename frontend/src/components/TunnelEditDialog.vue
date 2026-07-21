@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <el-dialog append-to-body
     v-model="visible"
     :title="editingId ? t('tunnels.editTunnel') : t('tunnels.addTunnel')"
     width="500px"

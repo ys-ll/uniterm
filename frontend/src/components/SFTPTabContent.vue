@@ -80,7 +80,7 @@
     <SFTPTransferProgress :tasks="transferTasks" @cancel="onCancelTransfer" @pause="onPauseTransfer" @resume="onResumeTransfer" />
 
     <!-- Custom Dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="dialogVisible"
       :title="dialogTitle"
       width="400px"
@@ -132,7 +132,7 @@
     </el-dialog>
 
     <!-- Editor Dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="editorVisible"
       :title="editorTitle"
       width="80%"
@@ -178,7 +178,7 @@
     </el-dialog>
 
     <!-- Conflict Dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="conflictVisible"
       :title="t('sftp.dialog.conflictTitle')"
       width="450px"
@@ -196,7 +196,7 @@
     </el-dialog>
 
     <!-- New File Dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="newFileVisible"
       :title="t('sftp.dialog.newFileTitle')"
       width="400px"

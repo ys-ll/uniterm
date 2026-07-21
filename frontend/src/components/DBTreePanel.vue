@@ -85,7 +85,7 @@
     </div>
 
     <!-- Confirm dialog -->
-    <el-dialog
+    <el-dialog append-to-body
       v-model="confirmVisible"
       :title="confirmTitle"
       width="420px"
@@ -104,7 +104,7 @@
     </el-dialog>
 
     <!-- New Database dialog -->
-    <el-dialog v-model="newDbVisible" :title="t('db.newDatabase')" width="380px">
+    <el-dialog append-to-body v-model="newDbVisible" :title="t('db.newDatabase')" width="380px">
       <el-form label-width="80px">
         <el-form-item :label="t('db.dbName')">
           <el-input v-model="newDbName" />
@@ -119,7 +119,7 @@
     </el-dialog>
 
     <!-- New Table dialog -->
-    <el-dialog v-model="newTableVisible" :title="t('db.newTable')" width="380px">
+    <el-dialog append-to-body v-model="newTableVisible" :title="t('db.newTable')" width="380px">
       <el-form label-width="80px">
         <el-form-item :label="t('db.tableName')">
           <el-input v-model="newTableName" />

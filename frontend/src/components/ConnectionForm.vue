@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="isEdit ? t('conn.editTitle') : t('conn.newTitle')" width="680px" class="conn-dialog">
+  <el-dialog append-to-body v-model="visible" :title="isEdit ? t('conn.editTitle') : t('conn.newTitle')" width="680px" class="conn-dialog">
     <div class="conn-layout">
       <!-- Left sidebar: category icons -->
       <div class="conn-categories">
@@ -327,7 +327,7 @@
   </el-dialog>
 
   <!-- New group dialog -->
-  <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
+  <el-dialog append-to-body v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
     <el-form label-width="80px" @submit.prevent="confirmNewGroup">
       <el-form-item :label="t('conn.groupName')">
         <el-input
