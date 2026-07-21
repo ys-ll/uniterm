@@ -23,6 +23,9 @@ type LocalState struct {
 	BackgroundOpacity int    `json:"backgroundOpacity"`
 	BackgroundBlur    int    `json:"backgroundBlur"`
 	BackgroundFit     string `json:"backgroundFit"`
+	// SystemTitleBar switches the window to the OS native frame instead of
+	// the built-in one. Read at startup only — changing it needs a restart.
+	SystemTitleBar bool `json:"systemTitleBar"`
 }
 
 type LocalStateStore struct {

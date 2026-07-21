@@ -15,6 +15,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	"github.com/ys-ll/uniterm/backend/log"
+	"github.com/ys-ll/uniterm/backend/store"
 )
 
 var Version = "dev"
@@ -62,6 +63,21 @@ func main() {
 		appMenu = &menu.Menu{}
 	}
 
+	// Read the persisted window-frame preference before wails.Run — the frame
+	// style is fixed at startup and can't be toggled at runtime.
+	systemTitleBar := false
+	if configDir, err := os.UserConfigDir(); err == nil {
+		ls := store.NewLocalStateStore(filepath.Join(configDir, "uniTerm"))
+		if state, err := ls.Load(); err == nil {
+			systemTitleBar = state.SystemTitleBar
+		}
+	}
+
+	macTitleBar := mac.TitleBarHiddenInset()
+	if systemTitleBar {
+		macTitleBar = mac.TitleBarDefault()
+	}
+
 	err := wails.Run(&options.App{
 		Title:     "uniTerm",
 		Width:     1200,
@@ -70,7 +86,7 @@ func main() {
 		MinHeight: 300,
 		MaxWidth:  maxW,
 		MaxHeight: maxH,
-		Frameless: runtime.GOOS != "darwin",
+		Frameless: runtime.GOOS != "darwin" && !systemTitleBar,
 		Menu:      appMenu,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
@@ -79,7 +95,7 @@ func main() {
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Mac: &mac.Options{
-			TitleBar: mac.TitleBarHiddenInset(),
+			TitleBar: macTitleBar,
 		},
 		Windows: &windows.Options{
 			WebviewUserDataPath: webviewDataPath,

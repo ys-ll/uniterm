@@ -72,6 +72,19 @@
 
           <div class="setting-card">
             <div class="setting-info">
+              <div class="setting-title">{{ t('settings.systemTitleBar') }}</div>
+              <div class="setting-desc">{{ t('settings.systemTitleBarDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-switch
+                :model-value="localStateStore.state.systemTitleBar"
+                @update:model-value="(v: boolean) => onToggleSystemTitleBar(v)"
+              />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
               <div class="setting-title">{{ t('settings.bgEnable') }}</div>
               <div class="setting-desc">{{ t('settings.bgEnableDesc') }}</div>
             </div>
@@ -682,6 +695,8 @@ import { useLocalStateStore } from '../stores/localStateStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { useI18n, locale } from '../i18n'
 import { BrowserOpenURL } from '../../wailsjs/runtime'
+import { Quit } from '../../wailsjs/runtime'
+import { ElMessageBox } from 'element-plus'
 import { FONT_OPTIONS, LANGUAGE_OPTIONS, DEFAULT_KEYBOARD, SHORTCUT_LABELS, USER_AGENT_PRESETS } from '../types/settings'
 import { formatFontFamily } from '../utils/formatFontFamily'
 import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings } from '../types/settings'
@@ -1095,6 +1110,22 @@ async function clearBackground() {
   await ClearBackgroundImage()
   await localStateStore.update({ backgroundImage: '' })
   bgPreview.value = ''
+}
+
+// The window frame is fixed at startup (Wails limitation) — changing it needs
+// a restart. Persist the choice, then offer to quit so the user can reopen.
+async function onToggleSystemTitleBar(v: boolean) {
+  await localStateStore.update({ systemTitleBar: v })
+  try {
+    await ElMessageBox.confirm(
+      t('settings.titleBarRestartMsg'),
+      t('settings.titleBarRestartTitle'),
+      { confirmButtonText: t('settings.restartNow'), cancelButtonText: t('conn.cancel'), type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  Quit()
 }
 </script>
 

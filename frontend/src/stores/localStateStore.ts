@@ -19,6 +19,7 @@ const DEFAULT: LocalState = {
   backgroundOpacity: 60,
   backgroundBlur: 3,
   backgroundFit: 'cover',
+  systemTitleBar: false,
 } as LocalState
 
 export const useLocalStateStore = defineStore('localState', () => {

@@ -1230,6 +1230,7 @@ export namespace store {
 	    backgroundOpacity: number;
 	    backgroundBlur: number;
 	    backgroundFit: string;
+	    systemTitleBar: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new LocalState(source);
@@ -1250,6 +1251,7 @@ export namespace store {
 	        this.backgroundOpacity = source["backgroundOpacity"];
 	        this.backgroundBlur = source["backgroundBlur"];
 	        this.backgroundFit = source["backgroundFit"];
+	        this.systemTitleBar = source["systemTitleBar"];
 	    }
 	}
 	export class QuickCommand {

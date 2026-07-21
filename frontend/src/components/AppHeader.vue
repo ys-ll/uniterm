@@ -33,9 +33,9 @@
       <el-icon><Settings :size="14" /></el-icon>
     </button>
 
-    <!-- Windows/Linux: window controls right -->
+    <!-- Windows/Linux: window controls right (hidden when using system title bar) -->
     <WindowControls
-      v-if="platform !== 'darwin'"
+      v-if="showWindowControls"
       :is-maximised="isMaximised"
       @minimise="onMinimise"
       @maximise="onMaximise"
@@ -53,6 +53,7 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useLocalStateStore } from '../stores/localStateStore'
 import WindowControls from './WindowControls.vue'
 import TabsList from './TabsList.vue'
 import {
@@ -76,6 +77,7 @@ const tabStore = useTabStore()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
 const settingsStore = useSettingsStore()
+const localStateStore = useLocalStateStore()
 
 const hasActiveConnections = computed(() =>
   tabStore.tabs.some(t => {
@@ -101,6 +103,12 @@ const emit = defineEmits<{
 
 const platform = ref<'windows' | 'darwin' | 'linux'>('windows')
 const isMaximised = ref(false)
+
+// On Windows/Linux the app draws its own window controls — but not when the
+// user opted into the OS native title bar, which already provides them.
+const showWindowControls = computed(
+  () => platform.value !== 'darwin' && !localStateStore.state.systemTitleBar
+)
 
 async function updateMaximisedState() {
   try {
