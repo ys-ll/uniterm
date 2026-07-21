@@ -69,6 +69,85 @@
               <el-switch v-model="settingsStore.settings.closeAppPrompt" @change="settingsStore.save()" />
             </div>
           </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.bgEnable') }}</div>
+              <div class="setting-desc">{{ t('settings.bgEnableDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-switch
+                :model-value="localStateStore.state.backgroundEnabled"
+                @update:model-value="(v: boolean) => localStateStore.update({ backgroundEnabled: v })"
+              />
+            </div>
+          </div>
+
+          <template v-if="localStateStore.state.backgroundEnabled">
+            <div class="setting-card">
+              <div class="setting-info">
+                <div class="setting-title">{{ t('settings.bgImage') }}</div>
+              </div>
+              <div class="setting-control">
+                <div class="bg-image-row">
+                  <div
+                    v-if="bgPreview"
+                    class="bg-thumb"
+                    :style="{ backgroundImage: `url('${bgPreview}')` }"
+                  ></div>
+                  <el-button size="small" @click="chooseBackground">{{ t('settings.bgChoose') }}</el-button>
+                  <el-button
+                    v-if="localStateStore.state.backgroundImage"
+                    size="small"
+                    @click="clearBackground"
+                  >{{ t('settings.bgClear') }}</el-button>
+                </div>
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-info">
+                <div class="setting-title">{{ t('settings.bgOpacity') }}</div>
+              </div>
+              <div class="setting-control">
+                <el-slider
+                  :model-value="localStateStore.state.backgroundOpacity"
+                  :min="0" :max="100"
+                  @update:model-value="(v: number) => localStateStore.update({ backgroundOpacity: v as number })"
+                />
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-info">
+                <div class="setting-title">{{ t('settings.bgBlur') }}</div>
+              </div>
+              <div class="setting-control">
+                <el-slider
+                  :model-value="localStateStore.state.backgroundBlur"
+                  :min="0" :max="20"
+                  @update:model-value="(v: number) => localStateStore.update({ backgroundBlur: v as number })"
+                />
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-info">
+                <div class="setting-title">{{ t('settings.bgFit') }}</div>
+              </div>
+              <div class="setting-control">
+                <el-select
+                  :model-value="localStateStore.state.backgroundFit"
+                  @update:model-value="(v: string) => localStateStore.update({ backgroundFit: v })"
+                >
+                  <el-option :label="t('settings.bgFitCover')" value="cover" />
+                  <el-option :label="t('settings.bgFitContain')" value="contain" />
+                  <el-option :label="t('settings.bgFitCenter')" value="center" />
+                  <el-option :label="t('settings.bgFitTile')" value="tile" />
+                </el-select>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -507,7 +586,7 @@
     </div>
 
     <!-- Model Form Dialog -->
-    <el-dialog v-model="showModelForm" :title="editingModel ? t('settings.editModel') : t('settings.newModel')" width="400px">
+    <el-dialog append-to-body v-model="showModelForm" :title="editingModel ? t('settings.editModel') : t('settings.newModel')" width="400px">
       <el-form label-width="80px">
         <el-form-item :label="t('settings.modelName')">
           <el-input v-model="modelForm.name" />
@@ -596,9 +675,10 @@
 import { ref, reactive, watch, computed, onMounted } from 'vue'
 import { Settings, Monitor, MessageCircleMore, Info, RefreshCw, Pencil, Trash2, Globe, Keyboard, Plus, BookOpen } from '@lucide/vue'
 import { msg } from '../services/message'
-import { FetchModels, ChatCompletion, GetPlatform, GetSystemFonts, GetDefaultSessionLogDir, OpenDirectoryDialog } from '../../wailsjs/go/main/App'
+import { FetchModels, ChatCompletion, GetPlatform, GetSystemFonts, GetDefaultSessionLogDir, OpenDirectoryDialog, OpenFileDialogFiltered, SetBackgroundImage, ClearBackgroundImage, GetBackgroundImage } from '../../wailsjs/go/main/App'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useSyncStore } from '../stores/syncStore'
+import { useLocalStateStore } from '../stores/localStateStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { useI18n, locale } from '../i18n'
 import { BrowserOpenURL } from '../../wailsjs/runtime'
@@ -616,6 +696,7 @@ import CustomThemeEditor from './CustomThemeEditor.vue'
 const settingsStore = useSettingsStore()
 const syncStore = useSyncStore()
 const updateCheck = useUpdateCheck()
+const localStateStore = useLocalStateStore()
 const { t } = useI18n()
 const platform = ref('')
 const isMac = computed(() => platform.value === 'darwin')
@@ -686,6 +767,11 @@ onMounted(async () => {
     defaultLogDir.value = await GetDefaultSessionLogDir()
   } catch {
     defaultLogDir.value = ''
+  }
+  try {
+    await refreshBgPreview()
+  } catch {
+    // Ignore preview errors
   }
 })
 
@@ -981,6 +1067,35 @@ function getShellLabel(path: string): string {
   if (lower.includes('cmd')) return 'Command Prompt'
   return path.split(/[\\/]/).pop() || path
 }
+
+const bgPreview = ref('')
+
+async function refreshBgPreview() {
+  const name = localStateStore.state.backgroundImage
+  bgPreview.value = name ? await GetBackgroundImage(name).catch(() => '') : ''
+}
+
+async function chooseBackground() {
+  const path = await OpenFileDialogFiltered(
+    t('settings.bgChoose'),
+    'Images',
+    '*.png;*.jpg;*.jpeg;*.webp'
+  )
+  if (!path) return
+  try {
+    const name = await SetBackgroundImage(path)
+    await localStateStore.update({ backgroundImage: name, backgroundEnabled: true })
+    await refreshBgPreview()
+  } catch {
+    msg.error(t('settings.bgUnsupported'))
+  }
+}
+
+async function clearBackground() {
+  await ClearBackgroundImage()
+  await localStateStore.update({ backgroundImage: '' })
+  bgPreview.value = ''
+}
 </script>
 
 <style scoped>
@@ -1027,6 +1142,7 @@ function getShellLabel(path: string): string {
   background: var(--accent-subtle);
   color: var(--accent);
   border-left-color: var(--accent);
+  backdrop-filter: blur(8px);
 }
 
 .category-icon {
@@ -1068,6 +1184,7 @@ function getShellLabel(path: string): string {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   transition: all 0.12s ease;
+  backdrop-filter: blur(8px);
 }
 
 .setting-card:hover {
@@ -1482,5 +1599,12 @@ function getShellLabel(path: string): string {
 .kb-actions {
   display: flex;
   gap: 6px;
+}
+
+.bg-image-row { display: flex; align-items: center; gap: 8px; }
+.bg-thumb {
+  width: 64px; height: 40px; border-radius: 4px;
+  background-size: cover; background-position: center;
+  border: 1px solid var(--border-subtle);
 }
 </style>

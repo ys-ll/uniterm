@@ -369,7 +369,7 @@
     </div>
 
     <!-- Rename group dialog -->
-    <el-dialog v-model="showRenameGroupDialog" :title="t('conn.renameGroup')" width="360px">
+    <el-dialog append-to-body v-model="showRenameGroupDialog" :title="t('conn.renameGroup')" width="360px">
       <el-form @submit.prevent="confirmRenameGroup">
         <el-form-item :label="t('conn.groupName')">
           <el-input
@@ -386,7 +386,7 @@
     </el-dialog>
 
     <!-- New group dialog -->
-    <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
+    <el-dialog append-to-body v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
       <el-form label-width="80px" @submit.prevent="doAddGroup">
         <el-form-item :label="t('conn.groupName')">
           <el-input
@@ -414,7 +414,7 @@
     </el-dialog>
 
     <!-- Delete group dialog -->
-    <el-dialog v-model="showDeleteGroupDialog" :title="t('conn.deleteGroupTitle')" width="450px">
+    <el-dialog append-to-body v-model="showDeleteGroupDialog" :title="t('conn.deleteGroupTitle')" width="450px">
       <p>{{ deleteGroupPromptText }}</p>
       <template #footer>
         <el-button @click="showDeleteGroupDialog = false">{{ t('conn.deleteGroupCancel') }}</el-button>
