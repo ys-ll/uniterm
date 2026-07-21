@@ -427,6 +427,97 @@ func (a *App) LoadLocalState() (store.LocalState, error) {
 	return a.localStateStore.Load()
 }
 
+// bgDir returns the directory holding the (local-only, never-synced)
+// background image. It is created on demand.
+func (a *App) bgDir() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(configDir, "uniTerm", "backgrounds")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+var allowedBgExt = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".webp": "image/webp",
+}
+
+// SetBackgroundImage copies the chosen image into the app's backgrounds
+// directory as a single fixed file (overwriting any previous one) and
+// returns the stored file name. It does NOT touch local_state.json.
+func (a *App) SetBackgroundImage(srcPath string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(srcPath))
+	if _, ok := allowedBgExt[ext]; !ok {
+		return "", fmt.Errorf("unsupported image type: %s", ext)
+	}
+	dir, err := a.bgDir()
+	if err != nil {
+		return "", err
+	}
+	for e := range allowedBgExt {
+		_ = os.Remove(filepath.Join(dir, "bg"+e))
+	}
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+	name := "bg" + ext
+	dst, err := os.Create(filepath.Join(dir, name))
+	if err != nil {
+		return "", err
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, src); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+// GetBackgroundImage reads the stored background file and returns it as a
+// data URL. Returns an empty string (no error) when name is empty or the
+// file is missing, so the frontend degrades gracefully.
+func (a *App) GetBackgroundImage(name string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	ext := strings.ToLower(filepath.Ext(name))
+	mime, ok := allowedBgExt[ext]
+	if !ok {
+		return "", nil
+	}
+	dir, err := a.bgDir()
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+}
+
+// ClearBackgroundImage removes any stored background image file.
+func (a *App) ClearBackgroundImage() error {
+	dir, err := a.bgDir()
+	if err != nil {
+		return err
+	}
+	for e := range allowedBgExt {
+		_ = os.Remove(filepath.Join(dir, "bg"+e))
+	}
+	return nil
+}
+
 // reloadStoresAfterSync reloads connections and settings from disk and emits
 // events so the frontend refreshes after a sync pull.
 func (a *App) reloadStoresAfterSync() {

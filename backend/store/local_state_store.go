@@ -17,6 +17,12 @@ type LocalState struct {
 	WindowWidth       int      `json:"windowWidth"`
 	WindowHeight      int      `json:"windowHeight"`
 	WindowMaximised   bool     `json:"windowMaximised"`
+	// Background image — local-only appearance, never synced.
+	BackgroundEnabled bool   `json:"backgroundEnabled"`
+	BackgroundImage   string `json:"backgroundImage"`
+	BackgroundOpacity int    `json:"backgroundOpacity"`
+	BackgroundBlur    int    `json:"backgroundBlur"`
+	BackgroundFit     string `json:"backgroundFit"`
 }
 
 type LocalStateStore struct {
@@ -39,17 +45,27 @@ func (s *LocalStateStore) Save(state LocalState) error {
 	return os.WriteFile(s.filePath(), bytes, 0600)
 }
 
+func defaultLocalState() LocalState {
+	return LocalState{
+		SidebarVisible:    true,
+		AISidebarVisible:  true,
+		BackgroundOpacity: 60,
+		BackgroundBlur:    3,
+		BackgroundFit:     "cover",
+	}
+}
+
 func (s *LocalStateStore) Load() (LocalState, error) {
 	bytes, err := os.ReadFile(s.filePath())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return LocalState{SidebarVisible: true, AISidebarVisible: true}, nil
+			return defaultLocalState(), nil
 		}
 		return LocalState{}, err
 	}
 	var state LocalState
 	if err := json.Unmarshal(bytes, &state); err != nil {
-		return LocalState{SidebarVisible: true, AISidebarVisible: true}, nil
+		return defaultLocalState(), nil
 	}
 	return state, nil
 }

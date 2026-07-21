@@ -26,6 +26,10 @@ export function CheckForUpdate(arg1) {
   return window['go']['main']['App']['CheckForUpdate'](arg1);
 }
 
+export function ClearBackgroundImage() {
+  return window['go']['main']['App']['ClearBackgroundImage']();
+}
+
 export function CloseSession(arg1) {
   return window['go']['main']['App']['CloseSession'](arg1);
 }
@@ -120,6 +124,10 @@ export function GetAppInfo() {
 
 export function GetAvailableShells() {
   return window['go']['main']['App']['GetAvailableShells']();
+}
+
+export function GetBackgroundImage(arg1) {
+  return window['go']['main']['App']['GetBackgroundImage'](arg1);
 }
 
 export function GetDBCapabilities(arg1) {
@@ -516,6 +524,10 @@ export function SessionWrite(arg1, arg2) {
 
 export function SessionWriteBinary(arg1, arg2) {
   return window['go']['main']['App']['SessionWriteBinary'](arg1, arg2);
+}
+
+export function SetBackgroundImage(arg1) {
+  return window['go']['main']['App']['SetBackgroundImage'](arg1);
 }
 
 export function SetDefaultSessionLogDir(arg1) {

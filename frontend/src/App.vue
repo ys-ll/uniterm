@@ -1,6 +1,7 @@
 <template>
   <el-config-provider :locale="elLocale">
-  <div class="app-container">
+  <div class="app-container" :class="{ 'has-bg': bgVisible }">
+    <div v-if="bgVisible" class="app-bg" :style="bgStyle"></div>
     <AppHeader
       @toggle-ai="aiStore.toggle"
       @toggle-sidebar="sidebarVisible = !sidebarVisible"
@@ -166,16 +167,56 @@ import { useAIStore } from './stores/aiStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useQuickCommandStore } from './stores/quickCommandStore'
 import { useTunnelStore } from './stores/tunnelStore'
+import { useLocalStateStore } from './stores/localStateStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
 import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
 import { focusPanelTerminal, installTerminalFocusRestore } from './composables/useFocusTerminal'
 import type { ShortcutAction } from './types/settings'
 import { useI18n } from './i18n'
-import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFocus, LoadLocalState, SaveLocalState, RecordRecentConnection, GetPlatform } from '../wailsjs/go/main/App'
+import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RDPSetFocus, RecordRecentConnection, GetPlatform, GetBackgroundImage } from '../wailsjs/go/main/App'
 import { EventsOn, ClipboardGetText, Quit } from '../wailsjs/runtime'
 import { msg } from './services/message'
 import type { ConnectionConfig } from './types/session'
 import { parseQuickConnect } from './utils/quickConnect'
+
+const bgDataUrl = ref('')
+
+async function loadBackgroundImage() {
+  const ls = localStateStore.state
+  if (ls.backgroundEnabled && ls.backgroundImage) {
+    try {
+      bgDataUrl.value = await GetBackgroundImage(ls.backgroundImage)
+    } catch {
+      bgDataUrl.value = ''
+    }
+  } else {
+    bgDataUrl.value = ''
+  }
+}
+
+const bgVisible = computed(
+  () => localStateStore.state.backgroundEnabled && !!bgDataUrl.value
+)
+
+const bgStyle = computed(() => {
+  const ls = localStateStore.state
+  const fit = ls.backgroundFit || 'cover'
+  const style: Record<string, string> = {
+    backgroundImage: `url("${bgDataUrl.value}")`,
+    filter: ls.backgroundBlur ? `blur(${ls.backgroundBlur}px)` : 'none',
+  }
+  if (fit === 'cover') {
+    style.backgroundSize = 'cover'; style.backgroundPosition = 'center'; style.backgroundRepeat = 'no-repeat'
+  } else if (fit === 'contain') {
+    style.backgroundSize = 'contain'; style.backgroundPosition = 'center'; style.backgroundRepeat = 'no-repeat'
+  } else if (fit === 'center') {
+    style.backgroundSize = 'auto'; style.backgroundPosition = 'center'; style.backgroundRepeat = 'no-repeat'
+  } else {
+    style.backgroundSize = 'auto'; style.backgroundRepeat = 'repeat'
+  }
+  style['--bg-mask-opacity'] = String((ls.backgroundOpacity ?? 60) / 100)
+  return style
+})
 
 const connectionStore = useConnectionStore()
 const tabStore = useTabStore()
@@ -184,6 +225,7 @@ const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
 const aiStore = useAIStore()
 const settingsStore = useSettingsStore()
+const localStateStore = useLocalStateStore()
 const updateCheck = useUpdateCheck()
 let uninstallFocusRestore: (() => void) | null = null
 const { t, locale } = useI18n()
@@ -571,13 +613,10 @@ onMounted(async () => {
   aiStore.init()
   updateCheck.initAutoCheck()
 
-  // Load sidebar visibility from local state
-  try {
-    const state = await LoadLocalState()
-    sidebarVisible.value = state.sidebarVisible ?? false
-  } catch {
-    // keep default
-  }
+  // Load local-only state (sidebar visibility, background image, etc.)
+  await localStateStore.init()
+  await loadBackgroundImage()
+  sidebarVisible.value = localStateStore.state.sidebarVisible ?? false
   // Pre-load quick commands so suggestions can read them immediately
   useQuickCommandStore().load()
   // Pre-load tunnels so auto-start state and the panel are ready
@@ -1462,13 +1501,7 @@ watch(showConnectionForm, (val) => {
 watch(sidebarVisible, async () => {
   RDPHideForOverlay()
   nextTick(() => RDPShowForOverlay())
-  try {
-    const state = await LoadLocalState()
-    state.sidebarVisible = sidebarVisible.value
-    await SaveLocalState(state)
-  } catch {
-    // ignore save errors
-  }
+  localStateStore.update({ sidebarVisible: sidebarVisible.value })
 })
 
 watch(() => aiStore.visible, () => {
@@ -1479,6 +1512,11 @@ watch(() => aiStore.visible, () => {
 watch(() => settingsStore.settings.keyboard, () => {
   applyKeybindings()
 }, { deep: true })
+
+watch(
+  () => [localStateStore.state.backgroundEnabled, localStateStore.state.backgroundImage],
+  () => loadBackgroundImage()
+)
 </script>
 
 <style scoped>
@@ -1488,6 +1526,7 @@ watch(() => settingsStore.settings.keyboard, () => {
   width: 100%;
   height: 100%;
   background: var(--bg-base);
+  position: relative;
 }
 .main-content {
   display: flex;
@@ -1495,6 +1534,7 @@ watch(() => settingsStore.settings.keyboard, () => {
   overflow: hidden;
   gap: 0;
   position: relative;
+  z-index: 1;
 }
 
 .tab-area {
@@ -1547,6 +1587,110 @@ watch(() => settingsStore.settings.keyboard, () => {
 }
 .group-list .group-item:hover {
   background: var(--bg-hover);
+}
+
+.app-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: transparent;
+}
+.app-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg-base);
+  opacity: var(--bg-mask-opacity, 0.6);
+}
+.app-container.has-bg .main-content,
+.app-container.has-bg .main-content :deep(*),
+.app-container.has-bg .app-header,
+.app-container.has-bg :deep(.app-header *) {
+  background-color: transparent !important;
+}
+/* 标签栏毛玻璃 */
+.app-container.has-bg :deep(.app-header) {
+  backdrop-filter: blur(8px);
+}
+/* 对话框、下拉/右键菜单保持不透明背景（覆盖全局 * 透明规则）*/
+.app-container.has-bg .main-content :deep(.el-dialog),
+.app-container.has-bg .main-content :deep(.el-message-box),
+.app-container.has-bg .main-content :deep(.el-select-dropdown),
+.app-container.has-bg .main-content :deep(.el-dropdown-menu),
+.app-container.has-bg .main-content :deep(.context-menu),
+.app-container.has-bg .main-content :deep(.ai-context-menu),
+.app-container.has-bg .main-content :deep(.conn-context-menu),
+.app-container.has-bg .main-content :deep(.qc-context-menu),
+.app-container.has-bg .main-content :deep(.sftp-context-menu),
+.app-container.has-bg .main-content :deep(.tab-context-menu),
+.app-container.has-bg .main-content :deep(.start-context-menu),
+.app-container.has-bg .main-content :deep(.tn-context-menu),
+.app-container.has-bg .main-content :deep(.ctx-menu),
+.app-container.has-bg .main-content :deep(.panel-more-menu),
+.app-container.has-bg .main-content :deep(.shell-submenu),
+.app-container.has-bg .main-content :deep(.hash-dropdown),
+.app-container.has-bg .main-content :deep(.drive-dropdown),
+.app-container.has-bg .main-content :deep(.bookmark-dropdown),
+.app-container.has-bg .main-content :deep(.type-filter-menu) {
+  background-color: var(--bg-surface) !important;
+}
+/* 设置左侧选中分类：保留强调色高亮（* 规则会清掉）*/
+.app-container.has-bg .main-content :deep(.settings-category.active) {
+  background-color: var(--accent-subtle) !important;
+}
+.app-container.has-bg .main-content :deep(.el-switch__core) {
+  background-color: var(--bg-hover) !important;
+}
+.app-container.has-bg .main-content :deep(.el-switch.is-checked .el-switch__core) {
+  background-color: var(--accent) !important;
+}
+.app-container.has-bg .main-content :deep(.el-switch__core .el-switch__action) {
+  background-color: #ffffff !important;
+}
+.app-container.has-bg .main-content :deep(.el-slider__runway) {
+  background-color: var(--bg-hover) !important;
+}
+.app-container.has-bg .main-content :deep(.el-slider__bar) {
+  background-color: var(--accent) !important;
+}
+.app-container.has-bg .main-content :deep(.el-slider__button) {
+  background-color: #ffffff !important;
+}
+/* 开背景时，开始页「新建连接」主按钮改用普通按钮样式（透明+blur 与其它按钮一致），
+   仅修正文字/边框颜色，避免深色文字糊在图上 */
+.app-container.has-bg .main-content :deep(.start-action-btn.primary) {
+  border-color: var(--border-subtle) !important;
+  color: var(--text-secondary) !important;
+}
+/* 恢复终端选区高亮（全局透明规则会清掉 xterm 内联选区色）*/
+.app-container.has-bg .main-content :deep(.xterm-selection div) {
+  background-color: rgba(120, 150, 200, 0.4) !important;
+}
+/* 终端滚动条：轨道透明，滑块用半透明白（同全局滚动条，背景上可见）*/
+.app-container.has-bg .main-content :deep(.xterm-viewport::-webkit-scrollbar-track) {
+  background: transparent !important;
+}
+.app-container.has-bg .main-content :deep(.xterm-viewport::-webkit-scrollbar-thumb) {
+  background: var(--scrollbar-thumb) !important;
+}
+/* 边栏毛玻璃 */
+.app-container.has-bg .main-content :deep(.sidebar),
+.app-container.has-bg .main-content :deep(.ai-sidebar) {
+  backdrop-filter: blur(8px);
+}
+/* 开始页卡片、按钮毛玻璃 */
+.app-container.has-bg .main-content :deep(.start-card),
+.app-container.has-bg .main-content :deep(.start-action-btn),
+.app-container.has-bg .main-content :deep(.start-action-btn-dropdown-arrow) {
+  backdrop-filter: blur(8px);
+}
+/* 各类输入框毛玻璃 */
+.app-container.has-bg .main-content :deep(.el-input__wrapper),
+.app-container.has-bg .main-content :deep(.el-textarea__inner),
+.app-container.has-bg .main-content :deep(.el-input-number),
+.app-container.has-bg .main-content :deep(.el-select__wrapper) {
+  backdrop-filter: blur(8px);
 }
 
 </style>

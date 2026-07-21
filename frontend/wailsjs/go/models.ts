@@ -1225,6 +1225,11 @@ export namespace store {
 	    windowWidth: number;
 	    windowHeight: number;
 	    windowMaximised: boolean;
+	    backgroundEnabled: boolean;
+	    backgroundImage: string;
+	    backgroundOpacity: number;
+	    backgroundBlur: number;
+	    backgroundFit: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new LocalState(source);
@@ -1240,6 +1245,11 @@ export namespace store {
 	        this.windowWidth = source["windowWidth"];
 	        this.windowHeight = source["windowHeight"];
 	        this.windowMaximised = source["windowMaximised"];
+	        this.backgroundEnabled = source["backgroundEnabled"];
+	        this.backgroundImage = source["backgroundImage"];
+	        this.backgroundOpacity = source["backgroundOpacity"];
+	        this.backgroundBlur = source["backgroundBlur"];
+	        this.backgroundFit = source["backgroundFit"];
 	    }
 	}
 	export class QuickCommand {

@@ -339,7 +339,7 @@
     </div>
 
     <!-- Delete group dialog -->
-    <el-dialog v-model="showDeleteGroupDialog" :title="t('conn.deleteGroupTitle')" width="450px">
+    <el-dialog append-to-body v-model="showDeleteGroupDialog" :title="t('conn.deleteGroupTitle')" width="450px">
       <p>{{ deleteGroupPromptText }}</p>
       <template #footer>
         <el-button @click="showDeleteGroupDialog = false">{{ t('conn.deleteGroupCancel') }}</el-button>
@@ -349,7 +349,7 @@
     </el-dialog>
 
     <!-- Rename group dialog -->
-    <el-dialog v-model="showRenameGroupDialog" :title="t('conn.renameGroup')" width="360px">
+    <el-dialog append-to-body v-model="showRenameGroupDialog" :title="t('conn.renameGroup')" width="360px">
       <el-form @submit.prevent="confirmRenameGroup">
         <el-form-item :label="t('conn.groupName')">
           <el-input
@@ -366,7 +366,7 @@
     </el-dialog>
 
     <!-- Move to dialog -->
-    <el-dialog v-model="showChangeGroupDialog" :title="t('conn.group')" width="400px">
+    <el-dialog append-to-body v-model="showChangeGroupDialog" :title="t('conn.group')" width="400px">
       <el-tree-select
         v-model="changeGroupTargetId"
         :data="groupTreeData"
@@ -383,7 +383,7 @@
     </el-dialog>
 
     <!-- Standalone new group dialog -->
-    <el-dialog v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
+    <el-dialog append-to-body v-model="showNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
       <el-form label-width="80px" @submit.prevent="confirmNewGroup">
         <el-form-item :label="t('conn.groupName')">
           <el-input
@@ -411,7 +411,7 @@
     </el-dialog>
 
     <!-- New group dialog (for change group flow) -->
-    <el-dialog v-model="showChangeNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
+    <el-dialog append-to-body v-model="showChangeNewGroupDialog" :title="t('conn.newGroupTitle')" width="400px">
       <el-form label-width="80px" @submit.prevent="confirmChangeNewGroup">
         <el-form-item :label="t('conn.groupName')">
           <el-input
@@ -458,10 +458,10 @@ import GroupTreeItem from './GroupTreeItem.vue'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 import { parseQuickConnect, formatConnSubtitle } from '../utils/quickConnect'
 import { FONT_OPTIONS, LANGUAGE_OPTIONS } from '../types/settings'
-import { LoadLocalState, SaveLocalState } from '../../wailsjs/go/main/App'
 import { formatFontFamily } from '../utils/formatFontFamily'
 import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
 import { GetSystemFonts } from '../../wailsjs/go/main/App'
+import { useLocalStateStore } from '../stores/localStateStore'
 
 defineProps<{
   visible: boolean
@@ -576,9 +576,7 @@ function syncExpandedFromCollapsed(groupIds: string[]) {
 // Persist collapsedGroupIds to LocalState
 async function persistCollapsedState() {
   try {
-    const state = await LoadLocalState()
-    state.collapsedGroupIds = [...collapsedGroupIds.value]
-    await SaveLocalState(state)
+    useLocalStateStore().update({ collapsedGroupIds: [...collapsedGroupIds.value] })
   } catch {
     // ignore errors — collapse state is not critical
   }
@@ -711,9 +709,10 @@ watch(() => connectionStore.allGroupIds, (ids) => {
 // Initialize collapse state from persisted LocalState
 async function initCollapseState() {
   try {
-    const state = await LoadLocalState()
-    if (state.collapsedGroupIds && state.collapsedGroupIds.length > 0) {
-      collapsedGroupIds.value = new Set(state.collapsedGroupIds)
+    const ls = useLocalStateStore()
+    if (!ls.loaded) await ls.init()
+    if (ls.state.collapsedGroupIds && ls.state.collapsedGroupIds.length > 0) {
+      collapsedGroupIds.value = new Set(ls.state.collapsedGroupIds)
     }
   } catch {
     // Use default (all expanded)

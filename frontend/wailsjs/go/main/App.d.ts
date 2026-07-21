@@ -19,6 +19,8 @@ export function ChatCompletion(arg1:string,arg2:string,arg3:string,arg4:string,a
 
 export function CheckForUpdate(arg1:string):Promise<update.UpdateInfo>;
 
+export function ClearBackgroundImage():Promise<void>;
+
 export function CloseSession(arg1:string):Promise<void>;
 
 export function ConnectSerial(arg1:string,arg2:number,arg3:number,arg4:number,arg5:string):Promise<session.SessionInfo>;
@@ -66,6 +68,8 @@ export function FrontendLog(arg1:string,arg2:string):Promise<void>;
 export function GetAppInfo():Promise<main.AppInfo>;
 
 export function GetAvailableShells():Promise<Array<string>>;
+
+export function GetBackgroundImage(arg1:string):Promise<string>;
 
 export function GetDBCapabilities(arg1:string):Promise<database.DBCapabilities>;
 
@@ -264,6 +268,8 @@ export function SessionStartZmodem(arg1:string):Promise<void>;
 export function SessionWrite(arg1:string,arg2:string):Promise<void>;
 
 export function SessionWriteBinary(arg1:string,arg2:string):Promise<void>;
+
+export function SetBackgroundImage(arg1:string):Promise<string>;
 
 export function SetDefaultSessionLogDir(arg1:string):Promise<void>;
 

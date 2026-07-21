@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed, reactive, watch } from 'vue'
 import type { AIMessage, AIConfig, ExecutionMode, AISession, AIAgentStatus } from '../types/ai'
-import { SaveAIConfig, LoadAIConfig, SaveAISessions, LoadAISessions, SaveLocalState, LoadLocalState } from '../../wailsjs/go/main/App'
+import { SaveAIConfig, LoadAIConfig, SaveAISessions, LoadAISessions } from '../../wailsjs/go/main/App'
+import { useLocalStateStore } from './localStateStore'
 import { EventsOn } from '../../wailsjs/runtime'
 import { t } from '../i18n'
 
@@ -194,9 +195,7 @@ export const useAIStore = defineStore('ai', () => {
 
   async function saveVisible() {
     try {
-      const current = await LoadLocalState()
-      current.aiSidebarVisible = visible.value
-      await SaveLocalState(current)
+      useLocalStateStore().update({ aiSidebarVisible: visible.value })
     } catch {
       // ignore save errors
     }
@@ -287,8 +286,9 @@ export const useAIStore = defineStore('ai', () => {
 
     // Load sidebar visibility from local state
     try {
-      const state = await LoadLocalState()
-      visible.value = state.aiSidebarVisible ?? false
+      const ls = useLocalStateStore()
+      if (!ls.loaded) await ls.init()
+      visible.value = ls.state.aiSidebarVisible ?? false
     } catch {
       // keep default
     }
