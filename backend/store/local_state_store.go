@@ -66,7 +66,9 @@ func (s *LocalStateStore) Load() (LocalState, error) {
 		}
 		return LocalState{}, err
 	}
-	var state LocalState
+	// Start from defaults so fields missing in older configs keep their
+	// intended values instead of Go zero values (e.g. opacity/blur = 0).
+	state := defaultLocalState()
 	if err := json.Unmarshal(bytes, &state); err != nil {
 		return defaultLocalState(), nil
 	}
