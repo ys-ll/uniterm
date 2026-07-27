@@ -120,6 +120,17 @@ const state = reactive({
   initAutoCheck,
 })
 
+// dispose stops the periodic update-check timer. Call from app teardown
+// or a top-level component's onBeforeUnmount so the interval does not
+// outlive the Vue app instance (FE-04).
+function dispose() {
+  stopTimer()
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', dispose)
+}
+
 export function useUpdateCheck() {
   return state
 }
