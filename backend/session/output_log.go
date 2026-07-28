@@ -2,6 +2,7 @@ package session
 
 import (
 	"bufio"
+	crand "crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -453,6 +454,22 @@ const logFlushIdleExit = 30 * time.Second
 
 const bannerHeader = "=== uniTerm session log ==="
 
+// randSuffix returns a short random suffix for log filenames so that a
+// same-second Enable collision resolves in one OpenFile call (F-012)
+// instead of a 100-iteration scan. Six lowercase hex chars = ~16M
+// distinct values per timestamp second, far more than any user opens
+// in practice. crypto/rand seeded by the runtime; we don't need
+// cryptographic strength here, only uniqueness.
+func randSuffix() string {
+	var b [3]byte
+	if _, err := crand.Read(b[:]); err != nil {
+		// crypto/rand failure is exceedingly rare; fall back to nanosecond
+		// timestamp so a collision still resolves deterministically.
+		return fmt.Sprintf("%09x", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("%x", b[:])
+}
+
 // Enable opens the log file and writes the header banner. Returns the
 // final path. If dir is empty, defaultSessionLogDir() is used. If name
 // sanitizes to empty, "session" is used as the base.
@@ -473,27 +490,15 @@ func (l *OutputLogger) Enable(dir, name, protocol string) (string, error) {
 	now := time.Now()
 	stamp := now.Format("20060102_150405")
 
-	var file *os.File
-	var final string
-	for suffix := 1; suffix <= 100; suffix++ {
-		var candidate string
-		if suffix == 1 {
-			candidate = filepath.Join(dir, base+"_"+stamp+".log")
-		} else {
-			candidate = filepath.Join(dir, fmt.Sprintf("%s_%s_%d.log", base, stamp, suffix))
-		}
-		f, err := os.OpenFile(candidate, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err == nil {
-			file = f
-			final = candidate
-			break
-		}
-		if !os.IsExist(err) {
-			return "", fmt.Errorf("open log %s: %w", candidate, err)
-		}
-	}
-	if file == nil {
-		return "", fmt.Errorf("could not allocate log filename in %s", dir)
+	// Pick a unique filename. The previous brute-force loop tried up to
+	// 100 numeric suffixes via os.OpenFile(O_CREATE|O_EXCL), costing up
+	// to 100 stat+create syscalls on collision (F-012). Use a randomized
+	// temp pattern instead — one syscall, no scan loop. The human-readable
+	// name still encodes the timestamp so directory listings stay useful.
+	final := filepath.Join(dir, base+"_"+stamp+"_"+randSuffix()+".log")
+	file, err := os.OpenFile(final, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return "", fmt.Errorf("open log %s: %w", final, err)
 	}
 
 	l.mu.Lock()
