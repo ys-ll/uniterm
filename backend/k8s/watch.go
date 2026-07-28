@@ -29,17 +29,18 @@ type WatchEvent struct {
 // backoff (1s, 2s, 4s, 8s, max 30s) so an apiserver bounce does not
 // silently kill the watch (K8S-02).
 func startWatchStream(ctx context.Context, client *http.Client, base, path string,
-	cb func(WatchEvent), onEnd func(error), onReconnect func(error)) error {
+	cb func(WatchEvent), onEnd func(error), onReconnect func(error), done chan struct{}) error {
 
 	if !strings.HasPrefix(path, "/") {
 		return fmt.Errorf("path must start with /: %q", path)
 	}
-	go runWatchLoop(ctx, client, base, path, cb, onEnd, onReconnect)
+	go runWatchLoop(ctx, client, base, path, cb, onEnd, onReconnect, done)
 	return nil
 }
 
 func runWatchLoop(ctx context.Context, client *http.Client, base, path string,
-	cb func(WatchEvent), onEnd func(error), onReconnect func(error)) {
+	cb func(WatchEvent), onEnd func(error), onReconnect func(error), done chan struct{}) {
+	defer close(done)
 	backoff := time.Second
 	const maxBackoff = 30 * time.Second
 	for {

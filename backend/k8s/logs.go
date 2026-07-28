@@ -18,17 +18,18 @@ import (
 // manager can emit a light reconnecting event without churning its maps
 // (F-404).
 func startLogStream(ctx context.Context, client *http.Client, base, path string,
-	cb func(string), onEnd func(error), onReconnect func(error)) error {
+	cb func(string), onEnd func(error), onReconnect func(error), done chan struct{}) error {
 
 	if !strings.HasPrefix(path, "/") {
 		return fmt.Errorf("path must start with /: %q", path)
 	}
-	go runLogLoop(ctx, client, base, path, cb, onEnd, onReconnect)
+	go runLogLoop(ctx, client, base, path, cb, onEnd, onReconnect, done)
 	return nil
 }
 
 func runLogLoop(ctx context.Context, client *http.Client, base, path string,
-	cb func(string), onEnd func(error), onReconnect func(error)) {
+	cb func(string), onEnd func(error), onReconnect func(error), done chan struct{}) {
+	defer close(done)
 	backoff := time.Second
 	const maxBackoff = 30 * time.Second
 	for {
