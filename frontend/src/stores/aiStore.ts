@@ -260,12 +260,18 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   function addMessage(msg: AIMessage): AIMessage {
-    const r = reactive({ ...msg }) as AIMessage
-    messages.value.push(r)
+    // F-302: shallowReactive + markRaw _rawApiMsg. The raw API block is only
+    // mutated by the LLM, never read by UI components, so it doesn't need
+    // deep reactive tracking. The shallow wrapper covers the message's
+    // own fields (content, pendingTools) without descending into nested arrays.
+    const wrapped: AIMessage = msg._rawApiMsg
+      ? (shallowReactive({ ...msg, _rawApiMsg: markRaw(msg._rawApiMsg) }) as AIMessage)
+      : (shallowReactive({ ...msg }) as AIMessage)
+    messages.value.push(wrapped)
     if (currentSessionId.value) {
       const s = sessions.value.find(s => s.id === currentSessionId.value)
       if (s) {
-        s.messages.push(r)
+        s.messages.push(wrapped)
         s.updatedAt = Date.now()
         if (msg.role === 'user' && s.name === t('ai.newSession')) {
           const trimmed = msg.content.trim()
@@ -277,11 +283,11 @@ export const useAIStore = defineStore('ai', () => {
       }
     }
     messagesVersion.value++
-    return r
+    return wrapped
   }
 
   function addSkillCard(name: string, source: 'explicit' | 'auto') {
-    const r = reactive({
+    const r = shallowReactive({
       id: `skill-${Date.now()}`,
       role: 'user' as const,
       content: '',
@@ -301,7 +307,7 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   function addCommandCard(name: string, args: string) {
-    const r = reactive({
+    const r = shallowReactive({
       id: `cmd-${Date.now()}`,
       role: 'user' as const,
       content: '',
@@ -359,7 +365,10 @@ export const useAIStore = defineStore('ai', () => {
           if (typeof msg._rawApiMsg === 'string' && msg._rawApiMsg) {
             try { msg._rawApiMsg = JSON.parse(msg._rawApiMsg) } catch { delete msg._rawApiMsg }
           }
-          return reactive(msg) as AIMessage
+          if (msg._rawApiMsg) {
+            ;(msg as AIMessage)._rawApiMsg = markRaw(msg._rawApiMsg)
+          }
+          return shallowReactive(msg) as AIMessage
         })
       } else {
         createSession()
@@ -452,7 +461,13 @@ export const useAIStore = defineStore('ai', () => {
     const s = sessions.value.find(s => s.id === sessionId)
     if (!s) return
     currentSessionId.value = sessionId
-    messages.value = s.messages.map(m => reactive({ ...m }) as AIMessage)
+    messages.value = s.messages.map(m => {
+      const msg = { ...m }
+      if (msg._rawApiMsg) {
+        ;(msg as AIMessage)._rawApiMsg = markRaw(msg._rawApiMsg)
+      }
+      return shallowReactive(msg) as AIMessage
+    })
     clearQueue()
     messagesVersion.value++
   }
