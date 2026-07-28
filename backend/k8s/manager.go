@@ -168,6 +168,7 @@ func (m *Manager) StartWatch(connID, path string) (string, error) {
 	watchID := uuid.New().String()
 	eventName := "k8s:watch:" + watchID
 	endName := "k8s:watch-end:" + watchID
+	reconnectingName := "k8s:watch-reconnecting:" + watchID
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// 先注册再启流：避免 stream 立即 EOF 时 onEnd 抢在注册之前跑，导致句柄泄漏。
@@ -188,18 +189,23 @@ func (m *Manager) StartWatch(connID, path string) (string, error) {
 	err := startWatchStream(ctx, client, base, path,
 		func(ev WatchEvent) { emit(eventName, ev) },
 		func(err error) {
+			// 终端结束（ctx 取消 / 干净 EOF）才走这里：emit 终态事件并清 map。
 			payload := map[string]any{"error": ""}
 			if err != nil {
 				payload["error"] = err.Error()
 			}
 			emit(endName, payload)
-			// 主动清理 map
 			m.mu.Lock()
 			delete(m.watches, watchID)
 			if c, ok := m.conns[connID]; ok {
 				delete(c.watches, watchID)
 			}
 			m.mu.Unlock()
+		},
+		func(err error) {
+			// 重连退避前仅发轻量 reconnecting 事件，不动 maps — 防止 apiserver 抖动时
+			// 每 1s/2s/4s/… 都抢 mutex + EventsEmit (F-404)。
+			emit(reconnectingName, map[string]any{"error": err.Error()})
 		},
 	)
 	if err != nil {
@@ -234,6 +240,7 @@ func (m *Manager) StartLogStream(connID, ns, pod, container string, tailLines in
 	streamID := uuid.New().String()
 	eventName := "k8s:log:" + streamID
 	endName := "k8s:log-end:" + streamID
+	reconnectingName := "k8s:log-reconnecting:" + streamID
 	ctx, cancel := context.WithCancel(context.Background())
 
 	m.mu.Lock()
@@ -259,6 +266,9 @@ func (m *Manager) StartLogStream(connID, ns, pod, container string, tailLines in
 			m.mu.Lock()
 			delete(m.logs, streamID)
 			m.mu.Unlock()
+		},
+		func(err error) {
+			emit(reconnectingName, map[string]any{"error": err.Error()})
 		},
 	)
 	if err != nil {

@@ -53,7 +53,7 @@ func TestWatchDeliversEvents(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	err := startWatchStream(ctx, client, base, "/api/v1/namespaces/default/pods?watch=true", cb, onEnd)
+	err := startWatchStream(ctx, client, base, "/api/v1/namespaces/default/pods?watch=true", cb, onEnd, nil)
 	if err != nil {
 		t.Fatalf("startWatchStream: %v", err)
 	}
@@ -96,7 +96,8 @@ func TestWatchContextCancel(t *testing.T) {
 	ended := make(chan struct{})
 	err := startWatchStream(ctx, client, base, "/api/v1/pods?watch=true",
 		func(WatchEvent) {},
-		func(err error) { close(ended) })
+		func(err error) { close(ended) },
+		nil)
 	if err != nil {
 		t.Fatal(err)
 	}

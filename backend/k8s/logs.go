@@ -14,19 +14,21 @@ import (
 //
 // Same reconnect-with-backoff shape as startWatchStream so a pod
 // restart or apiserver bounce does not silently kill the log stream
-// (K8S-02).
+// (K8S-02). onReconnect is fired on transient transport failures so the
+// manager can emit a light reconnecting event without churning its maps
+// (F-404).
 func startLogStream(ctx context.Context, client *http.Client, base, path string,
-	cb func(string), onEnd func(error)) error {
+	cb func(string), onEnd func(error), onReconnect func(error)) error {
 
 	if !strings.HasPrefix(path, "/") {
 		return fmt.Errorf("path must start with /: %q", path)
 	}
-	go runLogLoop(ctx, client, base, path, cb, onEnd)
+	go runLogLoop(ctx, client, base, path, cb, onEnd, onReconnect)
 	return nil
 }
 
 func runLogLoop(ctx context.Context, client *http.Client, base, path string,
-	cb func(string), onEnd func(error)) {
+	cb func(string), onEnd func(error), onReconnect func(error)) {
 	backoff := time.Second
 	const maxBackoff = 30 * time.Second
 	for {
@@ -40,9 +42,13 @@ func runLogLoop(ctx context.Context, client *http.Client, base, path string,
 			onEnd(nil)
 			return
 		}
-		// Transport / scanner error — likely apiserver bounce. Backoff
-		// and retry, but surface once via onEnd (K8S-02).
-		onEnd(err)
+		// Transport / scanner error — likely apiserver bounce. Surface
+		// a transient reconnect signal (if wired) and back off; onEnd is
+		// reserved for the terminal case so the manager doesn't drop the
+		// handle from its map on every reconnect attempt (F-404).
+		if onReconnect != nil {
+			onReconnect(err)
+		}
 		select {
 		case <-ctx.Done():
 			return
