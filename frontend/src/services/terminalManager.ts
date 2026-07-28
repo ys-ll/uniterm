@@ -77,9 +77,14 @@ export function acquireTerminal(
     if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
       theme.background = 'rgba(0,0,0,0)'
     }
+    // F-034: 1.15 line height gives italic glyph descenders enough vertical
+    // room to render without clipping against the cell boundary. xterm
+    // defaults to 1.0, which is tight enough that the ⏺/⏵ spinner glyphs
+    // and italic thinking-block text from Claude Code visibly cut off.
     const terminal = new Terminal({
       fontSize: options.fontSize ?? 13,
       fontFamily: formatFontFamily(options.fontFamily ?? 'Consolas, "Courier New", monospace'),
+      lineHeight: 1.15,
       theme,
       cursorBlink,
       rightClickSelectsWord: false,
