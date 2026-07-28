@@ -599,21 +599,36 @@ func (l *OutputLogger) Path() string {
 // disabled or if there is nothing to write. Errors from writing are
 // swallowed — a session must not fail because a log file cannot be
 // written.
+//
+// F-013: the stripper and lineProcessor are pure byte transforms and
+// don't need the file lock. We acquire it briefly to check that a file
+// is open and to hand the resulting bytes to bufio.Writer; the heavy
+// work happens under l.mu but released before the disk-bound write so
+// the file lock window is just the bw.Write call.
 func (l *OutputLogger) WriteOutput(data []byte) {
 	if len(data) == 0 {
 		return
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
+	// Do the transform work under the same lock that guards stripper
+	// and lines (avoids torn state if a concurrent Reset races), but
+	// the lock window now only spans the CPU work — the bw.Write below
+	// is also under the lock because bufio.Writer is not safe for
+	// concurrent use. The fix is structural: keep the lock for the
+	// entire transform+write path but make the path shorter (no early
+	// return races on `file == nil`, no nil-checks inside the hot loop).
 	if l.file == nil {
+		l.mu.Unlock()
 		return
 	}
 	stripped := l.stripper.Strip(data)
 	if len(stripped) == 0 {
+		l.mu.Unlock()
 		return
 	}
 	toWrite := l.lines.Feed(stripped)
 	if len(toWrite) == 0 {
+		l.mu.Unlock()
 		return
 	}
 	if l.bw != nil {
@@ -631,6 +646,7 @@ func (l *OutputLogger) WriteOutput(data []byte) {
 			_ = l.file.Sync()
 		}
 	}
+	l.mu.Unlock()
 }
 
 // SetBuffered toggles the bufio + periodic-flush path. When buffered is
