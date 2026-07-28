@@ -17,14 +17,23 @@ import {
 // Global token listener management: only one runAgent instance should receive
 // ai:token events at a time. Registering a new listener automatically cancels
 // the previous one, preventing duplicate streaming into multiple assistant
-// messages when a stop/continue sequence races.
+// messages when a stop/continue sequence races. F-315: each register call
+// bumps a generation counter; the returned cleanup only clears module state
+// when its generation still matches, so an early-return path that gets
+// superseded by a re-entry (approveTool → runAgent; rejectTool / answer /
+// dismissQuestion setTimeout→runAgent) can't accidentally clobber a newer
+// pair by running its stale cleanup.
 let activeTokenUnsubscribe: (() => void) | null = null
 let activeAssistantMsg: AIMessage | null = null
+let activeGeneration = 0
 
 function registerTokenListener(callback: (data: any) => void): () => void {
   activeTokenUnsubscribe?.()
   activeTokenUnsubscribe = EventsOn('ai:token', callback)
+  activeGeneration++
+  const myGeneration = activeGeneration
   return () => {
+    if (myGeneration !== activeGeneration) return
     activeTokenUnsubscribe?.()
     activeTokenUnsubscribe = null
     activeAssistantMsg = null
