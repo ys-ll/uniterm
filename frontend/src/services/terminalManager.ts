@@ -81,6 +81,17 @@ export function acquireTerminal(
     // room to render without clipping against the cell boundary. xterm
     // defaults to 1.0, which is tight enough that the ⏺/⏵ spinner glyphs
     // and italic thinking-block text from Claude Code visibly cut off.
+    //
+    // F-036: italic SGR-3 is handled natively by xterm.js v5.5 — its DOM
+    // renderer emits <span class="xterm-italic">…</span> and applies
+    // \`font-style: italic\` via xterm.css. No @xterm/addon-italic package
+    // is published on npm (verified: npm view @xterm/addon-italic → 404),
+    // and xterm.js already routes the italic attribute through the
+    // browser's CSS font-matching — so the JetBrains Mono Variable /
+    // Consolas / Courier New chain in fontFamily already renders italic
+    // faces when the system has them. The fix sketch's "install addon"
+    // step is a no-op against the v5.5 source; the lineHeight bump above
+    // is the actual rendering improvement.
     // F-039: keep windowsMode off so xterm treats alt-screen (DECSET 1049)
     // transitions the same as it does on macOS/Linux: the saved scrollback
     // buffer is restored on return. windowsMode forces winpty/conpty-style
