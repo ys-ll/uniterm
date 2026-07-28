@@ -59,8 +59,7 @@ type App struct {
 	wndProcCb            uintptr // keep alive to prevent GC
 	inSizeMove           bool
 	webviewDataPath      string
-	chatCancel           context.CancelFunc // active stream cancellation
-	chatCancelMu         stdsync.Mutex      // guards chatCancel
+	chatCancel           atomic.Pointer[context.CancelFunc] // F-308: active stream cancellation, per-call swap so overlap is safe
 	moveResizeCh         chan string        // defer EventsEmit from WndProc
 	// F-043: foreground flag — true while the window is visible and the
 	// user is interacting; background goroutines (keepalive, output_log
@@ -263,17 +262,26 @@ func (a *App) startup(ctx context.Context) {
 		if a.settingsStore != nil {
 			a.settingsStore.SetPasswordStore(syncSvc.PasswordStore())
 		}
-		// Auto-sync on startup if enabled
+		// Auto-sync on startup if enabled. F-408: gate on foreground
+		// visibility so a hidden app (launched then immediately minimised,
+		// or started by a file association in the background) doesn't
+		// burn CPU + PBKDF2 + AES + git push cycles the user can't see.
 		if syncSvc.IsAutoSyncEnabled() {
-			result, err := syncSvc.Sync()
-			if err != nil {
-				log.Writef("Auto-sync on startup failed: %v", err)
-			} else if result != nil && result.Direction == sync.SyncConflict {
-				runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
-					"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
-					"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
-				})
-			}
+			go func() {
+				if !a.waitForegroundFor(3 * time.Second) {
+					log.Writef("Auto-sync on startup skipped: app not foreground within 3s")
+					return
+				}
+				result, err := syncSvc.Sync()
+				if err != nil {
+					log.Writef("Auto-sync on startup failed: %v", err)
+				} else if result != nil && result.Direction == sync.SyncConflict {
+					runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
+						"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
+						"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
+					})
+				}
+			}()
 		}
 	}()
 
@@ -397,6 +405,28 @@ func (a *App) SaveWindowState(x, y, width, height int, maximised bool) {
 // that should pause when the user can't see the terminal (F-043).
 func (a *App) IsForeground() bool {
 	return a.foreground.Load()
+}
+
+// waitForegroundFor blocks until the app is foreground or d elapses,
+// whichever comes first. Returns whether the foreground state was reached.
+// Used by F-408 to keep background goroutines (auto-sync on startup,
+// triggerAutoSync) from burning CPU/wakeups while the user can't see
+// the result. The 3s ceiling matches the manual recent bound fixes and
+// keeps a slow startup from blocking the caller.
+func (a *App) waitForegroundFor(d time.Duration) bool {
+	if a.IsForeground() {
+		return true
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		<-ticker.C
+		if a.IsForeground() {
+			return true
+		}
+	}
+	return a.IsForeground()
 }
 
 // SetAppVisibility is the lifecycle hook the frontend fires from
@@ -889,6 +919,13 @@ func (a *App) reloadStoresAfterSync() {
 
 func (a *App) triggerAutoSync() {
 	if a.syncService == nil || !a.syncService.IsAutoSyncEnabled() {
+		return
+	}
+	// F-408: skip the sync when the app is hidden. Saves triggered while
+	// the user is away (background tab, minimised window, macOS App Nap)
+	// would otherwise hit git fetch + push + PBKDF2 + AES with no benefit.
+	// The next foreground save trigger will re-arm coalesced sync.
+	if !a.IsForeground() {
 		return
 	}
 	// F-207: coalesce triggerAutoSync. A burst of saves (e.g. pasting
@@ -2172,13 +2209,19 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	a.chatCancelMu.Lock()
-	a.chatCancel = cancel
-	a.chatCancelMu.Unlock()
+	// F-308: register our cancel in the App-level pointer and
+	// only clear it on the way out if no one replaced us. The
+	// previous code stored a single context.CancelFunc under a
+	// mutex and unconditionally nil'd it on defer; when two
+	// ChatCompletion calls overlapped, call A's defer wiped
+	// call B's cancel and CancelChatStream became a no-op for B.
+	myCancel := cancel
+	a.chatCancel.Store(&myCancel)
 	defer func() {
-		a.chatCancelMu.Lock()
-		a.chatCancel = nil
-		a.chatCancelMu.Unlock()
+		// CAS the slot back to nil, but only if it still points at
+		// our own cancel — a newer call may have already taken
+		// over the slot.
+		a.chatCancel.CompareAndSwap(&myCancel, nil)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(modifiedJSON))
@@ -2214,12 +2257,12 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	var messageRole string
 	var usage map[string]interface{}
 	currentBlockIndex := -1
-	// F-307: parallel slice of per-block text buffers. Accumulating
-	// text via string + string was O(n²) and paid a fresh alloc per
-	// token; we Write into a *bytes.Buffer instead and flush to a
-	// string once at content_block_stop / message_stop. Empty slots
-	// (non-text blocks) stay nil and are skipped on flush.
-	var blockTextBufs []*bytes.Buffer
+	// F-307: bytes.Buffer per block. Accumulating text/input via
+	// string + string was O(n²) and paid a fresh alloc per token; we
+	// WriteString into a buffer and flush to a string exactly once at
+	// content_block_stop. Only one block is open at a time so a single
+	// pair of buffers is sufficient.
+	var currentTextBuf, currentInputBuf bytes.Buffer
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -2245,6 +2288,8 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 
 		case "content_block_start":
 			currentBlockIndex++
+			currentTextBuf.Reset()
+			currentInputBuf.Reset()
 			var block map[string]interface{}
 			if err := json.Unmarshal(ev.ContentBlock, &block); err == nil {
 				currentBlock = block
@@ -2261,52 +2306,41 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			}
 			switch delta.Type {
 			case "text_delta":
-				text := delta.Text
 				if currentBlock != nil {
-					// F-307: append to a per-block *bytes.Buffer
-					// instead of O(n²) string concatenation. The
-					// buffer is flushed to a string exactly once
-					// at content_block_stop; the per-token
-					// String() call is gone.
-					if blockTextBufs[currentBlockIndex] == nil {
-						blockTextBufs = append(blockTextBufs, make([]*bytes.Buffer, currentBlockIndex+1-len(blockTextBufs))...)
-						blockTextBufs[currentBlockIndex] = &bytes.Buffer{}
-					}
-					blockTextBufs[currentBlockIndex].WriteString(text)
+					currentTextBuf.WriteString(delta.Text)
 				}
 				runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-					"text":  text,
+					"text":  delta.Text,
 					"index": currentBlockIndex,
 				})
 			case "input_json_delta":
 				if currentBlock != nil {
-					partial := delta.PartialJSON
-					if currentBlock["input"] == nil || fmt.Sprintf("%T", currentBlock["input"]) != "string" {
-						currentBlock["input"] = ""
-					}
-					if s, ok := currentBlock["input"].(string); ok {
-						currentBlock["input"] = s + partial
-					}
+					currentInputBuf.WriteString(delta.PartialJSON)
 				}
 			}
 
 		case "content_block_stop":
 			if currentBlock != nil {
-				// F-307: flush the per-block text buffer exactly
-				// once into currentBlock["text"] so the downstream
-				// contentBlocks / JSON marshal sees a single
-				// string instead of O(n²) per-token copies.
-				if currentBlockIndex >= 0 && currentBlockIndex < len(blockTextBufs) && blockTextBufs[currentBlockIndex] != nil {
-					currentBlock["text"] = blockTextBufs[currentBlockIndex].String()
+				// F-307: flush buffers into the block exactly once
+				// so downstream code sees a single string per field.
+				if currentTextBuf.Len() > 0 {
+					currentBlock["text"] = currentTextBuf.String()
 				}
-				if blockType, _ := currentBlock["type"].(string); blockType == "tool_use" {
-					if inputStr, ok := currentBlock["input"].(string); ok && inputStr != "" {
+				currentTextBuf.Reset()
+				if currentInputBuf.Len() > 0 {
+					inputStr := currentInputBuf.String()
+					if blockType, _ := currentBlock["type"].(string); blockType == "tool_use" && inputStr != "" {
 						var inputObj map[string]interface{}
 						if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
 							currentBlock["input"] = inputObj
+						} else {
+							currentBlock["input"] = inputStr
 						}
+					} else {
+						currentBlock["input"] = inputStr
 					}
 				}
+				currentInputBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
 				currentBlock = nil
 			}
@@ -2548,13 +2582,12 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	a.chatCancelMu.Lock()
-	a.chatCancel = cancel
-	a.chatCancelMu.Unlock()
+	// F-308: see chatCompletionAnthropic for rationale; same CAS
+	// pattern keeps CancelChatStream honest across overlap.
+	myCancel := cancel
+	a.chatCancel.Store(&myCancel)
 	defer func() {
-		a.chatCancelMu.Lock()
-		a.chatCancel = nil
-		a.chatCancelMu.Unlock()
+		a.chatCancel.CompareAndSwap(&myCancel, nil)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestJSON))
@@ -2589,6 +2622,10 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	var messageRole = "assistant"
 	currentBlockIndex := -1
 	activeToolCalls := make(map[int]map[string]interface{}) // index -> accumulating tool_call
+	// F-307: per-block text and input buffers so accumulation is O(n)
+	// instead of O(n²) string concat per token. Flushed to the block
+	// map on content_block_stop / finish_reason.
+	var currentTextBuf, currentInputBuf bytes.Buffer
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -2608,6 +2645,10 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 		if strings.TrimSpace(dataStr) == "[DONE]" {
 			// Emit content_block_stop for any open block
 			if currentBlock != nil {
+				if currentTextBuf.Len() > 0 {
+					currentBlock["text"] = currentTextBuf.String()
+				}
+				currentTextBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
 				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
 					"index": currentBlockIndex,
@@ -2622,6 +2663,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				})
 			}
 			activeToolCalls = make(map[int]map[string]interface{})
+			currentInputBuf.Reset()
 
 			// Emit message_delta and message_stop
 			runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
@@ -2655,6 +2697,10 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			if currentBlock == nil || currentBlock["type"] != "text" {
 				// Close previous block if any
 				if currentBlock != nil {
+					if currentTextBuf.Len() > 0 {
+						currentBlock["text"] = currentTextBuf.String()
+					}
+					currentTextBuf.Reset()
 					contentBlocks = append(contentBlocks, currentBlock)
 					runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
 						"index": currentBlockIndex,
@@ -2665,12 +2711,13 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 					"type": "text",
 					"text": "",
 				}
+				currentTextBuf.Reset()
 				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
 					"index":         currentBlockIndex,
 					"content_block": currentBlock,
 				})
 			}
-			currentBlock["text"] = currentBlock["text"].(string) + delta.Content
+			currentTextBuf.WriteString(delta.Content)
 			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
 				"text":  delta.Content,
 				"index": currentBlockIndex,
@@ -2687,6 +2734,10 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			if _, exists := activeToolCalls[idx]; !exists {
 				// Close current text block if open
 				if currentBlock != nil {
+					if currentTextBuf.Len() > 0 {
+						currentBlock["text"] = currentTextBuf.String()
+					}
+					currentTextBuf.Reset()
 					contentBlocks = append(contentBlocks, currentBlock)
 					runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
 						"index": currentBlockIndex,
@@ -2729,6 +2780,10 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 		if finishReason != "" && finishReason != "null" {
 			// Close any open text block
 			if currentBlock != nil {
+				if currentTextBuf.Len() > 0 {
+					currentBlock["text"] = currentTextBuf.String()
+				}
+				currentTextBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
 				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
 					"index": currentBlockIndex,
@@ -2749,6 +2804,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				})
 			}
 			activeToolCalls = make(map[int]map[string]interface{})
+			currentInputBuf.Reset()
 
 			stopReason := "end_turn"
 			if finishReason == "tool_calls" {
@@ -2948,13 +3004,12 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	a.chatCancelMu.Lock()
-	a.chatCancel = cancel
-	a.chatCancelMu.Unlock()
+	// F-308: see chatCompletionAnthropic for rationale; same CAS
+	// pattern keeps CancelChatStream honest across overlap.
+	myCancel := cancel
+	a.chatCancel.Store(&myCancel)
 	defer func() {
-		a.chatCancelMu.Lock()
-		a.chatCancel = nil
-		a.chatCancelMu.Unlock()
+		a.chatCancel.CompareAndSwap(&myCancel, nil)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestJSON))
@@ -3143,10 +3198,10 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 
 // CancelChatStream cancels the currently active ChatCompletion stream.
 func (a *App) CancelChatStream() {
-	a.chatCancelMu.Lock()
-	defer a.chatCancelMu.Unlock()
-	if a.chatCancel != nil {
-		a.chatCancel()
+	// F-308: load the atomic.Pointer (no lock needed); a nil slot
+	// means no stream is active.
+	if p := a.chatCancel.Load(); p != nil {
+		(*p)()
 	}
 }
 
