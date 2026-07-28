@@ -3,7 +3,9 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // parseParams parses "key1=val1&key2=val2" into a map.
@@ -165,9 +167,19 @@ func scanToString(v any) string {
 	if v == nil {
 		return ""
 	}
-	switch s := v.(type) {
+	switch x := v.(type) {
 	case []byte:
-		return string(s)
+		return string(x)
+	case string:
+		return x
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case float64:
+		return strconv.FormatFloat(x, 'g', -1, 64)
+	case bool:
+		return strconv.FormatBool(x)
+	case time.Time:
+		return x.Format(time.RFC3339Nano)
 	default:
 		return fmt.Sprintf("%v", v)
 	}
