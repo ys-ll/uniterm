@@ -2664,6 +2664,10 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	// instead of O(n²) string concat per token. Flushed to the block
 	// map on content_block_stop / finish_reason.
 	var currentTextBuf, currentInputBuf bytes.Buffer
+	// Per-tool input buffer so each tool_call's argument concat stays
+	// O(n). Keyed by the tool's index — multiple tool_calls can run
+	// in parallel (one per idx).
+	toolInputBufs := make(map[int]*bytes.Buffer)
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -2716,7 +2720,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, _ := json.Marshal(fullMessage)
+			resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
 			return string(resultJSON), nil
 		}
 
@@ -2803,10 +2807,14 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				atc["name"] = tc.Function.Name
 			}
 			if args := tc.Function.Arguments; args != "" {
-				if atc["input"] == nil {
-					atc["input"] = ""
+				// F-307: append to a per-tool *bytes.Buffer instead of
+				// string concat (O(n²) over a long tool-args stream).
+				buf, ok := toolInputBufs[idx]
+				if !ok {
+					buf = &bytes.Buffer{}
+					toolInputBufs[idx] = buf
 				}
-				atc["input"] = atc["input"].(string) + args
+				buf.WriteString(args)
 				runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
 					"partial_json": args,
 				})
@@ -2830,7 +2838,17 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			}
 			// Close tool_use blocks and parse their input JSON
 			for idx, tc := range activeToolCalls {
-				if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
+				// F-307: prefer the per-tool buffer over the
+				// possibly-empty tc["input"] string.
+				if buf, ok := toolInputBufs[idx]; ok && buf.Len() > 0 {
+					inputStr := buf.String()
+					var inputObj map[string]interface{}
+					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
+						tc["input"] = inputObj
+					} else {
+						tc["input"] = inputStr
+					}
+				} else if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
 					var inputObj map[string]interface{}
 					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
 						tc["input"] = inputObj
@@ -2842,6 +2860,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				})
 			}
 			activeToolCalls = make(map[int]map[string]interface{})
+			toolInputBufs = nil
 			currentInputBuf.Reset()
 
 			stopReason := "end_turn"
@@ -2865,7 +2884,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, _ := json.Marshal(fullMessage)
+			resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
 			return string(resultJSON), nil
 		}
 	}
@@ -2882,7 +2901,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			"role":    messageRole,
 			"content": contentBlocks,
 		}
-		resultJSON, _ := json.Marshal(fullMessage)
+		resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -3101,11 +3120,14 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			"role":    "assistant",
 			"content": contentBlocks,
 		}
+		resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
+		if err != nil {
+			return "", fmt.Errorf("marshal final message: %w", err)
+		}
 		runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
-			"message":     fullMessage,
+			"message":     json.RawMessage(resultJSON),
 			"stop_reason": stopReason,
 		})
-		resultJSON, _ := json.Marshal(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -3168,7 +3190,14 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			if ev.Delta == "" {
 				continue
 			}
-			block["text"] = block["text"].(string) + ev.Delta
+			// F-307: append to per-block *bytes.Buffer instead of
+			// O(n²) string concatenation. Flushed on output_item.done.
+			buf, ok := textBufs[ev.OutputIndex]
+			if !ok {
+				buf = &bytes.Buffer{}
+				textBufs[ev.OutputIndex] = buf
+			}
+			buf.WriteString(ev.Delta)
 			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
 				"text":  ev.Delta,
 				"index": idxByOutputIdx[ev.OutputIndex],
@@ -3182,10 +3211,12 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			if ev.Delta == "" {
 				continue
 			}
-			if block["input"] == nil {
-				block["input"] = ""
+			buf, ok := inputBufs[ev.OutputIndex]
+			if !ok {
+				buf = &bytes.Buffer{}
+				inputBufs[ev.OutputIndex] = buf
 			}
-			block["input"] = block["input"].(string) + ev.Delta
+			buf.WriteString(ev.Delta)
 			runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
 				"partial_json": ev.Delta,
 			})
@@ -3195,15 +3226,28 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			if block == nil {
 				continue
 			}
-			if block["type"] == "tool_use" {
-				if inputStr, ok := block["input"].(string); ok {
-					var inputObj map[string]interface{}
-					if inputStr != "" && json.Unmarshal([]byte(inputStr), &inputObj) == nil {
-						block["input"] = inputObj
+			// F-307: flush per-block buffers once into the block map.
+			if buf, ok := textBufs[ev.OutputIndex]; ok {
+				if buf.Len() > 0 {
+					block["text"] = buf.String()
+				}
+				delete(textBufs, ev.OutputIndex)
+			}
+			if buf, ok := inputBufs[ev.OutputIndex]; ok {
+				if buf.Len() > 0 {
+					inputStr := buf.String()
+					if block["type"] == "tool_use" {
+						var inputObj map[string]interface{}
+						if json.Unmarshal([]byte(inputStr), &inputObj) == nil {
+							block["input"] = inputObj
+						} else {
+							block["input"] = map[string]interface{}{}
+						}
 					} else {
-						block["input"] = map[string]interface{}{}
+						block["input"] = inputStr
 					}
 				}
+				delete(inputBufs, ev.OutputIndex)
 			}
 			contentBlocks = append(contentBlocks, block)
 			runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
