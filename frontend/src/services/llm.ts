@@ -78,6 +78,7 @@ export async function chat(options: ChatOptions): Promise<void> {
   const requestJSON = staticPrefixCache
     + `,"system":${JSON.stringify(options.system)}`
     + `,"messages":${JSON.stringify(options.messages)}`
+    + `}`
 
   let responseText: string
   try {
