@@ -34,6 +34,21 @@ function estimateTokens(text: string): number {
 // against any remaining hot reads) doesn't re-stringify _rawApiMsg.
 const tokenEstimateCache = new WeakMap<AIMessage, number>()
 
+// F-314: cache the serialized _rawApiMsg JSON per message so doSave doesn't
+// re-stringify on every save. The raw API block is set once per assistant
+// message by the LLM and never mutated thereafter, so the cached form is
+// stable for the lifetime of the message.
+const rawApiMsgJsonCache = new WeakMap<AIMessage, string>()
+
+function getRawApiMsgJson(msg: AIMessage): string {
+  if (!msg._rawApiMsg) return ''
+  const cached = rawApiMsgJsonCache.get(msg)
+  if (cached !== undefined) return cached
+  const json = JSON.stringify(msg._rawApiMsg)
+  rawApiMsgJsonCache.set(msg, json)
+  return json
+}
+
 /**
  * Estimate tokens for an AIMessage, including content, tool_calls, and
  * serialized _rawApiMsg. Cached on the message itself after first compute.
@@ -49,7 +64,7 @@ function estimateMessageTokens(msg: AIMessage): number {
     }
   }
   if (msg._rawApiMsg) {
-    total += estimateTokens(JSON.stringify(msg._rawApiMsg))
+    total += estimateTokens(getRawApiMsgJson(msg))
   }
   tokenEstimateCache.set(msg, total)
   return total
@@ -418,24 +433,31 @@ export const useAIStore = defineStore('ai', () => {
     config.value = { ...config.value, ...updates }
   }
 
+  // F-314: serialize a session to the JSON shape persisted to disk.
+  // The session structure is rebuilt each save (cheap), but the heavy
+  // JSON.stringify of _rawApiMsg is cached per-message via getRawApiMsgJson.
+  function serializeSession(s: AISession): Record<string, unknown> {
+    return {
+      id: s.id,
+      name: s.name,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      messages: s.messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        tool_call_id: m.tool_call_id || '',
+        tool_calls: m.tool_calls || [],
+        pendingTools: m.pendingTools || [],
+        _rawApiMsg: getRawApiMsgJson(m),
+      }))
+    }
+  }
+
   async function doSave() {
     try {
       const data = {
-        sessions: sessions.value.map(s => ({
-          id: s.id,
-          name: s.name,
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt,
-          messages: s.messages.map(m => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            tool_call_id: m.tool_call_id || '',
-            tool_calls: m.tool_calls || [],
-            pendingTools: m.pendingTools || [],
-            _rawApiMsg: m._rawApiMsg ? JSON.stringify(m._rawApiMsg) : '',
-          }))
-        })),
+        sessions: sessions.value.map(s => serializeSession(s)),
         currentSessionId: currentSessionId.value || '',
       }
       await SaveAISessions(data as any)
