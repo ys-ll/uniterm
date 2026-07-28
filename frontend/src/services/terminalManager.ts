@@ -36,6 +36,11 @@ export interface ManagedTerminal {
 
 const terminals = new Map<string, ManagedTerminal>()
 
+// F-027: scrollback limit applied while the terminal sits in the hidden
+// holding container (between detach and re-attach). Restored on re-attach
+// so users keep their full scrollback when they revisit the tab.
+const INACTIVE_SCROLLBACK = 500
+
 // Hidden holding containers to keep terminal elements alive when no
 // component is actively displaying them. detachTerminal moves elements
 // here; attachTerminal picks them up regardless of where they are.
@@ -161,6 +166,16 @@ export function attachTerminal(sessionId: string, container: HTMLElement): void 
 
   managed.container = container
 
+  // F-027: restore the user-configured scrollback that detachTerminal
+  // shrank while the terminal sat in the holding container. Without this
+  // re-attach, users would see only the last 500 lines after every
+  // drag-out / re-merge cycle even though the full history is still
+  // replayable from sessionStore on a fresh mount.
+  if (managed.options.scrollback != null &&
+      managed.terminal.options.scrollback != managed.options.scrollback) {
+    managed.terminal.options.scrollback = managed.options.scrollback
+  }
+
   if (!managed.terminal.element) {
     managed.terminal.open(container)
   } else {
@@ -186,6 +201,16 @@ export function attachTerminal(sessionId: string, container: HTMLElement): void 
 export function detachTerminal(sessionId: string, container: HTMLElement): void {
   const managed = terminals.get(sessionId)
   if (!managed) return
+  // F-027: shrink xterm's pixel buffer while in the hidden holding
+  // container. detach → attach within the disposeTimer window still
+  // restores the original scrollback so users see their full history on
+  // re-attach. Without this the canvas + row objects for the trimmed
+  // rows stay pinned in the holding container's offscreen DOM and
+  // accumulate over the session.
+  if (managed.terminal.options.scrollback != null &&
+      managed.terminal.options.scrollback > INACTIVE_SCROLLBACK) {
+    managed.terminal.options.scrollback = INACTIVE_SCROLLBACK
+  }
   // Move element to a holding container so it survives component destruction.
   // The next attachTerminal picks it up from there.
   if (managed.terminal.element?.parentElement === container) {
