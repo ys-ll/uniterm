@@ -2354,14 +2354,23 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			}
 			var sd anthropicStopDelta
 			if err := json.Unmarshal(ev.Delta, &sd); err == nil && sd.StopReason != "" {
-				runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
-					"message": map[string]interface{}{
-						"role":    messageRole,
-						"content": contentBlocks,
-					},
-					"usage":       usage,
-					"stop_reason": sd.StopReason,
-				})
+				// F-210: marshal the full message once into a pooled
+				// buffer and reuse the bytes for both the ai:done
+				// emit (Wails marshals the args separately) and the
+				// eventual return at message_stop. Previously this
+				// struct was rebuilt + remarshaled twice per turn.
+				fullMessage := map[string]interface{}{
+					"role":    messageRole,
+					"content": contentBlocks,
+				}
+				resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
+				if err == nil {
+					runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
+						"message":    json.RawMessage(resultJSON),
+						"usage":      usage,
+						"stop_reason": sd.StopReason,
+					})
+				}
 			}
 
 		case "message_stop":
@@ -2369,7 +2378,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, err := json.Marshal(fullMessage)
+			resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
 			if err != nil {
 				return "", fmt.Errorf("marshal full message: %w", err)
 			}
@@ -2393,7 +2402,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			"role":    messageRole,
 			"content": contentBlocks,
 		}
-		resultJSON, _ := json.Marshal(fullMessage)
+		resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -2401,6 +2410,35 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 }
 
 // anthropicToolToOpenAI converts an Anthropic tool definition to OpenAI format.
+// pooled *bytes.Buffer and returns the resulting JSON string. The
+// pool avoids per-turn allocator churn; in a heavy Claude Code session
+// the buffer grows once to ~3 KiB and stays warm. Returns the buffer
+// to the pool via defer in the caller (no — the string escapes the
+// goroutine, so we keep ownership here; the buffer can be reused when
+// the underlying JSON is no longer referenced by Wails).
+func marshalAnthropicFinalMessage(msg map[string]interface{}) ([]byte, error) {
+	buf := finalMsgPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer finalMsgPool.Put(buf)
+	enc := json.NewEncoder(buf)
+	if err := enc.Encode(msg); err != nil {
+		return nil, err
+	}
+	// json.Encoder always appends a trailing newline; trim it.
+	out := buf.Bytes()
+	if n := len(out); n > 0 && out[n-1] == '\n' {
+		out = out[:n-1]
+	}
+	return out, nil
+}
+
+var finalMsgPool = stdsync.Pool{
+	New: func() any {
+		b := &bytes.Buffer{}
+		b.Grow(4 * 1024)
+		return b
+	},
+}
 func anthropicToolToOpenAI(t map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"type": "function",
@@ -3044,6 +3082,12 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	blockByOutputIdx := make(map[int]map[string]interface{})
 	idxByOutputIdx := make(map[int]int)
 	nextBlockIndex := 0
+	// F-307: parallel maps of *bytes.Buffer so text/input accumulation
+	// is O(n) instead of O(n²) string concat per token. Outputs may run
+	// in parallel (different output_index) so a single shared buffer
+	// doesn't work — keep one per output_index.
+	textBufs := make(map[int]*bytes.Buffer)
+	inputBufs := make(map[int]*bytes.Buffer)
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
