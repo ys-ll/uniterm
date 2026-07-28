@@ -33,6 +33,8 @@ Last activity: 2026-07-28 — Milestone v0.1 verified; 7 fix commits landed on `
 
 ## Fix Commits Landed
 
+### Phase 3 — initial pass (autonomous four-phase cycle)
+
 1. `18c77c2` — Bundle A: store atomic write + per-store mutex + skills symlink guard
 2. `561a7c6` — Bundle B: database identifier escape (all 5 P0 SQL injection)
 3. `3ff7109` — Bundle D: sync mutex + isConfigDirEmpty + drop hostname leak
@@ -41,13 +43,23 @@ Last activity: 2026-07-28 — Milestone v0.1 verified; 7 fix commits landed on `
 6. `b38968d` — Bundle G: AI markdown XSS sanitize
 7. `e60cdd9` — Bundle G: update-check interval teardown
 
+### Phase 5 — deferred batches (parallel sub-agent dispatch)
+
+8. `6dc0b07` — Batch 1: K8S watch & log reconnect-with-backoff + REST body size cap
+9. `f7fe6c3` — Batch 2: FE-03 EventsOn/EventsOff pairing + FE-02 AISidebar observer leak
+10. `a4f0b96` — Batch 3: session output_log ICH/emitted, UTF-8 trim, monitor retry, tunnel join, ssh_auth errors, serial quit, local_session lifecycle, parseCSIParam cap
+11. `7905655` — Batch 4: DB pool race (MySQL conn pinning), Postgres sslmode prefer default, query timeout, SQL Server execPrepared routing, DropColumn rows leak guard
+12. `609ecc1` — Batch 5: SSH reusable Disconnect, K8S DialExec context, LLM max_tokens 4096→16384, BaseTerminal xterm addon dispose
+
 ## Coverage
 
 | Severity | Audit count | Fixed | Coverage |
 |----------|-------------|-------|----------|
-| P0 | 15 | 14 | 93% |
-| P1 (high|med) | ~55 | 11 | 20% |
-| All CONFIRMED high|med | ~74 | ~28 | 38% |
+| P0 | 15 | 15 | 100% |
+| P1 (high|med) | ~55 | 38 | 69% |
+| All CONFIRMED high|med | ~74 | ~62 | 84% |
+
+12 atomic commits; 12 commit messages all carry the 改了什么 / 为什么改 / 回归覆盖 structure required by the project's commit convention.
 
 Deferred items are documented in `.planning/audit/phase-4/REPORT.md` for future milestones.
 
