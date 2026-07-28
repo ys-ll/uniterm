@@ -26,7 +26,13 @@ func (p *postgresProvider) DSN(host string, port int, user, password, dbName str
 		Path:   "/" + dbName,
 	}
 	q := u.Query()
-	q.Set("sslmode", "disable")
+	// Default to "prefer": encrypted when the server has TLS, plaintext
+	// fallback when it doesn't. Callers can override via extraParams
+	// (e.g. "sslmode=require" to refuse non-TLS, "sslmode=disable" to
+	// force plaintext against self-signed dev servers).
+	if _, ok := extraParams["sslmode"]; !ok {
+		q.Set("sslmode", "prefer")
+	}
 	for k, v := range extraParams {
 		q.Set(k, v)
 	}
