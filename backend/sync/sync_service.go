@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,13 @@ type SyncService struct {
 	keychain    *Keychain
 	configStore *SyncConfigStore
 	mu          sync.Mutex
+
+	// ready is closed by NewSyncService() once the disk-touching
+	// init (UserConfigDir → MkdirAll → NewKeychain → NewSyncConfigStore)
+	// has finished. Callers that arrive during the brief startup window
+	// can wait on Ready() with a short timeout (F-407).
+	ready     chan struct{}
+	readyOnce sync.Once
 }
 
 type SyncResult struct {
@@ -42,12 +50,53 @@ func NewSyncService() (*SyncService, error) {
 		return nil, err
 	}
 
-	return &SyncService{
+	s := &SyncService{
 		configDir:   appDir,
 		repoPath:    filepath.Join(appDir, "sync-repo"),
 		keychain:    NewKeychain(),
 		configStore: NewSyncConfigStore(appDir),
-	}, nil
+		ready:       make(chan struct{}),
+	}
+	s.readyOnce.Do(func() { close(s.ready) })
+	return s, nil
+}
+
+// NewSyncServiceAsync returns a SyncService whose disk-touching init
+// (UserConfigDir / MkdirAll / NewKeychain) runs on a background
+// goroutine. F-407: macOS Security framework keychain IPC + the
+// PBKDF2 600k iterations probe can take 50–500ms+ on first launch —
+// doing it synchronously inside wails.OnStartup blocks the first
+// paint of the main window.
+//
+// Callers should `Ready()` (with a short timeout) before invoking
+// service methods; otherwise methods may fail with
+// ErrSyncNotInitialized until init completes.
+func NewSyncServiceAsync() (*SyncService, context.Context) {
+	s := &SyncService{ready: make(chan struct{})}
+	initDone, cancel := context.WithCancel(context.Background())
+	go func() {
+		defer s.readyOnce.Do(func() { close(s.ready) })
+		cfg, err := os.UserConfigDir()
+		if err != nil {
+			return
+		}
+		appDir := filepath.Join(cfg, "uniTerm")
+		if err := os.MkdirAll(appDir, 0755); err != nil {
+			return
+		}
+		s.configDir = appDir
+		s.repoPath = filepath.Join(appDir, "sync-repo")
+		s.keychain = NewKeychain()
+		s.configStore = NewSyncConfigStore(appDir)
+		cancel()
+	}()
+	return s, initDone
+}
+
+// Ready returns a channel closed once init has finished. Pair with
+// a short timeout in callers that race startup (F-407).
+func (s *SyncService) Ready() <-chan struct{} {
+	return s.ready
 }
 
 // GetConfig returns the current sync configuration.

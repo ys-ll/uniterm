@@ -923,9 +923,28 @@ func (a *App) triggerAutoSync() {
 		}
 	}()
 }
+// waitSyncReady briefly blocks on the async NewSyncService's Ready()
+// channel so callers that arrive during the ~ms-scale startup window
+// don't fail with "sync service not initialized" (F-407). Returns
+// true once ready, false on timeout.
+func (a *App) waitSyncReady(timeout time.Duration) bool {
+	if a.syncService == nil {
+		return false
+	}
+	select {
+	case <-a.syncService.Ready():
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 func (a *App) SyncGetConfig() (sync.SyncConfig, error) {
 	if a.syncService == nil {
 		return sync.SyncConfig{}, fmt.Errorf("sync service not initialized")
+	}
+	if !a.waitSyncReady(time.Second) {
+		return sync.SyncConfig{}, fmt.Errorf("sync service still initializing")
 	}
 	return a.syncService.GetConfig()
 }
@@ -935,6 +954,9 @@ func (a *App) SyncSaveConfig(config sync.SyncConfig, token string) error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
+	if !a.waitSyncReady(time.Second) {
+		return fmt.Errorf("sync service still initializing")
+	}
 	return a.syncService.SaveConfig(config, token)
 }
 
@@ -942,6 +964,9 @@ func (a *App) SyncSaveConfig(config sync.SyncConfig, token string) error {
 func (a *App) SyncNow() (*sync.SyncResult, error) {
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
+	}
+	if !a.waitSyncReady(time.Second) {
+		return nil, fmt.Errorf("sync service still initializing")
 	}
 	result, err := a.syncService.Sync()
 	if err != nil {
@@ -965,6 +990,9 @@ func (a *App) SyncResolveConflict(useLocal bool) (*sync.SyncResult, error) {
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
 	}
+	if !a.waitSyncReady(time.Second) {
+		return nil, fmt.Errorf("sync service still initializing")
+	}
 	result, err := a.syncService.ResolveConflict(useLocal)
 	if err != nil {
 		return nil, err
@@ -985,6 +1013,9 @@ func (a *App) SyncTestConnection() error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
+	if !a.waitSyncReady(time.Second) {
+		return fmt.Errorf("sync service still initializing")
+	}
 	return a.syncService.TestConnection()
 }
 
@@ -992,6 +1023,9 @@ func (a *App) SyncTestConnection() error {
 func (a *App) SyncConfigureRepo(repoURL, username, token, masterPassword string) (*sync.SyncResult, error) {
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
+	}
+	if !a.waitSyncReady(time.Second) {
+		return nil, fmt.Errorf("sync service still initializing")
 	}
 	result, err := a.syncService.ConfigureRepo(repoURL, username, token, masterPassword)
 	if err == nil {
@@ -1006,6 +1040,9 @@ func (a *App) SyncChangePassword(oldPassword, newPassword string) error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
+	if !a.waitSyncReady(time.Second) {
+		return fmt.Errorf("sync service still initializing")
+	}
 	return a.syncService.ChangePassword(oldPassword, newPassword)
 }
 
@@ -1014,6 +1051,9 @@ func (a *App) SyncVerifyPassword(password, username, token string) error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
+	if !a.waitSyncReady(time.Second) {
+		return fmt.Errorf("sync service still initializing")
+	}
 	return a.syncService.VerifySyncPassword(password, username, token)
 }
 
@@ -1021,6 +1061,9 @@ func (a *App) SyncVerifyPassword(password, username, token string) error {
 func (a *App) SyncDeleteRepo() error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
+	}
+	if !a.waitSyncReady(time.Second) {
+		return fmt.Errorf("sync service still initializing")
 	}
 	return a.syncService.DeleteRepo()
 }
@@ -2171,6 +2214,12 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	var messageRole string
 	var usage map[string]interface{}
 	currentBlockIndex := -1
+	// F-307: parallel slice of per-block text buffers. Accumulating
+	// text via string + string was O(n²) and paid a fresh alloc per
+	// token; we Write into a *bytes.Buffer instead and flush to a
+	// string once at content_block_stop / message_stop. Empty slots
+	// (non-text blocks) stay nil and are skipped on flush.
+	var blockTextBufs []*bytes.Buffer
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -2214,10 +2263,16 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			case "text_delta":
 				text := delta.Text
 				if currentBlock != nil {
-					if currentBlock["text"] == nil {
-						currentBlock["text"] = ""
+					// F-307: append to a per-block *bytes.Buffer
+					// instead of O(n²) string concatenation. The
+					// buffer is flushed to a string exactly once
+					// at content_block_stop; the per-token
+					// String() call is gone.
+					if blockTextBufs[currentBlockIndex] == nil {
+						blockTextBufs = append(blockTextBufs, make([]*bytes.Buffer, currentBlockIndex+1-len(blockTextBufs))...)
+						blockTextBufs[currentBlockIndex] = &bytes.Buffer{}
 					}
-					currentBlock["text"] = currentBlock["text"].(string) + text
+					blockTextBufs[currentBlockIndex].WriteString(text)
 				}
 				runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
 					"text":  text,
@@ -2237,6 +2292,13 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 
 		case "content_block_stop":
 			if currentBlock != nil {
+				// F-307: flush the per-block text buffer exactly
+				// once into currentBlock["text"] so the downstream
+				// contentBlocks / JSON marshal sees a single
+				// string instead of O(n²) per-token copies.
+				if currentBlockIndex >= 0 && currentBlockIndex < len(blockTextBufs) && blockTextBufs[currentBlockIndex] != nil {
+					currentBlock["text"] = blockTextBufs[currentBlockIndex].String()
+				}
 				if blockType, _ := currentBlock["type"].(string); blockType == "tool_use" {
 					if inputStr, ok := currentBlock["input"].(string); ok && inputStr != "" {
 						var inputObj map[string]interface{}
@@ -2820,6 +2882,23 @@ func convertAnthropicMessageToResponses(msg map[string]interface{}) []map[string
 	return results
 }
 
+// F-306: typed SSE shapes for OpenAI Responses events. The wrapper
+// captures the discriminator + output_index; nested item fields are
+// decoded lazily per branch so we skip the ~99% of fields the loop
+// discards.
+type responsesStreamItem struct {
+	Type    string `json:"type"`
+	CallID  string `json:"call_id"`
+	Name    string `json:"name"`
+}
+
+type responsesStreamEvent struct {
+	Type        string          `json:"type"`
+	OutputIndex int             `json:"output_index"`
+	Item        json.RawMessage `json:"item"`
+	Delta       string          `json:"delta"`
+}
+
 // chatCompletionResponses converts the Anthropic-format request to the OpenAI
 // Responses API, calls /responses with SSE streaming, and converts the response
 // events back to Anthropic-format events so the frontend sees no difference.
@@ -2941,27 +3020,22 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			continue
 		}
 
-		var event map[string]interface{}
-		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
+		var ev responsesStreamEvent
+		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
 			continue
 		}
 
-		eventType, _ := event["type"].(string)
-		outputIdxF, _ := event["output_index"].(float64)
-		outputIdx := int(outputIdxF)
-
-		switch eventType {
+		switch ev.Type {
 		case "response.output_item.added":
-			item, _ := event["item"].(map[string]interface{})
-			if item == nil {
+			var item responsesStreamItem
+			if err := json.Unmarshal(ev.Item, &item); err != nil {
 				continue
 			}
-			itemType, _ := item["type"].(string)
-			switch itemType {
+			switch item.Type {
 			case "message":
 				block := map[string]interface{}{"type": "text", "text": ""}
-				blockByOutputIdx[outputIdx] = block
-				idxByOutputIdx[outputIdx] = nextBlockIndex
+				blockByOutputIdx[ev.OutputIndex] = block
+				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
 				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
 					"index":         nextBlockIndex,
 					"content_block": block,
@@ -2970,57 +3044,55 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			case "function_call":
 				block := map[string]interface{}{
 					"type":  "tool_use",
-					"id":    item["call_id"],
-					"name":  item["name"],
+					"id":    item.CallID,
+					"name":  item.Name,
 					"input": "",
 				}
-				blockByOutputIdx[outputIdx] = block
-				idxByOutputIdx[outputIdx] = nextBlockIndex
+				blockByOutputIdx[ev.OutputIndex] = block
+				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
 				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
 					"index": nextBlockIndex,
 					"content_block": map[string]interface{}{
 						"type": "tool_use",
-						"id":   item["call_id"],
-						"name": item["name"],
+						"id":   item.CallID,
+						"name": item.Name,
 					},
 				})
 				nextBlockIndex++
 			}
 
 		case "response.output_text.delta":
-			block := blockByOutputIdx[outputIdx]
+			block := blockByOutputIdx[ev.OutputIndex]
 			if block == nil {
 				continue
 			}
-			delta, _ := event["delta"].(string)
-			if delta == "" {
+			if ev.Delta == "" {
 				continue
 			}
-			block["text"] = block["text"].(string) + delta
+			block["text"] = block["text"].(string) + ev.Delta
 			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-				"text":  delta,
-				"index": idxByOutputIdx[outputIdx],
+				"text":  ev.Delta,
+				"index": idxByOutputIdx[ev.OutputIndex],
 			})
 
 		case "response.function_call_arguments.delta":
-			block := blockByOutputIdx[outputIdx]
+			block := blockByOutputIdx[ev.OutputIndex]
 			if block == nil {
 				continue
 			}
-			delta, _ := event["delta"].(string)
-			if delta == "" {
+			if ev.Delta == "" {
 				continue
 			}
 			if block["input"] == nil {
 				block["input"] = ""
 			}
-			block["input"] = block["input"].(string) + delta
+			block["input"] = block["input"].(string) + ev.Delta
 			runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
-				"partial_json": delta,
+				"partial_json": ev.Delta,
 			})
 
 		case "response.output_item.done":
-			block := blockByOutputIdx[outputIdx]
+			block := blockByOutputIdx[ev.OutputIndex]
 			if block == nil {
 				continue
 			}
@@ -3036,9 +3108,9 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			}
 			contentBlocks = append(contentBlocks, block)
 			runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-				"index": idxByOutputIdx[outputIdx],
+				"index": idxByOutputIdx[ev.OutputIndex],
 			})
-			delete(blockByOutputIdx, outputIdx)
+			delete(blockByOutputIdx, ev.OutputIndex)
 
 		case "response.completed":
 			stopReason := "end_turn"
@@ -3051,7 +3123,9 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			return finish(stopReason)
 
 		case "response.failed", "error":
-			body, _ := json.Marshal(event)
+			// Marshal the typed event back out for the error message; the
+			// caller doesn't need the original map shape.
+			body, _ := json.Marshal(ev)
 			return "", fmt.Errorf("responses stream error: %s", string(body))
 		}
 	}
