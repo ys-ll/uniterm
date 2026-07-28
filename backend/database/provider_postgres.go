@@ -1,15 +1,23 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	_ "github.com/lib/pq"
+	"golang.org/x/sync/errgroup"
 )
 
 type postgresProvider struct{}
+
+// postgresSchemaCache memoises GetTableSchema results per "dbName.tableName".
+// The schema-tree panel walks every table on every refresh; without this cache
+// each browse issues 3*N serial round-trips even when nothing changed.
+var postgresSchemaCache sync.Map
 
 func init() {
 	Register("postgres", &postgresProvider{})
@@ -176,12 +184,52 @@ func (p *postgresProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, er
 }
 
 func (p *postgresProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error) {
-	colRows, err := queryStrings(db,
-		fmt.Sprintf("SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = $1 ORDER BY ordinal_position"),
-		tableName,
+	cacheKey := dbName + "." + tableName
+	if cached, ok := postgresSchemaCache.Load(cacheKey); ok {
+		return cached.(*SchemaResult), nil
+	}
+
+	var (
+		colRows []map[string]string
+		pkRows  []map[string]string
+		idxRows []map[string]string
 	)
-	if err != nil {
-		return nil, fmt.Errorf("get columns: %w", err)
+	g, _ := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		r, err := queryStrings(db,
+			"SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_name = $1 ORDER BY ordinal_position",
+			tableName,
+		)
+		if err != nil {
+			return fmt.Errorf("get columns: %w", err)
+		}
+		colRows = r
+		return nil
+	})
+	g.Go(func() error {
+		r, err := queryStrings(db,
+			"SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = $1::regclass AND i.indisprimary",
+			tableName,
+		)
+		if err != nil {
+			return nil // PKs are non-fatal like before
+		}
+		pkRows = r
+		return nil
+	})
+	g.Go(func() error {
+		r, err := queryStrings(db,
+			"SELECT i.relname AS index_name, ix.indisunique AS is_unique, ix.indisprimary AS is_primary, a.attname AS column_name FROM pg_class t JOIN pg_index ix ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) WHERE t.relname = $1 ORDER BY i.relname, a.attnum",
+			tableName,
+		)
+		if err != nil {
+			return fmt.Errorf("get indexes: %w", err)
+		}
+		idxRows = r
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	columns := make([]ColumnInfo, 0, len(colRows))
@@ -205,28 +253,12 @@ func (p *postgresProvider) GetTableSchema(db *sql.DB, dbName, tableName string) 
 		})
 	}
 
-	// Primary keys
-	pkRows, err := queryStrings(db,
-		fmt.Sprintf("SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = $1::regclass AND i.indisprimary"),
-		tableName,
-	)
-	if err == nil {
-		for _, row := range pkRows {
-			for i := range columns {
-				if columns[i].Name == row["attname"] {
-					columns[i].IsPrimary = true
-				}
+	for _, row := range pkRows {
+		for i := range columns {
+			if columns[i].Name == row["attname"] {
+				columns[i].IsPrimary = true
 			}
 		}
-	}
-
-	// Indexes
-	idxRows, err := queryStrings(db,
-		fmt.Sprintf("SELECT i.relname AS index_name, ix.indisunique AS is_unique, ix.indisprimary AS is_primary, a.attname AS column_name FROM pg_class t JOIN pg_index ix ON t.oid = ix.indrelid JOIN pg_class i ON i.oid = ix.indexrelid JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey) WHERE t.relname = $1 ORDER BY i.relname, a.attnum"),
-		tableName,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("get indexes: %w", err)
 	}
 
 	idxMap := make(map[string]*IndexInfo)
@@ -250,7 +282,9 @@ func (p *postgresProvider) GetTableSchema(db *sql.DB, dbName, tableName string) 
 		indexes = append(indexes, *idxMap[name])
 	}
 
-	return &SchemaResult{Columns: columns, Indexes: indexes}, nil
+	result := &SchemaResult{Columns: columns, Indexes: indexes}
+	postgresSchemaCache.Store(cacheKey, result)
+	return result, nil
 }
 
 // ── DDL: Database ──
