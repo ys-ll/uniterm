@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -156,11 +157,13 @@ func (s *SettingsStore) Save(settings AppSettings) error {
 	}
 
 	settings.AI.Models = models
-	data, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
+	// Settings file is internal — no indent. Encoder streams into the buf
+	// so we skip the intermediate allocation of json.Marshal.
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(settings); err != nil {
 		return err
 	}
-	return atomicWriteFile(s.filePath(), data, 0600)
+	return atomicWriteFile(s.filePath(), buf.Bytes(), 0600)
 }
 
 func (s *SettingsStore) Load() (AppSettings, error) {
