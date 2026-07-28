@@ -356,7 +356,7 @@
   "settings.cursorBlink": "Cursor Blink",
   "settings.cursorBlinkDesc": "Whether the terminal cursor blinks",
   "settings.sessionLogDir": "Log directory",
-  "settings.sessionLogDirDesc": "Where session logs are saved. Leave empty to use the default: {path}",
+  "settings.sessionLogDirDesc": "Where session logs are saved.",
   "settings.browse": "Browse…",
   "settings.maxTurns": "Max Autonomous Rounds",
   "settings.maxTurnsDesc": "Maximum autonomous interaction rounds per AI request. Set to 0 for unlimited. Default 20.",

@@ -353,7 +353,7 @@
   "settings.cursorBlink": "Cursor blinken",
   "settings.cursorBlinkDesc": "Ob der Terminal-Cursor blinkt",
   "settings.sessionLogDir": "Log-Verzeichnis",
-  "settings.sessionLogDirDesc": "Speicherort für Sitzungsprotokolle. Leer lassen, um den Standard zu verwenden: {path}",
+  "settings.sessionLogDirDesc": "Speicherort für Sitzungsprotokolle.",
   "settings.browse": "Durchsuchen…",
   "settings.maxTurns": "Max. autonome Runden",
   "settings.maxTurnsDesc": "Maximale Anzahl autonomer Interaktionsrunden pro KI-Anfrage. 0 = unbegrenzt. Standard: 20.",

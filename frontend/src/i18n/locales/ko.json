@@ -353,7 +353,7 @@
   "settings.cursorBlink": "커서 깜박임",
   "settings.cursorBlinkDesc": "터미널 커서를 깜박일지 여부",
   "settings.sessionLogDir": "로그 저장 폴더",
-  "settings.sessionLogDirDesc": "세션 로그를 저장할 위치. 비워두면 기본값 사용: {path}",
+  "settings.sessionLogDirDesc": "세션 로그를 저장할 위치.",
   "settings.browse": "찾아보기…",
   "settings.maxTurns": "AI 자율 상호작용 최대 라운드",
   "settings.maxTurnsDesc": "AI 요청당 자율 상호작용 라운드의 최대 횟수. 0은 무제한. 기본값: 20.",

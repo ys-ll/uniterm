@@ -353,7 +353,7 @@
   "settings.cursorBlink": "Parpadeo del cursor",
   "settings.cursorBlinkDesc": "Si el cursor del terminal parpadea",
   "settings.sessionLogDir": "Directorio de logs",
-  "settings.sessionLogDirDesc": "Ubicación donde se guardan los logs de sesión. Dejar vacío para usar el predeterminado: {path}",
+  "settings.sessionLogDirDesc": "Ubicación donde se guardan los logs de sesión.",
   "settings.browse": "Examinar…",
   "settings.maxTurns": "Máx. rondas autónomas",
   "settings.maxTurnsDesc": "Rondas máximas de interacción autónoma por solicitud de IA. 0 = ilimitado. Predeterminado: 20.",
