@@ -82,7 +82,10 @@ func runOneLogStream(ctx context.Context, client *http.Client, base, path string
 	}
 	defer resp.Body.Close()
 	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	// F-412: log lines are typically < 1 KiB; start small and let
+	// bufio.Scanner grow on demand. Caps at 4 MiB which is enough for
+	// even multi-KiB stack traces from panic'd pods.
+	scanner.Buffer(make([]byte, 0, 4*1024), 4*1024*1024)
 	for scanner.Scan() {
 		cb(scanner.Text())
 	}

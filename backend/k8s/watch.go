@@ -98,7 +98,10 @@ func runOneWatch(ctx context.Context, client *http.Client, base, path string,
 	}
 	defer resp.Body.Close()
 	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	// F-412: most watch lines are < 2 KiB; start at 4 KiB and let
+	// bufio.Scanner grow on demand up to 4 MiB. The previous 64 KiB
+	// initial cap pinned ~80 MiB across 20 watches even on idle clusters.
+	scanner.Buffer(make([]byte, 0, 4*1024), 4*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
