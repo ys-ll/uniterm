@@ -84,6 +84,29 @@ export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]
   switch (name) {
     case 'uniterm-dark':
       return base
+    case 'uniterm-soft-gray':
+      return {
+        background: '#e8e8e8',
+        foreground: '#1a1a1a',
+        cursor: '#1a1a1a',
+        selectionBackground: 'rgba(0, 120, 212, 0.25)',
+        black: '#2d2d2d',
+        red: '#c1395b',
+        green: '#2c8c4f',
+        yellow: '#b07d00',
+        blue: '#1f6fcc',
+        magenta: '#8a44c9',
+        cyan: '#0d8a8a',
+        white: '#5a5a5a',
+        brightBlack: '#6a6a6a',
+        brightRed: '#e85a82',
+        brightGreen: '#4cb87a',
+        brightYellow: '#d99a1a',
+        brightBlue: '#4ca0e8',
+        brightMagenta: '#b06ee0',
+        brightCyan: '#33b3b3',
+        brightWhite: '#2d2d2d'
+      }
     case 'uniterm-light':
       return {
         background: '#fafafa',
