@@ -77,6 +77,13 @@ type App struct {
 	lastConnSnapshot   session.ConnectionStoreData
 	lastConnSnapshotMu stdsync.RWMutex
 
+	// F-207: triggerAutoSync coalescing. syncInFlight tracks whether
+	// a sync goroutine is currently running; syncPending records that
+	// a new trigger arrived during the run so we fire exactly one
+	// follow-up.
+	syncInFlight atomic.Bool
+	syncPending  atomic.Bool
+
 	// Session output log state (issue #227). Logs are keyed by panelID so
 	// they survive reconnects — a single panel may cycle through many
 	// session objects and the log file spans all of them. sessionToPanel
@@ -817,20 +824,36 @@ func (a *App) triggerAutoSync() {
 	if a.syncService == nil || !a.syncService.IsAutoSyncEnabled() {
 		return
 	}
+	// F-207: coalesce triggerAutoSync. A burst of saves (e.g. pasting
+	// 50 commands into QuickCommands) used to launch 50 concurrent
+	// git pull+push coroutines. Now we run at most one at a time and
+	// remember if a new trigger arrived during the run so we can fire
+	// exactly one follow-up.
+	if !a.syncInFlight.CompareAndSwap(false, true) {
+		a.syncPending.Store(true)
+		return
+	}
+	a.syncPending.Store(false)
 	go func() {
-		result, err := a.syncService.Sync()
-		if err != nil {
-			log.Writef("Auto-sync failed: %v", err)
-		} else if result.Direction == sync.SyncConflict {
-			runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
-				"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
-				"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
-			})
+		defer a.syncInFlight.Store(false)
+		for {
+			result, err := a.syncService.Sync()
+			if err != nil {
+				log.Writef("Auto-sync failed: %v", err)
+			} else if result.Direction == sync.SyncConflict {
+				runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
+					"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
+					"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
+				})
+			}
+			if err == nil && result.Direction == sync.SyncPull {
+				a.reloadStoresAfterSync()
+			}
+			runtime.EventsEmit(a.ctx, "sync:completed")
+			if !a.syncPending.CompareAndSwap(true, false) {
+				return
+			}
 		}
-		if err == nil && result.Direction == sync.SyncPull {
-			a.reloadStoresAfterSync()
-		}
-		runtime.EventsEmit(a.ctx, "sync:completed")
 	}()
 }
 func (a *App) SyncGetConfig() (sync.SyncConfig, error) {
