@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { SearchAddon } from '@xterm/addon-search'
 import { getXtermTheme } from '../composables/useTerminal'
+import { resolveXtermBackground } from '../composables/useTerminalTheme'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useLocalStateStore } from '../stores/localStateStore'
 import type { CustomTerminalTheme } from '../types/settings'
@@ -68,10 +69,11 @@ export function acquireTerminal(
   } else {
     const cursorBlink = useSettingsStore().settings.terminal.cursorBlink ?? true
     const ls = useLocalStateStore()
-    const theme = getXtermTheme(options.themeName ?? 'dark', customThemes)
-    if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
-      theme.background = 'rgba(0,0,0,0)'
-    }
+    const theme = resolveXtermBackground(
+      getXtermTheme(options.themeName ?? 'dark', customThemes),
+      ls.state.backgroundEnabled,
+      ls.state.backgroundImage
+    )
     const terminal = new Terminal({
       fontSize: options.fontSize ?? 13,
       fontFamily: formatFontFamily(options.fontFamily ?? 'Consolas, "Courier New", monospace'),

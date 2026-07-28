@@ -12,6 +12,7 @@ import { useLocalStateStore } from '../stores/localStateStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { highlight } from './useHighlight'
 import { stripCursorBlink } from '../utils/cursor'
+import { resolveXtermBackground } from './useTerminalTheme'
 import type { CustomTerminalTheme } from '../types/settings'
 
 export interface UseTerminalOptions {
@@ -60,9 +61,9 @@ export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]
     }
   }
   const base = {
-    background: 'var(--bg-base)',
-    foreground: 'var(--text-primary)',
-    cursor: 'var(--accent)',
+    background: '#1a1a1a',
+    foreground: '#e4e4e7',
+    cursor: '#22d3ee',
     selectionBackground: 'rgba(34, 211, 238, 0.2)',
     black: '#1e1e22',
     red: '#f87171',
@@ -412,10 +413,11 @@ export function useTerminal(
     const ts = settingsStore.settings.terminal
     const ls = useLocalStateStore()
     const themeName = ts.theme || 'uniterm-dark'
-    const theme = getXtermTheme(themeName, settingsStore.settings.customTerminalThemes)
-    if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
-      theme.background = 'rgba(0,0,0,0)'
-    }
+    const theme = resolveXtermBackground(
+      getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
+      ls.state.backgroundEnabled,
+      ls.state.backgroundImage
+    )
     return {
       fontSize: ts.fontSize || 13,
       fontFamily: ts.fontFamily || 'Consolas, "Courier New", monospace',
@@ -738,10 +740,11 @@ export function useTerminal(
   function applyXtermTheme(themeName: string) {
     if (!terminal) return
     const ls = useLocalStateStore()
-    const theme = getXtermTheme(themeName, settingsStore.settings.customTerminalThemes)
-    if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
-      theme.background = 'rgba(0,0,0,0)'
-    }
+    const theme = resolveXtermBackground(
+      getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
+      ls.state.backgroundEnabled,
+      ls.state.backgroundImage
+    )
     terminal.options.theme = theme
   }
 
