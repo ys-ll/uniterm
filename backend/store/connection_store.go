@@ -1,6 +1,8 @@
 package store
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -28,6 +30,9 @@ type ConnectionStore struct {
 	configDir     string
 	passwordStore PasswordStore // nil = passwords kept in JSON (backward compat)
 	mu            sync.Mutex    // serializes Save + populatePasswords writes (STORE-05/06).
+	pwdMu         sync.RWMutex  // guards pwdCache for F-110 async keychain fill.
+	pwdCache      map[string]string
+	lastSavedHash string // F-105: skip no-op rewrites keyed by canonical content hash.
 }
 
 func NewConnectionStore() (*ConnectionStore, error) {
@@ -88,11 +93,61 @@ func (s *ConnectionStore) Save(data session.ConnectionStoreData) error {
 		Groups:      data.Groups,
 		Connections: connections,
 	}
-	jsonData, err := json.MarshalIndent(saveData, "", "  ")
+	return s.writeJSONLocked(saveData)
+}
+
+// writeJSONLocked serializes data to the connections file atomically.
+// F-105: uses json.NewEncoder to stream directly to the temp file (no
+// intermediate buffer the size of the output), and skips the temp+sync+rename
+// cycle when the canonical content hash matches the last successful save.
+// Caller must hold s.mu.
+func (s *ConnectionStore) writeJSONLocked(data session.ConnectionStoreData) error {
+	preview, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
-	return atomicWriteFile(s.filePath(), jsonData, 0600)
+	sum := sha256.Sum256(preview)
+	hashHex := hex.EncodeToString(sum[:])
+	if hashHex == s.lastSavedHash {
+		return nil
+	}
+
+	path := s.filePath()
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	tmp, err := os.CreateTemp(dir, base+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+
+	enc := json.NewEncoder(tmp)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	s.lastSavedHash = hashHex
+	return nil
 }
 
 func (s *ConnectionStore) Load() (session.ConnectionStoreData, error) {
@@ -166,13 +221,9 @@ func (s *ConnectionStore) populatePasswords(data *session.ConnectionStoreData) e
 
 	if needsSave {
 		// Save cleaned JSON (passwords migrated out)
-		jsonData, err := json.MarshalIndent(data, "", "  ")
-		if err != nil {
-			return err
-		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		return atomicWriteFile(s.filePath(), jsonData, 0600)
+		return s.writeJSONLocked(*data)
 	}
 	return nil
 }
