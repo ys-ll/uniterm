@@ -1084,3 +1084,106 @@ body.drag-active .zone {
 .el-autocomplete-suggestion .el-select-dropdown__item {
   font-size: 12px !important;
 }
+
+/* ====================================================================
+   Windows 11 - component overrides
+   ==================================================================== */
+
+/* Tabs: 8px rounded rectangles, accent block on active */
+[data-theme="win11"] .el-tabs__item {
+  border-radius: 8px;
+  padding: 0 16px;
+  height: 32px;
+  line-height: 32px;
+  color: var(--text-primary);
+  transition: background-color 0.1s ease;
+}
+[data-theme="win11"] .el-tabs__item:hover {
+  background: var(--bg-hover);
+}
+[data-theme="win11"] .el-tabs__item.is-active,
+[data-theme="win11"] .el-tabs__item.is-active:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 500;
+}
+[data-theme="win11"] .el-tabs__active-bar { display: none; }
+
+/* Buttons: 4px radius, accent primary, subtle secondary */
+[data-theme="win11"] .el-button { border-radius: 4px; font-weight: 400; }
+[data-theme="win11"] .el-button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+[data-theme="win11"] .el-button--primary:hover { filter: brightness(1.08); }
+[data-theme="win11"] .el-button:not(.el-button--primary):not(.el-button--text) {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+/* Inputs: bottom-border only */
+[data-theme="win11"] .el-input__wrapper {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 4px 4px 0 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+[data-theme="win11"] .el-input__wrapper:hover { border-bottom-color: var(--border-hover); }
+[data-theme="win11"] .el-input__wrapper.is-focus {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 1px 0 0 var(--accent);
+}
+[data-theme="win11"] .el-textarea__inner {
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+[data-theme="win11"] .el-textarea__inner:focus { border-color: var(--accent); }
+
+/* Dialog: 8px radius, deep shadow */
+[data-theme="win11"] .el-dialog,
+[data-theme="win11"] .el-message-box {
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+/* Menu: 3px accent bar on active */
+[data-theme="win11"] .el-menu-item.is-active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  position: relative;
+}
+[data-theme="win11"] .el-menu-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+/* Checkbox / Radio: 2px corner radius */
+[data-theme="win11"] .el-checkbox__inner,
+[data-theme="win11"] .el-radio__inner { border-radius: 2px; }
+[data-theme="win11"] .el-checkbox__inner { border-width: 1px; }
+
+/* Scrollbar: 8px wide, fades in on hover */
+[data-theme="win11"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-theme="win11"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+[data-theme="win11"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Sidebar personalization panel: tighter 12px row spacing */
+[data-theme="win11"] .personalization-panel .persist-section { margin-bottom: 12px; }
+
+/* BaseTerminal outer frame: subtle border that matches Win11 surface */
+[data-theme="win11"] .base-terminal {
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
