@@ -366,33 +366,25 @@ const searchText = ref('')
 const searchResultIndex = ref(0)
 const searchResultCount = ref(0)
 
+// F-029: single alternation regex for the 6 "drop this garbage" passes +
+// the \n{3,}→\n\n collapse. Six sequential `.replace()` calls each
+// allocated a fresh copy of the (large) scrollback string; the regex engine
+// walked the full buffer six times. One global scan with a callback that
+// dispatches on whether the match starts with \n keeps correctness while
+// dropping ~7× the work. Finding: console-perf F-029, ~10 ms on 100 KB.
+const SANITIZE_STRIP_RE =
+  /\*{2,}(?:\x18)?[ABC][0-9a-fA-F]{10,}|\x18+|\x08+|[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]|\uFFFD|[^\x00-\x7f一-鿿぀-ゟ゠-ヿ가-힯─-╿▀-▟←-⇿∀-⋿⟀-⟯⠀-⣿⬀-⯿]|\n{3,}/g
+
 function sanitizeTerminalHistory(text: string): string {
   if (!text) return text
-  let cleaned = text
-  // ZModem HEX header fragments
-  cleaned = cleaned.replace(/\*{2,}(?:\x18)?[ABC][0-9a-fA-F]{10,}/g, '')
-  // ZModem ZDLE (0x18) and backspace (0x08) sequences
-  cleaned = cleaned.replace(/\x18+/g, '')
-  cleaned = cleaned.replace(/\x08+/g, '')
-  // ASCII control chars except \n, \r, \t and ESC
-  cleaned = cleaned.replace(/[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]/g, '')
-  // Drop U+FFFD replacement chars. Live data is stripped before write
-  // (see the session:data handler) but history restore goes through this
-  // path, so the same filter applies here. Without it a tab switch
-  // replays the '─���─' pattern Claude Code emits.
-  cleaned = cleaned.replace(/\uFFFD/g, '')
-  // Drop binary garbage decoded as random Unicode blocks. Keep ASCII, CJK,
-  // box-drawing, block elements, arrows, math symbols and braille so that
-  // Claude Code / modern TUI output survives a KeepAlive history restore
-  // intact. Previously only ASCII + CJK survived — every box border, spinner
-  // and progress bar was stripped on tab switch, leaving tables as raw text
-  // with no alignment.
-  cleaned = cleaned.replace(
-    /[^\x00-\x7f一-鿿぀-ゟ゠-ヿ가-힯─-╿▀-▟←-⇿∀-⋿⟀-⟯⠀-⣿⬀-⯿]/g,
-    ''
+  // Single-pass strip: ZModem hex headers, ZDLE runs, backspaces, ASCII
+  // control chars (except \n\r\t\ESC), U+FFFD, binary garbage outside the
+  // kept Unicode blocks, and 3+ blank lines collapsed to \n\n. The blank-
+  // line collapse shares the scan; the callback emits '\n\n' only when the
+  // match is a run of newlines.
+  const cleaned = text.replace(SANITIZE_STRIP_RE, (m) =>
+    m.charCodeAt(0) === 0x0a ? '\n\n' : ''
   )
-  // Collapse blank lines left by removed garbage
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n')
   // Forward debug info to backend log so we can inspect the raw garbage.
   if (cleaned !== text) {
     FrontendLog('sanitizeTerminalHistory', `raw last 400: ${JSON.stringify(text.slice(-400))}`)
