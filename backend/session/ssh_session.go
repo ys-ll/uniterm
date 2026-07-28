@@ -48,9 +48,11 @@ type SSHSession struct {
 	expectOutput *postLoginOutputBuffer
 
 	enc            encoding.Encoding // input(write) codec; nil = utf-8 passthrough
+	encoder        transform.Transformer // cached encoder; nil = utf-8 passthrough (F-003)
 	decoder        *encoding.Decoder // persistent streaming decoder for output(read)
 	decodeLeftover []byte            // trailing partial multibyte bytes between reads
 	decodeScratch  []byte            // reusable src buffer for decodeOutput (F-002)
+	encScratch     []byte            // reusable dst buffer for encodeInput (F-003)
 
 	// Disconnect diagnostics (see readLoop / disconnect logs).
 	lastRecv atomic.Value // []byte: tail of most recent server output (diagnostics)
@@ -524,8 +526,10 @@ func (s *SSHSession) SetEncoding(name string) {
 	s.enc = enc
 	if enc == nil {
 		s.decoder = nil
+		s.encoder = nil
 	} else {
 		s.decoder = enc.NewDecoder()
+		s.encoder = enc.NewEncoder()
 	}
 	s.decodeLeftover = nil
 	s.mu.Unlock()
@@ -571,16 +575,18 @@ func (s *SSHSession) decodeOutput(data []byte) []byte {
 // before writing to the remote. Each call handles a complete UTF-8 input.
 func (s *SSHSession) encodeInput(data []byte) []byte {
 	s.mu.RLock()
-	enc := s.enc
+	encoder := s.encoder
 	s.mu.RUnlock()
-	if enc == nil {
+	if encoder == nil {
 		return data
 	}
-	out, err := enc.NewEncoder().Bytes(data)
-	if err != nil {
+	encoder.Reset()
+	s.encScratch = s.encScratch[:0]
+	nDst, _, err := encoder.Transform(s.encScratch, data, true)
+	if err != nil && err != transform.ErrShortSrc {
 		return data
 	}
-	return out
+	return s.encScratch[:nDst]
 }
 
 // encodingByName maps a connection's encoding setting to an x/text codec.
