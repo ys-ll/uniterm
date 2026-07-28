@@ -1111,5 +1111,13 @@
   "settings.skillsImportZip": "Import Zip",
   "settings.skillsImportDir": "Import Folder",
   "settings.skillsImportFolderHint": "Supports folder skills with references/ and scripts/",
-  "settings.skillsImportOk": "Imported skill \"{name}\""
+  "settings.skillsImportOk": "Imported skill \"{name}\"",
+  "settings.syncLocalPath": "Local Path",
+  "addRepo.mode": "Mode",
+  "addRepo.modeRemote": "Remote (GitHub/GitLab/...)",
+  "addRepo.modeLocal": "Local Folder",
+  "addRepo.localPath": "Local Path",
+  "addRepo.localPathPlaceholder": "/path/to/backup/uniterm-sync",
+  "addRepo.localPathHint": "One-way backup. The folder will be initialized as a git repo if empty. Encrypted snapshots are committed here.",
+  "addRepo.localPathRequired": "Please choose a local folder"
 }

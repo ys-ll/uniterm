@@ -13,6 +13,7 @@ type SyncConfig struct {
 	RepoURL        string    `json:"repoUrl"`
 	Branch         string    `json:"branch"`
 	Username       string    `json:"username"`
+	Local          bool      `json:"local"`
 	AutoSync       bool      `json:"autoSync"`
 	LastSyncAt     time.Time `json:"lastSyncAt"`
 	LastSyncStatus string    `json:"lastSyncStatus"`

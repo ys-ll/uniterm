@@ -84,6 +84,50 @@ func initEmpty(repoPath, repoURL string) (*GitRepo, error) {
 	return &GitRepo{repo: repo, repoPath: repoPath}, nil
 }
 
+// OpenOrInitLocal opens a local-only sync directory: returns the existing
+// repo if any, otherwise runs git init. No remote is configured.
+func OpenOrInitLocal(repoPath string) (*GitRepo, error) {
+	if err := os.MkdirAll(repoPath, 0755); err != nil {
+		return nil, fmt.Errorf("create repo dir: %w", err)
+	}
+	if repo, err := git.PlainOpen(repoPath); err == nil {
+		return &GitRepo{repo: repo, repoPath: repoPath}, nil
+	} else if !errors.Is(err, git.ErrRepositoryNotExists) && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("open repo: %w", err)
+	}
+	repo, err := git.PlainInit(repoPath, false)
+	if err != nil {
+		return nil, fmt.Errorf("init: %w", err)
+	}
+	mainRef := plumbing.NewBranchReferenceName("main")
+	if err := repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, mainRef)); err != nil {
+		return nil, fmt.Errorf("set HEAD to main: %w", err)
+	}
+	return &GitRepo{repo: repo, repoPath: repoPath}, nil
+}
+
+// OpenOrInitLocal opens a local-only sync directory: returns the existing
+// repo if any, otherwise runs git init. No remote is configured.
+func OpenOrInitLocal(repoPath string) (*GitRepo, error) {
+	if err := os.MkdirAll(repoPath, 0755); err != nil {
+		return nil, fmt.Errorf("create repo dir: %w", err)
+	}
+	if repo, err := git.PlainOpen(repoPath); err == nil {
+		return &GitRepo{repo: repo, repoPath: repoPath}, nil
+	} else if !errors.Is(err, git.ErrRepositoryNotExists) && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("open repo: %w", err)
+	}
+	repo, err := git.PlainInit(repoPath, false)
+	if err != nil {
+		return nil, fmt.Errorf("init: %w", err)
+	}
+	mainRef := plumbing.NewBranchReferenceName("main")
+	if err := repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, mainRef)); err != nil {
+		return nil, fmt.Errorf("set HEAD to main: %w", err)
+	}
+	return &GitRepo{repo: repo, repoPath: repoPath}, nil
+}
+
 // StageAndCommit stages all files and creates a commit. Returns true if committed.
 func (g *GitRepo) StageAndCommit(msg string) (bool, error) {
 	wt, err := g.repo.Worktree()

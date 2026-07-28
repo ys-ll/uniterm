@@ -1109,5 +1109,13 @@
   "settings.skillsImportZip": "Importar Zip",
   "settings.skillsImportDir": "Importar carpeta",
   "settings.skillsImportFolderHint": "Admite skills de carpeta con references/ y scripts/",
-  "settings.skillsImportOk": "Skill \"{name}\" importado"
+  "settings.skillsImportOk": "Skill \"{name}\" importado",
+  "settings.syncLocalPath": "Ruta local",
+  "addRepo.mode": "Modo",
+  "addRepo.modeRemote": "Remoto (GitHub / GitLab / ...)",
+  "addRepo.modeLocal": "Carpeta local",
+  "addRepo.localPath": "Ruta local",
+  "addRepo.localPathPlaceholder": "/path/to/backup/uniterm-sync",
+  "addRepo.localPathHint": "Copia de seguridad unidireccional. Una carpeta vacía se inicializa con git init; las instantáneas cifradas se commitean aquí.",
+  "addRepo.localPathRequired": "Por favor elija una carpeta local"
 }

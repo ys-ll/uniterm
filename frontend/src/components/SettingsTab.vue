@@ -395,15 +395,15 @@
           <div class="sync-card">
             <div class="sync-card-header">
               <span>{{ t('settings.syncRepoCard') }}</span>
-              <el-button text @click="openEditRepo">{{ t('settings.syncEdit') }}</el-button>
+              <el-button v-if="!syncStore.config.local" text @click="openEditRepo">{{ t('settings.syncEdit') }}</el-button>
             </div>
             <div class="sync-card-body">
               <div class="repo-info">
                 <div class="repo-info-row">
-                  <span class="repo-label">{{ t('settings.syncRepoUrl') }}</span>
+                  <span class="repo-label">{{ syncStore.config.local ? t('settings.syncLocalPath') : t('settings.syncRepoUrl') }}</span>
                   <span class="repo-value">{{ syncStore.config.repoUrl }}</span>
                 </div>
-                <div class="repo-info-row">
+                <div v-if="!syncStore.config.local" class="repo-info-row">
                   <span class="repo-label">{{ t('settings.syncUsername') }}</span>
                   <span class="repo-value">{{ syncStore.config.username }}</span>
                 </div>

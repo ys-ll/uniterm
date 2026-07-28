@@ -1109,5 +1109,13 @@
   "settings.skillsImportZip": "匯入 Zip",
   "settings.skillsImportDir": "匯入目錄",
   "settings.skillsImportFolderHint": "或匯入含 SKILL.md 的目錄",
-  "settings.skillsImportOk": "已匯入技能「{name}」"
+  "settings.skillsImportOk": "已匯入技能「{name}」",
+  "settings.syncLocalPath": "本機路徑",
+  "addRepo.mode": "模式",
+  "addRepo.modeRemote": "遠端（GitHub / GitLab / Gitee）",
+  "addRepo.modeLocal": "本機目錄",
+  "addRepo.localPath": "本機路徑",
+  "addRepo.localPathPlaceholder": "/path/to/backup/uniterm-sync",
+  "addRepo.localPathHint": "單向備份。空目錄會自動 git init，加密快照以 commit 寫入此處。",
+  "addRepo.localPathRequired": "請選擇一個本機目錄"
 }

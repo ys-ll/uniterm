@@ -1083,6 +1083,22 @@ func (a *App) SyncConfigureRepo(repoURL, username, token, masterPassword string)
 	return result, err
 }
 
+// SyncConfigureLocalRepo sets up a local-only sync backup directory.
+func (a *App) SyncConfigureLocalRepo(localPath, masterPassword string) (*sync.SyncResult, error) {
+	if a.syncService == nil {
+		return nil, fmt.Errorf("sync service not initialized")
+	}
+	if !a.waitSyncReady(time.Second) {
+		return nil, fmt.Errorf("sync service still initializing")
+	}
+	result, err := a.syncService.ConfigureLocalRepo(localPath, masterPassword)
+	if err == nil {
+		a.reloadStoresAfterSync()
+		runtime.EventsEmit(a.ctx, "sync:completed")
+	}
+	return result, err
+}
+
 // SyncChangePassword re-encrypts synced files with a new master password.
 func (a *App) SyncChangePassword(oldPassword, newPassword string) error {
 	if a.syncService == nil {
