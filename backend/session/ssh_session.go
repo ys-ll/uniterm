@@ -50,6 +50,7 @@ type SSHSession struct {
 	enc            encoding.Encoding // input(write) codec; nil = utf-8 passthrough
 	decoder        *encoding.Decoder // persistent streaming decoder for output(read)
 	decodeLeftover []byte            // trailing partial multibyte bytes between reads
+	decodeScratch  []byte            // reusable src buffer for decodeOutput (F-002)
 
 	// Disconnect diagnostics (see readLoop / disconnect logs).
 	lastRecv atomic.Value // []byte: tail of most recent server output (diagnostics)
@@ -539,9 +540,10 @@ func (s *SSHSession) decodeOutput(data []byte) []byte {
 	if s.decoder == nil {
 		return data
 	}
-	src := make([]byte, 0, len(s.decodeLeftover)+len(data))
-	src = append(src, s.decodeLeftover...)
-	src = append(src, data...)
+	s.decodeScratch = s.decodeScratch[:0]
+	s.decodeScratch = append(s.decodeScratch, s.decodeLeftover...)
+	s.decodeScratch = append(s.decodeScratch, data...)
+	src := s.decodeScratch
 
 	var out []byte
 	dst := make([]byte, 8192)
@@ -554,7 +556,14 @@ func (s *SSHSession) decodeOutput(data []byte) []byte {
 		}
 		break // nil or ErrShortSrc: remaining src is an incomplete trailing rune
 	}
-	s.decodeLeftover = append([]byte(nil), src...)
+	// Buffer any incomplete trailing rune into a fresh slice so the next
+	// read's append(s.decodeScratch, data...) isn't racing with decodeLeftover
+	// backing storage.
+	if len(src) > 0 {
+		s.decodeLeftover = append(s.decodeLeftover[:0], src...)
+	} else {
+		s.decodeLeftover = src[:0]
+	}
 	return out
 }
 
