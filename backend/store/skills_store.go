@@ -568,32 +568,6 @@ func assembleSkillMD(name, description, body string) string {
 	return fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s", name, description, body)
 }
 
-func copyFile(src, dst string) error {
-	// Refuse to follow symlinks during import: STORE-02.
-	srcInfo, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-	if srcInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to copy symlink: %s", src)
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode().Perm())
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
-}
-
 // assertNoSymlinks walks dir (Lstat, not Stat) and returns an error if any
 // entry is a symlink. Used to gate destructive operations like Delete /
 // importToDir so we never follow an attacker-controlled link out of the
@@ -610,21 +584,16 @@ func assertNoSymlinks(dir string) error {
 	})
 }
 
+// copyDir duplicates src into dst. os.CopyFS (Go 1.23+) replaces the previous
+// filepath.Walk + per-file os.Lstat/Open/Create loop, which paid an extra
+// Lstat and a fresh open/create pair for every file. STORE-02 safety is
+// preserved by the pre-check: os.CopyFS follows symlinks, so the explicit
+// assertNoSymlinks walk must run first.
 func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, 0755)
-		}
-		return copyFile(path, target)
-	})
+	if err := assertNoSymlinks(src); err != nil {
+		return err
+	}
+	return os.CopyFS(dst, os.DirFS(src))
 }
 
 // ---- 导入（B3）----
