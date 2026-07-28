@@ -516,11 +516,16 @@ function focus() {
 }
 
 function toBase64(str: string): string {
-  const encoder = new TextEncoder()
-  const bytes = encoder.encode(str)
+  const bytes = new TextEncoder().encode(str)
+  // F-028: process in 8K chunks. String.fromCharCode.apply has a hard
+  // argument-count cap (varies by engine, ~64K on V8). The previous
+  // per-byte loop also re-allocated the binary string each iteration,
+  // turning a 1MB scrollback export into ~1M string concats.
   let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
+  const CHUNK = 0x2000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length))
+    binary += String.fromCharCode.apply(null, slice as unknown as number[])
   }
   return btoa(binary)
 }
