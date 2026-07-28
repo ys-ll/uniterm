@@ -140,7 +140,14 @@ func (a *App) startup(ctx context.Context) {
 	// Defer EventsEmit from WndProc to avoid blocking the modal resize/move loop.
 	a.moveResizeCh = make(chan string, 10)
 	go func() {
+		// F-206: the previous implementation ranged over a.moveResizeCh
+		// forever. shutdown() now closes the channel; the range loop
+		// exits and the goroutine returns instead of leaking for the
+		// process lifetime.
 		for evt := range a.moveResizeCh {
+			if a.ctx == nil {
+				continue
+			}
 			runtime.EventsEmit(a.ctx, evt)
 			if evt == "rdp:move-resize-end" {
 				a.saveWindowStateFromRuntime()
@@ -492,6 +499,12 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	if a.terminalHistoryStore != nil {
 		_ = a.terminalHistoryStore.Close()
+	}
+	// F-206: close moveResizeCh so the deferred EventsEmit goroutine
+	// started in startup() returns instead of living for the process
+	// lifetime. close(nil) is a no-op so the nil guard below is safe.
+	if a.moveResizeCh != nil {
+		close(a.moveResizeCh)
 	}
 	os.RemoveAll(a.webviewDataPath)
 }
