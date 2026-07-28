@@ -406,12 +406,9 @@ function onEditableInput() {
 // MutationObserver as backup — catches changes that don't fire 'input' event
 onMounted(() => {
   if (editableRef.value) {
-    mutationObserver = new MutationObserver(() => { syncInputText(); refreshHashDropdown(); refreshSkillDropdown() })
-    mutationObserver.observe(editableRef.value, { childList: true, subtree: true, characterData: true })
+    editableObserver = new MutationObserver(() => { syncInputText(); refreshHashDropdown(); refreshSkillDropdown() })
+    editableObserver.observe(editableRef.value, { childList: true, subtree: true, characterData: true })
   }
-})
-onUnmounted(() => {
-  mutationObserver?.disconnect()
 })
 
 function focusInput() {
@@ -521,7 +518,8 @@ const sidebarEl = ref<HTMLDivElement>()
 const aiMenuVisible = ref(false)
 const aiMenuStyle = ref({ left: '0px', top: '0px' })
 const isAtBottom = ref(true)
-let mutationObserver: MutationObserver | null = null
+let editableObserver: MutationObserver | null = null
+let messagesObserver: MutationObserver | null = null
 
 const modeLabel = computed(() => {
   switch (aiStore.mode) {
@@ -1406,12 +1404,12 @@ onMounted(() => {
 
   if (messagesRef.value) {
     messagesRef.value.addEventListener('scroll', onMessagesScroll)
-    mutationObserver = new MutationObserver(() => {
+    messagesObserver = new MutationObserver(() => {
       if (isAtBottom.value) {
         autoScrollToBottom()
       }
     })
-    mutationObserver.observe(messagesRef.value, { childList: true, subtree: true })
+    messagesObserver.observe(messagesRef.value, { childList: true, subtree: true })
   }
   scrollToBottom()
 })
@@ -1424,7 +1422,8 @@ onUnmounted(() => {
   if (messagesRef.value) {
     messagesRef.value.removeEventListener('scroll', onMessagesScroll)
   }
-  mutationObserver?.disconnect()
+  editableObserver?.disconnect()
+  messagesObserver?.disconnect()
 })
 
 defineExpose({ focusInput })

@@ -35,8 +35,14 @@ const sessionState = reactive<{
   sessions: new Map()
 })
 
+// Module-level un-subscribers for session:status / session:data listeners.
+// Tracked at module scope so HMR re-imports can detach the previous listener
+// before re-subscribing (FE-03).
+let unsubSessionStatus: (() => void) | null = null
+let unsubSessionData: (() => void) | null = null
+
 // Register event listeners once at module level
-EventsOn('session:status', (payload: { id: string; status: SessionStatus }) => {
+unsubSessionStatus = EventsOn('session:status', (payload: { id: string; status: SessionStatus }) => {
   let s = sessionState.sessions.get(payload.id)
   if (!s) {
     s = { id: payload.id, status: 'connecting', data: [], seq: 0 }
@@ -45,7 +51,7 @@ EventsOn('session:status', (payload: { id: string; status: SessionStatus }) => {
   s.status = payload.status
 })
 
-EventsOn('session:data', (payload: { id: string; data: string }) => {
+unsubSessionData = EventsOn('session:data', (payload: { id: string; data: string }) => {
   let s = sessionState.sessions.get(payload.id)
   if (!s) {
     s = { id: payload.id, status: 'connecting', data: [], seq: 0 }
@@ -53,6 +59,14 @@ EventsOn('session:data', (payload: { id: string; data: string }) => {
   }
   pushChunk(s, payload.data)
 })
+
+// Detach both session:* listeners. Called from App.vue's onUnmounted.
+export function disposeSessionStore() {
+  unsubSessionStatus?.()
+  unsubSessionStatus = null
+  unsubSessionData?.()
+  unsubSessionData = null
+}
 
 export const useSessionStore = defineStore('session', () => {
   function initSession(id: string) {
