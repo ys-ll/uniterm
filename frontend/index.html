@@ -4,6 +4,11 @@
     <meta charset="UTF-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>uniTerm</title>
+    <style>
+        /* Match the :root --bg-base default in style.css so the webview
+           first paint isn't a white flash before the stylesheet loads. */
+        html, body { background: #14171d; color: #e6e8ed; margin: 0; }
+    </style>
 </head>
 <body>
 <div id="app"></div>

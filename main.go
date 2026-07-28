@@ -135,7 +135,9 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		// Match :root --bg-base in frontend/src/style.css so the window
+		// background blends with the webview first paint (no flash).
+		BackgroundColour: &options.RGBA{R: 0x14, G: 0x17, B: 0x1d, A: 1},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Mac: &mac.Options{
