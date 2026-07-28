@@ -336,9 +336,11 @@ func (s *SkillsStore) GetBody(name string) (string, error) {
 		return "", err
 	}
 	var dir string
+	var isSystem bool
 	for _, m := range metas {
 		if m.Name == name {
 			dir = m.Dir
+			isSystem = m.IsSystem
 			break
 		}
 	}
@@ -346,7 +348,7 @@ func (s *SkillsStore) GetBody(name string) (string, error) {
 		return "", fmt.Errorf("skill %q not found", name)
 	}
 	root := s.skillsRoot()
-	if metas[0].IsSystem {
+	if isSystem {
 		root = filepath.Join(root, systemDirName)
 	}
 	content, err := readCapped(filepath.Join(root, dir, skillEntryFile))
@@ -449,6 +451,11 @@ func (s *SkillsStore) Delete(name string) error {
 		return fmt.Errorf("skill %q not found", name)
 	}
 	skillDir := filepath.Join(s.skillsRoot(), dir)
+	// Refuse to traverse symlinks: an imported skill that points outside the
+	// skills root must not be followed by RemoveAll. STORE-02.
+	if err := assertNoSymlinks(skillDir); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(skillDir); err != nil {
 		return err
 	}
@@ -503,6 +510,14 @@ func assembleSkillMD(name, description, body string) string {
 }
 
 func copyFile(src, dst string) error {
+	// Refuse to follow symlinks during import: STORE-02.
+	srcInfo, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if srcInfo.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to copy symlink: %s", src)
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -511,13 +526,29 @@ func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
 	}
-	out, err := os.Create(dst)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode().Perm())
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 	_, err = io.Copy(out, in)
 	return err
+}
+
+// assertNoSymlinks walks dir (Lstat, not Stat) and returns an error if any
+// entry is a symlink. Used to gate destructive operations like Delete /
+// importToDir so we never follow an attacker-controlled link out of the
+// skills root. STORE-02.
+func assertNoSymlinks(dir string) error {
+	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to traverse symlink in skill directory: %s", path)
+		}
+		return nil
+	})
 }
 
 func copyDir(src, dst string) error {

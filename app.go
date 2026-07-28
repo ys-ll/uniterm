@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go.bug.st/serial"
 	"io"
@@ -77,6 +78,14 @@ type App struct {
 	// SetDefaultSessionLogDir; ongoing logs are not migrated.
 	customLogDir   string
 	customLogDirMu stdsync.RWMutex
+
+	// errCh accumulates non-fatal init failures during startup() so the
+	// frontend can surface them (see StartupError / "app:startup-error"
+	// event). Stores may stay nil if their init fails — the existing
+	// nil-guard pattern is preserved so today's working configs keep
+	// loading; the additive channel just makes the failure visible.
+	errCh      chan error
+	startupErr error
 }
 
 func NewApp(webviewDataPath string) *App {
@@ -86,6 +95,7 @@ func NewApp(webviewDataPath string) *App {
 		sessionToPanel:     make(map[string]string),
 		panelAutoTriggered: make(map[string]bool),
 		k8sManager:         k8s.NewManager(),
+		errCh:              make(chan error, 16),
 	}
 }
 
@@ -126,29 +136,31 @@ func (a *App) startup(ctx context.Context) {
 	cs, err := store.NewConnectionStore()
 	if err != nil {
 		log.Writef("Failed to init connection store: %v", err)
-		return
+		a.sendStartupErr(fmt.Errorf("connection store: %w", err))
+	} else {
+		a.connectionStore = cs
 	}
-	a.connectionStore = cs
 
 	ass, err := store.NewAISessionStore()
 	if err != nil {
 		log.Writef("Failed to init AI session store: %v", err)
-		return
+		a.sendStartupErr(fmt.Errorf("ai session store: %w", err))
+	} else {
+		a.aiSessionStore = ass
 	}
-	a.aiSessionStore = ass
 
 	ss, err := store.NewSettingsStore()
 	if err != nil {
 		log.Writef("Failed to init settings store: %v", err)
-		return
-	}
-	a.settingsStore = ss
-
-	// Prime the session-log directory override from persisted settings
-	// so a log Enable that lands before the settings UI opens still
-	// respects the user's choice from a prior run.
-	if settings, err := ss.Load(); err == nil {
-		a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
+		a.sendStartupErr(fmt.Errorf("settings store: %w", err))
+	} else {
+		a.settingsStore = ss
+		// Prime the session-log directory override from persisted settings
+		// so a log Enable that lands before the settings UI opens still
+		// respects the user's choice from a prior run.
+		if settings, err := ss.Load(); err == nil {
+			a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
+		}
 	}
 
 	// Init terminal history store (same config dir as other stores)
@@ -174,6 +186,7 @@ func (a *App) startup(ctx context.Context) {
 	syncSvc, err := sync.NewSyncService()
 	if err != nil {
 		log.Writef("Failed to create sync service: %v", err)
+		a.sendStartupErr(fmt.Errorf("sync service: %w", err))
 	} else {
 		a.syncService = syncSvc
 		// Wire keychain into stores for password/API key migration
@@ -201,6 +214,59 @@ func (a *App) startup(ctx context.Context) {
 
 	// Restore window position and size from last session
 	a.restoreWindow(ctx)
+
+	// Drain any non-fatal init failures and surface them to the frontend so
+	// the user sees a banner instead of getting an NPE on the first store
+	// call. Additive only — stores that failed to init are still nil and
+	// guarded as before; the app still launches.
+	a.drainStartupErr()
+	if a.startupErr != nil {
+		runtime.EventsEmit(ctx, "app:startup-error", a.startupErr.Error())
+	}
+}
+
+// sendStartupErr records a non-fatal init failure so the frontend can see
+// it after startup completes. Channel is buffered (16) and only written
+// from the startup goroutine, so the send is non-blocking.
+func (a *App) sendStartupErr(err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case a.errCh <- err:
+	default:
+		// Channel full — best-effort drop. The log line is the
+		// last-resort record in this case.
+		log.Writef("startup error channel full, dropping: %v", err)
+	}
+}
+
+// drainStartupErr joins every error sent during startup into a single
+// startupErr the frontend can query via StartupError().
+func (a *App) drainStartupErr() {
+	var errs []error
+	for {
+		select {
+		case err := <-a.errCh:
+			if err != nil {
+				errs = append(errs, err)
+			}
+		default:
+			a.startupErr = errors.Join(errs...)
+			return
+		}
+	}
+}
+
+// StartupError returns a human-readable, newline-joined list of any
+// non-fatal errors that occurred during startup, or "" if startup
+// completed cleanly. The frontend can call this on demand (e.g. after
+// the "app:startup-error" event) to display a banner.
+func (a *App) StartupError() string {
+	if a.startupErr == nil {
+		return ""
+	}
+	return a.startupErr.Error()
 }
 
 // restoreWindow restores the saved window position and size.
@@ -4084,7 +4150,11 @@ func (a *App) K8sExecSession(connID, namespace, pod, container string) (*session
 		return nil, fmt.Errorf("k8s manager not initialized")
 	}
 	// initial size fallback; real size arrives via Resize after the frontend mounts xterm
-	wsConn, err := a.k8sManager.DialExec(connID, namespace, pod, container, 80, 24)
+	// Use a bounded context so a slow/unreachable apiserver can't hang the
+	// WS upgrade indefinitely; cancellation propagates into the dialer.
+	dialCtx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
+	defer cancel()
+	wsConn, err := a.k8sManager.DialExec(dialCtx, connID, namespace, pod, container, 80, 24)
 	if err != nil {
 		return nil, err
 	}

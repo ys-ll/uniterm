@@ -260,7 +260,15 @@ func decryptGenericFile(src, dest string, key []byte) error {
 	return os.WriteFile(dest, plaintext, 0600)
 }
 
+// encryptBytes encrypts plaintext under key, binding the ciphertext to a
+// logical "file" identifier via additional data so an attacker who can
+// swap ciphertexts across files (e.g. paste connections.json.enc over
+// settings.json.enc) fails the AAD check (SYNC-P1-1).
 func encryptBytes(plaintext []byte, key []byte) (string, error) {
+	return encryptBytesWithAAD(plaintext, key, nil)
+}
+
+func encryptBytesWithAAD(plaintext []byte, key []byte, aad []byte) (string, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("create cipher: %w", err)
@@ -273,11 +281,15 @@ func encryptBytes(plaintext []byte, key []byte) (string, error) {
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("generate nonce: %w", err)
 	}
-	ciphertext := aesGCM.Seal(nonce, nonce, plaintext, nil)
+	ciphertext := aesGCM.Seal(nonce, nonce, plaintext, aad)
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
 func decryptBytes(encoded string, key []byte) ([]byte, error) {
+	return decryptBytesWithAAD(encoded, key, nil)
+}
+
+func decryptBytesWithAAD(encoded string, key []byte, aad []byte) ([]byte, error) {
 	ciphertext, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("decode base64: %w", err)
@@ -295,7 +307,7 @@ func decryptBytes(encoded string, key []byte) ([]byte, error) {
 		return nil, fmt.Errorf("ciphertext too short")
 	}
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt: %w", err)
 	}

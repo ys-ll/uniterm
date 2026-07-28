@@ -15,6 +15,11 @@ type tunnelEntry struct {
 	sshClient *ssh.Client
 	listener  net.Listener
 	quit      chan struct{}
+	// wg tracks every in-flight forwarder goroutine spawned by the accept
+	// loop so Stop/Shutdown can join them before declaring the tunnel down.
+	// Without this, a forwarder could still be holding the SSH client and a
+	// half-copied pair of connections when the caller thinks the port is free.
+	wg sync.WaitGroup
 }
 
 // TunnelService manages SSH tunnel lifecycles.
@@ -93,6 +98,16 @@ func (ts *TunnelService) Start(sessionID string, sshConfig ConnectionConfig, tar
 	localPort := listener.Addr().(*net.TCPAddr).Port
 	target := fmt.Sprintf("%s:%d", targetHost, targetPort)
 
+	// Construct the entry first so the accept loop and its forwarders can
+	// register with entry.wg before any handle the Stop signal.
+	quit := make(chan struct{})
+	entry := &tunnelEntry{
+		sshClient: client,
+		listener:  listener,
+		quit:      quit,
+	}
+	ts.tunnels[sessionID] = entry
+
 	// 3. Accept loop — forward each connection through SSH
 	go func() {
 		for {
@@ -101,7 +116,9 @@ func (ts *TunnelService) Start(sessionID string, sshConfig ConnectionConfig, tar
 				// Listener closed; tunnel is shutting down
 				return
 			}
+			entry.wg.Add(1)
 			go func() {
+				defer entry.wg.Done()
 				remoteConn, err := client.Dial("tcp", target)
 				if err != nil {
 					localConn.Close()
@@ -126,12 +143,6 @@ func (ts *TunnelService) Start(sessionID string, sshConfig ConnectionConfig, tar
 		}
 	}()
 
-	quit := make(chan struct{})
-	ts.tunnels[sessionID] = &tunnelEntry{
-		sshClient: client,
-		listener:  listener,
-		quit:      quit,
-	}
 	go tunnelKeepAlive(client, quit, "session="+sessionID)
 
 	return localPort, nil
@@ -163,17 +174,22 @@ func tunnelKeepAlive(client *ssh.Client, quit chan struct{}, label string) {
 // Stop closes the tunnel and SSH connection for the given session.
 func (ts *TunnelService) Stop(sessionID string) {
 	ts.mu.Lock()
-	defer ts.mu.Unlock()
-
 	entry, ok := ts.tunnels[sessionID]
+	if ok {
+		delete(ts.tunnels, sessionID)
+	}
+	ts.mu.Unlock()
 	if !ok {
 		return
 	}
-	delete(ts.tunnels, sessionID)
 
+	// Signal shutdown, tear down the listener and SSH client, then join the
+	// in-flight forwarders. Drop ts.mu first so a slow forwarder doesn't
+	// block unrelated tunnels from being started/stopped.
 	close(entry.quit)
 	entry.listener.Close()
 	entry.sshClient.Close()
+	entry.wg.Wait()
 }
 
 // Shutdown closes all tunnels. Call on app shutdown.
@@ -190,5 +206,6 @@ func (ts *TunnelService) Shutdown() {
 		close(entry.quit)
 		entry.listener.Close()
 		entry.sshClient.Close()
+		entry.wg.Wait()
 	}
 }

@@ -12,6 +12,7 @@ import { useLocalStateStore } from '../stores/localStateStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { highlight } from './useHighlight'
 import { stripCursorBlink } from '../utils/cursor'
+import { resolveXtermBackground } from './useTerminalTheme'
 import type { CustomTerminalTheme } from '../types/settings'
 
 export interface UseTerminalOptions {
@@ -60,9 +61,9 @@ export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]
     }
   }
   const base = {
-    background: 'var(--bg-base)',
-    foreground: 'var(--text-primary)',
-    cursor: 'var(--accent)',
+    background: '#1a1a1a',
+    foreground: '#e4e4e7',
+    cursor: '#22d3ee',
     selectionBackground: 'rgba(34, 211, 238, 0.2)',
     black: '#1e1e22',
     red: '#f87171',
@@ -84,6 +85,75 @@ export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]
   switch (name) {
     case 'uniterm-dark':
       return base
+    case 'uniterm-soft-gray':
+      return {
+        background: '#e8e8e8',
+        foreground: '#1a1a1a',
+        cursor: '#1a1a1a',
+        selectionBackground: 'rgba(0, 120, 212, 0.25)',
+        black: '#2d2d2d',
+        red: '#c1395b',
+        green: '#2c8c4f',
+        yellow: '#b07d00',
+        blue: '#1f6fcc',
+        magenta: '#8a44c9',
+        cyan: '#0d8a8a',
+        white: '#5a5a5a',
+        brightBlack: '#6a6a6a',
+        brightRed: '#e85a82',
+        brightGreen: '#4cb87a',
+        brightYellow: '#d99a1a',
+        brightBlue: '#4ca0e8',
+        brightMagenta: '#b06ee0',
+        brightCyan: '#33b3b3',
+        brightWhite: '#2d2d2d'
+      }
+    case 'uniterm-windows11':
+      return {
+        background: '#0c0c0c',
+        foreground: '#cccccc',
+        cursor: '#ffffff',
+        selectionBackground: 'rgba(255, 255, 255, 0.4)',
+        black: '#0c0c0c',
+        red: '#e74856',
+        green: '#16c60c',
+        yellow: '#f9f1a5',
+        blue: '#3b78ff',
+        magenta: '#b4009e',
+        cyan: '#61d6d6',
+        white: '#cccccc',
+        brightBlack: '#767676',
+        brightRed: '#e74856',
+        brightGreen: '#16c60c',
+        brightYellow: '#f9f1a5',
+        brightBlue: '#3b78ff',
+        brightMagenta: '#b4009e',
+        brightCyan: '#61d6d6',
+        brightWhite: '#f2f2f2'
+      }
+    case 'uniterm-windows11-light':
+      return {
+        background: '#f3f7fc',
+        foreground: '#1c1c1c',
+        cursor: '#1c1c1c',
+        selectionBackground: 'rgba(28, 28, 28, 0.4)',
+        black: '#000000',
+        red: '#c50f1f',
+        green: '#13a10e',
+        yellow: '#c19c00',
+        blue: '#0037da',
+        magenta: '#881798',
+        cyan: '#3a96dd',
+        white: '#cccccc',
+        brightBlack: '#767676',
+        brightRed: '#c50f1f',
+        brightGreen: '#13a10e',
+        brightYellow: '#c19c00',
+        brightBlue: '#0037da',
+        brightMagenta: '#881798',
+        brightCyan: '#3a96dd',
+        brightWhite: '#1c1c1c'
+      }
     case 'uniterm-light':
       return {
         background: '#fafafa',
@@ -343,10 +413,11 @@ export function useTerminal(
     const ts = settingsStore.settings.terminal
     const ls = useLocalStateStore()
     const themeName = ts.theme || 'uniterm-dark'
-    const theme = getXtermTheme(themeName, settingsStore.settings.customTerminalThemes)
-    if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
-      theme.background = 'rgba(0,0,0,0)'
-    }
+    const theme = resolveXtermBackground(
+      getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
+      ls.state.backgroundEnabled,
+      ls.state.backgroundImage
+    )
     return {
       fontSize: ts.fontSize || 13,
       fontFamily: ts.fontFamily || 'Consolas, "Courier New", monospace',
@@ -669,10 +740,11 @@ export function useTerminal(
   function applyXtermTheme(themeName: string) {
     if (!terminal) return
     const ls = useLocalStateStore()
-    const theme = getXtermTheme(themeName, settingsStore.settings.customTerminalThemes)
-    if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
-      theme.background = 'rgba(0,0,0,0)'
-    }
+    const theme = resolveXtermBackground(
+      getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
+      ls.state.backgroundEnabled,
+      ls.state.backgroundImage
+    )
     terminal.options.theme = theme
   }
 

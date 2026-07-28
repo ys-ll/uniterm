@@ -129,18 +129,40 @@ func resolveClientCert(user userEntry) ([]byte, []byte, error) {
 	return certPEM, keyPEM, nil
 }
 
-// authRoundTripper 每次请求前注入 Authorization。将来 P2 处理 exec provider 时可以在此扩展。
+// authRoundTripper 每次请求前注入 Authorization。Tokens can rotate, so
+// a 401 response must surface to a single retry with a refreshed token
+// (K8S-01 / K8S-09).
 type authRoundTripper struct {
-	base  http.RoundTripper
-	token string
+	base        http.RoundTripper
+	token       string
+	refreshTok  func() (string, error) // optional; called on 401 to fetch a new token
 }
 
 func (a *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Clone the request so the caller's header map is never mutated
+	// (K8S-09) — would otherwise block any future 401-retry path.
+	req = req.Clone(req.Context())
 	if a.token != "" && req.Header.Get("Authorization") == "" {
 		req.Header.Set("Authorization", "Bearer "+a.token)
 	}
-	// P2: 若 401 且 user 是 exec provider，重跑 plugin 并 retry 一次。
-	return a.base.RoundTrip(req)
+	resp, err := a.base.RoundTrip(req)
+	if err != nil {
+		return resp, err
+	}
+	if resp.StatusCode != http.StatusUnauthorized || a.refreshTok == nil {
+		return resp, nil
+	}
+	// Token rotated (or stale). Refresh and retry once.
+	resp.Body.Close()
+	newToken, rerr := a.refreshTok()
+	if rerr != nil || newToken == "" {
+		// Surface the original 401; refresh failure shouldn't lose data.
+		return a.base.RoundTrip(req.Clone(req.Context()))
+	}
+	a.token = newToken
+	retry := req.Clone(req.Context())
+	retry.Header.Set("Authorization", "Bearer "+a.token)
+	return a.base.RoundTrip(retry)
 }
 
 var _ = time.Second // 保留 time import 便于后续使用

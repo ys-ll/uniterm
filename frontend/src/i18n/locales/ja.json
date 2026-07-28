@@ -305,6 +305,8 @@
   "settings.themeDeepBlue": "ディープブルー",
   "settings.themeLight": "ライト",
   "settings.themeSystem": "システム",
+  "settings.themeWin11": "Windows 11",
+  "settings.themeMacOS26": "macOS 26",
   "settings.language": "言語",
   "settings.langSystem": "システムの既定値",
   "settings.closeTabPrompt": "タブを閉じる確認",

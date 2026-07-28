@@ -2,8 +2,10 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/ys-ll/uniterm/backend/session"
 )
@@ -25,6 +27,7 @@ type PasswordStore interface {
 type ConnectionStore struct {
 	configDir     string
 	passwordStore PasswordStore // nil = passwords kept in JSON (backward compat)
+	mu            sync.Mutex    // serializes Save + populatePasswords writes (STORE-05/06).
 }
 
 func NewConnectionStore() (*ConnectionStore, error) {
@@ -50,6 +53,9 @@ func (s *ConnectionStore) filePath() string {
 }
 
 func (s *ConnectionStore) Save(data session.ConnectionStoreData) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Deep-copy connections so we don't mutate the caller's backing array
 	connections := make([]session.ConnectionConfig, len(data.Connections))
 	copy(connections, data.Connections)
@@ -67,8 +73,13 @@ func (s *ConnectionStore) Save(data session.ConnectionStoreData) error {
 			}
 			continue
 		}
-		if s.passwordStore != nil {
-			_ = s.passwordStore.SetPassword(conn.ID, conn.Password)
+		if s.passwordStore == nil {
+			// Fail closed: never write a plaintext password to disk when the
+			// keychain isn't available. STORE-04.
+			return errors.New("passwordStore not initialized; refusing to save plaintext password")
+		}
+		if err := s.passwordStore.SetPassword(conn.ID, conn.Password); err != nil {
+			return err
 		}
 		conn.Password = ""
 	}
@@ -81,7 +92,7 @@ func (s *ConnectionStore) Save(data session.ConnectionStoreData) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath(), jsonData, 0600)
+	return atomicWriteFile(s.filePath(), jsonData, 0600)
 }
 
 func (s *ConnectionStore) Load() (session.ConnectionStoreData, error) {
@@ -105,24 +116,30 @@ func (s *ConnectionStore) Load() (session.ConnectionStoreData, error) {
 		if data.Connections == nil {
 			data.Connections = []session.ConnectionConfig{}
 		}
-		s.populatePasswords(&data)
+		if err := s.populatePasswords(&data); err != nil {
+			return session.ConnectionStoreData{}, err
+		}
 		return data, nil
 	}
 
 	// Fallback: old format — plain array of connections
 	var connections []session.ConnectionConfig
 	if err := json.Unmarshal(fileData, &connections); err != nil {
+		// STORE-09: rename corrupt JSON aside before re-attempting.
+		quarantineCorrupt(s.filePath())
 		return session.ConnectionStoreData{}, err
 	}
 	data = session.ConnectionStoreData{
 		Groups:      []session.ConnectionGroup{},
 		Connections: connections,
 	}
-	s.populatePasswords(&data)
+	if err := s.populatePasswords(&data); err != nil {
+		return session.ConnectionStoreData{}, err
+	}
 	return data, nil
 }
 
-func (s *ConnectionStore) populatePasswords(data *session.ConnectionStoreData) {
+func (s *ConnectionStore) populatePasswords(data *session.ConnectionStoreData) error {
 	needsSave := false
 	for i := range data.Connections {
 		conn := &data.Connections[i]
@@ -133,7 +150,9 @@ func (s *ConnectionStore) populatePasswords(data *session.ConnectionStoreData) {
 		if s.passwordStore != nil {
 			// Migration: if JSON still has plaintext password, move to keychain
 			if conn.Password != "" {
-				_ = s.passwordStore.SetPassword(conn.ID, conn.Password)
+				if err := s.passwordStore.SetPassword(conn.ID, conn.Password); err != nil {
+					return err
+				}
 				conn.Password = ""
 				needsSave = true
 			}
@@ -149,8 +168,11 @@ func (s *ConnectionStore) populatePasswords(data *session.ConnectionStoreData) {
 		// Save cleaned JSON (passwords migrated out)
 		jsonData, err := json.MarshalIndent(data, "", "  ")
 		if err != nil {
-			return
+			return err
 		}
-		_ = os.WriteFile(s.filePath(), jsonData, 0600)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return atomicWriteFile(s.filePath(), jsonData, 0600)
 	}
+	return nil
 }

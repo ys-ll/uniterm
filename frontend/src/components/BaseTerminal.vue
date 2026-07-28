@@ -99,6 +99,7 @@ import {
   bumpOnDataGeneration,
 } from '../services/terminalManager'
 import { getXtermTheme } from '../composables/useTerminal'
+import { resolveXtermBackground } from '../composables/useTerminalTheme'
 import { stripCursorBlink } from '../utils/cursor'
 import { useTerminalInput } from '../composables/useTerminalInput'
 import { useSuggestions, quickCommandCache } from '../composables/useSuggestions'
@@ -151,6 +152,11 @@ let terminalInput: ReturnType<typeof useTerminalInput> | null = null
 let terminal: Terminal | null = null
 let onDataDispose: { dispose(): void } | null = null
 let keyHandlerDispose: { dispose(): void } | null = null
+// webLinksAddon is per-component (has component-scoped callbacks). xterm's
+// Terminal.dispose() does not cascade to addons loaded via loadAddon, so
+// we must dispose it explicitly in onUnmounted or its link-provider event
+// listeners stay bound to a disposed terminal.
+let webLinksAddonDispose: { dispose(): void } | null = null
 let resizeObserver: ResizeObserver | null = null
 let intersectionObserver: IntersectionObserver | null = null
 // Track how many sessionStore chunks have been written to the terminal
@@ -774,6 +780,7 @@ onMounted(() => {
     }
   )
   terminal.loadAddon(webLinksAddon)
+  webLinksAddonDispose = webLinksAddon
 
   // Unicode 11 activeVersion is set inside terminalManager.ts right after
   // the addon is loaded, so it's already in effect by the time this
@@ -1484,10 +1491,11 @@ function onSearchPrev() {
 
 function applyXtermTheme(themeName: string) {
   if (!terminal) return
-  const theme = getXtermTheme(themeName, settingsStore.settings.customTerminalThemes)
-  if (localStateStore.state.backgroundEnabled && localStateStore.state.backgroundImage) {
-    theme.background = 'rgba(0,0,0,0)'
-  }
+  const theme = resolveXtermBackground(
+    getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
+    localStateStore.state.backgroundEnabled,
+    localStateStore.state.backgroundImage
+  )
   terminal.options.theme = theme
 }
 
@@ -1536,6 +1544,12 @@ onUnmounted(() => {
   onDataDispose = null
   keyHandlerDispose?.dispose()
   keyHandlerDispose = null
+  // webLinksAddon is per-component (its callbacks close over this
+  // component's hoverEl). Terminal.dispose() does NOT cascade to
+  // addons loaded via loadAddon — dispose it here or its link-provider
+  // listeners stay bound to a disposed terminal.
+  webLinksAddonDispose?.dispose()
+  webLinksAddonDispose = null
 
   // Release reference (delayed dispose: terminal survives 500ms)
   if (props.sessionId) {

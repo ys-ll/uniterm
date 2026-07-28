@@ -6,6 +6,11 @@ import { SaveSettings, LoadSettings, GetAvailableShells, SetDefaultSessionLogDir
 import { EventsOn } from '../../wailsjs/runtime'
 import { setLocale } from '../i18n'
 
+// Module-level un-subscriber for the cross-window store:settings:changed listener.
+// Tracked at module scope so re-imports under HMR can detach the previous
+// listener before re-subscribing (FE-03).
+let unsubSettingsChanged: (() => void) | null = null
+
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>({ ...DEFAULT_SETTINGS })
   const loaded = ref(false)
@@ -173,13 +178,19 @@ export const useSettingsStore = defineStore('settings', () => {
   })
 
   // Listen for settings changes from sync
-  EventsOn('store:settings:changed', (data: AppSettings) => {
+  unsubSettingsChanged?.()
+  unsubSettingsChanged = EventsOn('store:settings:changed', (data: AppSettings) => {
     if (data) {
       settings.value = mergeSettings(data)
       loaded.value = true
       applyTheme()
     }
   })
+
+  function dispose() {
+    unsubSettingsChanged?.()
+    unsubSettingsChanged = null
+  }
 
   return {
     settings,
@@ -207,7 +218,8 @@ export const useSettingsStore = defineStore('settings', () => {
     removeSftpBookmark,
     addCustomTheme,
     updateCustomTheme,
-    removeCustomTheme
+    removeCustomTheme,
+    dispose
   }
 })
 

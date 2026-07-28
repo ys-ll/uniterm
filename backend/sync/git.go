@@ -98,8 +98,20 @@ func (g *GitRepo) StageAndCommit(msg string) (bool, error) {
 		return false, nil
 	}
 
-	if _, err := wt.Add("."); err != nil {
-		return false, fmt.Errorf("add: %w", err)
+	// Whitelist only known config filenames so stray files dropped in
+	// the sync repo (e.g. an SSH key) are NOT committed plaintext
+	// (SYNC-P1-9).
+	for _, name := range []string{
+		"connections.json", "settings.json",
+		"ai-sessions.json", "skills.json",
+		"quickCommands.json", ".sync-salt", "README.md",
+	} {
+		if _, err := os.Stat(filepath.Join(g.repoPath, name)); err != nil {
+			continue
+		}
+		if _, err := wt.Add(name); err != nil {
+			return false, fmt.Errorf("add %s: %w", name, err)
+		}
 	}
 
 	_, err = wt.Commit(msg, &git.CommitOptions{

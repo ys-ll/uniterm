@@ -64,6 +64,16 @@ func (p *sqlserverProvider) qualifiedTable(tableName string) string {
 }
 
 // ── CRUD ──
+//
+// InsertRow/UpdateRow/DeleteRow go through execPrepared so that:
+//   - USE [dbName] and the actual statement run on the same pooled conn
+//     (DB-10, AUDIT-database-10). Previously each CRUD call issued a
+//     `USE [db];\n...` multi-statement batch; the driver handles it but
+//     the pool could still split work across conns for the trailing USE.
+//   - context propagation is consistent with the other providers.
+//
+// withUse is intentionally not prepended here — execPrepared already calls
+// PrepareExec, which issues USE [dbName] on the pinned connection.
 
 func (p *sqlserverProvider) InsertRow(db *sql.DB, dbName, tableName string, values map[string]any) error {
 	cols := sortedKeys(values)
@@ -77,8 +87,7 @@ func (p *sqlserverProvider) InsertRow(db *sql.DB, dbName, tableName string, valu
 	}
 	sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		p.qualifiedTable(tableName), strings.Join(quotedCols, ", "), strings.Join(placeholders, ", "))
-	_, err := db.ExecContext(context.Background(), p.withUse(dbName, sql), args...)
-	return err
+	return execPrepared(p, db, dbName, sql, args)
 }
 
 func (p *sqlserverProvider) UpdateRow(db *sql.DB, dbName, tableName string, set, where map[string]any) error {
@@ -111,8 +120,7 @@ func (p *sqlserverProvider) UpdateRow(db *sql.DB, dbName, tableName string, set,
 	if len(whereParts) > 0 {
 		sql += " WHERE " + strings.Join(whereParts, " AND ")
 	}
-	_, err := db.ExecContext(context.Background(), p.withUse(dbName, sql), args...)
-	return err
+	return execPrepared(p, db, dbName, sql, args)
 }
 
 func (p *sqlserverProvider) DeleteRow(db *sql.DB, dbName, tableName string, where map[string]any) error {
@@ -133,8 +141,7 @@ func (p *sqlserverProvider) DeleteRow(db *sql.DB, dbName, tableName string, wher
 	if len(whereParts) > 0 {
 		sql += " WHERE " + strings.Join(whereParts, " AND ")
 	}
-	_, err := db.ExecContext(context.Background(), p.withUse(dbName, sql), args...)
-	return err
+	return execPrepared(p, db, dbName, sql, args)
 }
 
 // ── Capabilities ──
@@ -358,16 +365,19 @@ func (p *sqlserverProvider) DropColumn(db *sql.DB, dbName, tableName, colName st
 	if err != nil {
 		return fmt.Errorf("find default constraints: %w", err)
 	}
+	defer rows.Close()
+
 	var constraints []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			rows.Close()
 			return err
 		}
 		constraints = append(constraints, name)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
 
 	qt := p.qualifiedTable(tableName)
 	for _, name := range constraints {

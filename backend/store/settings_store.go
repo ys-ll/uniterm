@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 const settingsFileName = "settings.json"
@@ -114,6 +115,7 @@ type SFTPBookmarks struct {
 type SettingsStore struct {
 	configDir     string
 	passwordStore PasswordStore
+	mu            sync.Mutex // serializes Save + Load migration writes (STORE-05/06).
 }
 
 func NewSettingsStore() (*SettingsStore, error) {
@@ -137,6 +139,9 @@ func (s *SettingsStore) filePath() string {
 }
 
 func (s *SettingsStore) Save(settings AppSettings) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Deep-copy models so we don't mutate the caller's backing array
 	models := make([]AIModelConfig, len(settings.AI.Models))
 	copy(models, settings.AI.Models)
@@ -155,10 +160,13 @@ func (s *SettingsStore) Save(settings AppSettings) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath(), data, 0600)
+	return atomicWriteFile(s.filePath(), data, 0600)
 }
 
 func (s *SettingsStore) Load() (AppSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	data, err := os.ReadFile(s.filePath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -168,6 +176,9 @@ func (s *SettingsStore) Load() (AppSettings, error) {
 	}
 	var settings AppSettings
 	if err := json.Unmarshal(data, &settings); err != nil {
+		// STORE-09: preserve corrupt file before falling back to defaults so
+		// the next Save doesn't silently overwrite the user's prior data.
+		quarantineCorrupt(s.filePath())
 		return defaultSettings(), nil
 	}
 
@@ -203,7 +214,7 @@ func (s *SettingsStore) Load() (AppSettings, error) {
 	}
 	if needsSave {
 		jsonData, _ := json.MarshalIndent(settings, "", "  ")
-		_ = os.WriteFile(s.filePath(), jsonData, 0600)
+		_ = atomicWriteFile(s.filePath(), jsonData, 0600)
 	}
 
 	return settings, nil

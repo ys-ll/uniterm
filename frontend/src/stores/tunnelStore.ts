@@ -5,6 +5,12 @@ import {
 } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 
+// Module-level un-subscribers for tunnel:state / store:tunnels:changed listeners.
+// Tracked at module scope so re-imports under HMR can detach the previous
+// listener before re-subscribing (FE-03).
+let unsubTunnelState: (() => void) | null = null
+let unsubTunnelsChanged: (() => void) | null = null
+
 export type TunnelMode = 'local' | 'remote' | 'dynamic'
 export type TunnelStatus = 'stopped' | 'running' | 'error'
 
@@ -74,15 +80,24 @@ export const useTunnelStore = defineStore('tunnels', () => {
       console.error('Failed to list tunnel states:', e)
     }
     // Live state pushes.
-    EventsOn('tunnel:state', (st: TunnelState) => {
+    unsubTunnelState?.()
+    unsubTunnelState = EventsOn('tunnel:state', (st: TunnelState) => {
       states.value = { ...states.value, [st.id]: st }
     })
     // Cross-window sync.
-    EventsOn('store:tunnels:changed', (data: { groups?: TunnelGroup[]; tunnels?: Tunnel[] }) => {
+    unsubTunnelsChanged?.()
+    unsubTunnelsChanged = EventsOn('store:tunnels:changed', (data: { groups?: TunnelGroup[]; tunnels?: Tunnel[] }) => {
       groups.value = data.groups || []
       tunnels.value = data.tunnels || []
     })
     loaded.value = true
+  }
+
+  function dispose() {
+    unsubTunnelState?.()
+    unsubTunnelState = null
+    unsubTunnelsChanged?.()
+    unsubTunnelsChanged = null
   }
 
   async function save() {
@@ -176,5 +191,6 @@ export const useTunnelStore = defineStore('tunnels', () => {
     addTunnel, updateTunnel, deleteTunnel, getTunnelsByGroup,
     addGroup, renameGroup, deleteGroup,
     start, stop,
+    dispose,
   }
 })

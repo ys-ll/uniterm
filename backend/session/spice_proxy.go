@@ -148,6 +148,9 @@ func (p *SPICEProxy) handleWebSocket(ws *websocket.Conn) {
 }
 
 // Stop closes all connections and waits for goroutines to exit.
+// Listener is closed before wg.Wait() so handleWebSocket has no
+// window to accept and spawn goroutines that never reach Done
+// (SESSION-04).
 func (p *SPICEProxy) Stop() {
 	p.stopOnce.Do(func() { close(p.stopCh) })
 	p.mu.Lock()

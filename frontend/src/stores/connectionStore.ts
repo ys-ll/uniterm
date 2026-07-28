@@ -4,6 +4,11 @@ import { SaveConnections, LoadConnections } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 
+// Module-level un-subscriber for the cross-window store:connections:changed listener.
+// Tracked at module scope so re-imports under HMR can detach the previous
+// listener before re-subscribing (FE-03).
+let unsubConnectionsChanged: (() => void) | null = null
+
 export interface GroupTreeNode {
   group: ConnectionGroup
   connections: ConnectionConfig[]
@@ -306,12 +311,18 @@ export const useConnectionStore = defineStore('connection', () => {
   })
 
   // Listen for cross-window connection sync
-  EventsOn('store:connections:changed', (data: { groups?: ConnectionGroup[]; connections?: ConnectionConfig[] }) => {
+  unsubConnectionsChanged?.()
+  unsubConnectionsChanged = EventsOn('store:connections:changed', (data: { groups?: ConnectionGroup[]; connections?: ConnectionConfig[] }) => {
     if (data) {
       if (data.groups) groups.value = data.groups
       if (data.connections) connections.value = data.connections
     }
   })
+
+  function dispose() {
+    unsubConnectionsChanged?.()
+    unsubConnectionsChanged = null
+  }
 
   return {
     connections,
@@ -335,5 +346,6 @@ export const useConnectionStore = defineStore('connection', () => {
     moveGroup,
     groupedConnections,
     allGroupIds,
+    dispose
   }
 })

@@ -14,6 +14,12 @@ import {
 import { sync } from '../../wailsjs/go/models'
 import { EventsOn } from '../../wailsjs/runtime'
 
+// Module-level un-subscribers for sync:conflict / sync:completed listeners.
+// Tracked at module scope so re-imports under HMR can detach the previous
+// listener before re-subscribing (FE-03).
+let unsubSyncConflict: (() => void) | null = null
+let unsubSyncCompleted: (() => void) | null = null
+
 export interface SyncConfig {
   repoUrl: string
   branch: string
@@ -207,7 +213,8 @@ export const useSyncStore = defineStore('sync', () => {
   }
 
   // Listen for conflict events from auto-sync
-  EventsOn('sync:conflict', (data: SyncConflict) => {
+  unsubSyncConflict?.()
+  unsubSyncConflict = EventsOn('sync:conflict', (data: SyncConflict) => {
     conflict.value = {
       localTime: data.localTime ?? (data as any).LocalTime ?? '',
       remoteTime: data.remoteTime ?? (data as any).RemoteTime ?? '',
@@ -215,9 +222,17 @@ export const useSyncStore = defineStore('sync', () => {
   })
 
   // Reload config when auto-sync completes
-  EventsOn('sync:completed', () => {
+  unsubSyncCompleted?.()
+  unsubSyncCompleted = EventsOn('sync:completed', () => {
     loadConfig()
   })
+
+  function dispose() {
+    unsubSyncConflict?.()
+    unsubSyncConflict = null
+    unsubSyncCompleted?.()
+    unsubSyncCompleted = null
+  }
 
   return {
     config,
@@ -238,5 +253,6 @@ export const useSyncStore = defineStore('sync', () => {
     changePassword,
     deleteRepo,
     formatSyncTime,
+    dispose
   }
 })

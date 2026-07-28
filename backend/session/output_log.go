@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -319,6 +320,12 @@ func (p *lineProcessor) applyCSI(csi []byte) {
 		}
 		ins := make([]byte, n)
 		p.line = append(p.line[:p.pos], append(ins, p.line[p.pos:]...)...)
+		// Bytes that were past the insert point shifted right by n. If any of
+		// those were already emitted, bump the high-water mark so they aren't
+		// double-flushed on the next sweep.
+		if p.emitted > p.pos {
+			p.emitted += n
+		}
 	}
 	// If the buffer was shortened past the emitted mark, pull it back so
 	// we don't silently lose bytes that were already flushed.
@@ -326,6 +333,11 @@ func (p *lineProcessor) applyCSI(csi []byte) {
 		p.emitted = len(p.line)
 	}
 }
+
+// maxCSIParam caps parsed CSI numeric parameters so a hostile or buggy
+// remote can't feed values that overflow int arithmetic and drive p.pos
+// negative downstream. Real terminals never exceed a few thousand.
+const maxCSIParam = 4096
 
 // parseCSIParam extracts the idx-th semicolon-separated numeric parameter
 // from params. Returns defaultVal if the parameter is missing or empty.
@@ -356,7 +368,13 @@ func parseCSIParam(params []byte, idx, defaultVal int) int {
 	}
 	n := 0
 	for _, b := range params[start:end] {
+		if b < '0' || b > '9' {
+			break
+		}
 		n = n*10 + int(b-'0')
+		if n > maxCSIParam {
+			return maxCSIParam
+		}
 	}
 	return n
 }
@@ -396,10 +414,29 @@ func (p *lineProcessor) Reset() {
 type OutputLogger struct {
 	mu       sync.Mutex
 	file     *os.File
+	bw       *bufio.Writer
 	path     string
 	stripper ansiStripper
 	lines    lineProcessor
+	flushCh  chan struct{}
+	flushDone chan struct{}
+	// buffered controls whether writes go through bufio + periodic flush.
+	// SetBuffered(false) opts back into the legacy Sync-per-write path,
+	// useful for callers that need durable-per-write semantics (and for
+	// tests that want deterministic post-Disable fs visibility).
+	buffered    bool
+	bufferedSet bool
 }
+
+// logBufferSize is the in-memory buffer size for the log writer. 64 KiB
+// matches the typical filesystem block cluster and avoids per-write
+// syscalls on the hot path (see SESSION-07).
+const logBufferSize = 64 * 1024
+
+// logFlushInterval is how often the periodic goroutine flushes the
+// buffered writer to the underlying file. The OS coalesces the actual
+// disk write; we only need to forward buffered bytes out of user-space.
+const logFlushInterval = 1 * time.Second
 
 const bannerHeader = "=== uniTerm session log ==="
 
@@ -458,9 +495,26 @@ func (l *OutputLogger) Enable(dir, name, protocol string) (string, error) {
 	l.stripper = ansiStripper{}
 	l.lines.Reset()
 
+	// Default to buffered mode unless SetBuffered(false) was called
+	// before Enable (the zero value is false; we treat Enable as opting in).
+	if !l.bufferedSet {
+		l.buffered = true
+	}
+	if l.buffered {
+		l.bw = bufio.NewWriterSize(file, logBufferSize)
+		l.flushCh = make(chan struct{})
+		l.flushDone = make(chan struct{})
+		go l.flushLoop()
+	}
+
 	fmt.Fprintf(file, "%s\nName: %s\nProtocol: %s\nStarted: %s\n\n",
 		bannerHeader, name, protocol, now.Format("2006-01-02 15:04:05 -0700"))
-	_ = file.Sync()
+	if l.bw != nil {
+		_ = l.bw.Flush()
+		_ = file.Sync()
+	} else {
+		_ = file.Sync()
+	}
 	return final, nil
 }
 
@@ -474,12 +528,36 @@ func (l *OutputLogger) Disable() {
 	// Flush any buffered partial line so an unterminated last command
 	// still appears in the log.
 	if partial := l.lines.FlushPartial(); len(partial) > 0 {
-		_, _ = l.file.Write(partial)
+		if l.bw != nil {
+			_, _ = l.bw.Write(partial)
+		} else {
+			_, _ = l.file.Write(partial)
+		}
 	}
-	fmt.Fprintf(l.file, "\n=== Ended: %s ===\n", time.Now().Format("2006-01-02 15:04:05 -0700"))
+	if l.bw != nil {
+		fmt.Fprintf(l.bw, "\n=== Ended: %s ===\n", time.Now().Format("2006-01-02 15:04:05 -0700"))
+		_ = l.bw.Flush()
+	} else {
+		fmt.Fprintf(l.file, "\n=== Ended: %s ===\n", time.Now().Format("2006-01-02 15:04:05 -0700"))
+		_ = l.file.Sync()
+	}
+	// Stop the periodic flush goroutine.
+	if l.flushCh != nil {
+		close(l.flushCh)
+		l.flushCh = nil
+	}
+	if l.flushDone != nil {
+		// Wait outside the lock — the goroutine may need to take it.
+		done := l.flushDone
+		l.flushDone = nil
+		l.mu.Unlock()
+		<-done
+		l.mu.Lock()
+	}
 	_ = l.file.Sync()
 	_ = l.file.Close()
 	l.file = nil
+	l.bw = nil
 	l.path = ""
 }
 
@@ -519,7 +597,50 @@ func (l *OutputLogger) WriteOutput(data []byte) {
 	if len(toWrite) == 0 {
 		return
 	}
-	if _, err := l.file.Write(toWrite); err == nil {
-		_ = l.file.Sync()
+	if l.bw != nil {
+		// Buffered mode: hand bytes to bufio.Writer; the periodic flush
+		// goroutine (or Disable) forwards them to the file. No Sync per write.
+		_, _ = l.bw.Write(toWrite)
+	} else {
+		if _, err := l.file.Write(toWrite); err == nil {
+			_ = l.file.Sync()
+		}
+	}
+}
+
+// SetBuffered toggles the bufio + periodic-flush path. When buffered is
+// true (the default after Enable), writes go through a 64 KiB buffer and
+// a 1 s ticker flushes to the OS — the OS coalesces actual disk writes.
+// When false, every WriteOutput call durably syncs to disk (legacy
+// behavior, useful for tests that need deterministic fs visibility).
+// Has no effect after Enable; must be called before Enable, or after
+// Disable when the logger is idled.
+func (l *OutputLogger) SetBuffered(buffered bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file != nil {
+		return // can't change mode while a file is open
+	}
+	l.buffered = buffered
+	l.bufferedSet = true
+}
+
+// flushLoop is the periodic flush goroutine. It exits when flushCh is
+// closed (by Disable) and signals flushDone so the closer can wait.
+func (l *OutputLogger) flushLoop() {
+	defer close(l.flushDone)
+	ticker := time.NewTicker(logFlushInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-l.flushCh:
+			return
+		case <-ticker.C:
+			l.mu.Lock()
+			if l.bw != nil {
+				_ = l.bw.Flush()
+			}
+			l.mu.Unlock()
+		}
 	}
 }

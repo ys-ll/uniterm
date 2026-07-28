@@ -26,7 +26,13 @@ func (p *postgresProvider) DSN(host string, port int, user, password, dbName str
 		Path:   "/" + dbName,
 	}
 	q := u.Query()
-	q.Set("sslmode", "disable")
+	// Default to "prefer": encrypted when the server has TLS, plaintext
+	// fallback when it doesn't. Callers can override via extraParams
+	// (e.g. "sslmode=require" to refuse non-TLS, "sslmode=disable" to
+	// force plaintext against self-signed dev servers).
+	if _, ok := extraParams["sslmode"]; !ok {
+		q.Set("sslmode", "prefer")
+	}
 	for k, v := range extraParams {
 		q.Set(k, v)
 	}
@@ -39,7 +45,8 @@ func (p *postgresProvider) DriverName() string {
 }
 
 func (p *postgresProvider) Quote(name string) string {
-	return `"` + name + `"`
+	q, _ := SafePgIdent(name)
+	return q
 }
 
 func (p *postgresProvider) PrepareExec(db execer, dbName string) error {
@@ -304,7 +311,11 @@ func (p *postgresProvider) AddColumn(db *sql.DB, dbName, tableName string, col C
 		parts = append(parts, "DEFAULT NULL")
 	case "value":
 		if col.DefaultVal != "" {
-			parts = append(parts, "DEFAULT "+col.DefaultVal)
+			def, err := SafeDefaultLiteral(col.DefaultVal)
+			if err != nil {
+				return err
+			}
+			parts = append(parts, "DEFAULT "+def)
 		} else {
 			parts = append(parts, "DEFAULT ''")
 		}
@@ -336,8 +347,12 @@ func (p *postgresProvider) ModifyColumn(db *sql.DB, dbName, tableName string, co
 			q(tableName), q(col.Name)))
 	case "value":
 		if col.DefaultVal != "" {
+			def, err := SafeDefaultLiteral(col.DefaultVal)
+			if err != nil {
+				return err
+			}
 			stmts = append(stmts, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s",
-				q(tableName), q(col.Name), col.DefaultVal))
+				q(tableName), q(col.Name), def))
 		} else {
 			stmts = append(stmts, fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET DEFAULT ''",
 				q(tableName), q(col.Name)))

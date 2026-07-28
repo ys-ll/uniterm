@@ -4,6 +4,8 @@ import (
 	"os"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/ys-ll/uniterm/backend/log"
 )
 
 func makeSSHAuthMethods(config ConnectionConfig, kbCallback ssh.KeyboardInteractiveChallenge) []ssh.AuthMethod {
@@ -13,9 +15,15 @@ func makeSSHAuthMethods(config ConnectionConfig, kbCallback ssh.KeyboardInteract
 	case "password":
 		methods = append(methods, ssh.Password(config.Password))
 	case "key":
-		if signer, ok := parsePrivateKeyFile(config.KeyPath, config.Password); ok {
-			methods = append(methods, ssh.PublicKeys(signer))
+		signer, err := parsePrivateKeyFile(config.KeyPath, config.Password)
+		if err != nil {
+			// Log the parse error so a bad key path or wrong passphrase is
+			// observable — previously the bool return hid every parse failure
+			// and the only visible symptom was a confusing SSH handshake error.
+			log.Writef("ssh: key auth skipped, parse %s failed: %v", config.KeyPath, err)
+			break
 		}
+		methods = append(methods, ssh.PublicKeys(signer))
 	}
 
 	// Keyboard-interactive as fallback for password-less or failed-password scenarios.
@@ -27,24 +35,16 @@ func makeSSHAuthMethods(config ConnectionConfig, kbCallback ssh.KeyboardInteract
 }
 
 // parsePrivateKeyFile reads the private key at path and parses it, using
-// passphrase when the key is encrypted. Returns (nil, false) on any error;
-// the caller is expected to fall back to other auth methods so the SSH
-// handshake surfaces a meaningful error to the user.
-func parsePrivateKeyFile(path, passphrase string) (ssh.Signer, bool) {
+// passphrase when the key is encrypted. Returns the underlying error from
+// os.ReadFile / ssh.ParsePrivateKey* so the caller can surface a
+// meaningful diagnostic (e.g. wrong passphrase, unsupported key format).
+func parsePrivateKeyFile(path, passphrase string) (ssh.Signer, error) {
 	key, err := os.ReadFile(path)
 	if err != nil {
-		return nil, false
+		return nil, err
 	}
 	if passphrase != "" {
-		signer, err := ssh.ParsePrivateKeyWithPassphrase(key, []byte(passphrase))
-		if err != nil {
-			return nil, false
-		}
-		return signer, true
+		return ssh.ParsePrivateKeyWithPassphrase(key, []byte(passphrase))
 	}
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, false
-	}
-	return signer, true
+	return ssh.ParsePrivateKey(key)
 }

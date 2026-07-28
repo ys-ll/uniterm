@@ -3,6 +3,7 @@ package k8s
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,13 @@ import (
 
 	"github.com/ys-ll/uniterm/backend/log"
 )
+
+// maxK8sResponseBytes caps the size of any single REST response body so
+// a runaway server (or a misconfigured apiserver returning huge CRDs
+// or log lists) cannot exhaust process memory. 64 MiB matches the
+// typical kubectl response cap and is well above any realistic single
+// object (K8S-05).
+const maxK8sResponseBytes = 64 * 1024 * 1024
 
 // Do 是通用 REST 请求 —— 拼 URL、发请求、返回 (status, body, err)。
 // path 必须以 "/" 开头。contentType 可以为空。
@@ -35,10 +43,14 @@ func Do(ctx context.Context, client *http.Client, base, method, path string, bod
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
+	// Cap the read so a pathological server can't OOM us (K8S-05).
+	b, err := io.ReadAll(io.LimitReader(resp.Body, maxK8sResponseBytes+1))
 	if err != nil {
 		log.Writef("[k8s] %s %s%s -> read body err: %v (status=%d)", method, base, path, err, resp.StatusCode)
 		return resp.StatusCode, nil, err
+	}
+	if len(b) > maxK8sResponseBytes {
+		return resp.StatusCode, nil, errors.New("response body exceeds 64 MiB limit")
 	}
 	preview := b
 	if len(preview) > 300 {

@@ -175,6 +175,8 @@ import { useSettingsStore } from './stores/settingsStore'
 import { useQuickCommandStore } from './stores/quickCommandStore'
 import { useTunnelStore } from './stores/tunnelStore'
 import { useLocalStateStore } from './stores/localStateStore'
+import { useSyncStore } from './stores/syncStore'
+import { disposeSessionStore } from './stores/sessionStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
 import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
 import { focusPanelTerminal, installTerminalFocusRestore } from './composables/useFocusTerminal'
@@ -234,8 +236,14 @@ const sessionStore = useSessionStore()
 const aiStore = useAIStore()
 const settingsStore = useSettingsStore()
 const localStateStore = useLocalStateStore()
+const syncStore = useSyncStore()
+const tunnelStore = useTunnelStore()
 const updateCheck = useUpdateCheck()
 let uninstallFocusRestore: (() => void) | null = null
+// Unsubscribers for module-level Wails EventsOn listeners (FE-03).
+let unsubRdpFullscreenExit: (() => void) | null = null
+let unsubRdpMoveResizeStart: (() => void) | null = null
+let unsubRdpMoveResizeEnd: (() => void) | null = null
 const { t, locale } = useI18n()
 const EL_LOCALE_MAP: Record<string, typeof enUs> = {
   'zh-CN': zhCn, 'zh-TW': zhTw, en: enUs, ja, ko, de, es, fr, ru,
@@ -676,10 +684,10 @@ onMounted(async () => {
   // RDP native full-screen enter/exit
   window.addEventListener('rdp:fullscreen-enter', onRdpFullScreenEnter)
   // Exit is emitted from Go when the user uses the connection bar's restore button.
-  EventsOn('rdp:fullscreen-exit', () => onRdpFullScreenExit())
+  unsubRdpFullscreenExit = EventsOn('rdp:fullscreen-exit', () => onRdpFullScreenExit())
   // Go-side WndProc events: window move/resize start/end
-  EventsOn('rdp:move-resize-start', () => RDPHideForOverlay())
-  EventsOn('rdp:move-resize-end', () => RDPShowForOverlay())
+  unsubRdpMoveResizeStart = EventsOn('rdp:move-resize-start', () => RDPHideForOverlay())
+  unsubRdpMoveResizeEnd = EventsOn('rdp:move-resize-end', () => RDPShowForOverlay())
 
   // Panel/Tab/StartTab menu actions
   window.addEventListener('app:connect-sftp', ((e: CustomEvent) => {
@@ -847,7 +855,17 @@ onUnmounted(() => {
   window.removeEventListener('split:resize-end', RDPShowForOverlay)
   window.removeEventListener('rdp:sync-position', rdpResetTracking)
   window.removeEventListener('rdp:fullscreen-enter', onRdpFullScreenEnter)
-
+  // Wails EventsOn teardown (FE-03)
+  unsubRdpFullscreenExit?.()
+  unsubRdpMoveResizeStart?.()
+  unsubRdpMoveResizeEnd?.()
+  // Tear down store-level EventsOn registrations (FE-03)
+  aiStore.dispose?.()
+  settingsStore.dispose?.()
+  connectionStore.dispose?.()
+  syncStore.dispose?.()
+  tunnelStore.dispose?.()
+  disposeSessionStore?.()
 })
 
 function openSettings() {

@@ -137,14 +137,24 @@ func startMoshServer(client *ssh.Client) (key string, udpPort int, err error) {
 
 	var output strings.Builder
 	stdoutScanner := bufio.NewScanner(stdout)
+	// Raise the default 64 KiB line cap so a chatty mosh-server banner
+	// (key + port) doesn't get truncated (SESSION-13).
+	stdoutScanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for stdoutScanner.Scan() {
 		output.WriteString(stdoutScanner.Text())
 		output.WriteByte('\n')
 	}
+	if err := stdoutScanner.Err(); err != nil {
+		return "", 0, fmt.Errorf("read mosh stdout: %w", err)
+	}
 	stderrScanner := bufio.NewScanner(stderr)
+	stderrScanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for stderrScanner.Scan() {
 		output.WriteString(stderrScanner.Text())
 		output.WriteByte('\n')
+	}
+	if err := stderrScanner.Err(); err != nil {
+		return "", 0, fmt.Errorf("read mosh stderr: %w", err)
 	}
 	session.Wait()
 

@@ -305,6 +305,8 @@
   "settings.themeDeepBlue": "Azul Profundo",
   "settings.themeLight": "Claro",
   "settings.themeSystem": "Sistema",
+  "settings.themeWin11": "Windows 11",
+  "settings.themeMacOS26": "macOS 26",
   "settings.language": "Idioma",
   "settings.langSystem": "Predeterminado del Sistema",
   "settings.closeTabPrompt": "Confirmación al cerrar pestaña",

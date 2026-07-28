@@ -285,7 +285,9 @@ func (m *Manager) StopLogStream(streamID string) {
 
 // DialExec 打开一个到 Pod exec 端点的 WebSocket，复用连接的 TLS/auth/dial 配置。
 // cols/rows 供上层建立终端后通过 resize 通道下发，这里仅负责建连。
-func (m *Manager) DialExec(connID, ns, pod, container string, cols, rows int) (*websocket.Conn, error) {
+// ctx 控制 dial 阶段（DNS/TCP/TLS/upgrade）的取消与超时：调用方在用户关闭面板、
+// 切换 tab、或上层超时时应 cancel ctx，避免 hang 在不可达的 apiserver 上。
+func (m *Manager) DialExec(ctx context.Context, connID, ns, pod, container string, cols, rows int) (*websocket.Conn, error) {
 	m.mu.RLock()
 	conn, ok := m.conns[connID]
 	m.mu.RUnlock()
@@ -327,7 +329,7 @@ func (m *Manager) DialExec(connID, ns, pod, container string, cols, rows int) (*
 	if conn.token != "" {
 		header.Set("Authorization", "Bearer "+conn.token)
 	}
-	c, _, err := dialer.Dial(u.String(), header)
+	c, _, err := dialer.DialContext(ctx, u.String(), header)
 	if err != nil {
 		return nil, fmt.Errorf("exec dial: %w", err)
 	}

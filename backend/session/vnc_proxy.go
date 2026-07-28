@@ -155,6 +155,10 @@ func (p *VNCProxy) Stop() {
 		p.tcpConn.Close()
 	}
 	p.mu.Unlock()
+	// Close the listener BEFORE wg.Wait() so handleWebSocket can exit
+	// and add to the wait group cleanly — otherwise a new connection
+	// accepted in the window between listener.Close() and wg.Wait()
+	// adds goroutines that never reach Done (SESSION-04).
 	if p.listener != nil {
 		p.listener.Close()
 	}

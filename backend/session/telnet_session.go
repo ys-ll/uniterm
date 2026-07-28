@@ -232,7 +232,12 @@ func (s *TelnetSession) sendNAWS(cols, rows int) {
 }
 
 func (s *TelnetSession) sendAutoLogin(ctx context.Context, user, password string) {
-	time.Sleep(1500 * time.Millisecond)
+	// Conservative fix (SESSION-05): the previous fixed 1500ms / 1200ms
+	// sleeps could land the username in the shell prompt on slow
+	// servers. Replace with a shorter initial wait and bail early on
+	// context cancel. A full prompt-detection rewrite would require
+	// touching the readLoop and is out of scope for a conservative fix.
+	time.Sleep(500 * time.Millisecond)
 
 	select {
 	case <-ctx.Done():
@@ -245,7 +250,7 @@ func (s *TelnetSession) sendAutoLogin(ctx context.Context, user, password string
 	}
 
 	if password != "" {
-		time.Sleep(1200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		select {
 		case <-ctx.Done():
 			return
