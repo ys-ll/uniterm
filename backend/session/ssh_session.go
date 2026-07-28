@@ -26,7 +26,7 @@ const (
 	// server/NAT/firewall idle timeout doesn't drop an otherwise-healthy
 	// connection. Dead-connection detection is NOT done here — see readLoop
 	// (EOF) and the OS-level TCP keepalive set in Connect.
-	sshKeepAliveInterval = 60 * time.Second
+	sshKeepAliveInterval = 90 * time.Second
 )
 
 type SSHSession struct {
