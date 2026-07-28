@@ -305,6 +305,8 @@
   "settings.themeDeepBlue": "딥블루",
   "settings.themeLight": "라이트",
   "settings.themeSystem": "시스템",
+  "settings.themeWin11": "Windows 11",
+  "settings.themeMacOS26": "macOS 26",
   "settings.language": "언어",
   "settings.langSystem": "시스템 기본값",
   "settings.closeTabPrompt": "탭 닫기 확인",

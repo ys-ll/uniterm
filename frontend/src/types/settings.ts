@@ -4,7 +4,7 @@ export const SUPPORTED_LOCALES = [
 
 export type Locale = typeof SUPPORTED_LOCALES[number]
 export type Language = Locale | 'system'
-export type Theme = 'dark' | 'deep-blue' | 'light' | 'system'
+export type Theme = 'dark' | 'deep-blue' | 'light' | 'system' | 'win11' | 'macos26'
 export type TerminalTheme = 'uniterm-dark' | 'uniterm-light' | 'solarized-dark' | 'solarized-light' | 'monokai' | 'dracula' | 'molokai' | 'tomorrow-night' | 'tomorrow-night-bright' | 'tomorrow' | 'one-dark' | 'one-light' | 'github-dark' | 'github-light' | 'gotham' | 'hybrid' | 'nord' | 'gruvbox-dark' | 'gruvbox-light' | 'catppuccin-mocha' | 'catppuccin-latte' | 'tokyo-night' | 'tokyo-day' | 'rose-pine' | 'rose-pine-dawn' | 'everforest-dark' | 'everforest-light'
 
 // xterm.js's ITheme shape: the 4 base colors plus the 16 ANSI colors, all as hex strings.

@@ -305,6 +305,8 @@
   "settings.themeDeepBlue": "Глубокий синий",
   "settings.themeLight": "Светлая",
   "settings.themeSystem": "Системная",
+  "settings.themeWin11": "Windows 11",
+  "settings.themeMacOS26": "macOS 26",
   "settings.language": "Язык",
   "settings.langSystem": "Системный по умолчанию",
   "settings.closeTabPrompt": "Подтверждение закрытия вкладки",

@@ -30,6 +30,8 @@
                 <el-option :label="t('settings.themeDeepBlue')" value="deep-blue" />
                 <el-option :label="t('settings.themeLight')" value="light" />
                 <el-option :label="t('settings.themeSystem')" value="system" />
+                <el-option :label="t('settings.themeWin11')" value="win11" />
+                <el-option :label="t('settings.themeMacOS26')" value="macos26" />
               </el-select>
             </div>
           </div>
