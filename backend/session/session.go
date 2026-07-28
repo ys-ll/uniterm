@@ -184,11 +184,17 @@ type baseSession struct {
 	// single session — a reconnect re-uses the same underlying logger by
 	// installing the same writer on the new session.
 	outputLogWriter func([]byte)
-	outputLogMu     sync.RWMutex
 	// logOnConnect mirrors ConnectionConfig.LogOnConnect so the App
 	// layer can query it via AutoLogOnConnect() and decide whether to
 	// enable the log the first time this session binds to a panel.
 	logOnConnect bool
+	// idleSignal is sent-to (non-blocking) every time RecordReadActivity
+	// runs. waitIdle subscribes to this channel to avoid the busy-loop
+	// that previously woke every 50ms; see F-017. idleSignalOnce makes
+	// the channel lazy-allocated so we don't have to touch every
+	// baseSession constructor.
+	idleSignal     chan struct{}
+	idleSignalOnce sync.Once
 }
 
 func (s *baseSession) ID() string            { return s.id }
@@ -219,15 +225,13 @@ func (s *baseSession) setStatus(st SessionStatus) {
 }
 
 func (s *baseSession) emitData(data []byte) {
-	s.outputLogMu.RLock()
+	s.mu.RLock()
 	w := s.outputLogWriter
-	s.outputLogMu.RUnlock()
+	cb := s.onDataCallback
+	s.mu.RUnlock()
 	if w != nil {
 		w(data)
 	}
-	s.mu.RLock()
-	cb := s.onDataCallback
-	s.mu.RUnlock()
 	if cb != nil {
 		cb(data)
 	}
@@ -238,9 +242,9 @@ func (s *baseSession) emitData(data []byte) {
 // logger lives at the App layer so it can outlive any single session
 // and survive reconnects.
 func (s *baseSession) SetOutputLogWriter(w func([]byte)) {
-	s.outputLogMu.Lock()
+	s.mu.Lock()
 	s.outputLogWriter = w
-	s.outputLogMu.Unlock()
+	s.mu.Unlock()
 }
 
 // SetLogOnConnect records the per-connection auto-log preference so
@@ -324,6 +328,22 @@ func looksLikeZmodemHeader(data []byte) bool {
 // Each session's readLoop should call this whenever data is received.
 func (s *baseSession) RecordReadActivity() {
 	s.lastReadTime.Store(time.Now().UnixNano())
+	// Non-blocking signal to any waitIdle goroutine. A 1-slot buffer is
+	// enough: waitIdle only cares that "something happened since the last
+	// tick"; coalescing repeated signals is fine.
+	ch, _ := s.idleSignalCh()
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+// idleSignalCh returns the lazy-allocated idle signal channel.
+func (s *baseSession) idleSignalCh() (chan struct{}, bool) {
+	s.idleSignalOnce.Do(func() {
+		s.idleSignal = make(chan struct{}, 1)
+	})
+	return s.idleSignal, true
 }
 
 // idleSince reports how long since the last read activity. Returns -1 if no
@@ -338,16 +358,35 @@ func (s *baseSession) idleSince() time.Duration {
 
 // waitIdle blocks until no read activity has occurred for the given idle
 // duration, or the overall timeout expires. It returns true on idle detection.
+// Implemented with a 1-slot signal channel + idle timer instead of a 50ms
+// busy loop; RecordReadActivity pushes to the channel so we only wake when
+// there is something to check (F-017).
 func (s *baseSession) waitIdle(timeout, idle time.Duration) bool {
 	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	ch, _ := s.idleSignalCh()
+	for {
 		last := time.Unix(0, s.lastReadTime.Load())
 		if !last.IsZero() && time.Since(last) >= idle {
 			return true
 		}
-		time.Sleep(50 * time.Millisecond)
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return false
+		}
+		// Cap the inner wait so a stream of activity can't starve the
+		// deadline check; idle granularity is the dominant signal.
+		wait := idle
+		if wait > remaining {
+			wait = remaining
+		}
+		select {
+		case <-ch:
+			// Activity happened — re-check the timestamp on next loop.
+		case <-time.After(wait):
+			// Either we sat idle past `idle`, or the deadline is close;
+			// fall through and let the timestamp check decide.
+		}
 	}
-	return false
 }
 
 // RunPostLoginScript sends each non-empty line of script after the terminal
