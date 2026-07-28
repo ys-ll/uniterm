@@ -423,17 +423,41 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
   // Track whether streaming already delivered text, to skip onChunk duplication
   let streamedText = ''
 
+  // F-311: buffer SSE tokens into a non-reactive string and flush at rAF
+  // cadence (~16ms / 60Hz) instead of mutating `activeAssistantMsg.content`
+  // per token. Per-token `+=` on a deep-reactive string triggers Vue's dep
+  // graph on every token (100+/s for fast models); one assignment per rAF
+  // caps re-renders at the display refresh rate.
+  let pendingText = ''
+  let flushRafId: number | null = null
+
+  function flushStream() {
+    flushRafId = null
+    if (pendingText && activeAssistantMsg) {
+      activeAssistantMsg.content += pendingText
+    }
+    pendingText = ''
+  }
+
   // Register stream event listener (fires from Go backend SSE events)
   const cleanupTokenListener = registerTokenListener((data: any) => {
     if (store.stopRequested) return
     if (activeAssistantMsg && data.text) {
-      activeAssistantMsg.content += data.text
+      pendingText += data.text
       streamedText += data.text
       store.status = 'outputting'
+      if (flushRafId === null) {
+        flushRafId = requestAnimationFrame(flushStream)
+      }
     }
   })
 
   function cleanupStreamListeners() {
+    if (flushRafId !== null) {
+      cancelAnimationFrame(flushRafId)
+      flushRafId = null
+    }
+    flushStream()
     cleanupTokenListener()
     setActiveAssistantMsg(null)
   }
@@ -506,6 +530,13 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     try {
       store.status = 'thinking'
       await chat(chatOptions)
+      // F-311: drain any rAF-buffered tokens so the assistant message holds
+      // the full text before we read .content for _rawApiMsg / doSave.
+      if (flushRafId !== null) {
+        cancelAnimationFrame(flushRafId)
+        flushRafId = null
+      }
+      flushStream()
       // Preserve raw API message blocks for conversation history
       if (chatOptions._rawApiMsg) {
         assistantMsg._rawApiMsg = chatOptions._rawApiMsg
