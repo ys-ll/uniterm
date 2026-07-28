@@ -81,6 +81,12 @@ export function acquireTerminal(
     // room to render without clipping against the cell boundary. xterm
     // defaults to 1.0, which is tight enough that the ⏺/⏵ spinner glyphs
     // and italic thinking-block text from Claude Code visibly cut off.
+    // F-039: keep windowsMode off so xterm treats alt-screen (DECSET 1049)
+    // transitions the same as it does on macOS/Linux: the saved scrollback
+    // buffer is restored on return. windowsMode forces winpty/conpty-style
+    // line wrapping + reflow disabled, which is wrong on every backend
+    // uniterm ships (none of them use winpty/conpty — go-pty / ssh /
+    // local PTY all behave like xterm proper).
     const terminal = new Terminal({
       fontSize: options.fontSize ?? 13,
       fontFamily: formatFontFamily(options.fontFamily ?? 'Consolas, "Courier New", monospace'),
@@ -91,6 +97,7 @@ export function acquireTerminal(
       scrollback: options.scrollback ?? 2500,
       allowProposedApi: true,
       allowTransparency: true,
+      windowsMode: false,
     })
 
     const fitAddon = new FitAddon()
