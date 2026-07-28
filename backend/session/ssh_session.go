@@ -314,12 +314,18 @@ func (s *SSHSession) readStderr() {
 }
 
 func (s *SSHSession) readLoop() {
-	buf := make([]byte, 4096)
+	// 16K read buffer (F-001) reused across iterations. Each consumer either
+	// copies into its own storage (lastRecv, decodeOutput, offerExpectOutput's
+	// string conversion) or passes the slice to a callback that owns the data
+	// lifecycle (emitData / emitBinary), so reusing the backing array is safe.
+	buf := make([]byte, 16*1024)
 	for {
 		n, err := s.stdout.Read(buf)
 		if n > 0 {
 			s.RecordReadActivity()
-			data := append([]byte(nil), buf[:n]...)
+			data := buf[:n]
+			// lastRecv outlives this iteration (Disconnect logs it after
+			// readLoop returns) so it must hold an independent copy.
 			s.lastRecv.Store(append([]byte(nil), data...))
 			s.offerExpectOutput(data)
 			if s.IsZmodemMode() {
