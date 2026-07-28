@@ -62,19 +62,20 @@ export function useTerminalMenu(options: UseTerminalMenuOptions): UseTerminalMen
   // Wails' ClipboardSetText returns Promise<boolean> — `false` means the OS
   // refused (focus loss, AppKit permission glitch on macOS), NOT a thrown
   // error. The previous try/catch only handled rejections, so a `resolve(false)`
-  // silently left the clipboard empty. Now we check the resolved value and
-  // fall through to navigator.clipboard.writeText in that case.
-  async function writeClipboard(text: string) {
-    let ok = false
-    try {
-      ok = await ClipboardSetText(text)
-    } catch {
-      ok = false
-    }
-    if (!ok) {
-      try { await navigator.clipboard.writeText(text) } catch { /* ignore */ }
-    }
+  // silently left the clipboard empty. We pick the API once at module load:
+  // Wails' ClipboardSetText exists in this build, so use it directly — no
+  // per-call 2-IPC fallback on the hot selection-copy path. The browser API
+  // stays available if Wails itself is missing (dev outside Wails runtime).
+  type ClipboardWriter = (text: string) => Promise<boolean>
+  const wailsWriter: ClipboardWriter = async (text) => {
+    try { return await ClipboardSetText(text) } catch { return false }
   }
+  const browserWriter: ClipboardWriter = async (text) => {
+    try { await navigator.clipboard.writeText(text); return true } catch { return false }
+  }
+  const writeClipboard: ClipboardWriter = typeof ClipboardSetText === 'function'
+    ? wailsWriter
+    : browserWriter
 
   function copySelection() {
     // Re-read the xterm selection at click time. hasSelection.value was
