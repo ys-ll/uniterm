@@ -550,71 +550,92 @@ export const useAIStore = defineStore('ai', () => {
 
     // Walk backwards through messages, accumulate token estimates.
     // Stop when we exceed the budget.
-    const kept: typeof messages.value = []
-    for (let i = messages.value.length - 1; i >= 0; i--) {
-      const msg = messages.value[i]
-      const msgTokens = estimateMessageTokens(msg)
-      if (tokenCount + msgTokens > MAX_CONTEXT_TOKENS) break
-      tokenCount += msgTokens
-      kept.unshift(msg)
-    }
-
-    let recentMsgs = kept
-
-    // Don't start the conversation with an orphaned tool_result whose matching
-    // tool_use was truncated out of the window. Strip leading tool messages
-    // until we hit a user or assistant message.
-    while (recentMsgs.length > 0 && recentMsgs[0].role === 'tool') {
-      recentMsgs.shift()
-    }
-
-    // Collect all resolved tool_use IDs from tool_result messages
-    const resolvedIds = new Set<string>()
-    for (const m of recentMsgs) {
-      if (m.role === 'tool' && m.tool_call_id) {
-        resolvedIds.add(m.tool_call_id)
+    const msgs = messages.value
+    const n = msgs.length
+    const kept: AIMessage[] = []
+    const keptStart = (() => {
+      let start = n
+      for (let i = n - 1; i >= 0; i--) {
+        const msgTokens = estimateMessageTokens(msgs[i])
+        if (tokenCount + msgTokens > MAX_CONTEXT_TOKENS) break
+        tokenCount += msgTokens
+        start = i
       }
-    }
+      // Strip leading tool messages whose matching tool_use was truncated out.
+      while (start < n && msgs[start].role === 'tool') start++
+      return start
+    })()
+    for (let i = keptStart; i < n; i++) kept.push(msgs[i])
 
+    // F-313: single forward pass that:
+    //   - collects resolved tool_use IDs from tool_result messages,
+    //   - filters dangling tool_use blocks (assistant raw / legacy),
+    //   - merges consecutive user messages,
+    //   - validates pairings (assistant tool_use ↔ user tool_result).
+    const resolvedIds = new Set<string>()
     const result: Array<Record<string, unknown>> = []
+    const pendingMsgId = pendingCommand.value?.messageId
 
-    for (const m of recentMsgs) {
+    const isMessagePending = (m: AIMessage) => !!(m.pendingTools?.length || pendingMsgId === m.id)
+
+    for (let i = 0; i < kept.length; i++) {
+      const m = kept[i]
+      const pending = isMessagePending(m)
+
       if (m.id.startsWith('dbg-')) continue
-      if (m.needsContinue) continue  // UI-only prompts, not part of LLM conversation
-      // skill/command cards are UI-only markers; never send them to the API
+      if (m.needsContinue) continue
       if ((m.skillName || m.commandName) && !m.content) continue
-      // restored/legacy empty user messages produce invalid empty text blocks
       if (m.role === 'user' && !m.content && !m._contextHeader) continue
 
-      // Tool messages: ones with tool_call_id are real tool_results for the API;
-      // ones without are display-only system errors and must not be sent.
+      // Tool message: register id, emit as user tool_result wrapper.
       if (m.role === 'tool') {
         if (m.tool_call_id) {
-          result.push({
-            role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: m.content }]
-          })
+          resolvedIds.add(m.tool_call_id)
+          const toolResultBlocks = [{
+            type: 'tool_result',
+            tool_use_id: m.tool_call_id,
+            content: m.content
+          }]
+
+          // Pair-validate backward: if previous result is assistant with
+          // tool_use blocks, prune any block that doesn't have a matching
+          // tool_result in this new message.
+          const prev = result[result.length - 1]
+          if (prev && prev.role === 'assistant' && Array.isArray(prev.content)) {
+            const prevBlocks = prev.content as Array<Record<string, unknown>>
+            const filtered = prevBlocks.filter((b) => {
+              if (b.type === 'tool_use') {
+                return toolResultBlocks.some((tr) => tr.tool_use_id === (b.id as string))
+              }
+              return true
+            })
+            if (filtered.length === 0) {
+              result.pop()
+            } else {
+              prev.content = filtered
+            }
+          }
+
+          // Two consecutive tool messages must each appear as their own
+          // user wrapper so they pair with their respective tool_use blocks.
+          // Don't merge into the previous user.
+          result.push({ role: 'user', content: toolResultBlocks })
         }
         continue
       }
 
-      // Skip assistant messages that are API error placeholders from before the fix
-      if (m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('[Error:')) {
-        continue
-      }
+      if (m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('[Error:')) continue
 
-      // Assistant with raw API blocks: filter dangling tool_use blocks without matching tool_result
+      // Assistant with raw API blocks: filter dangling tool_use blocks.
       if (m._rawApiMsg) {
         const raw = m._rawApiMsg as Record<string, unknown>
         const content = raw.content
         if (Array.isArray(content)) {
-          const filtered = (content as Array<Record<string, unknown>>).filter((block: Record<string, unknown>) => {
-            if (block.type === 'tool_use') {
-              return resolvedIds.has(block.id as string)
-            }
+          const filtered = (content as Array<Record<string, unknown>>).filter((b) => {
+            if (b.type === 'tool_use') return resolvedIds.has(b.id as string)
             return true
           })
-          if (filtered.length === 0 && !m.content && !(m.pendingTools?.length || pendingCommand.value?.messageId === m.id)) continue
+          if (filtered.length === 0 && !m.content && !pending) continue
           result.push({ ...raw, role: (raw.role as string) || 'assistant', content: filtered })
         } else {
           result.push({ ...raw, role: (raw.role as string) || 'assistant' })
@@ -622,15 +643,13 @@ export const useAIStore = defineStore('ai', () => {
         continue
       }
 
-      // Assistant with legacy tool_calls: filter dangling ones, build content blocks
+      // Assistant with legacy tool_calls.
       if (m.role === 'assistant' && m.tool_calls?.length) {
         const resolved = m.tool_calls.filter(tc => resolvedIds.has(tc.id))
-        if (!m.content && resolved.length === 0 && !(m.pendingTools?.length || pendingCommand.value?.messageId === m.id)) continue
+        if (!m.content && resolved.length === 0 && !pending) continue
 
         const blocks: Array<Record<string, unknown>> = []
-        if (m.content) {
-          blocks.push({ type: 'text', text: m.content })
-        }
+        if (m.content) blocks.push({ type: 'text', text: m.content })
         for (const tc of resolved) {
           let input: Record<string, unknown> = {}
           try { input = JSON.parse(tc.function.arguments) } catch { /* passthrough */ }
@@ -640,76 +659,79 @@ export const useAIStore = defineStore('ai', () => {
         continue
       }
 
-      // Skip empty assistant messages (no content, no tool calls, no raw api msg, no pending tools)
-      if (m.role === 'assistant' && !m.content && !(m.pendingTools?.length || pendingCommand.value?.messageId === m.id)) continue
+      if (m.role === 'assistant' && !m.content && !pending) continue
 
-      // Inject dynamic context header into user messages for the API
-      // (hidden from UI, stored in _contextHeader)
+      // User / plain assistant: dedup consecutive user messages.
+      let content: string
       if (m.role === 'user' && m._contextHeader) {
-        result.push({ role: m.role, content: m._contextHeader + '\n\n' + m.content })
+        content = m._contextHeader + '\n\n' + m.content
       } else {
-        result.push({ role: m.role || 'user', content: m.content })
+        content = m.content
+      }
+      const apiMsg = { role: m.role || 'user', content }
+      const last = result[result.length - 1]
+      if (m.role === 'user' && last && last.role === 'user') {
+        const prevBlocks = Array.isArray(last.content)
+          ? last.content as Array<Record<string, unknown>>
+          : [{ type: 'text', text: last.content as string }]
+        const msgBlocks = Array.isArray(content)
+          ? content as Array<Record<string, unknown>>
+          : [{ type: 'text', text: content as string }]
+        last.content = [...prevBlocks, ...msgBlocks]
+      } else {
+        result.push(apiMsg)
       }
     }
 
-    // Final safety pass: enforce that every tool_use is immediately followed
-    // by a user message containing its matching tool_result, and every
-    // tool_result is immediately preceded by an assistant with its tool_use.
-    // The Anthropic API rejects tool_use blocks that are not resolved in the
-    // very next message.
-    const cleaned: Array<Record<string, unknown>> = []
+    // Pair validation: prune any tool_use blocks whose next-of-pair msg
+    // doesn't carry the matching tool_result. The Anthropic API rejects
+    // tool_use blocks not resolved in the very next message, regardless of
+    // where in the conversation they appear. Walk backward so we can
+    // prune-then-collapse in place.
+    for (let i = result.length - 1; i >= 0; i--) {
+      const msg = result[i]
+      if (msg.role !== 'assistant' || !Array.isArray(msg.content)) continue
+      const next = i + 1 < result.length ? result[i + 1] : null
+      const nextBlocks = next && next.role === 'user' && Array.isArray(next.content)
+        ? next.content as Array<Record<string, unknown>>
+        : null
+      const blocks = (msg.content as Array<Record<string, unknown>>).filter((b) => {
+        if (b.type === 'tool_use') {
+          return nextBlocks !== null && nextBlocks.some((nb) => nb.type === 'tool_result' && nb.tool_use_id === b.id)
+        }
+        return true
+      })
+      if (blocks.length === 0) {
+        result.splice(i, 1)
+      } else {
+        msg.content = blocks
+      }
+    }
+    // Mirror pass: prune tool_result blocks in user messages whose prev
+    // assistant no longer has the matching tool_use (after the previous
+    // pass may have removed it). Drop user messages whose content is empty.
     for (let i = 0; i < result.length; i++) {
       const msg = result[i]
-
-      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-        const nextMsg = i + 1 < result.length ? result[i + 1] : null
-        const blocks = (msg.content as Array<Record<string, unknown>>).filter((block) => {
-          if (block.type === 'tool_use') {
-            if (!nextMsg || nextMsg.role !== 'user' || !Array.isArray(nextMsg.content)) {
-              return false
-            }
-            return (nextMsg.content as Array<Record<string, unknown>>).some(
-              (nb) => nb.type === 'tool_result' && nb.tool_use_id === block.id
-            )
-          }
-          return true
-        })
-        if (blocks.length === 0) continue
-        cleaned.push({ ...msg, content: blocks })
-      } else if (msg.role === 'user' && Array.isArray(msg.content)) {
-        const prevMsg = i > 0 ? result[i - 1] : null
-        const blocks = (msg.content as Array<Record<string, unknown>>).filter((block) => {
-          if (block.type === 'tool_result') {
-            if (!prevMsg || prevMsg.role !== 'assistant' || !Array.isArray(prevMsg.content)) {
-              return false
-            }
-            return (prevMsg.content as Array<Record<string, unknown>>).some(
-              (pb) => pb.type === 'tool_use' && pb.id === block.tool_use_id
-            )
-          }
-          return true
-        })
-        if (blocks.length === 0) continue
-        cleaned.push({ ...msg, content: blocks })
+      if (msg.role !== 'user' || !Array.isArray(msg.content)) continue
+      const prev = i > 0 ? result[i - 1] : null
+      const prevBlocks = prev && prev.role === 'assistant' && Array.isArray(prev.content)
+        ? prev.content as Array<Record<string, unknown>>
+        : null
+      const blocks = (msg.content as Array<Record<string, unknown>>).filter((b) => {
+        if (b.type === 'tool_result') {
+          return prevBlocks !== null && prevBlocks.some((pb) => pb.type === 'tool_use' && pb.id === b.tool_use_id)
+        }
+        return true
+      })
+      if (blocks.length === 0) {
+        result.splice(i, 1)
+        i--
       } else {
-        cleaned.push(msg)
+        msg.content = blocks
       }
     }
 
-    // Additional validation: ensure no consecutive user messages ( Anthropic rejects this )
-    const deduped: Array<Record<string, unknown>> = []
-    for (const msg of cleaned) {
-      if (msg.role === 'user' && deduped.length > 0 && deduped[deduped.length - 1].role === 'user') {
-        const prev = deduped[deduped.length - 1]
-        const prevBlocks = Array.isArray(prev.content) ? prev.content : [{ type: 'text', text: prev.content }]
-        const msgBlocks = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }]
-        prev.content = [...prevBlocks, ...msgBlocks]
-      } else {
-        deduped.push(msg)
-      }
-    }
-
-    conversationValue.value = deduped
+    conversationValue.value = result
   }
 
   // F-301: rebuild conversation only when messages are added/removed.
