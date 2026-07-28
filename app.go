@@ -91,6 +91,15 @@ type App struct {
 	httpClient     *http.Client
 	httpClientOnce stdsync.Once
 
+	// F-213: ListSessions memoization. Frontend polls this and
+	// allocates a fresh []SessionInfo on every call; when the
+	// (id, status) set hasn't changed we return the cached slice
+	// and skip both the per-session SessionInfo copy inside the
+	// manager and the JSON-marshal pass on the Wails side.
+	listSessionsMu    stdsync.Mutex
+	listSessionsCache []session.SessionInfo
+	listSessionsHash  uint64
+
 	// Session output log state (issue #227). Logs are keyed by panelID so
 	// they survive reconnects — a single panel may cycle through many
 	// session objects and the log file spans all of them. sessionToPanel
@@ -1608,11 +1617,57 @@ func (a *App) CloseSession(sessionID string) error {
 	return a.sessionManager.Close(sessionID)
 }
 
+// listSessionsMemo memoizes the last session list returned to the
+// frontend, along with a hash of (id, status) pairs. When the frontend
+// polls ListSessions without an underlying change, we return the same
+// slice and skip the per-call []SessionInfo allocation entirely. F-213.
+//
+// Hashing (id, status) only — Title / Type are static per session and
+// status is what the polling frontend cares about. Status transitions
+// always go through SetOnStatusChangeCallback → emit session:status,
+// so the frontend can rely on that event for live updates; ListSessions
+// is the initial / refresh path.
 func (a *App) ListSessions() []session.SessionInfo {
 	if a.sessionManager == nil {
 		return []session.SessionInfo{}
 	}
-	return a.sessionManager.List()
+	a.listSessionsMu.Lock()
+	defer a.listSessionsMu.Unlock()
+
+	infos := a.sessionManager.List()
+	hash := hashSessions(infos)
+	if hash == a.listSessionsHash && len(a.listSessionsCache) == len(infos) {
+		// No underlying change — return the cached slice so the caller
+		// gets the same backing array and Go skips allocating a new
+		// one. The slice header is still copied by value, which is what
+		// the Wails JSON encoder needs.
+		return a.listSessionsCache
+	}
+	a.listSessionsCache = infos
+	a.listSessionsHash = hash
+	return infos
+}
+
+// hashSessions produces a quick stable hash of (id, status) pairs.
+// Uses FNV-1a; collisions are vanishingly rare for any realistic
+// session count and just cause a single false refresh.
+func hashSessions(infos []session.SessionInfo) uint64 {
+	h := uint64(14695981039346656037) // FNV offset basis
+	for _, s := range infos {
+		for i := 0; i < len(s.ID); i++ {
+			h ^= uint64(s.ID[i])
+			h *= 1099511628211 // FNV prime
+		}
+		// SessionStatus is a string alias; fold the first 4 bytes in
+		// (status strings are short — typically "connected",
+		// "disconnected", "error").
+		status := string(s.Status)
+		for i := 0; i < len(status) && i < 4; i++ {
+			h ^= uint64(status[i]) << (uint(i) * 8)
+		}
+		h *= 1099511628211
+	}
+	return h
 }
 
 func (a *App) SessionWrite(sessionID string, data string) error {
