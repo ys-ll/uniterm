@@ -16,18 +16,26 @@ import { useTabStore } from '../stores/tabStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { watch } from 'vue'
 
+// Bounded backoff for focus recovery: 0/50/150/300ms (~500ms total, 4 polls
+// instead of 11). Most xterm-helper-textarea appearances resolve inside one
+// rAF; the trailing 300ms catches slow KeepAlive + drag re-mounts without
+// the previous 1s of 10 Hz polling.
+const FOCUS_RETRY_DELAYS = [0, 50, 150, 300]
+const FOCUS_RETRY_MAX = FOCUS_RETRY_DELAYS.length
+
 /**
- * Focus the terminal in the given panel. Retries a few times because xterm's
- * internal textarea can be temporarily absent right after a KeepAlive
- * re-mount or during a session reconnect.
+ * Focus the terminal in the given panel. Retries with backoff because
+ * xterm's internal textarea can be temporarily absent right after a
+ * KeepAlive re-mount or during a session reconnect.
  */
 export function focusPanelTerminal(panelId: string, attempt = 0) {
-  if (attempt > 10) return
+  if (attempt >= FOCUS_RETRY_MAX) return
   const el = document.querySelector(`[data-panel-id="${panelId}"] .xterm-helper-textarea`)
   if (el instanceof HTMLTextAreaElement) {
     el.focus()
   } else {
-    setTimeout(() => focusPanelTerminal(panelId, attempt + 1), 100)
+    const delay = FOCUS_RETRY_DELAYS[attempt]
+    setTimeout(() => focusPanelTerminal(panelId, attempt + 1), delay)
   }
 }
 
