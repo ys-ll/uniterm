@@ -96,7 +96,7 @@ func (s *TelnetSession) Connect(config ConnectionConfig) error {
 }
 
 func (s *TelnetSession) readLoop(ctx context.Context) {
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16384)
 	for {
 		select {
 		case <-ctx.Done():
@@ -107,10 +107,7 @@ func (s *TelnetSession) readLoop(ctx context.Context) {
 		n, err := s.conn.Read(buf)
 		if n > 0 {
 			s.RecordReadActivity()
-			filtered := s.filterIAC(buf[:n])
-			if len(filtered) > 0 {
-				s.emitData(filtered)
-			}
+			s.handleRead(buf[:n])
 		}
 		if err != nil {
 			if err != io.EOF {
@@ -121,6 +118,13 @@ func (s *TelnetSession) readLoop(ctx context.Context) {
 			s.Disconnect()
 			return
 		}
+	}
+}
+
+func (s *TelnetSession) handleRead(data []byte) {
+	filtered := s.filterIAC(data)
+	if len(filtered) > 0 {
+		s.emitData(filtered)
 	}
 }
 
