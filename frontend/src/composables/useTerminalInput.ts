@@ -45,30 +45,40 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
       if (!buffer) return null
       // Prompt endings: $ # > ] plus common zsh/oh-my-zsh/powerline glyphs
       const PROMPT_RE = /(.+?[$#>\]❯➜→»λ])(?:\s+|$)(.*)/
-      // Scan entire visible area from bottom to top to find the prompt
       const rows = (terminal as any).rows || 24
-      for (let dy = 0; dy < rows; dy++) {
-        const y = buffer.baseY + rows - 1 - dy
-        if (y < 0) break
+      // Cursor row is the cheapest probe: the running command (if any) lives
+      // on the line where the cursor currently sits. Check it first, then only
+      // walk up until we find a prompt — don't scan the full visible row span
+      // when only the most recent prompt line is interesting.
+      const cursorY = (buffer.y ?? 0) + (buffer.baseY ?? 0)
+      const tryLine = (y: number): string | null => {
+        if (y < 0) return null
         const line = buffer.getLine(y)
-        if (!line) continue
+        if (!line) return null
         const rawText = line.translateToString().trim()
-        if (!rawText) continue
+        if (!rawText) return null
         const cleanText = stripAnsi(rawText)
         const match = cleanText.match(PROMPT_RE)
-        if (!match) continue
+        if (!match) return null
         const promptPart = match[1]
-        // Accept: user@host patterns, tilde-path patterns, bare $/#, or
-        // lines ending with a Unicode prompt glyph (❯➜→»λ) which are
-        // rare in normal output so false positives are minimal.
         const lastChar = promptPart.charAt(promptPart.length - 1)
         const isUnicodePrompt = /[❯➜→»λ]/.test(lastChar)
         if (!promptPart.includes('@') && !promptPart.includes('~') &&
-            promptPart !== '$' && promptPart !== '#' && !isUnicodePrompt) continue
+            promptPart !== '$' && promptPart !== '#' && !isUnicodePrompt) return null
         const command = match[2].trim()
         if (command && !command.includes('__AI_DONE_') && command.length <= MAX_COMMAND_LENGTH) {
           return command
         }
+        return null
+      }
+      const fromCursor = tryLine(cursorY)
+      if (fromCursor !== null) return fromCursor
+      // Walk up from the cursor row toward the top of the visible buffer.
+      for (let dy = 1; dy < rows; dy++) {
+        const y = cursorY - dy
+        if (y < 0) break
+        const hit = tryLine(y)
+        if (hit !== null) return hit
       }
     } catch {
       // Ignore errors
