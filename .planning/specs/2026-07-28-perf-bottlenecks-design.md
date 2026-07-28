@@ -17,9 +17,9 @@ Top 5 P0 在审计完成后填入;当前为占位(将由整合 agent 根据真�
 
 ### 2.1 范围
 
-全 6 个子系统(其中 terminal_io 含 Claude Code `render_compat` 子方向):
+全 5 个子系统(其中 terminal_io 含 Claude Code `render_compat` 子方向):
 
-1. **terminal_io**(终端 I/O 路径)
+1. **terminal_io**(终端 I/O 路径,含 Claude Code 渲染兼容)
 2. **storage_db**(存储与数据库)
 3. **wails_bridge**(Wails JS↔Go 桥)
 4. **ai_llm**(AI/LLM 循环)
@@ -68,9 +68,9 @@ Top 5 P0 在审计完成后填入;当前为占位(将由整合 agent 根据真�
 
 ### 2.5 严重度定义
 
-- **P0**:每次会话都触发 / 中等负载就劣化 / Claude Code 跑起来就花屏
-- **P1**:特定场景触发 / 高负载才暴露 / 特定主题下错位
-- **P2**:理论隐患 / 不常见
+- **P0**:在普通用户日常使用 uniterm 时必然触发(每次开 tab、每次 AI 多轮、跑一次 Claude Code 就会暴露);或中等负载就明显劣化
+- **P1**:特定场景才触发(大文件 `cat`、8+ tab、kubectl get -A、AI 5+ 轮、特定主题);高负载才暴露
+- **P2**:理论隐患、不常见路径、仅在边界条件下出现
 
 ## 3. 发现汇总表
 
