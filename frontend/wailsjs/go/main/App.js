@@ -766,6 +766,10 @@ export function StartTunnel(arg1) {
   return window['go']['main']['App']['StartTunnel'](arg1);
 }
 
+export function StartupError() {
+  return window['go']['main']['App']['StartupError']();
+}
+
 export function StopTunnel(arg1) {
   return window['go']['main']['App']['StopTunnel'](arg1);
 }

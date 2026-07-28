@@ -348,6 +348,7 @@ export namespace session {
 	    ftpEncryption?: string;
 	    ftpPassive: boolean;
 	    ftpEncoding?: string;
+	    ftpSkipVerify?: boolean;
 	    smbDomain?: string;
 	    smbShare?: string;
 	    s3Region?: string;
@@ -407,6 +408,7 @@ export namespace session {
 	        this.ftpEncryption = source["ftpEncryption"];
 	        this.ftpPassive = source["ftpPassive"];
 	        this.ftpEncoding = source["ftpEncoding"];
+	        this.ftpSkipVerify = source["ftpSkipVerify"];
 	        this.smbDomain = source["smbDomain"];
 	        this.smbShare = source["smbShare"];
 	        this.s3Region = source["s3Region"];
