@@ -69,6 +69,41 @@ The AI Assistant is deeply integrated with the terminal — commands run directl
 
 Drag the AI conversation panel to the right area to form a left-right split with the terminal. View the AI's analysis and plan on one side while observing execution results in the terminal on the other — neither side obstructs the other.
 
+## Skills and Commands
+
+Skills and commands let you capture reusable workflows and prompts. Type `/` in the AI input box to pick one from the dropdown and insert it — both appear as `/name`.
+
+![Skills and Commands Management](/imgs/skills_light.webp)
+
+### Skills
+
+A skill is a reusable command-line workflow / SOP that the AI can invoke on its own when needed.
+
+- **Autonomous Invocation** — When the AI decides the current task matches a skill, it reads and follows its steps automatically, with no manual trigger
+- **Manual Insertion** — Type `/name` in the input box to insert a skill manually
+- **Save Skill** — After working out a repeatable procedure, the AI can save it as a new skill via `save_skill`
+
+**Management** (Settings → Skills & Commands):
+
+- **Create** — Fill in the name (kebab-case), description, and instruction body
+- **Import** — Drop in a `.md` / `.zip` / `.skill` file, or select a folder to import (including directory-style skills that reference scripts)
+- **Enable / Lock** — Toggle whether it takes effect; locking makes it read-only to prevent accidental edits or deletion
+- **Edit / Delete** — Modify the description and body anytime, or delete skills you created
+
+::: warning Security Note
+Skills drive the AI to execute terminal commands — confirm carefully in combination with the execution mode.
+:::
+
+### Commands
+
+A command is a reusable prompt template with argument placeholders, invoked quickly via `/` in the conversation.
+
+![Using Skills and Commands](/imgs/use_skills_light.webp)
+
+- **Argument Placeholders** — Use the `$ARGUMENTS` placeholder in the body to receive arguments typed after `/command`; without a placeholder, arguments are automatically appended to the end
+- **Argument Hint** — Set an argument hint (e.g. `[env] [service]`) to show usage in the dropdown
+- **Management** — Same as skills: create, edit, delete, enable, and lock
+
 ::: tip Related
 - [Smart Suggestions](/en/features/smart-suggest) — AI-driven command completion
 :::

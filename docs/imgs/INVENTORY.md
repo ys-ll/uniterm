@@ -25,9 +25,15 @@
 | 14 | `zmodem.webp` | `zmodem_light.webp` | Zmodem file transfer progress |
 | 15 | `mongodb.webp` | `mongodb_light.webp` | MongoDB database browser |
 | 16 | `ssh_tunnel.webp` | `ssh_tunnel_light.webp` | SSH tunnel manager |
+| 17 | `kubernetes.webp` | `kubernetes_light.webp` | Kubernetes cluster management |
+| 18 | `container.webp` | `container_light.webp` | Container management panel |
+| 19 | `skills.webp` | `skills_light.webp` | AI skills & commands management |
+| 20 | `use_skills.webp` | `use_skills_light.webp` | Using skills & commands in terminal |
+| 21 | `background_image.webp` | — | Terminal background image showcase |
 
 ## Static assets
 
 | File | Purpose |
 |------|---------|
 | `appicon.webp` | Application icon |
+| `appicon.png` | Application icon (PNG source) |
