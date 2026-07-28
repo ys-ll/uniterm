@@ -1558,23 +1558,49 @@ function applyXtermTheme(themeName: string) {
   terminal.options.theme = theme
 }
 
-// Watch terminal settings changes
-watch(() => settingsStore.settings.terminal, (ts) => {
-  if (!terminal) return
-  if (ts.fontSize) terminal.options.fontSize = ts.fontSize
-  if (ts.fontFamily) terminal.options.fontFamily = ts.fontFamily
-  if (ts.maxHistoryLines) terminal.options.scrollback = ts.maxHistoryLines
-  if (ts.theme) applyXtermTheme(ts.theme)
-  if (typeof ts.cursorBlink === 'boolean') {
-    terminal.options.cursorBlink = ts.cursorBlink
-    // xterm keeps an internal blink state set by DECSET 12; if the
-    // terminal previously received \x1b[?12h from a remote shell, just
-    // flipping the option may not stop the running blink animation.
-    // Force-reset by feeding the cursor a DECRST 12 sequence.
-    if (!ts.cursorBlink) terminal.write('\x1b[?12l')
-  }
-  resize()
-}, { deep: true })
+// F-032: watch individual terminal settings keys instead of the whole
+// object with `deep: true`. The previous deep watcher fired on every
+// nested mutation (e.g. dragging the fontSize slider 60×/sec) and ran
+// the entire handler — including a fresh theme build + applyXtermTheme —
+// for each tick. Each per-key watcher is also short-circuits the
+// resize() call (debounced) so a burst of slider edits collapses into
+// one reflow.
+let settingsResizeTimer: ReturnType<typeof setTimeout> | null = null
+function debouncedSettingsResize() {
+  if (settingsResizeTimer) clearTimeout(settingsResizeTimer)
+  settingsResizeTimer = setTimeout(() => {
+    settingsResizeTimer = null
+    resize()
+  }, 50)
+}
+
+watch(() => settingsStore.settings.terminal.fontSize, (v) => {
+  if (!terminal || !v) return
+  terminal.options.fontSize = v
+  debouncedSettingsResize()
+})
+watch(() => settingsStore.settings.terminal.fontFamily, (v) => {
+  if (!terminal || !v) return
+  terminal.options.fontFamily = v
+  debouncedSettingsResize()
+})
+watch(() => settingsStore.settings.terminal.maxHistoryLines, (v) => {
+  if (!terminal || !v) return
+  terminal.options.scrollback = v
+})
+watch(() => settingsStore.settings.terminal.theme, (v) => {
+  if (!terminal || !v) return
+  applyXtermTheme(v)
+})
+watch(() => settingsStore.settings.terminal.cursorBlink, (v) => {
+  if (!terminal || typeof v !== 'boolean') return
+  terminal.options.cursorBlink = v
+  // xterm keeps an internal blink state set by DECSET 12; if the
+  // terminal previously received \x1b[?12h from a remote shell, just
+  // flipping the option may not stop the running blink animation.
+  // Force-reset by feeding the cursor a DECRST 12 sequence.
+  if (!v) terminal.write('\x1b[?12l')
+})
 
 // Watch for background image toggling to update terminal transparency
 watch(
