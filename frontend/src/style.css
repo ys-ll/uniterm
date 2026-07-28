@@ -1308,3 +1308,122 @@ body.drag-active .zone {
     background: radial-gradient(ellipse at top, rgba(255, 255, 255, 0.04) 0%, transparent 60%), var(--bg-base);
   }
 }
+
+/* ====================================================================
+   macOS 26 - component overrides
+   ==================================================================== */
+
+/* Tabs: rounder, 2px accent underline on active (no block) */
+[data-theme="macos26"] .el-tabs__item {
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 32px;
+  line-height: 32px;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color 0.12s ease;
+}
+[data-theme="macos26"] .el-tabs__item:hover { color: var(--text-primary); }
+[data-theme="macos26"] .el-tabs__item.is-active,
+[data-theme="macos26"] .el-tabs__item.is-active:hover {
+  color: var(--accent);
+  font-weight: 600;
+  background: transparent;
+}
+[data-theme="macos26"] .el-tabs__active-bar {
+  background: var(--accent);
+  height: 2px;
+  border-radius: 1px;
+}
+
+/* Buttons: 6px radius, no border on primary */
+[data-theme="macos26"] .el-button { border-radius: 6px; font-weight: 500; }
+[data-theme="macos26"] .el-button--primary {
+  background: var(--accent);
+  border: none;
+  color: var(--on-accent);
+}
+[data-theme="macos26"] .el-button--primary:hover { filter: brightness(1.08); }
+[data-theme="macos26"] .el-button:not(.el-button--primary):not(.el-button--text) {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+/* Inputs: full border 1px, 6px radius, 2px focus ring */
+[data-theme="macos26"] .el-input__wrapper {
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 1px var(--border-subtle);
+  border-radius: 6px;
+}
+[data-theme="macos26"] .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+[data-theme="macos26"] .el-textarea__inner {
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+[data-theme="macos26"] .el-textarea__inner:focus { border-color: var(--accent); }
+
+/* Dialog: 14px radius, soft shadow */
+[data-theme="macos26"] .el-dialog,
+[data-theme="macos26"] .el-message-box {
+  border-radius: 14px;
+  background: var(--bg-surface);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* Menu: macOS-style subtle background on active, no left bar */
+[data-theme="macos26"] .el-menu-item.is-active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+[data-theme="macos26"] .el-menu-item.is-active::before { display: none; }
+
+/* Checkbox / Radio: 4px corner radius (rounder than Win11) */
+[data-theme="macos26"] .el-checkbox__inner,
+[data-theme="macos26"] .el-radio__inner { border-radius: 4px; }
+
+/* Scrollbar */
+[data-theme="macos26"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-theme="macos26"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+[data-theme="macos26"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Sidebar: force the macOS darker-sidebar look.
+   The existing .sidebar class lives in Sidebar.vue — this rule overrides
+   its background to --bg-elevated (the macOS signature darker-than-content
+   shade). No .vue change needed. */
+[data-theme="macos26"] .sidebar { background: var(--bg-elevated); }
+
+/* AppHeader: subtle backdrop (Liquid Glass lite).
+   NOTE: AppHeader.vue already paints a 1px hairline via .app-header::after,
+   so we deliberately omit `border-bottom` here to avoid stacking a 2px line. */
+[data-theme="macos26"] .app-header {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="macos26"] .app-header {
+    background: rgba(30, 30, 30, 0.7);
+  }
+}
+
+/* Sidebar personalization panel: 14px row spacing (looser than Win11) */
+[data-theme="macos26"] .personalization-panel .persist-section { margin-bottom: 14px; }
+
+/* SettingsTab: 12px gap, no left bar */
+[data-theme="macos26"] .settings-tab-content .settings-section { margin-bottom: 12px; }
+[data-theme="macos26"] .settings-tab-content .settings-section.active { box-shadow: none; }
+
+/* BaseTerminal: rounded 8px frame.
+   NOTE: BaseTerminal.vue uses class="base-terminal", not .terminal-frame. */
+[data-theme="macos26"] .base-terminal {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
