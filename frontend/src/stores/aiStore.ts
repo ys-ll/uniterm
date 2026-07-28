@@ -35,17 +35,21 @@ function estimateTokens(text: string): number {
 const tokenEstimateCache = new WeakMap<AIMessage, number>()
 
 // F-314: cache the serialized _rawApiMsg JSON per message so doSave doesn't
-// re-stringify on every save. The raw API block is set once per assistant
-// message by the LLM and never mutated thereafter, so the cached form is
-// stable for the lifetime of the message.
-const rawApiMsgJsonCache = new WeakMap<AIMessage, string>()
+// re-stringify on every save. The cache is keyed by the AIMessage object and
+// stores the object reference alongside the JSON so agent.ts can safely
+// replace _rawApiMsg (it assigns a new object) without invalidating reads.
+const rawApiMsgJsonCache = new WeakMap<AIMessage, { obj: object; json: string }>()
 
 function getRawApiMsgJson(msg: AIMessage): string {
   if (!msg._rawApiMsg) return ''
+  // F-316: inactive sessions retain _rawApiMsg as a JSON string. The disk
+  // form is already the JSON we want to persist; double-stringifying would
+  // produce a quoted string. Use it verbatim.
+  if (typeof msg._rawApiMsg === 'string') return msg._rawApiMsg
   const cached = rawApiMsgJsonCache.get(msg)
-  if (cached !== undefined) return cached
+  if (cached && cached.obj === msg._rawApiMsg) return cached.json
   const json = JSON.stringify(msg._rawApiMsg)
-  rawApiMsgJsonCache.set(msg, json)
+  rawApiMsgJsonCache.set(msg, { obj: msg._rawApiMsg, json })
   return json
 }
 
@@ -155,6 +159,10 @@ const DEFAULT_CONFIG: AIConfig = {
 async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], currentSessionId: string | null }> {
   try {
     const data = await LoadAISessions() as any
+    // F-316: keep _rawApiMsg as a JSON string in inactive sessions. Parse
+    // only when the session is opened (in init / switchSession). Inactive
+    // sessions retain the raw string form; the conversation computed refs
+    // parsed objects only for the active session.
     const sessions: AISession[] = (data.sessions || []).map((s: any) => ({
       id: s.id,
       name: s.name,
@@ -167,7 +175,7 @@ async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], curre
         tool_call_id: m.tool_call_id,
         tool_calls: m.tool_calls || [],
         pendingTools: m.pendingTools || [],
-        _rawApiMsg: m._rawApiMsg ? JSON.parse(m._rawApiMsg) : undefined,
+        _rawApiMsg: m._rawApiMsg || undefined,
       }))
     }))
     return { sessions, currentSessionId: data.currentSessionId || null }
@@ -383,16 +391,22 @@ export const useAIStore = defineStore('ai', () => {
     if (currentSessionId.value) {
       const s = sessions.value.find(s => s.id === currentSessionId.value)
       if (s) {
-        messages.value = s.messages.map(m => {
-          const msg = { ...m }
-          if (typeof msg._rawApiMsg === 'string' && msg._rawApiMsg) {
-            try { msg._rawApiMsg = JSON.parse(msg._rawApiMsg) } catch { delete msg._rawApiMsg }
+        // F-316: parse _rawApiMsg in place so messages.value and s.messages
+        // share the same backing object — agent.ts mutations to the active
+        // message propagate to the stored session and survive a save.
+        for (const m of s.messages) {
+          if (typeof m._rawApiMsg === 'string' && m._rawApiMsg) {
+            try {
+              m._rawApiMsg = JSON.parse(m._rawApiMsg)
+            } catch {
+              delete m._rawApiMsg
+            }
           }
-          if (msg._rawApiMsg) {
-            ;(msg as AIMessage)._rawApiMsg = markRaw(msg._rawApiMsg)
+          if (m._rawApiMsg) {
+            m._rawApiMsg = markRaw(m._rawApiMsg)
           }
-          return shallowReactive(msg) as AIMessage
-        })
+        }
+        messages.value = s.messages.map(m => shallowReactive(m) as AIMessage)
       } else {
         createSession()
       }
@@ -510,13 +524,22 @@ export const useAIStore = defineStore('ai', () => {
     const s = sessions.value.find(s => s.id === sessionId)
     if (!s) return
     currentSessionId.value = sessionId
-    messages.value = s.messages.map(m => {
-      const msg = { ...m }
-      if (msg._rawApiMsg) {
-        ;(msg as AIMessage)._rawApiMsg = markRaw(msg._rawApiMsg)
+    // F-316: parse _rawApiMsg in place so messages.value and s.messages
+    // share the same backing object — agent.ts mutations to the active
+    // message propagate to the stored session and survive a save.
+    for (const m of s.messages) {
+      if (typeof m._rawApiMsg === 'string' && m._rawApiMsg) {
+        try {
+          m._rawApiMsg = JSON.parse(m._rawApiMsg)
+        } catch {
+          delete m._rawApiMsg
+        }
       }
-      return shallowReactive(msg) as AIMessage
-    })
+      if (m._rawApiMsg) {
+        m._rawApiMsg = markRaw(m._rawApiMsg)
+      }
+    }
+    messages.value = s.messages.map(m => shallowReactive(m) as AIMessage)
     clearQueue()
     messagesVersion.value++
   }
