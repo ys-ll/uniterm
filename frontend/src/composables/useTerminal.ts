@@ -344,6 +344,13 @@ export function useTerminal(
   let suppressResizeUntil = 0
   let retryOnEnter = false
   let hoverEl: HTMLDivElement | null = null
+  // Cache cellWidth/cellHeight: xterm only recomputes character dimensions
+  // when fontSize or fontFamily changes, so we can avoid re-reading internal
+  // _renderService on every resize (resize fires 50+ times per second during
+  // a drag).
+  let cachedCellWidth = 0
+  let cachedCellHeight = 0
+  let cachedFontKey = ''
 
   function getTerminalOptions() {
     const ts = settingsStore.settings.terminal
@@ -384,16 +391,27 @@ export function useTerminal(
     // Use try/catch because these are internal APIs that may change between versions.
     let cellWidth = 0
     let cellHeight = 0
-    try {
-      const core = (terminal as any)._core
-      const dims = core?._renderService?.dimensions
-      if (dims) {
-        cellWidth = dims.css?.cell?.width || 0
-        cellHeight = dims.css?.cell?.height || 0
+    const fontKey = `${terminal.options.fontSize}|${terminal.options.fontFamily}`
+    if (fontKey === cachedFontKey && cachedCellWidth > 0 && cachedCellHeight > 0) {
+      cellWidth = cachedCellWidth
+      cellHeight = cachedCellHeight
+    } else {
+      try {
+        const core = (terminal as any)._core
+        const dims = core?._renderService?.dimensions
+        if (dims) {
+          cellWidth = dims.css?.cell?.width || 0
+          cellHeight = dims.css?.cell?.height || 0
+        }
+      } catch {
+        cellWidth = 0
+        cellHeight = 0
       }
-    } catch {
-      cellWidth = 0
-      cellHeight = 0
+      if (cellWidth > 0 && cellHeight > 0) {
+        cachedCellWidth = cellWidth
+        cachedCellHeight = cellHeight
+        cachedFontKey = fontKey
+      }
     }
 
     if (cellWidth === 0 || cellHeight === 0) {
