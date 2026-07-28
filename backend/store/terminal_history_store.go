@@ -21,6 +21,7 @@ type TerminalHistoryStore struct {
 	stop    chan struct{}
 	done    chan struct{}
 	closed  bool
+	closeOnce sync.Once
 }
 
 type HistoryEntry struct {
@@ -133,20 +134,34 @@ func (s *TerminalHistoryStore) flushLoop() {
 		s.timer.Stop()
 	}
 	s.mu.Unlock()
-	// Final synchronous flush before signaling shutdown.
-	_ = s.flush(false)
+	// Final synchronous flush before signaling shutdown. Bounded so a hung
+	// disk cannot block app shutdown forever.
+	done := make(chan struct{})
+	go func() { _ = s.flush(false); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		// disk is hung — let the app exit anyway
+	}
 }
 
-// Close stops the debounce loop and performs a final flush. Idempotent.
+// Close stops the debounce loop. Idempotent and bounded — a hung flushLoop
+// (e.g. blocked on disk I/O or a stuck timer callback) cannot block shutdown
+// for more than 2 s. Subsequent calls return immediately.
 func (s *TerminalHistoryStore) Close() error {
-	s.mu.Lock()
-	if s.closed {
+	s.closeOnce.Do(func() {
+		s.mu.Lock()
+		closed := s.closed
 		s.mu.Unlock()
-		return nil
+		if !closed {
+			close(s.stop)
+		}
+	})
+	select {
+	case <-s.done:
+	case <-time.After(3 * time.Second):
+		// flushLoop never finished — abandon and let the process exit
 	}
-	s.mu.Unlock()
-	close(s.stop)
-	<-s.done
 	return nil
 }
 
