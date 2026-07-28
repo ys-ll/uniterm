@@ -509,6 +509,27 @@ func (a *App) llmHTTPClient() *http.Client {
 	})
 	return a.httpClient
 }
+
+// injectCacheControl adds ephemeral cache_control breakpoints on the
+// static system prompt and tools array so Anthropic's prompt caching
+// beta actually caches them across turns. Without this the
+// prompt-caching-2024-07-31 header is sent but the request body has
+// no breakpoints, so every turn re-ships and re-bills the static
+// prefix (~3 KB in typical Claude Code sessions). F-303.
+func injectCacheControl(reqBody map[string]interface{}) {
+	if sys, ok := reqBody["system"].(string); ok && sys != "" {
+		reqBody["system"] = []map[string]interface{}{{
+			"type":          "text",
+			"text":          sys,
+			"cache_control": map[string]string{"type": "ephemeral"},
+		}}
+	}
+	if tools, ok := reqBody["tools"].([]interface{}); ok && len(tools) > 0 {
+		if last, ok := tools[len(tools)-1].(map[string]interface{}); ok {
+			last["cache_control"] = map[string]string{"type": "ephemeral"}
+		}
+	}
+}
 // which don't fire the JS visibilitychange event (Cmd+H on macOS before
 // the WebView is loaded, OS-level Alt+Tab) still update the foreground
 // flag. Runs every 2s — coarse on purpose, this is a lifecycle hint not
@@ -2043,9 +2064,42 @@ func (a *App) ChatCompletion(apiKey, baseURL, model string, requestJSON string, 
 	return a.chatCompletionAnthropic(apiKey, baseURL, model, reqBody, userAgent)
 }
 
+// F-306: typed SSE envelope for Anthropic Messages events. Variant
+// fields stay as json.RawMessage so we only decode the few fields the
+// handler actually reads per event type.
+type anthropicStreamEvent struct {
+	Type         string          `json:"type"`
+	Index        int             `json:"index"`
+	ContentBlock json.RawMessage `json:"content_block"`
+	Delta        json.RawMessage `json:"delta"`
+	Message      json.RawMessage `json:"message"`
+	Usage        json.RawMessage `json:"usage"`
+	Error        json.RawMessage `json:"error"`
+}
+
+type anthropicDelta struct {
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	PartialJSON string `json:"partial_json"`
+}
+
+type anthropicMessageRole struct {
+	Role string `json:"role"`
+}
+
+type anthropicStopDelta struct {
+	StopReason string `json:"stop_reason"`
+}
+
 // chatCompletionAnthropic handles the native Anthropic Messages API with SSE streaming.
 func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
 	reqBody["stream"] = true
+
+	// F-303: insert ephemeral cache_control breakpoints on the static
+	// system + tools prefixes so Anthropic reuses the cached tokens
+	// across turns. Without these the prompt-caching beta header is a
+	// no-op — every turn re-ships and re-bills the static prefix.
+	injectCacheControl(reqBody)
 
 	modifiedJSON, err := json.Marshal(reqBody)
 	if err != nil {
@@ -2115,22 +2169,22 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 		}
 		dataStr := line[6:]
 
-		var event map[string]interface{}
-		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
+		var ev anthropicStreamEvent
+		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
 			continue
 		}
 
-		eventType, _ := event["type"].(string)
-
-		switch eventType {
+		switch ev.Type {
 		case "message_start":
-			if msg, ok := event["message"].(map[string]interface{}); ok {
-				messageRole, _ = msg["role"].(string)
+			var mr anthropicMessageRole
+			if err := json.Unmarshal(ev.Message, &mr); err == nil {
+				messageRole = mr.Role
 			}
 
 		case "content_block_start":
 			currentBlockIndex++
-			if block, ok := event["content_block"].(map[string]interface{}); ok {
+			var block map[string]interface{}
+			if err := json.Unmarshal(ev.ContentBlock, &block); err == nil {
 				currentBlock = block
 				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
 					"index":         currentBlockIndex,
@@ -2139,11 +2193,13 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			}
 
 		case "content_block_delta":
-			delta, _ := event["delta"].(map[string]interface{})
-			deltaType, _ := delta["type"].(string)
-
-			if deltaType == "text_delta" {
-				text, _ := delta["text"].(string)
+			var delta anthropicDelta
+			if err := json.Unmarshal(ev.Delta, &delta); err != nil {
+				continue
+			}
+			switch delta.Type {
+			case "text_delta":
+				text := delta.Text
 				if currentBlock != nil {
 					if currentBlock["text"] == nil {
 						currentBlock["text"] = ""
@@ -2154,14 +2210,15 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 					"text":  text,
 					"index": currentBlockIndex,
 				})
-			}
-			if deltaType == "input_json_delta" && currentBlock != nil {
-				partial, _ := delta["partial_json"].(string)
-				if currentBlock["input"] == nil || fmt.Sprintf("%T", currentBlock["input"]) != "string" {
-					currentBlock["input"] = ""
-				}
-				if s, ok := currentBlock["input"].(string); ok {
-					currentBlock["input"] = s + partial
+			case "input_json_delta":
+				if currentBlock != nil {
+					partial := delta.PartialJSON
+					if currentBlock["input"] == nil || fmt.Sprintf("%T", currentBlock["input"]) != "string" {
+						currentBlock["input"] = ""
+					}
+					if s, ok := currentBlock["input"].(string); ok {
+						currentBlock["input"] = s + partial
+					}
 				}
 			}
 
@@ -2180,20 +2237,22 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			}
 
 		case "message_delta":
-			if u, ok := event["usage"].(map[string]interface{}); ok {
-				usage = u
-			}
-			if delta, ok := event["delta"].(map[string]interface{}); ok {
-				if stopReason, ok := delta["stop_reason"].(string); ok {
-					runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
-						"message": map[string]interface{}{
-							"role":    messageRole,
-							"content": contentBlocks,
-						},
-						"usage":       usage,
-						"stop_reason": stopReason,
-					})
+			if len(ev.Usage) > 0 {
+				var u map[string]interface{}
+				if err := json.Unmarshal(ev.Usage, &u); err == nil {
+					usage = u
 				}
+			}
+			var sd anthropicStopDelta
+			if err := json.Unmarshal(ev.Delta, &sd); err == nil && sd.StopReason != "" {
+				runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
+					"message": map[string]interface{}{
+						"role":    messageRole,
+						"content": contentBlocks,
+					},
+					"usage":       usage,
+					"stop_reason": sd.StopReason,
+				})
 			}
 
 		case "message_stop":
@@ -2208,9 +2267,11 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			return string(resultJSON), nil
 
 		case "error":
-			errData, _ := event["error"].(map[string]interface{})
-			errMsg, _ := errData["message"].(string)
-			return "", fmt.Errorf("stream error: %s", errMsg)
+			var e struct {
+				Message string `json:"message"`
+			}
+			_ = json.Unmarshal(ev.Error, &e)
+			return "", fmt.Errorf("stream error: %s", e.Message)
 		}
 	}
 
