@@ -29,11 +29,18 @@ function estimateTokens(text: string): number {
   return Math.ceil(asciiChars / 3.5 + nonAsciiChars / 1.8)
 }
 
+// F-310: cache token estimates per message in a WeakMap so the per-token
+// `conversation` re-evaluation (shouldn't happen post-F-301, but guards
+// against any remaining hot reads) doesn't re-stringify _rawApiMsg.
+const tokenEstimateCache = new WeakMap<AIMessage, number>()
+
 /**
  * Estimate tokens for an AIMessage, including content, tool_calls, and
- * serialized _rawApiMsg.
+ * serialized _rawApiMsg. Cached on the message itself after first compute.
  */
 function estimateMessageTokens(msg: AIMessage): number {
+  const cached = tokenEstimateCache.get(msg)
+  if (cached !== undefined) return cached
   let total = estimateTokens(msg.content)
   if (msg.tool_calls) {
     for (const tc of msg.tool_calls) {
@@ -44,6 +51,7 @@ function estimateMessageTokens(msg: AIMessage): number {
   if (msg._rawApiMsg) {
     total += estimateTokens(JSON.stringify(msg._rawApiMsg))
   }
+  tokenEstimateCache.set(msg, total)
   return total
 }
 
