@@ -5,8 +5,14 @@
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>uniTerm</title>
     <style>
-        /* Match the :root --bg-base default in style.css so the webview
-           first paint isn't a white flash before the stylesheet loads. */
+        /* DUPLICATED from frontend/src/style.css :root defaults.
+           Inlined so the webview first paint matches the loaded theme
+           (no white flash before the stylesheet lands). Keep these three
+           values in sync:
+             1. frontend/src/style.css :root { --bg-base; --text-primary }
+             2. frontend/index.html    (this block)
+             3. main.go BackgroundColour
+        */
         html, body { background: #14171d; color: #e6e8ed; margin: 0; }
     </style>
 </head>

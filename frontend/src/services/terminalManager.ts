@@ -101,6 +101,11 @@ export function acquireTerminal(
       allowProposedApi: true,
       allowTransparency: true,
       windowsMode: false,
+      // xterm's default smoothScrollDuration (125 ms) makes fast scrolling
+      // feel laggy — the canvas lerps instead of snapping to the new
+      // viewport, which the user perceives as low refresh efficiency.
+      // Disabling the animation gives an immediate snap on wheel events.
+      smoothScrollDuration: 0,
     })
 
     const fitAddon = new FitAddon()
