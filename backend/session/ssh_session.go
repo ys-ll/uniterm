@@ -315,18 +315,19 @@ func (s *SSHSession) readStderr() {
 
 func (s *SSHSession) readLoop() {
 	// 16K read buffer (F-001) reused across iterations. Each consumer either
-	// copies into its own storage (lastRecv, decodeOutput, offerExpectOutput's
-	// string conversion) or passes the slice to a callback that owns the data
+	// copies into its own storage (decodeOutput, offerExpectOutput's string
+	// conversion) or passes the slice to a callback that owns the data
 	// lifecycle (emitData / emitBinary), so reusing the backing array is safe.
+	// F-004: lastRecv is only read on the disconnect path below, so we defer
+	// its copy to that point to avoid one allocation per chunk.
 	buf := make([]byte, 16*1024)
+	var lastData []byte
 	for {
 		n, err := s.stdout.Read(buf)
 		if n > 0 {
 			s.RecordReadActivity()
 			data := buf[:n]
-			// lastRecv outlives this iteration (Disconnect logs it after
-			// readLoop returns) so it must hold an independent copy.
-			s.lastRecv.Store(append([]byte(nil), data...))
+			lastData = data
 			s.offerExpectOutput(data)
 			if s.IsZmodemMode() {
 				s.emitBinary(data)
@@ -339,6 +340,13 @@ func (s *SSHSession) readLoop() {
 			}
 		}
 		if err != nil {
+			// Copy the last received chunk into lastRecv so the
+			// disconnect diagnostics in this loop and session.Wait()
+			// can show what the server sent right before the link
+			// dropped. Only one copy per session, not per read.
+			if lastData != nil {
+				s.lastRecv.Store(append([]byte(nil), lastData...))
+			}
 			if err != io.EOF {
 				log.Writef("ssh disconnect: read error: %v, %s", err, s.kaDiag())
 				s.emitData([]byte(fmt.Sprintf("\r\n\x1b[31m[read error: %v]\x1b[0m\r\n", err)))
