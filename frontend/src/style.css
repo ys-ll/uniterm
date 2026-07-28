@@ -242,6 +242,127 @@
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
 }
 
+/* Windows 11 - mica light */
+[data-theme="win11"] {
+  --bg-base: #fafafa;
+  --bg-elevated: #f3f3f3;
+  --bg-surface: #ffffff;
+  --bg-overlay: #ebebeb;
+  --bg-hover: #e5e5e5;
+  --bg-active: #d9d9d9;
+  --text-primary: #1c1c1c;
+  --text-secondary: #5c5c5c;
+  --text-muted: #707070;
+  --text-disabled: #9a9a9a;
+  --accent: #0078d4;
+  --accent-glow: rgba(0, 120, 212, 0.22);
+  --accent-subtle: rgba(0, 120, 212, 0.08);
+  --info: #006ab1;
+  --info-subtle: rgba(0, 106, 177, 0.08);
+  --on-accent: #ffffff;
+  --chart-1: #16a34a;
+  --chart-2: #2563eb;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-4-alt: #a78bfa;
+  --success: #107c41;
+  --success-dim: #0b5e30;
+  --success-subtle: rgba(16, 124, 65, 0.06);
+  --success-glow: rgba(16, 124, 65, 0.15);
+  --warning: #e07b00;
+  --warning-subtle: rgba(224, 123, 0, 0.08);
+  --error: #d13438;
+  --error-subtle: rgba(209, 52, 56, 0.06);
+  --error-glow: rgba(209, 52, 56, 0.15);
+  --border-subtle: rgba(0, 0, 0, 0.0578);
+  --border-hover: rgba(0, 0, 0, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.10);
+  --scrim: rgba(255, 255, 255, 0.6);
+  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.22);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #fafafa;
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color: #f3f3f3;
+  --el-fill-color-light: #ebebeb;
+  --el-fill-color-lighter: #e5e5e5;
+  --el-text-color-primary: #1c1c1c;
+  --el-text-color-regular: #5c5c5c;
+  --el-text-color-secondary: #707070;
+  --el-text-color-placeholder: #9a9a9a;
+  --el-border-color: rgba(0, 0, 0, 0.16);
+  --el-border-color-light: rgba(0, 0, 0, 0.10);
+  --el-border-color-lighter: rgba(0, 0, 0, 0.0578);
+  --el-input-height: 28px;
+  --el-component-size: 28px;
+}
+
+/* Windows 11 - mica dark (auto-toggled by OS appearance) */
+@media (prefers-color-scheme: dark) {
+  [data-theme="win11"] {
+    --bg-base: #202020;
+    --bg-elevated: #2c2c2c;
+    --bg-surface: #2c2c2c;
+    --bg-overlay: #383838;
+    --bg-hover: #3f3f3f;
+    --bg-active: #4a4a4a;
+    --text-primary: #f0f0f0;
+    --text-secondary: #c8c8c8;
+    --text-muted: #a0a0a0;
+    --text-disabled: #6a6a6a;
+    --accent: #4cc2ff;
+    --accent-glow: rgba(76, 194, 255, 0.22);
+    --accent-subtle: rgba(76, 194, 255, 0.08);
+    --info: #5eb3f5;
+    --info-subtle: rgba(94, 179, 245, 0.1);
+    --on-accent: #000000;
+    --success: #34d399;
+    --success-dim: #059669;
+    --success-subtle: rgba(52, 211, 153, 0.06);
+    --success-glow: rgba(52, 211, 153, 0.15);
+    --warning: #f59e0b;
+    --warning-subtle: rgba(245, 158, 11, 0.1);
+    --error: #f87171;
+    --error-subtle: rgba(248, 113, 113, 0.06);
+    --error-glow: rgba(248, 113, 113, 0.15);
+    --border-subtle: rgba(255, 255, 255, 0.0837);
+    --border-hover: rgba(255, 255, 255, 0.16);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(0, 0, 0, 0.35);
+    --el-bg-color: #2c2c2c;
+    --el-bg-color-page: #202020;
+    --el-fill-color-blank: #2c2c2c;
+    --el-fill-color: #2c2c2c;
+    --el-fill-color-light: #383838;
+    --el-fill-color-lighter: #3f3f3f;
+    --el-text-color-primary: #f0f0f0;
+    --el-text-color-regular: #c8c8c8;
+    --el-text-color-secondary: #a0a0a0;
+    --el-text-color-placeholder: #6a6a6a;
+    --el-border-color: rgba(255, 255, 255, 0.16);
+    --el-border-color-light: rgba(255, 255, 255, 0.10);
+    --el-border-color-lighter: rgba(255, 255, 255, 0.0837);
+  }
+}
+
+/* Windows 11 - body background gradient (Mica simulation) */
+[data-theme="win11"] body {
+  background: linear-gradient(180deg, #fafbfc 0%, #f3f3f3 100%);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="win11"] body {
+    background: linear-gradient(180deg, #2b2b2b 0%, #202020 100%);
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
