@@ -116,3 +116,41 @@ required by `CONTRIBUTING.md`.
 ## Concerns
 
 None.
+
+## 2026-07-28 followup #2: uniterm Windows 11 Light
+
+- Commit hash: `fe513f8`
+- TDD log: RED — `theme.background` was `'var(--bg-base)'` (default branch fell through) → GREEN — 1/1 pass after adding the `case 'uniterm-windows11-light'` branch.
+- Build: `npm --prefix frontend run build` → succeeds. 3680 modules transformed.
+
+### Palette (corrected mid-implementation)
+
+The first revision of this task specified a pure `#ffffff` background with
+`#000000` foreground — matching Windows Terminal 11's default **terminal**
+colors. The user corrected to the project's Win11 UI palette so the terminal
+blends with the chrome (matching `--bg-base` / `--text-primary` from
+`frontend/src/style.css` lines ~246-253):
+
+| Field                  | Final value          |
+| ---------------------- | -------------------- |
+| `background`           | `#f3f7fc`            |
+| `foreground`           | `#1c1c1c`            |
+| `cursor`               | `#1c1c1c`            |
+| `selectionBackground`  | `rgba(28, 28, 28, 0.4)` |
+| `black` … `white`      | same ANSI as before (`#000000`, `#c50f1f`, `#13a10e`, `#c19c00`, `#0037da`, `#881798`, `#3a96dd`, `#cccccc`) |
+| `brightBlack` … `brightCyan` | same as before (`#767676`, `#c50f1f`, `#13a10e`, `#c19c00`, `#0037da`, `#881798`, `#3a96dd`) |
+| `brightWhite`          | `#1c1c1c`            |
+
+The ANSI 16-color palette keeps the original `uniterm-windows11-light` color
+scheme (signature `#0037da` accent blue, `#c50f1f` / `#13a10e` / `#c19c00` for
+red/green/yellow). Only the four base colors changed to mirror the UI.
+
+### Final verification
+
+- `npx vitest run src/composables/useTerminal.windows11-light.test.ts` → 1/1 pass
+- `npx vitest run` → 115/120 pass. The 5 failures (`k8sResources.test.ts` 1, `terminalAgent.test.ts` 4) are pre-existing and unrelated to this commit.
+- `npm --prefix frontend run build` → succeeds. 3680 modules transformed.
+
+## Concerns
+
+None.
