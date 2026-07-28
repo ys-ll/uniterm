@@ -27,6 +27,7 @@ const (
 	SyncPush
 	SyncPull
 	SyncConflict
+	SyncSkipped // F-203: returned when a sync is already in flight
 )
 
 // CloneOrOpen opens the repo at repoPath, or clones it from the given URL.

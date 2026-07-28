@@ -1005,6 +1005,20 @@ func (a *App) SyncNow() (*sync.SyncResult, error) {
 	if !a.waitSyncReady(time.Second) {
 		return nil, fmt.Errorf("sync service still initializing")
 	}
+	// F-203 (partial): coalesce concurrent SyncNow calls. Multiple
+	// Settings→Sync clicks while a slow git push is in flight used to
+	// stack up N concurrent sync goroutines, each holding the Wails
+	// handler thread. If a sync is already running we return the
+	// "skipped" sentinel direction so the frontend's syncing flag
+	// still flips but no extra work is done. Fire-and-forget would
+	// also break syncStore.ts' syncing state, so the full async
+	// redesign is deferred to a frontend-coordinated change.
+	if a.syncInFlight.Load() {
+		return &sync.SyncResult{Direction: sync.SyncSkipped, Message: "sync already in flight"}, nil
+	}
+	a.syncInFlight.Store(true)
+	defer a.syncInFlight.Store(false)
+
 	result, err := a.syncService.Sync()
 	if err != nil {
 		return nil, err
@@ -2326,9 +2340,10 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			var block map[string]interface{}
 			if err := json.Unmarshal(ev.ContentBlock, &block); err == nil {
 				currentBlock = block
-				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
-					"index":         currentBlockIndex,
-					"content_block": block,
+				// F-320: typed payload.
+				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
+					Index:        currentBlockIndex,
+					ContentBlock: block,
 				})
 			}
 
@@ -2396,16 +2411,24 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 				// emit (Wails marshals the args separately) and the
 				// eventual return at message_stop. Previously this
 				// struct was rebuilt + remarshaled twice per turn.
+				// F-320: typed payload with json.RawMessage so the
+				// already-marshaled bytes pass through untouched.
 				fullMessage := map[string]interface{}{
 					"role":    messageRole,
 					"content": contentBlocks,
 				}
 				resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
 				if err == nil {
-					runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
-						"message":    json.RawMessage(resultJSON),
-						"usage":      usage,
-						"stop_reason": sd.StopReason,
+					// F-320: typed emit; json.RawMessage preserves
+					// the already-marshaled message bytes verbatim.
+					runtime.EventsEmit(a.ctx, "ai:done", struct {
+						Message    json.RawMessage            `json:"message"`
+						Usage      map[string]interface{}     `json:"usage,omitempty"`
+						StopReason string                     `json:"stop_reason"`
+					}{
+						Message:    json.RawMessage(resultJSON),
+						Usage:      usage,
+						StopReason: sd.StopReason,
 					})
 				}
 			}
