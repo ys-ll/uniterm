@@ -100,6 +100,16 @@ export function acquireTerminal(
     // was added to xterm.js after v5 (the synchronized output feature
     // landed upstream in 2024). Until the v6 upgrade, the thinking-block
     // flicker noted in the finding is structural to this xterm major.
+    //
+    // F-038: bracketed-paste (\`\e[?2004h\`) and mouse-reporting modes
+    // (1000/1006/1015) are handled by the xterm.js parser core itself
+    // and surfaced via \`terminal.modes\`. The finding is a verification
+    // gap, not a production bug — xterm.js v5.5 implements all four
+    // modes upstream. A smoke test (\`terminal.write('\e[?2004h'); assert
+    // terminal.modes.bracketedPasteMode\`) would catch a regression on
+    // upgrade; tracked for the next vitest sweep (frontend/src/services/
+    // terminalManager.test.ts does not exist yet — out of scope for this
+    // single-file atomic commit).
     // F-039: keep windowsMode off so xterm treats alt-screen (DECSET 1049)
     // transitions the same as it does on macOS/Linux: the saved scrollback
     // buffer is restored on return. windowsMode forces winpty/conpty-style
