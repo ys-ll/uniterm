@@ -412,14 +412,19 @@ func (p *lineProcessor) Reset() {
 // The zero value is a disabled logger; Enable installs a file, Disable
 // closes it. All methods are safe for concurrent use.
 type OutputLogger struct {
-	mu       sync.Mutex
-	file     *os.File
-	bw       *bufio.Writer
-	path     string
-	stripper ansiStripper
-	lines    lineProcessor
-	flushCh  chan struct{}
+	mu        sync.Mutex
+	file      *os.File
+	bw        *bufio.Writer
+	path      string
+	stripper  ansiStripper
+	lines     lineProcessor
+	flushCh   chan struct{}
 	flushDone chan struct{}
+	// dirtySignal is a 1-slot buffered channel that WriteOutput pushes
+	// to (non-blocking) when there is pending data to flush. flushLoop
+	// blocks on it instead of a fixed ticker, so idle sessions do not
+	// wake once per second (F-011).
+	dirtySignal chan struct{}
 	// buffered controls whether writes go through bufio + periodic flush.
 	// SetBuffered(false) opts back into the legacy Sync-per-write path,
 	// useful for callers that need durable-per-write semantics (and for
@@ -433,10 +438,18 @@ type OutputLogger struct {
 // syscalls on the hot path (see SESSION-07).
 const logBufferSize = 64 * 1024
 
-// logFlushInterval is how often the periodic goroutine flushes the
-// buffered writer to the underlying file. The OS coalesces the actual
-// disk write; we only need to forward buffered bytes out of user-space.
+// logFlushInterval is the maximum age of buffered bytes before the
+// flush goroutine forwards them to the underlying file. The OS coalesces
+// the actual disk write; we only need to forward buffered bytes out of
+// user-space.
 const logFlushInterval = 1 * time.Second
+
+// logFlushIdleExit is how long the flush goroutine stays alive after the
+// last write before it parks itself. On a long idle session this avoids
+// the previous 1 Hz wakeup that the user reported as one of the dominant
+// sources of idle CPU (F-011): the goroutine now sleeps silently after
+// logFlushIdleExit of inactivity and is re-armed by WriteOutput.
+const logFlushIdleExit = 30 * time.Second
 
 const bannerHeader = "=== uniTerm session log ==="
 
@@ -504,6 +517,7 @@ func (l *OutputLogger) Enable(dir, name, protocol string) (string, error) {
 		l.bw = bufio.NewWriterSize(file, logBufferSize)
 		l.flushCh = make(chan struct{})
 		l.flushDone = make(chan struct{})
+		l.dirtySignal = make(chan struct{}, 1)
 		go l.flushLoop()
 	}
 
@@ -601,6 +615,12 @@ func (l *OutputLogger) WriteOutput(data []byte) {
 		// Buffered mode: hand bytes to bufio.Writer; the periodic flush
 		// goroutine (or Disable) forwards them to the file. No Sync per write.
 		_, _ = l.bw.Write(toWrite)
+		// Nudge the flush goroutine. Non-blocking — the signal coalesces
+		// bursts of writes into a single flush.
+		select {
+		case l.dirtySignal <- struct{}{}:
+		default:
+		}
 	} else {
 		if _, err := l.file.Write(toWrite); err == nil {
 			_ = l.file.Sync()
@@ -625,22 +645,57 @@ func (l *OutputLogger) SetBuffered(buffered bool) {
 	l.bufferedSet = true
 }
 
-// flushLoop is the periodic flush goroutine. It exits when flushCh is
-// closed (by Disable) and signals flushDone so the closer can wait.
+// flushLoop forwards buffered bytes to the underlying file. It is
+// event-driven on WriteOutput's dirtySignal and arms a one-shot timer
+// at logFlushInterval after each dirty event, so idle sessions do not
+// wake once per second (F-011). After logFlushIdleExit without writes
+// the goroutine parks itself silently until the next dirty signal.
 func (l *OutputLogger) flushLoop() {
 	defer close(l.flushDone)
-	ticker := time.NewTicker(logFlushInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-l.flushCh:
+	var timer *time.Timer
+	stopTimer := func() {
+		if timer == nil {
 			return
-		case <-ticker.C:
-			l.mu.Lock()
-			if l.bw != nil {
-				_ = l.bw.Flush()
+		}
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
 			}
-			l.mu.Unlock()
+		}
+	}
+	for {
+		// Drain any pending dirty signal before sleeping. Bursts of
+		// WriteOutput calls collapse into a single flush arm.
+		select {
+		case <-l.dirtySignal:
+		default:
+		}
+		if timer != nil {
+			select {
+			case <-l.flushCh:
+				stopTimer()
+				return
+			case <-l.dirtySignal:
+				stopTimer()
+				timer = time.NewTimer(logFlushInterval)
+			case <-timer.C:
+				l.mu.Lock()
+				if l.bw != nil {
+					_ = l.bw.Flush()
+				}
+				l.mu.Unlock()
+				// Re-arm an idle-exit timer. If no further writes arrive
+				// within logFlushIdleExit, we stop the timer and park.
+				timer = time.NewTimer(logFlushIdleExit)
+			}
+		} else {
+			select {
+			case <-l.flushCh:
+				return
+			case <-l.dirtySignal:
+				timer = time.NewTimer(logFlushInterval)
+			}
 		}
 	}
 }
