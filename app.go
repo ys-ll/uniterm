@@ -238,12 +238,24 @@ func (a *App) startup(ctx context.Context) {
 	// primary entry point — this is belt-and-suspenders.
 	go a.watchForeground(ctx)
 
-	syncSvc, err := sync.NewSyncService()
-	if err != nil {
-		log.Writef("Failed to create sync service: %v", err)
-		a.sendStartupErr(fmt.Errorf("sync service: %w", err))
-	} else {
-		a.syncService = syncSvc
+	// F-407: NewSyncService's disk-touching init (UserConfigDir +
+	// MkdirAll + NewKeychain probing the OS keychain) can take
+	// 50–500ms+ on macOS. Run it on a goroutine so OnStartup returns
+	// promptly and the main window can paint. Wails callers that hit
+	// a.syncService before init completes briefly wait on Ready().
+	syncSvc, _ := sync.NewSyncServiceAsync()
+	a.syncService = syncSvc
+	// Schedule the post-init wiring (password store + auto-sync) once
+	// init completes so we don't race the goroutine.
+	go func() {
+		select {
+		case <-syncSvc.Ready():
+		case <-ctx.Done():
+			return
+		}
+		if syncSvc.PasswordStore() == nil {
+			return
+		}
 		// Wire keychain into stores for password/API key migration
 		if a.connectionStore != nil {
 			a.connectionStore.SetPasswordStore(syncSvc.PasswordStore())
@@ -253,19 +265,17 @@ func (a *App) startup(ctx context.Context) {
 		}
 		// Auto-sync on startup if enabled
 		if syncSvc.IsAutoSyncEnabled() {
-			go func() {
-				result, err := syncSvc.Sync()
-				if err != nil {
-					log.Writef("Auto-sync on startup failed: %v", err)
-				} else if result.Direction == sync.SyncConflict {
-					runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
-						"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
-						"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
-					})
-				}
-			}()
+			result, err := syncSvc.Sync()
+			if err != nil {
+				log.Writef("Auto-sync on startup failed: %v", err)
+			} else if result != nil && result.Direction == sync.SyncConflict {
+				runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
+					"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
+					"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
+				})
+			}
 		}
-	}
+	}()
 
 	// Restore window position and size from last session
 	a.restoreWindow(ctx)
@@ -2149,7 +2159,10 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(res.Body)
+		// F-305: cap the error-body read at 64 KiB so a hostile or
+		// buggy upstream returning a multi-GB error body can't OOM
+		// the Go process.
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
@@ -2501,7 +2514,10 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(res.Body)
+		// F-305: cap the error-body read at 64 KiB so a hostile or
+		// buggy upstream returning a multi-GB error body can't OOM
+		// the Go process.
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
@@ -2881,7 +2897,10 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(res.Body)
+		// F-305: cap the error-body read at 64 KiB so a hostile or
+		// buggy upstream returning a multi-GB error body can't OOM
+		// the Go process.
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
