@@ -31,7 +31,7 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
 
   let inAlternateScreen = false
   let isPasswordPrompt = false
-  let cursorPosTimer: ReturnType<typeof setTimeout> | null = null
+  let cursorPosRAF: number | null = null
 
   function stripAnsi(str: string): string {
     return str
@@ -236,15 +236,17 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
       }
     }
     updateToken()
-    // Defer cursor position update to next tick to avoid blocking rapid input
-    // (getBoundingClientRect() inside updateCursorPosition forces synchronous layout)
-    if (cursorPosTimer) {
-      clearTimeout(cursorPosTimer)
+    // Coalesce cursor position update to next paint frame via rAF. The
+    // suggestion popup only needs roughly correct placement, so per-keystroke
+    // updates are wasteful under typing bursts — rAF naturally coalesces
+    // multiple keystrokes within one frame into a single update.
+    if (cursorPosRAF !== null) {
+      cancelAnimationFrame(cursorPosRAF)
     }
-    cursorPosTimer = setTimeout(() => {
-      cursorPosTimer = null
+    cursorPosRAF = requestAnimationFrame(() => {
+      cursorPosRAF = null
       updateCursorPosition()
-    }, 0)
+    })
   }
 
   function handleSessionData(data: string) {
