@@ -358,7 +358,7 @@
   "settings.cursorBlink": "光标闪烁",
   "settings.cursorBlinkDesc": "是否启用终端光标闪烁",
   "settings.sessionLogDir": "日志保存目录",
-  "settings.sessionLogDirDesc": "会话日志文件的存放位置。留空使用默认路径：{path}",
+  "settings.sessionLogDirDesc": "会话日志文件的存放位置。",
   "settings.browse": "浏览…",
   "settings.maxTurns": "AI 自主交互最大轮次",
   "settings.maxTurnsDesc": "AI 自主执行命令与反馈的对话轮数上限。设为 0 表示不限制。默认 20。",

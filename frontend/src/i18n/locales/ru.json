@@ -355,7 +355,7 @@
   "settings.cursorBlink": "Мигание курсора",
   "settings.cursorBlinkDesc": "Должен ли мигать курсор терминала",
   "settings.sessionLogDir": "Папка для журналов",
-  "settings.sessionLogDirDesc": "Место сохранения журналов сеансов. Оставьте пустым для использования пути по умолчанию: {path}",
+  "settings.sessionLogDirDesc": "Место сохранения журналов сеансов.",
   "settings.browse": "Обзор…",
   "settings.maxTurns": "Макс. автономных раундов",
   "settings.maxTurnsDesc": "Максимальное количество автономных раундов взаимодействия на один запрос ИИ. 0 — без ограничений. По умолчанию: 20.",
