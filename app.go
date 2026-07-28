@@ -468,8 +468,10 @@ type connDelta struct {
 	All  *session.ConnectionStoreData `json:"all,omitempty"`  // for replace (first emit)
 }
 
-// F-205: typed event shapes + pooled buffer so session:data emits
-// stop allocating a fresh map[string]interface{} per chunk.
+// F-205: typed event shapes so session:data / session:binary emits
+// stop allocating a fresh map[string]interface{} per chunk. Wails
+// EventsEmit JSON-marshals every ...interface{} arg itself, so the
+// struct fields cross the bridge directly.
 type sessionDataEvent struct {
 	ID   string `json:"id"`
 	Data string `json:"data"`
@@ -478,14 +480,6 @@ type sessionDataEvent struct {
 type sessionBinaryEvent struct {
 	ID   string `json:"id"`
 	Data string `json:"data"`
-}
-
-var sessionDataPool = stdsync.Pool{
-	New: func() any {
-		b := &bytes.Buffer{}
-		b.Grow(8 * 1024) // typical SSH chunk size, avoids re-grow on small inputs
-		return b
-	},
 }
 
 // computeConnDelta returns the set of upsert/remove deltas between
@@ -1581,23 +1575,16 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	}
 
 	s.SetOnDataCallback(func(data []byte) {
-		// F-205: avoid the per-chunk map allocation + []byte→string
-		// escape. The frontend listener (wailsjs) only cares about
-		// two fields, so we ship a typed struct that reuses an
-		// encoder + pooled buffer across emits.
-		buf := sessionDataPool.Get().(*bytes.Buffer)
-		buf.Reset()
-		enc := json.NewEncoder(buf)
-		_ = enc.Encode(sessionDataEvent{ID: s.ID(), Data: string(data)})
-		// json.Encoder always appends a trailing newline; trim it.
-		b := buf.Bytes()
-		if n := len(b); n > 0 && b[n-1] == '\n' {
-			b = b[:n-1]
-		}
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "session:data", string(b))
+			// Pass the typed struct directly — Wails EventsEmit
+			// marshals each arg itself, so a pre-encoded JSON string
+			// would be quoted twice and the frontend would receive a
+			// string instead of {id, data}.
+			runtime.EventsEmit(a.ctx, "session:data", sessionDataEvent{
+				ID:   s.ID(),
+				Data: string(data),
+			})
 		}
-		sessionDataPool.Put(buf)
 	})
 
 	s.SetOnBinaryCallback(func(data []byte) {

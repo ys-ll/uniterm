@@ -129,10 +129,14 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 	// Disconnect can join it before tearing the child down. Without this,
 	// Disconnect's process.Kill() races with cmd.Wait and a successful
 	// in-flight Wait can return after the session is already marked down.
+	//
+	// Do NOT call s.Disconnect() from here: Disconnect itself waits on
+	// waitDone, but the defer fires only after Disconnect returns — a
+	// self-deadlock that hangs every local-session teardown (regression
+	// covered by TestLocalSessionWaitGoroutineDoesNotCallDisconnect).
 	go func() {
 		defer close(s.waitDone)
 		_ = s.cmd.Wait()
-		s.Disconnect()
 	}()
 
 	s.setStatus(StatusConnected)
