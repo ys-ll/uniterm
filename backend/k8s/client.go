@@ -48,8 +48,14 @@ func BuildClientWithDial(kc *Kubeconfig, ctxName string, dialOverride DialFunc) 
 		return nil, "", "", nil, err
 	}
 	base := &http.Transport{
-		TLSClientConfig: tlsCfg,
-		Proxy:           http.ProxyFromEnvironment,
+		TLSClientConfig:       tlsCfg,
+		Proxy:                 http.ProxyFromEnvironment,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		ExpectContinueTimeout: 2 * time.Second,
 	}
 	if dialOverride != nil {
 		base.DialContext = dialOverride
