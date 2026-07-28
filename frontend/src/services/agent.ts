@@ -8,6 +8,11 @@ import { useSkillStore } from '../stores/skillStore'
 import { GetSkillFile, ListSkillFiles } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 import type { AIMessage } from '../types/ai'
+import {
+  InputValidationError,
+  validateRequiredString,
+  validateObject,
+} from '../utils/runtimeTypeCheck'
 
 // Global token listener management: only one runAgent instance should receive
 // ai:token events at a time. Registering a new listener automatically cancels
@@ -62,11 +67,13 @@ function hasActiveSession(): boolean {
 
 type RiskLevel = 'read' | 'write' | 'dangerous'
 
-function getRisk(tu: { name: string; input: Record<string, unknown> }): RiskLevel {
-  if (tu.name !== 'execute_command' && tu.name !== 'start_command') return 'write'
-  const risk = tu.input.risk as string | undefined
+export const VALID_RISK: readonly RiskLevel[] = ['read', 'write', 'dangerous']
+
+export function getRisk(tu: { name: string; input: Record<string, unknown> }): RiskLevel {
+  if (tu.name !== 'execute_command' && tu.name !== 'start_command') return 'dangerous'
+  const risk = tu.input.risk
   if (risk === 'read' || risk === 'write' || risk === 'dangerous') return risk
-  return 'write' // conservative fallback
+  return 'dangerous' // default-closed: unknown / missing / wrong-typed → dangerous
 }
 
 function shouldConfirm(risk: RiskLevel): boolean {
@@ -77,6 +84,136 @@ function shouldConfirm(risk: RiskLevel): boolean {
     case 'confirm_dangerous': return risk === 'dangerous'
     case 'bypass': return false
     default: return risk !== 'read'
+  }
+}
+
+// ---- Tool input validators (FE-P0-3) ----
+// Hand-rolled shape checks for the 7 most-used tools. The LLM is untrusted;
+// `tu.input.command as string` would yield "[object Object]" for `command: {}`.
+// On any failure we throw InputValidationError so the dispatch site can
+// surface the error back to the model and continue the agent loop.
+
+interface ExecuteCommandInput {
+  command: string
+  timeout: number
+  head_lines: number
+  tail_lines: number
+  panel?: string
+}
+
+function validateExecuteCommandInput(raw: unknown): ExecuteCommandInput {
+  const obj = validateObject(raw, 'execute_command input')
+  return {
+    command: validateRequiredString(obj.command, 'command'),
+    timeout: typeof obj.timeout === 'number' && Number.isFinite(obj.timeout) ? obj.timeout : 60,
+    head_lines: typeof obj.head_lines === 'number' && Number.isFinite(obj.head_lines) ? obj.head_lines : 50,
+    tail_lines: typeof obj.tail_lines === 'number' && Number.isFinite(obj.tail_lines) ? obj.tail_lines : 300,
+    panel: typeof obj.panel === 'string' ? obj.panel : undefined,
+  }
+}
+
+interface StartCommandInput {
+  command: string
+  panel?: string
+}
+
+function validateStartCommandInput(raw: unknown): StartCommandInput {
+  const obj = validateObject(raw, 'start_command input')
+  return {
+    command: validateRequiredString(obj.command, 'command'),
+    panel: typeof obj.panel === 'string' ? obj.panel : undefined,
+  }
+}
+
+interface SendTerminalKeyInput {
+  input?: string
+  control?: 'ctrl_c' | 'ctrl_d' | 'enter'
+  send_enter: boolean
+  panel?: string
+}
+
+function validateSendTerminalKeyInput(raw: unknown): SendTerminalKeyInput {
+  const obj = validateObject(raw, 'send_terminal_key input')
+  const control = obj.control
+  let validatedControl: 'ctrl_c' | 'ctrl_d' | 'enter' | undefined
+  if (control === undefined) {
+    validatedControl = undefined
+  } else if (control === 'ctrl_c' || control === 'ctrl_d' || control === 'enter') {
+    validatedControl = control
+  } else {
+    throw new InputValidationError(`control must be one of ctrl_c, ctrl_d, enter`)
+  }
+  return {
+    input: typeof obj.input === 'string' ? obj.input : undefined,
+    control: validatedControl,
+    send_enter: typeof obj.send_enter === 'boolean' ? obj.send_enter : true,
+    panel: typeof obj.panel === 'string' ? obj.panel : undefined,
+  }
+}
+
+interface AskUserInput {
+  question: string
+  header?: string
+  options: Array<{ label: string; description: string }>
+  multiSelect: boolean
+}
+
+function validateAskUserInput(raw: unknown): AskUserInput {
+  const obj = validateObject(raw, 'ask_user input')
+  const rawOptions = obj.options
+  const options: Array<{ label: string; description: string }> = []
+  if (Array.isArray(rawOptions)) {
+    for (const item of rawOptions) {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const o = item as Record<string, unknown>
+        const label = typeof o.label === 'string' ? o.label : ''
+        const description = typeof o.description === 'string' ? o.description : ''
+        if (label) options.push({ label, description })
+      }
+    }
+  }
+  return {
+    question: validateRequiredString(obj.question, 'question'),
+    header: typeof obj.header === 'string' ? obj.header : undefined,
+    options,
+    multiSelect: typeof obj.multiSelect === 'boolean' ? obj.multiSelect : false,
+  }
+}
+
+interface SaveSkillInput {
+  name: string
+  description: string
+  body: string
+}
+
+function validateSaveSkillInput(raw: unknown): SaveSkillInput {
+  const obj = validateObject(raw, 'save_skill input')
+  return {
+    name: validateRequiredString(obj.name, 'name'),
+    description: validateRequiredString(obj.description, 'description'),
+    body: validateRequiredString(obj.body, 'body'),
+  }
+}
+
+interface UseSkillInput {
+  name: string
+}
+
+function validateUseSkillInput(raw: unknown): UseSkillInput {
+  const obj = validateObject(raw, 'use_skill input')
+  return { name: validateRequiredString(obj.name, 'name') }
+}
+
+interface ReadSkillFileInput {
+  name: string
+  path: string
+}
+
+function validateReadSkillFileInput(raw: unknown): ReadSkillFileInput {
+  const obj = validateObject(raw, 'read_skill_file input')
+  return {
+    name: validateRequiredString(obj.name, 'name'),
+    path: validateRequiredString(obj.path, 'path'),
   }
 }
 
@@ -462,12 +599,32 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
 
     // Process exactly one tool call
     const tu = toolUses[0]
+
+    // Surface a malformed tool_use back to the model instead of executing it.
+    // Returns true if the caller should `continue` (skip this iteration).
+    function handleInvalidInput(reason: string): true {
+      store.addMessage({
+        id: `msg-${Date.now()}`,
+        role: 'tool',
+        content: `[Error: invalid ${tu.name} input — ${reason}]. Retry with the documented JSON shape.`,
+        tool_call_id: tu.id
+      })
+      return true
+    }
+
     if (tu.name === 'execute_command') {
-      const command = tu.input.command as string
-      const timeoutSec = (tu.input.timeout as number) || 60
+      let validated: ExecuteCommandInput
+      try {
+        validated = validateExecuteCommandInput(tu.input)
+      } catch (e: any) {
+        if (e instanceof InputValidationError) { if (handleInvalidInput(e.message)) continue }
+        throw e
+      }
+      const command = validated.command
+      const timeoutSec = validated.timeout
       const timeoutMs = Math.max(5000, Math.min(timeoutSec * 1000, 300000))
-      const headLines = (tu.input.head_lines as number) ?? 50
-      const tailLines = (tu.input.tail_lines as number) ?? 300
+      const headLines = validated.head_lines
+      const tailLines = validated.tail_lines
       const risk = getRisk(tu)
 
       if (shouldConfirm(risk)) {
@@ -495,7 +652,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
 
       try {
         store.status = 'executing'
-        const panelTitle = tu.input.panel as string | undefined
+        const panelTitle = validated.panel
         const result = await executeCommand(command, timeoutMs, headLines, tailLines, () => store.stopRequested, panelTitle)
         if (result.cancelled || store.stopRequested) {
           store.addMessage({
@@ -523,7 +680,14 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         })
       }
     } else if (tu.name === 'start_command') {
-      const command = tu.input.command as string
+      let validated: StartCommandInput
+      try {
+        validated = validateStartCommandInput(tu.input)
+      } catch (e: any) {
+        if (e instanceof InputValidationError) { if (handleInvalidInput(e.message)) continue }
+        throw e
+      }
+      const command = validated.command
       const risk = getRisk(tu)
 
       if (shouldConfirm(risk)) {
@@ -551,7 +715,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
 
       try {
         store.status = 'executing'
-        const panelTitle = tu.input.panel as string | undefined
+        const panelTitle = validated.panel
         const result = await startCommand(command, panelTitle)
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -622,15 +786,22 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         })
       }
     } else if (tu.name === 'send_terminal_key') {
-      const input = tu.input.input as string | undefined
-      const control = tu.input.control as string | undefined
-      const sendEnter = (tu.input.send_enter as boolean) ?? true
+      let validated: SendTerminalKeyInput
+      try {
+        validated = validateSendTerminalKeyInput(tu.input)
+      } catch (e: any) {
+        if (e instanceof InputValidationError) { if (handleInvalidInput(e.message)) continue }
+        throw e
+      }
+      const input = validated.input
+      const control = validated.control
+      const sendEnter = validated.send_enter
       try {
         store.status = 'executing'
-        const panelTitle = tu.input.panel as string | undefined
+        const panelTitle = validated.panel
         const result = await sendTerminalKey(
           input,
-          control as 'ctrl_c' | 'ctrl_d' | 'enter' | undefined,
+          control,
           sendEnter,
           panelTitle
         )
@@ -668,10 +839,17 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         })
       }
     } else if (tu.name === 'ask_user') {
-      const question = tu.input.question as string
-      const header = tu.input.header as string | undefined
-      const options = (tu.input.options as Array<{ label: string; description: string }>) || []
-      const multiSelect = (tu.input.multiSelect as boolean) || false
+      let validated: AskUserInput
+      try {
+        validated = validateAskUserInput(tu.input)
+      } catch (e: any) {
+        if (e instanceof InputValidationError) { if (handleInvalidInput(e.message)) continue }
+        throw e
+      }
+      const question = validated.question
+      const header = validated.header
+      const options = validated.options
+      const multiSelect = validated.multiSelect
 
       store.setPendingQuestion({
         messageId: assistantMsg.id,
@@ -694,9 +872,16 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       cleanupStreamListeners()
       return
     } else if (tu.name === 'save_skill') {
-      const name = tu.input.name as string
-      const description = tu.input.description as string
-      const body = tu.input.body as string
+      let validated: SaveSkillInput
+      try {
+        validated = validateSaveSkillInput(tu.input)
+      } catch (e: any) {
+        if (e instanceof InputValidationError) { if (handleInvalidInput(e.message)) continue }
+        throw e
+      }
+      const name = validated.name
+      const description = validated.description
+      const body = validated.body
       try {
         store.status = 'executing'
         const skillStore = useSkillStore()
@@ -716,7 +901,14 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         })
       }
     } else if (tu.name === 'use_skill') {
-      const name = tu.input.name as string
+      let validated: UseSkillInput
+      try {
+        validated = validateUseSkillInput(tu.input)
+      } catch (e: any) {
+        if (e instanceof InputValidationError) { if (handleInvalidInput(e.message)) continue }
+        throw e
+      }
+      const name = validated.name
       try {
         const skillStore = useSkillStore()
         const meta = skillStore.skills.find(s => s.name === name)
@@ -746,8 +938,15 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         })
       }
     } else if (tu.name === 'read_skill_file') {
-      const name = tu.input.name as string
-      const path = tu.input.path as string
+      let validated: ReadSkillFileInput
+      try {
+        validated = validateReadSkillFileInput(tu.input)
+      } catch (e: any) {
+        if (e instanceof InputValidationError) { if (handleInvalidInput(e.message)) continue }
+        throw e
+      }
+      const name = validated.name
+      const path = validated.path
       try {
         const content = await GetSkillFile(name, path)
         store.addMessage({
