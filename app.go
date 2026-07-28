@@ -84,6 +84,13 @@ type App struct {
 	syncInFlight atomic.Bool
 	syncPending  atomic.Bool
 
+	// F-208: single shared http.Client for chatCompletion* /
+	// FetchModels calls. Built lazily once on first use so tests that
+	// don't hit the LLM path don't pay for the transport; subsequent
+	// calls reuse the keep-alive pool and skip the TCP+TLS handshake.
+	httpClient     *http.Client
+	httpClientOnce stdsync.Once
+
 	// Session output log state (issue #227). Logs are keyed by panelID so
 	// they survive reconnects — a single panel may cycle through many
 	// session objects and the log file spans all of them. sessionToPanel
@@ -472,6 +479,26 @@ func (a *App) saveConnSnapshot(data session.ConnectionStoreData) {
 	a.lastConnSnapshotMu.Lock()
 	a.lastConnSnapshot = data
 	a.lastConnSnapshotMu.Unlock()
+}
+
+// llmHTTPClient returns the App-wide *http.Client used by every
+// LLM-bound call. F-208: hoisted here so three back-to-back
+// ChatCompletion calls reuse the same TCP+TLS connection instead of
+// paying a fresh handshake each time. FetchModels uses a shorter
+// timeout via a derived client (see FetchModels).
+func (a *App) llmHTTPClient() *http.Client {
+	a.httpClientOnce.Do(func() {
+		tr := &http.Transport{
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   8,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			ExpectContinueTimeout: 2 * time.Second,
+		}
+		a.httpClient = &http.Client{Transport: tr}
+	})
+	return a.httpClient
 }
 // which don't fire the JS visibilitychange event (Cmd+H on macOS before
 // the WebView is loaded, OS-level Alt+Tab) still update the foreground
@@ -2002,7 +2029,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
 	req.Header.Set("User-Agent", userAgent)
 
-	client := &http.Client{Timeout: 0}
+	client := a.llmHTTPClient()
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -2321,7 +2348,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", userAgent)
 
-	client := &http.Client{Timeout: 0}
+	client := a.llmHTTPClient()
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -2708,7 +2735,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", userAgent)
 
-	client := &http.Client{Timeout: 0}
+	client := a.llmHTTPClient()
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -2911,8 +2938,13 @@ func (a *App) FetchModels(apiKey, baseURL string) ([]ModelInfo, error) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", "uniTerm")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	res, err := client.Do(req)
+	// F-208: share the same transport as the LLM clients so the model
+	// list call also benefits from the keep-alive pool; the request
+	// itself carries its own 10s deadline via the per-request context.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+	res, err := a.llmHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
