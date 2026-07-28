@@ -2181,6 +2181,39 @@ type anthropicStopDelta struct {
 	StopReason string `json:"stop_reason"`
 }
 
+// F-320: typed payloads for the ai:* Wails events. Replacing the
+// per-token `map[string]interface{}` literal with a fixed struct saves
+// the alloc per event; the json.Marshal on the Wails side now writes
+// the same JSON shape (lowercase keys) so the frontend contract is
+// unchanged.
+type aiTokenEvent struct {
+	Text  string `json:"text"`
+	Index int    `json:"index"`
+}
+
+type aiBlockStartEvent struct {
+	Index        int                    `json:"index"`
+	ContentBlock map[string]interface{} `json:"content_block"`
+}
+
+type aiContentBlockStopEvent struct {
+	Index int `json:"index"`
+}
+
+type aiInputJsonDeltaEvent struct {
+	PartialJSON string `json:"partial_json"`
+}
+
+type aiMessageStartEvent struct {
+	Role string `json:"role"`
+}
+
+type aiDoneEvent struct {
+	Message    map[string]interface{} `json:"message"`
+	Usage      map[string]interface{} `json:"usage,omitempty"`
+	StopReason string                 `json:"stop_reason"`
+}
+
 // chatCompletionAnthropic handles the native Anthropic Messages API with SSE streaming.
 func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
 	reqBody["stream"] = true
@@ -2764,9 +2797,11 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				})
 			}
 			currentTextBuf.WriteString(delta.Content)
-			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-				"text":  delta.Content,
-				"index": currentBlockIndex,
+			// F-320: typed struct + dropped unused fields — see
+			// chatCompletionAnthropic for rationale.
+			runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
+				Text:  delta.Content,
+				Index: currentBlockIndex,
 			})
 		}
 
@@ -3202,9 +3237,11 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 				textBufs[ev.OutputIndex] = buf
 			}
 			buf.WriteString(ev.Delta)
-			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-				"text":  ev.Delta,
-				"index": idxByOutputIdx[ev.OutputIndex],
+			// F-320: typed struct + dropped unused fields — see
+			// chatCompletionAnthropic for rationale.
+			runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
+				Text:  ev.Delta,
+				Index: idxByOutputIdx[ev.OutputIndex],
 			})
 
 		case "response.function_call_arguments.delta":
