@@ -1111,18 +1111,33 @@ body.drag-active .zone {
 }
 [data-theme="win11"] .el-tabs__active-bar { display: none; }
 
-/* Buttons: 4px radius, accent primary, subtle secondary */
-[data-theme="win11"] .el-button { border-radius: 4px; font-weight: 400; }
+/* Buttons: Fluent-style 32px tall, 4px radius, accent primary with subtle shadow */
+[data-theme="win11"] .el-button {
+  height: 32px !important;
+  padding: 6px 16px !important;
+  font-size: 13px !important;
+  border-radius: 4px;
+  font-weight: 400;
+}
 [data-theme="win11"] .el-button--primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.05);
 }
-[data-theme="win11"] .el-button--primary:hover { filter: brightness(1.08); }
+[data-theme="win11"] .el-button--primary:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+}
 [data-theme="win11"] .el-button:not(.el-button--primary):not(.el-button--text) {
-  background: var(--bg-elevated);
-  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+[data-theme="win11"] .el-button:not(.el-button--primary):not(.el-button--text):hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 /* Inputs: bottom-border only */
@@ -1166,10 +1181,19 @@ body.drag-active .zone {
   background: var(--accent);
 }
 
-/* Checkbox / Radio: 2px corner radius */
+/* Checkbox / Radio: 2px corner radius, 16px, hover state with accent border */
 [data-theme="win11"] .el-checkbox__inner,
-[data-theme="win11"] .el-radio__inner { border-radius: 2px; }
-[data-theme="win11"] .el-checkbox__inner { border-width: 1px; }
+[data-theme="win11"] .el-radio__inner {
+  border-radius: 2px;
+  width: 16px;
+  height: 16px;
+  border-width: 1px;
+  background: var(--bg-surface);
+}
+[data-theme="win11"] .el-checkbox__inner:hover,
+[data-theme="win11"] .el-radio__inner:hover {
+  border-color: var(--accent);
+}
 
 /* Scrollbar: 8px wide, fades in on hover */
 [data-theme="win11"] ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -1340,18 +1364,34 @@ body.drag-active .zone {
   border-radius: 1px;
 }
 
-/* Buttons: 6px radius, no border on primary */
-[data-theme="macos26"] .el-button { border-radius: 6px; font-weight: 500; }
+/* Buttons: pill-shaped capsule, 14px radius, accent primary with subtle fill */
+[data-theme="macos26"] .el-button {
+  height: 30px !important;
+  padding: 4px 18px !important;
+  font-size: 13px !important;
+  border-radius: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
 [data-theme="macos26"] .el-button--primary {
   background: var(--accent);
   border: none;
   color: var(--on-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
-[data-theme="macos26"] .el-button--primary:hover { filter: brightness(1.08); }
+[data-theme="macos26"] .el-button--primary:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
 [data-theme="macos26"] .el-button:not(.el-button--primary):not(.el-button--text) {
   background: var(--bg-overlay);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+[data-theme="macos26"] .el-button:not(.el-button--primary):not(.el-button--text):hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 /* Inputs: full border 1px, 6px radius, 2px focus ring */
@@ -1385,9 +1425,19 @@ body.drag-active .zone {
 }
 [data-theme="macos26"] .el-menu-item.is-active::before { display: none; }
 
-/* Checkbox / Radio: 4px corner radius (rounder than Win11) */
+/* Checkbox / Radio: 4px corner radius (rounder than Win11), 16px, hover state with accent border */
 [data-theme="macos26"] .el-checkbox__inner,
-[data-theme="macos26"] .el-radio__inner { border-radius: 4px; }
+[data-theme="macos26"] .el-radio__inner {
+  border-radius: 4px;
+  width: 16px;
+  height: 16px;
+  border-width: 1.5px;
+  background: var(--bg-surface);
+}
+[data-theme="macos26"] .el-checkbox__inner:hover,
+[data-theme="macos26"] .el-radio__inner:hover {
+  border-color: var(--accent);
+}
 
 /* Scrollbar */
 [data-theme="macos26"] ::-webkit-scrollbar { width: 8px; height: 8px; }
