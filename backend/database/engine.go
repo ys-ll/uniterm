@@ -111,6 +111,44 @@ func queryAny(db *sql.DB, query string, args ...any) ([]map[string]any, []string
 	return result, cols, rows.Err()
 }
 
+// QueryRowsStream streams rows to a callback without allocating a map per row.
+// Use it for large results (>~1000 rows); for small results the existing
+// queryStrings / queryAny maps are fine. The callback receives a reusable
+// []string sized to len(cols); values are pre-converted via scanToString.
+// Returning a non-nil error from the callback aborts the scan.
+func QueryRowsStream(db *sql.DB, query string, callback func(row []string) error, args ...any) error {
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	values := make([]any, len(cols))
+	valuePtrs := make([]any, len(cols))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+	out := make([]string, len(cols))
+
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return err
+		}
+		for i, v := range values {
+			out[i] = scanToString(v)
+		}
+		if err := callback(out); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 func scanToAny(v any) any {
 	if v == nil {
 		return nil
