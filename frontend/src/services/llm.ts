@@ -62,7 +62,10 @@ export async function chat(options: ChatOptions): Promise<void> {
 
   const requestBody: Record<string, unknown> = {
     model,
-    max_tokens: 4096,
+    // 16384 keeps long agent turns (tool call + assistant prose + final
+    // answer) from being truncated at 4096 — which used to surface as
+    // cut-off tool inputs. Per-model caps in the backend still apply.
+    max_tokens: 16384,
     system: options.system,
     messages: options.messages,
     tools: options.tools,

@@ -37,7 +37,13 @@ type SSHSession struct {
 	stdout       io.Reader
 	stderr       io.Reader
 	quit         chan struct{}
-	quitOnce     sync.Once
+	// quitMu guards quit and quitClosed so Disconnect can run safely even
+	// when called concurrently from multiple goroutines (session.Wait,
+	// readLoop EOF, keepalive tick, user close) without permanently
+	// consuming the SSHSession — close(s.quit) fires at most once per
+	// Connect, and Connect resets the channel and flag for the next use.
+	quitMu      sync.Mutex
+	quitClosed  bool
 	authAnswerCh chan []byte
 	expectOutput *postLoginOutputBuffer
 
@@ -76,6 +82,15 @@ func (s *SSHSession) Connect(config ConnectionConfig) error {
 	} else {
 		s.title = fmt.Sprintf("%s@%s", config.User, config.Host)
 	}
+
+	// Fresh connect on a reused instance: replace s.quit so background
+	// goroutines (startKeepAlive, runPostLoginExpect) can block on it
+	// again, and clear quitClosed so Disconnect can fire exactly once
+	// per connect cycle.
+	s.quitMu.Lock()
+	s.quitClosed = false
+	s.quit = make(chan struct{})
+	s.quitMu.Unlock()
 
 	// Set up keyboard-interactive auth input channel.
 	s.mu.Lock()
@@ -459,21 +474,30 @@ func (s *SSHSession) Write(data []byte) error {
 	return err
 }
 
-// Disconnect tears down the SSH session. It uses sync.Once so the entire
-// teardown sequence executes exactly once, regardless of how many goroutines
-// call Disconnect concurrently (session.Wait, readLoop error, keepalive
-// failure, or explicit user close).
+// Disconnect tears down the SSH session. It is safe to call from multiple
+// goroutines (session.Wait, readLoop EOF, keepalive tick, user close) and
+// safe to call again after a subsequent Connect — quitMu guards close(s.quit)
+// so it fires at most once per Connect, and Connect resets the channel and
+// quitClosed flag so a reused SSHSession tears down cleanly the next time.
 func (s *SSHSession) Disconnect() error {
-	s.quitOnce.Do(func() {
-		close(s.quit)
-		if s.session != nil {
-			s.session.Close()
-		}
-		if s.client != nil {
-			s.client.Close()
-		}
-		s.setStatus(StatusDisconnected)
-	})
+	s.quitMu.Lock()
+	if s.quitClosed {
+		s.quitMu.Unlock()
+		return nil
+	}
+	s.quitClosed = true
+	close(s.quit)
+	ses := s.session
+	cli := s.client
+	s.quitMu.Unlock()
+
+	if ses != nil {
+		ses.Close()
+	}
+	if cli != nil {
+		cli.Close()
+	}
+	s.setStatus(StatusDisconnected)
 	return nil
 }
 
