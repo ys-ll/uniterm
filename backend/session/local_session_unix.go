@@ -148,7 +148,9 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 }
 
 func (s *LocalSession) readLoop() {
-	buf := make([]byte, 4096)
+	// 16 KiB reused read buffer; emitData's callbacks copy the bytes, so
+	// buf[:n] can be handed off without an extra append.
+	buf := make([]byte, 16384)
 	for {
 		select {
 		case <-s.quit:
@@ -159,7 +161,7 @@ func (s *LocalSession) readLoop() {
 		n, err := s.pty.Read(buf)
 		if n > 0 {
 			s.RecordReadActivity()
-			data := append([]byte(nil), buf[:n]...)
+			data := buf[:n]
 			s.emitData(data)
 			s.updateMouseTrackingState(data)
 		}
