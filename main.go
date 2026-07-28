@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"time"
 
 	// F-201: register pprof handlers on the default mux.
 	_ "net/http/pprof"
@@ -87,11 +88,32 @@ func main() {
 
 	// Read the persisted window-frame preference before wails.Run — the frame
 	// style is fixed at startup and can't be toggled at runtime.
+	//
+	// F-410: the previous version did the Load() synchronously, so a slow
+	// home directory (network share, antivirus scan, locked file) could stall
+	// main() and delay the entire first paint. Default to the frameless
+	// preference (systemTitleBar=false) and race the disk load against a
+	// short timeout; on a slow disk we paint the default, on a fast disk
+	// we use the persisted value. The background goroutine's result is
+	// discarded — it's purely there to absorb the disk latency.
 	systemTitleBar := false
 	if configDir, err := os.UserConfigDir(); err == nil {
 		ls := store.NewLocalStateStore(filepath.Join(configDir, "uniTerm"))
-		if state, err := ls.Load(); err == nil {
-			systemTitleBar = state.SystemTitleBar
+		done := make(chan bool, 1)
+		go func() {
+			if state, err := ls.Load(); err == nil {
+				done <- state.SystemTitleBar
+				return
+			}
+			done <- false
+		}()
+		select {
+		case v := <-done:
+			systemTitleBar = v
+		case <-time.After(100 * time.Millisecond):
+			// Slow disk — paint the default. The goroutine continues to load
+			// in the background; its result is discarded because the
+			// window-frame option is fixed at startup.
 		}
 	}
 
