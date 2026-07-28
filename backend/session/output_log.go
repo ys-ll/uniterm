@@ -202,7 +202,14 @@ func (p *lineProcessor) Feed(in []byte) []byte {
 		return nil
 	}
 	now := time.Now()
-	var out []byte
+	// Pre-size out: at most every byte in `in` can produce one byte of
+	// output, plus the trailing pending line tail (F-015). Avoids the
+	// var-out nil growth that paid one allocation per append.
+	cap := len(in) + (len(p.line) - p.emitted)
+	if cap < 0 {
+		cap = len(in)
+	}
+	out := make([]byte, 0, cap)
 	// If we have been idle long enough and there is un-emitted content in
 	// the buffer, flush only the new tail (bytes past the high-water mark)
 	// so timestamps in the log roughly track the wall clock. The partial
