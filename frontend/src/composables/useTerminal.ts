@@ -107,6 +107,29 @@ export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]
         brightCyan: '#33b3b3',
         brightWhite: '#2d2d2d'
       }
+    case 'uniterm-windows11':
+      return {
+        background: '#0c0c0c',
+        foreground: '#cccccc',
+        cursor: '#ffffff',
+        selectionBackground: 'rgba(255, 255, 255, 0.4)',
+        black: '#0c0c0c',
+        red: '#e74856',
+        green: '#16c60c',
+        yellow: '#f9f1a5',
+        blue: '#3b78ff',
+        magenta: '#b4009e',
+        cyan: '#61d6d6',
+        white: '#cccccc',
+        brightBlack: '#767676',
+        brightRed: '#e74856',
+        brightGreen: '#16c60c',
+        brightYellow: '#f9f1a5',
+        brightBlue: '#3b78ff',
+        brightMagenta: '#b4009e',
+        brightCyan: '#61d6d6',
+        brightWhite: '#f2f2f2'
+      }
     case 'uniterm-light':
       return {
         background: '#fafafa',

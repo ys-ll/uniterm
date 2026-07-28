@@ -244,20 +244,20 @@
 
 /* Windows 11 - mica light */
 [data-theme="win11"] {
-  --bg-base: #fafafa;
-  --bg-elevated: #f3f3f3;
+  --bg-base: #f3f7fc;
+  --bg-elevated: #eaf2fb;
   --bg-surface: #ffffff;
-  --bg-overlay: #ebebeb;
-  --bg-hover: #e5e5e5;
-  --bg-active: #d9d9d9;
+  --bg-overlay: #e0eaf5;
+  --bg-hover: #d8e4f3;
+  --bg-active: #c5d8ec;
   --text-primary: #1c1c1c;
   --text-secondary: #5c5c5c;
   --text-muted: #707070;
   --text-disabled: #9a9a9a;
-  --accent: #0078d4;
-  --accent-glow: rgba(0, 120, 212, 0.22);
-  --accent-subtle: rgba(0, 120, 212, 0.08);
-  --info: #006ab1;
+  --accent: #0067c0;
+  --accent-glow: rgba(0, 103, 192, 0.24);
+  --accent-subtle: rgba(0, 103, 192, 0.10);
+  --info: #005ba1;
   --info-subtle: rgba(0, 106, 177, 0.08);
   --on-accent: #ffffff;
   --chart-1: #16a34a;
@@ -357,7 +357,7 @@
 
 /* Windows 11 - body background gradient (Mica simulation) */
 [data-theme="win11"] body {
-  background: linear-gradient(180deg, #fafbfc 0%, #f3f3f3 100%);
+  background: linear-gradient(180deg, #e8f0fa 0%, #d8e4f3 100%);
 }
 @media (prefers-color-scheme: dark) {
   [data-theme="win11"] body {
