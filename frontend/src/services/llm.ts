@@ -60,18 +60,24 @@ export async function chat(options: ChatOptions): Promise<void> {
 
   if (!apiKey) throw new Error('API key not configured')
 
-  const requestBody: Record<string, unknown> = {
-    model,
-    // 16384 keeps long agent turns (tool call + assistant prose + final
-    // answer) from being truncated at 4096 — which used to surface as
-    // cut-off tool inputs. Per-model caps in the backend still apply.
-    max_tokens: 16384,
-    system: options.system,
-    messages: options.messages,
-    tools: options.tools,
+  // F-319: reuse the cached static prefix (model + max_tokens + tools) so
+  // each turn avoids re-serializing the ~6 KB tools array. cache_control on
+  // the last tool is paired with the backend's F-303 injectCacheControl.
+  // 16384 keeps long agent turns (tool call + assistant prose + final
+  // answer) from being truncated at 4096 — which used to surface as
+  // cut-off tool inputs. Per-model caps in the backend still apply.
+  const cacheKey = `${model}|16384`
+  if (cacheKey !== staticPrefixCacheKey) {
+    staticPrefixCacheKey = cacheKey
+    staticPrefixCache = `{"model":${JSON.stringify(model)},"max_tokens":16384,"tools":${TOOLS_JSON_WITH_CACHE}`
   }
 
-  const requestJSON = JSON.stringify(requestBody)
+  // System + messages change every turn; stringify only those and concatenate
+  // with the cached static prefix. The result is valid JSON that the backend
+  // json.Unmarshal reads identically to a single-pass stringify.
+  const requestJSON = staticPrefixCache
+    + `,"system":${JSON.stringify(options.system)}`
+    + `,"messages":${JSON.stringify(options.messages)}`
 
   let responseText: string
   try {
@@ -357,3 +363,18 @@ export const AVAILABLE_TOOLS = [
     }
   }
 ]
+
+// F-319: AVAILABLE_TOOLS is module-constant. Pre-stringify the JSON once so
+// each turn avoids re-serializing the ~6 KB tools array. The last tool
+// carries an Anthropic cache_control breakpoint (paired with the backend's
+// F-303 injectCacheControl — harmless overlap).
+const TOOLS_JSON_WITH_CACHE = JSON.stringify([
+  ...AVAILABLE_TOOLS.slice(0, -1),
+  { ...AVAILABLE_TOOLS[AVAILABLE_TOOLS.length - 1], cache_control: { type: 'ephemeral' } },
+])
+
+// F-319: cache the static `model + max_tokens + tools` JSON prefix per active
+// model. Built once when the model changes; the system prompt and messages
+// are stringified and concatenated per turn.
+let staticPrefixCache = ''
+let staticPrefixCacheKey = ''
