@@ -157,14 +157,34 @@ func (s *MonitorSession) Connect(config ConnectionConfig) error {
 }
 
 func (s *MonitorSession) pushSystemInfo() {
-	info := s.collectSystemInfo()
-	if info != nil {
-		data, _ := json.Marshal(map[string]interface{}{
-			"type":   "system",
-			"system": info,
-		})
-		s.emitData(data)
+	const maxAttempts = 3
+	var info map[string]interface{}
+	backoff := 250 * time.Millisecond
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		info = s.collectSystemInfo()
+		if info != nil {
+			break
+		}
+		if attempt == maxAttempts {
+			return
+		}
+		// Respect a quit signal between retries so a fast disconnect doesn't
+		// have to wait through the full backoff schedule.
+		select {
+		case <-s.quit:
+			return
+		case <-time.After(backoff):
+		}
+		backoff *= 2
 	}
+	if info == nil {
+		return
+	}
+	data, _ := json.Marshal(map[string]interface{}{
+		"type":   "system",
+		"system": info,
+	})
+	s.emitData(data)
 }
 
 func (s *MonitorSession) collectSystemInfo() map[string]interface{} {

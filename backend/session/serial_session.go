@@ -109,6 +109,15 @@ func (s *SerialSession) SetSerialConfig(cfg SerialConfig) {
 func (s *SerialSession) readLoop() {
 	buf := make([]byte, 4096)
 	for {
+		// Bail out promptly if Disconnect has been called (s.port.Close()
+		// inside Disconnect will also trip an err on the next Read, but the
+		// explicit quit check avoids emitting a stray error line on the path
+		// where the caller is already aware of the shutdown).
+		select {
+		case <-s.quit:
+			return
+		default:
+		}
 		n, err := s.port.Read(buf)
 		if n > 0 {
 			data := make([]byte, n)

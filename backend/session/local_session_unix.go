@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/creack/pty"
 )
@@ -70,6 +71,11 @@ type LocalSession struct {
 	pty                  *os.File
 	quit                 chan struct{}
 	quitOnce             sync.Once
+	// waitDone is closed when the cmd.Wait goroutine has returned, so
+	// Disconnect can join it (and avoid racing with the shell's own exit
+	// handler while still applying a kill only when the child didn't exit
+	// on its own).
+	waitDone             chan struct{}
 	mouseTrackingEnabled atomic.Bool
 }
 
@@ -117,8 +123,14 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		return fmt.Errorf("start pty: %w", err)
 	}
 	s.pty = ptyFile
+	s.waitDone = make(chan struct{})
 
+	// Run cmd.Wait in its own goroutine and signal completion on waitDone so
+	// Disconnect can join it before tearing the child down. Without this,
+	// Disconnect's process.Kill() races with cmd.Wait and a successful
+	// in-flight Wait can return after the session is already marked down.
 	go func() {
+		defer close(s.waitDone)
 		_ = s.cmd.Wait()
 		s.Disconnect()
 	}()
@@ -194,11 +206,22 @@ func (s *LocalSession) Disconnect() error {
 	s.quitOnce.Do(func() {
 		close(s.quit)
 	})
+	// Closing the PTY first sends EOF on the child's stdin; well-behaved
+	// shells exit on their own. Only if the child doesn't exit within a short
+	// grace window do we escalate to a SIGKILL. Either way we join the Wait
+	// goroutine via waitDone before returning, so callers don't see a
+	// session marked down while the child is still being reaped.
 	if s.pty != nil {
 		s.pty.Close()
 	}
-	if s.cmd != nil && s.cmd.Process != nil {
-		s.cmd.Process.Kill()
+	if s.cmd != nil && s.cmd.Process != nil && s.waitDone != nil {
+		select {
+		case <-s.waitDone:
+			// Child reaped itself; nothing more to do.
+		case <-time.After(500 * time.Millisecond):
+			_ = s.cmd.Process.Kill()
+			<-s.waitDone
+		}
 	}
 	s.setStatus(StatusDisconnected)
 	return nil

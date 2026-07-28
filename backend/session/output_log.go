@@ -319,6 +319,12 @@ func (p *lineProcessor) applyCSI(csi []byte) {
 		}
 		ins := make([]byte, n)
 		p.line = append(p.line[:p.pos], append(ins, p.line[p.pos:]...)...)
+		// Bytes that were past the insert point shifted right by n. If any of
+		// those were already emitted, bump the high-water mark so they aren't
+		// double-flushed on the next sweep.
+		if p.emitted > p.pos {
+			p.emitted += n
+		}
 	}
 	// If the buffer was shortened past the emitted mark, pull it back so
 	// we don't silently lose bytes that were already flushed.
@@ -326,6 +332,11 @@ func (p *lineProcessor) applyCSI(csi []byte) {
 		p.emitted = len(p.line)
 	}
 }
+
+// maxCSIParam caps parsed CSI numeric parameters so a hostile or buggy
+// remote can't feed values that overflow int arithmetic and drive p.pos
+// negative downstream. Real terminals never exceed a few thousand.
+const maxCSIParam = 4096
 
 // parseCSIParam extracts the idx-th semicolon-separated numeric parameter
 // from params. Returns defaultVal if the parameter is missing or empty.
@@ -356,7 +367,13 @@ func parseCSIParam(params []byte, idx, defaultVal int) int {
 	}
 	n := 0
 	for _, b := range params[start:end] {
+		if b < '0' || b > '9' {
+			break
+		}
 		n = n*10 + int(b-'0')
+		if n > maxCSIParam {
+			return maxCSIParam
+		}
 	}
 	return n
 }

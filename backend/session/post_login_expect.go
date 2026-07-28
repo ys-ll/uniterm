@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const postLoginExpectBufferLimit = 8192
@@ -186,5 +187,24 @@ func trimPostLoginOutput(output string) string {
 	if len(output) <= postLoginExpectBufferLimit {
 		return output
 	}
-	return output[len(output)-postLoginExpectBufferLimit:]
+	// Walk back from the trim boundary until DecodeLastRuneInString stops
+	// reporting (RuneError, 1): that pair is returned exactly when its
+	// input ends with an incomplete UTF-8 sequence. Bumping the cut point
+	// past those trailing bytes preserves the rune rather than splitting it.
+	start := len(output) - postLoginExpectBufferLimit
+	for start > 0 {
+		_, size := utf8.DecodeLastRuneInString(output[:start])
+		if size > 1 {
+			// Multi-byte rune consumed cleanly; we're sitting between runes.
+			break
+		}
+		// size==1 either means ASCII or the tail of an invalid sequence.
+		// An ASCII byte at start-1 means we're already on a rune boundary;
+		// a continuation byte (0x80..0xBF) means we chopped mid-rune.
+		if output[start-1]&0xC0 != 0x80 {
+			break
+		}
+		start--
+	}
+	return output[start:]
 }
