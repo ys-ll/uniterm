@@ -217,6 +217,23 @@ function validateReadSkillFileInput(raw: unknown): ReadSkillFileInput {
   }
 }
 
+// F-312: cap the bytes stored in a tool message so a single tool call can't
+// blow up the conversation computed. The model can still see the beginning
+// and end of long output; the in-between is dropped with a clear marker.
+// 32 KB total, 8 KB head, 16 KB tail — biased to the tail because error
+// messages and final state almost always live at the bottom of terminal output.
+const TOOL_RESULT_MAX_BYTES = 32 * 1024
+const TOOL_RESULT_HEAD_BYTES = 8 * 1024
+const TOOL_RESULT_TAIL_BYTES = 16 * 1024
+
+function capToolResult(text: string): string {
+  if (text.length <= TOOL_RESULT_MAX_BYTES) return text
+  const head = text.slice(0, TOOL_RESULT_HEAD_BYTES)
+  const tail = text.slice(text.length - TOOL_RESULT_TAIL_BYTES)
+  const omitted = text.length - TOOL_RESULT_HEAD_BYTES - TOOL_RESULT_TAIL_BYTES
+  return `${head}\n\n─────── [已截断: 工具结果共 ${text.length} 字节, 已省略 ${omitted} 字节] ────────\n调整工具参数（如 head_lines / tail_lines）或分段调用以查看被截断部分。\n\n${tail}`
+}
+
 function getShellName(path?: string): string {
   if (!path) return 'Unknown'
   const lower = path.toLowerCase()
@@ -699,7 +716,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `${status}\n${result.output}`,
+          content: capToolResult(`${status}\n${result.output}`),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -751,7 +768,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output || '(command started)',
+          content: capToolResult(result.output || '(command started)'),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -771,7 +788,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output || '(terminal is empty)',
+          content: capToolResult(result.output || '(terminal is empty)'),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -805,7 +822,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `${status}\n${result.output}`,
+          content: capToolResult(`${status}\n${result.output}`),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -839,7 +856,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output || '(input sent)',
+          content: capToolResult(result.output || '(input sent)'),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -858,7 +875,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output || 'Sent Ctrl+C to interrupt the running command.',
+          content: capToolResult(result.output || 'Sent Ctrl+C to interrupt the running command.'),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -957,7 +974,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `[Skill loaded: ${name}]\n${manifest}`,
+          content: capToolResult(`[Skill loaded: ${name}]\n${manifest}`),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -983,7 +1000,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `[Skill file: ${name}/${path}]\n${content}`,
+          content: capToolResult(`[Skill file: ${name}/${path}]\n${content}`),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -1046,7 +1063,7 @@ export async function approveTool(_messageId: string) {
       store.addMessage({
         id: `msg-${Date.now()}`,
         role: 'tool',
-        content: result.output || '(command started)',
+        content: capToolResult(result.output || '(command started)'),
         tool_call_id: cmd.toolId
       })
     } else {
@@ -1055,7 +1072,7 @@ export async function approveTool(_messageId: string) {
       store.addMessage({
         id: `msg-${Date.now()}`,
         role: 'tool',
-        content: `${status}\n${result.output}`,
+        content: capToolResult(`${status}\n${result.output}`),
         tool_call_id: cmd.toolId
       })
     }
