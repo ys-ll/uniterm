@@ -435,6 +435,8 @@ export function SyncChangePassword(arg1:string,arg2:string):Promise<void>;
 
 export function SyncConfigureRepo(arg1:string,arg2:string,arg3:string,arg4:string):Promise<sync.SyncResult>;
 
+export function SyncConfigureLocalRepo(arg1:string,arg2:string):Promise<sync.SyncResult>;
+
 export function SyncDeleteRepo():Promise<void>;
 
 export function SyncGetConfig():Promise<sync.SyncConfig>;

@@ -296,6 +296,12 @@ func (s *SyncService) TestConnection() error {
 	if config.RepoURL == "" {
 		return fmt.Errorf("仓库地址未设置")
 	}
+	if config.Local {
+		if _, err := os.Stat(filepath.Join(config.RepoURL, ".git")); err != nil {
+			return fmt.Errorf("本地仓库不可访问: %w", err)
+		}
+		return nil
+	}
 	username := config.Username
 	token := s.getToken()
 	return TestConnection(config.RepoURL, username, token)
@@ -797,8 +803,15 @@ func (s *SyncService) DeleteRepo() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := os.RemoveAll(s.repoPath); err != nil {
-		return fmt.Errorf("remove repo: %w", err)
+	config, _ := s.configStore.Load()
+	if config.Local && config.RepoURL != "" {
+		if err := os.RemoveAll(config.RepoURL); err != nil {
+			return fmt.Errorf("remove local repo: %w", err)
+		}
+	} else {
+		if err := os.RemoveAll(s.repoPath); err != nil {
+			return fmt.Errorf("remove repo: %w", err)
+		}
 	}
 
 	_ = s.keychain.Delete("encryption-key")
@@ -857,4 +870,89 @@ func verifyDecryption(repoPath string, key []byte) error {
 	}
 	defer os.RemoveAll(tmpDir)
 	return DecryptConfigFiles(repoPath, tmpDir, key, nil)
+}
+
+
+// syncLocal runs a one-way backup into a local directory. Caller must
+// hold s.mu and have already loaded config + encKey.
+func (s *SyncService) syncLocal(config SyncConfig, encKey []byte) (*SyncResult, error) {
+	repo, err := OpenOrInitLocal(config.RepoURL)
+	if err != nil {
+		s.updateLastSyncResult("failed", fmt.Sprintf("open local repo: %v", err))
+		return nil, fmt.Errorf("open local repo: %w", err)
+	}
+	if err := EncryptConfigFiles(s.configDir, config.RepoURL, encKey, s.keychain); err != nil {
+		s.updateLastSyncResult("failed", fmt.Sprintf("encrypt files: %v", err))
+		return nil, fmt.Errorf("encrypt files: %w", err)
+	}
+	if _, err := repo.StageAndCommit(commitMsg("uniTerm config sync")); err != nil {
+		s.updateLastSyncResult("failed", fmt.Sprintf("commit: %v", err))
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	s.updateLastSyncResult("success", "")
+	return &SyncResult{Direction: SyncPush, Message: "已备份到本地仓库"}, nil
+}
+
+// ConfigureLocalRepo sets up a local-only sync backup directory.
+func (s *SyncService) ConfigureLocalRepo(localPath, masterPassword string) (*SyncResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if localPath == "" {
+		return nil, fmt.Errorf("本地路径不能为空")
+	}
+
+	repo, err := OpenOrInitLocal(localPath)
+	if err != nil {
+		return nil, fmt.Errorf("open local repo: %w", err)
+	}
+
+	salt, err := ReadSaltFile(localPath)
+	if err != nil {
+		return nil, fmt.Errorf("read salt: %w", err)
+	}
+
+	var encKey []byte
+	if salt != nil {
+		encKey = DeriveKey(masterPassword, salt)
+		if err := verifyDecryption(localPath, encKey); err != nil {
+			return nil, fmt.Errorf("主密码错误，无法解密本地配置")
+		}
+	} else {
+		salt, err = GenerateSalt()
+		if err != nil {
+			return nil, fmt.Errorf("generate salt: %w", err)
+		}
+		encKey = DeriveKey(masterPassword, salt)
+		if err := WriteSaltFile(localPath, salt); err != nil {
+			return nil, fmt.Errorf("write salt: %w", err)
+		}
+	}
+
+	if err := s.keychain.StoreEncryptionKey(encKey); err != nil {
+		return nil, fmt.Errorf("store encryption key: %w", err)
+	}
+
+	if err := EncryptConfigFiles(s.configDir, localPath, encKey, s.keychain); err != nil {
+		return nil, fmt.Errorf("encrypt files: %w", err)
+	}
+	if _, err := repo.StageAndCommit(commitMsg("uniTerm config sync")); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	cfg := SyncConfig{
+		RepoURL: localPath,
+		Branch:  "main",
+		Local:   true,
+	}
+	if err := s.configStore.Save(cfg); err != nil {
+		return nil, fmt.Errorf("save config: %w", err)
+	}
+
+	if err := DecryptConfigFiles(localPath, s.configDir, encKey, s.keychain); err != nil {
+		return nil, fmt.Errorf("decrypt files: %w", err)
+	}
+
+	s.updateLastSyncResult("success", "")
+	return &SyncResult{Direction: SyncPush, Message: "本地仓库配置成功"}, nil
 }

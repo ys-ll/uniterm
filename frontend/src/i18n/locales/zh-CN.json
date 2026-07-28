@@ -1111,5 +1111,13 @@
   "settings.skillsImportZip": "导入 Zip",
   "settings.skillsImportDir": "导入文件夹",
   "settings.skillsImportFolderHint": "支持含 references/、scripts/ 的文件夹型 skill",
-  "settings.skillsImportOk": "已导入技能「{name}」"
+  "settings.skillsImportOk": "已导入技能「{name}」",
+  "settings.syncLocalPath": "本地路径",
+  "addRepo.mode": "模式",
+  "addRepo.modeRemote": "远端（GitHub / GitLab / Gitee）",
+  "addRepo.modeLocal": "本地目录",
+  "addRepo.localPath": "本地路径",
+  "addRepo.localPathPlaceholder": "/path/to/backup/uniterm-sync",
+  "addRepo.localPathHint": "单向备份。空目录会自动 git init，加密快照作为 commit 写入此处。",
+  "addRepo.localPathRequired": "请选择一个本地目录"
 }

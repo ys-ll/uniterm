@@ -1780,6 +1780,7 @@ export namespace sync {
 	    repoUrl: string;
 	    branch: string;
 	    username: string;
+	    local: boolean;
 	    autoSync: boolean;
 	    // Go type: time
 	    lastSyncAt: any;
@@ -1795,6 +1796,7 @@ export namespace sync {
 	        this.repoUrl = source["repoUrl"];
 	        this.branch = source["branch"];
 	        this.username = source["username"];
+	        this.local = source["local"];
 	        this.autoSync = source["autoSync"];
 	        this.lastSyncAt = this.convertValues(source["lastSyncAt"], null);
 	        this.lastSyncStatus = source["lastSyncStatus"];

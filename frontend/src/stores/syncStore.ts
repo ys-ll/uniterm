@@ -8,6 +8,7 @@ import {
   SyncResolveConflict,
   SyncTestConnection,
   SyncConfigureRepo,
+  SyncConfigureLocalRepo,
   SyncChangePassword,
   SyncDeleteRepo,
 } from '../../wailsjs/go/main/App'
@@ -24,6 +25,7 @@ export interface SyncConfig {
   repoUrl: string
   branch: string
   username: string
+  local: boolean
   autoSync: boolean
   lastSyncAt: string
   lastSyncStatus: string
@@ -47,6 +49,7 @@ export const useSyncStore = defineStore('sync', () => {
     repoUrl: '',
     branch: 'main',
     username: '',
+    local: false,
     autoSync: false,
     lastSyncAt: '',
     lastSyncStatus: '',
@@ -70,6 +73,7 @@ export const useSyncStore = defineStore('sync', () => {
         repoUrl: cfg.repoUrl || '',
         branch: cfg.branch || 'main',
         username: cfg.username || '',
+        local: cfg.local || false,
         autoSync: cfg.autoSync || false,
         lastSyncAt: cfg.lastSyncAt || '',
         lastSyncStatus: cfg.lastSyncStatus || '',
@@ -86,6 +90,7 @@ export const useSyncStore = defineStore('sync', () => {
       cfg.repoUrl = config.value.repoUrl
       cfg.branch = config.value.branch
       cfg.username = config.value.username
+      cfg.local = config.value.local
       cfg.autoSync = config.value.autoSync
       cfg.lastSyncAt = config.value.lastSyncAt
       cfg.lastSyncStatus = config.value.lastSyncStatus
@@ -185,6 +190,22 @@ export const useSyncStore = defineStore('sync', () => {
     }
   }
 
+  async function configureLocalRepo(localPath: string, masterPassword: string): Promise<SyncResult | null> {
+    syncing.value = true
+    try {
+      const result = await SyncConfigureLocalRepo(localPath, masterPassword)
+      await loadConfig()
+      return {
+        direction: result.direction ?? (result as any).Direction ?? 0,
+        message: result.message ?? (result as any).Message ?? '',
+      }
+    } catch (e: any) {
+      throw e
+    } finally {
+      syncing.value = false
+    }
+  }
+
   async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
     try {
       await SyncChangePassword(oldPassword, newPassword)
@@ -250,6 +271,7 @@ export const useSyncStore = defineStore('sync', () => {
     resolveConflict,
     testConnection,
     configureRepo,
+    configureLocalRepo,
     changePassword,
     deleteRepo,
     formatSyncTime,

@@ -1109,5 +1109,13 @@
   "settings.skillsImportZip": "Zip importieren",
   "settings.skillsImportDir": "Ordner importieren",
   "settings.skillsImportFolderHint": "Unterstützt Ordner-Skills mit references/ und scripts/",
-  "settings.skillsImportOk": "Skill „{name}“ importiert"
+  "settings.skillsImportOk": "Skill „{name}“ importiert",
+  "settings.syncLocalPath": "Lokaler Pfad",
+  "addRepo.mode": "Modus",
+  "addRepo.modeRemote": "Remote (GitHub / GitLab / ...)",
+  "addRepo.modeLocal": "Lokaler Ordner",
+  "addRepo.localPath": "Lokaler Pfad",
+  "addRepo.localPathPlaceholder": "/path/to/backup/uniterm-sync",
+  "addRepo.localPathHint": "Einseitige Sicherung. Ein leerer Ordner wird automatisch per git init initialisiert. Verschlüsselte Snapshots werden hier als Commits abgelegt.",
+  "addRepo.localPathRequired": "Bitte einen lokalen Ordner wählen"
 }

@@ -1109,5 +1109,13 @@
   "settings.skillsImportZip": "Zip 가져오기",
   "settings.skillsImportDir": "폴터 가져오기",
   "settings.skillsImportFolderHint": "references/ 및 scripts/가 있는 폴터 스킬 지원",
-  "settings.skillsImportOk": "스킬 \"{name}\"을(를) 가져왔습니다"
+  "settings.skillsImportOk": "스킬 \"{name}\"을(를) 가져왔습니다",
+  "settings.syncLocalPath": "로컬 경로",
+  "addRepo.mode": "모드",
+  "addRepo.modeRemote": "원격 (GitHub / GitLab / ...)",
+  "addRepo.modeLocal": "로컬 폴더",
+  "addRepo.localPath": "로컬 경로",
+  "addRepo.localPathPlaceholder": "/path/to/backup/uniterm-sync",
+  "addRepo.localPathHint": "단방향 백업. 빈 폴더는 자동으로 git init 되며 암호화된 스냅샷이 commit 으로 저장됩니다.",
+  "addRepo.localPathRequired": "로컬 폴더를 선택해 주세요"
 }
