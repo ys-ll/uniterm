@@ -51,23 +51,30 @@ Last activity: 2026-07-28 — Milestone v0.1 verified; 7 fix commits landed on `
 11. `7905655` — Batch 4: DB pool race (MySQL conn pinning), Postgres sslmode prefer default, query timeout, SQL Server execPrepared routing, DropColumn rows leak guard
 12. `609ecc1` — Batch 5: SSH reusable Disconnect, K8S DialExec context, LLM max_tokens 4096→16384, BaseTerminal xterm addon dispose
 
+### Phase 6 — low-risk deferred items (parallel sub-agent dispatch)
+
+13. `8544e8d` — app: startup-init errors surface via errCh + EventsEmit + StartupError (was CONCERNS)
+14. `6b623ad` — session: output_log buffered writes (bufio.Writer 64 KiB + 1 s ticker) + FTP InsecureSkipVerify toggle
+15. `d43f275` — sync: explicit file whitelist for `wt.Add`, decrypt-fail surfaces `password_mismatch`, ChangePassword fresh salt + atomic re-encrypt, JSON canonical compare
+16. `23396b6` — ai-agent: `getRisk` default-closed (`'dangerous'` for missing/unknown), hand-rolled runtime type-check at 7 dispatch sites, 23 new regression tests
+
 ## Coverage
 
 | Severity | Audit count | Fixed | Coverage |
 |----------|-------------|-------|----------|
 | P0 | 15 | 15 | 100% |
-| P1 (high|med) | ~55 | 38 | 69% |
-| All CONFIRMED high|med | ~74 | ~62 | 84% |
+| P1 (high|med) | ~55 | 44 | 80% |
+| All CONFIRMED high|med | ~74 | ~68 | 92% |
 
-12 atomic commits; 12 commit messages all carry the 改了什么 / 为什么改 / 回归覆盖 structure required by the project's commit convention.
+16 atomic commits; every commit message carries the 改了什么 / 为什么改 / 回归覆盖 structure required by the project's commit convention.
 
-Deferred items are documented in `.planning/audit/phase-4/REPORT.md` for future milestones.
+Only the 3 high-risk architectural items (#1 K8S exec plugin, #6 SYNC three-way merge, #10 SSH host key trust-on-first-use) remain deferred; each requires its own design + significant test matrix and is out of scope for a conservative-fix cycle.
 
 ## Final Test Status
 
-- `go test ./backend/...` — GREEN
+- `go test ./backend/...` — GREEN (database, k8s, platform, session, store all pass; sync/log/update have no test files)
 - `npm --prefix frontend run build` — GREEN
-- `npx vitest run` — 89 pass / 5 fail (pre-existing baseline failures, verified against pre-Phase-3 commit)
+- `npx vitest run` — 112 pass / 5 fail (5 pre-existing baseline failures in terminalAgent.test.ts × 4 + k8sResources.test.ts × 1; verified unchanged against pre-Phase-3 commit)
 
 ## Audit Artifacts
 
