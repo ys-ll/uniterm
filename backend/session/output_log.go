@@ -28,9 +28,16 @@ import (
 type ansiStripper struct {
 	// pending holds bytes from an incomplete escape sequence carried over
 	// from the previous Strip call. When Strip is called again, pending
-	// is prepended to the new input before parsing resumes.
+	// is prepended to the new input before parsing resumes. Pending is
+	// capped at ansiStripperPendingCap to bound memory on streams that
+	// produce ongoing incomplete tails (F-014).
 	pending []byte
 }
+
+// ansiStripperPendingCap caps the incomplete-tail buffer of ansiStripper.
+// Real ANSI sequences fit in a handful of bytes; anything beyond 1 KiB
+// is almost certainly a malformed stream (F-014).
+const ansiStripperPendingCap = 1024
 
 // Strip returns in with ANSI escape sequences removed, EXCEPT the small set
 // of in-line cursor/erase CSI sequences that lineProcessor interprets to
@@ -53,8 +60,16 @@ func (s *ansiStripper) Strip(in []byte) []byte {
 		if b == 0x1b { // ESC
 			end, complete := scanEscape(data, i)
 			if !complete {
-				// Incomplete tail: save for next chunk.
-				s.pending = append(s.pending[:0], data[i:]...)
+				// Incomplete tail: save for next chunk, but cap the buffer
+				// so a hostile or buggy stream can't grow pending forever
+				// (F-014). If we'd overflow, drop the tail entirely —
+				// losing a few escape bytes is preferable to OOM.
+				tail := data[i:]
+				if len(tail) > ansiStripperPendingCap {
+					s.pending = nil
+					return out
+				}
+				s.pending = append(s.pending[:0], tail...)
 				return out
 			}
 			if isPreservedCSI(data[i:end]) {
