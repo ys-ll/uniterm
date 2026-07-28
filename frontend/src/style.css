@@ -337,6 +337,8 @@
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
     --scrim: rgba(0, 0, 0, 0.35);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
     --el-bg-color: #2c2c2c;
     --el-bg-color-page: #202020;
     --el-fill-color-blank: #2c2c2c;
@@ -1283,6 +1285,8 @@ body.drag-active .zone {
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
     --scrim: rgba(0, 0, 0, 0.4);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.20);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
     --el-bg-color: #1e1e1e;
     --el-bg-color-page: #1e1e1e;
     --el-fill-color-blank: #1e1e1e;
