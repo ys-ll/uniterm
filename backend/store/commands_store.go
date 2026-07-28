@@ -115,7 +115,7 @@ func (s *CommandsStore) savePrefs(data commandPrefsData) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.prefsPath(), bytes, 0600)
+	return atomicWriteFile(s.prefsPath(), bytes, 0600)
 }
 
 // ---- 文件扫描（内容/存在性以 commands/*.md 为真相源）----
@@ -307,7 +307,7 @@ func (s *CommandsStore) CreateCommand(name, description, argumentHint, body stri
 	}
 	mdPath := filepath.Join(s.commandsRoot(), name+commandFileExt)
 	content := assembleCommandMD(name, description, argumentHint, body)
-	if err := os.WriteFile(mdPath, []byte(content), 0644); err != nil {
+	if err := atomicWriteFile(mdPath, []byte(content), 0644); err != nil {
 		return err
 	}
 	prefs, err := s.loadPrefs()
@@ -367,7 +367,7 @@ func (s *CommandsStore) SaveCommand(name, description, argumentHint, body string
 	}
 	mdPath := filepath.Join(s.commandsRoot(), name+commandFileExt)
 	content := assembleCommandMD(name, description, argumentHint, body)
-	if err := os.WriteFile(mdPath, []byte(content), 0644); err != nil {
+	if err := atomicWriteFile(mdPath, []byte(content), 0644); err != nil {
 		return err
 	}
 	s.invalidateListCache() // .md 先于 setPref 写入，先失效以免窗口内读到旧版本
