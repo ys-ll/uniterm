@@ -468,10 +468,7 @@ type connDelta struct {
 	All  *session.ConnectionStoreData `json:"all,omitempty"`  // for replace (first emit)
 }
 
-// F-205: typed event shapes so session:data / session:binary emits
-// stop allocating a fresh map[string]interface{} per chunk. Wails
-// EventsEmit JSON-marshals every ...interface{} arg itself, so the
-// struct fields cross the bridge directly.
+// F-205: typed event shapes for session:data / session:binary emits.
 type sessionDataEvent struct {
 	ID   string `json:"id"`
 	Data string `json:"data"`
@@ -1576,10 +1573,8 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 
 	s.SetOnDataCallback(func(data []byte) {
 		if a.ctx != nil {
-			// Pass the typed struct directly — Wails EventsEmit
-			// marshals each arg itself, so a pre-encoded JSON string
-			// would be quoted twice and the frontend would receive a
-			// string instead of {id, data}.
+			// Pass struct, not pre-encoded JSON — EventsEmit marshals
+			// each arg itself, so a string would be quoted twice.
 			runtime.EventsEmit(a.ctx, "session:data", sessionDataEvent{
 				ID:   s.ID(),
 				Data: string(data),
