@@ -193,6 +193,9 @@ let zmodemStartTimer: ReturnType<typeof setTimeout> | null = null
 let zmodemDirection: 'upload' | 'download' | undefined = undefined
 let zmodemCancellingUntil = 0
 let exporting = false
+// F-032: rAF coalescer state. Per-instance (see comment above for why).
+let pendingDataChunks: string[] = []
+let pendingFlushRAF: number | null = null
 
 // F-030: hot-path regex literals hoisted to module scope. Inline `/re/g`
 // creates a fresh RegExp object on every entry of the session:data
@@ -205,6 +208,16 @@ const ED2_COMBINED_RE = /\x1b\[H\x1b\[2J/g
 const ED2_RE = /\x1b\[2J/g
 const FFFD_RE = new RegExp('�', 'g')
 const SFTP_OSC633_RE = /\x1b\]633;S[^\x07]*\x07/g
+
+// F-032: rAF coalescer for the session:data -> terminal.write pipeline.
+// Up to ~50 chunks/sec hit this callback during Claude Code streaming;
+// each one ran the 5-pass regex chain (F-030) plus highlight() (10 regex
+// patterns) synchronously, blocking the main thread. We accumulate raw
+// chunks and run the pipeline once per frame. Zmodem detection (which
+// has async handoff) and isActive gating stay synchronous.
+//
+// The pending buffer is instance-scoped: two BaseTerminal instances
+// backing two panels must not coalesce into a shared queue.
 
 function initZmodemService(sessionId: string) {
   if (!sessionId || props.mode !== 'ssh') return
@@ -1145,12 +1158,29 @@ onMounted(() => {
       return
     }
 
+    // F-032: defer the regex pipeline + terminal.write to the next paint
+    // frame. Multiple chunks within one frame collapse into a single pass
+    // instead of paying 5 regex replacements + highlight() per chunk.
+    // writtenChunks is incremented synchronously below so KeepAlive replay
+    // tracking sees the correct count. Zmodem detection ran synchronously
+    // above (it has async handoff); the rAF flush only handles terminal
+    // output.
+    pendingDataChunks.push(payload.data)
+    writtenChunks++
+    if (pendingFlushRAF === null) {
+      pendingFlushRAF = requestAnimationFrame(flushPendingData)
+    }
+  })
+
+  function flushPendingData() {
+    pendingFlushRAF = null
+    if (pendingDataChunks.length === 0 || !terminal) return
+    const raw = pendingDataChunks.join('')
+    pendingDataChunks = []
     // Filter ED3 (erase scrollback).
     // F-030: regex literals hoisted to module scope (ED3_RE / ED2_*_RE /
-    // FFFD_RE / SFTP_OSC633_RE) so we don't recompile them on every chunk.
-    // Inline `/re/g` inside this callback allocated a fresh RegExp ~50/sec
-    // during Claude Code streaming.
-    let data = stripCursorBlink(payload.data, settingsStore.settings.terminal.cursorBlink ?? true).replace(ED3_RE, '')
+    // FFFD_RE / SFTP_OSC633_RE) so we don't recompile them on every flush.
+    let data = stripCursorBlink(raw, settingsStore.settings.terminal.cursorBlink ?? true).replace(ED3_RE, '')
     // For ED2 (clear screen) in the main buffer, replace with scrolling
     // to preserve scrollback history. In alternate screen (vim, less,
     // k9s), pass through unchanged — the app manages its own screen.
@@ -1160,20 +1190,18 @@ onMounted(() => {
       data = data.replace(ED2_COMBINED_RE, scrollClear)
       data = data.replace(ED2_RE, scrollClear)
     }
-    // Drop U+FFFD replacement chars. Claude Code occasionally embeds
-    // partial UTF-8 sequences or genuinely invalid bytes in its output
-    // (visible as '���' between box-drawing chars, e.g. '─���─'); the
-    // Go decoder surfaces these as U+FFFD on its way through Wails IPC.
-    // They serve no purpose for the user, only clutter the rendered line.
+    // Drop U+FFFD replacement chars (see F-032 comment above for context).
     data = data.replace(FFFD_RE, '')
     if (props.mode === 'sftp') {
       const cleaned = data.replace(SFTP_OSC633_RE, '')
       if (cleaned) {
         terminal.write(cleaned)
       }
-      writtenChunks++
     } else {
-      // Extract history commands from SSH output
+      // Extract history commands from SSH output. handleSessionData only
+      // checks for the alternate-screen enter/exit sequences; running it
+      // on the coalesced blob is equivalent to running on individual chunks
+      // (the markers are present iff any sub-chunk contains them).
       if (props.mode === 'ssh' && terminalInput) {
         terminalInput.handleSessionData(data)
         // Close suggestions if we entered an alternate screen app (vim, k9s, etc.)
@@ -1183,12 +1211,8 @@ onMounted(() => {
       }
       const hlOn = (settingsStore.settings.terminal.highlightEnabled ?? true) && props.mode !== 'local'
       terminal.write(hlOn ? highlight(data) : data)
-      writtenChunks++
-      if (props.mode === 'ssh' && props.onSessionStatus) {
-        // onSessionData is handled by the consumer via EventsOn if needed
-      }
     }
-  })
+  }
 
   // SSH/Local: session status events
   if (props.mode === 'ssh' || props.mode === 'local') {
