@@ -507,11 +507,6 @@ function resize() {
     // an off-by-one column on every Claude Code table border, causing the
     // whole rendered table to drift half a cell.
     terminal.resize(terminal.cols, terminal.rows)
-    // Force a full-viewport redraw. xterm's canvas may keep old glyphs
-    // when the viewport scrolls during a rapid write burst (Claude Code
-    // spinner), producing ghost text residue until the next paint. A
-    // full refresh wipes the canvas before the next frame.
-    terminal.refresh(0, terminal.rows - 1)
     SessionResize(sid, terminal.cols, terminal.rows).catch(() => {})
   } else {
     getFitAddon()?.fit()
