@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	stdsync "sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -61,6 +62,14 @@ type App struct {
 	chatCancel           context.CancelFunc // active stream cancellation
 	chatCancelMu         stdsync.Mutex      // guards chatCancel
 	moveResizeCh         chan string        // defer EventsEmit from WndProc
+	// F-043: foreground flag — true while the window is visible and the
+	// user is interacting; background goroutines (keepalive, output_log
+	// flush, k8s watches, auto-sync) should consult IsForeground before
+	// burning CPU. Updated via SetAppVisibility (frontend bridge) and a
+	// low-frequency minimised poll as a fallback for paths that don't
+	// fire visibilitychange (e.g. app hidden via Cmd+H on macOS).
+	foreground   atomic.Bool
+	foregroundMu stdsync.RWMutex
 
 	// Session output log state (issue #227). Logs are keyed by panelID so
 	// they survive reconnects — a single panel may cycle through many
@@ -89,7 +98,7 @@ type App struct {
 }
 
 func NewApp(webviewDataPath string) *App {
-	return &App{
+	a := &App{
 		webviewDataPath:    webviewDataPath,
 		panelLogs:          make(map[string]*session.OutputLogger),
 		sessionToPanel:     make(map[string]string),
@@ -97,6 +106,8 @@ func NewApp(webviewDataPath string) *App {
 		k8sManager:         k8s.NewManager(),
 		errCh:              make(chan error, 16),
 	}
+	a.foreground.Store(true) // optimistic until SetAppVisibility lands
+	return a
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -182,6 +193,12 @@ func (a *App) startup(ctx context.Context) {
 		runtime.EventsEmit(a.ctx, "tunnel:state", st)
 	})
 	go a.autoStartTunnels()
+
+	// F-043: poll WindowIsMinimised as a fallback for the visibility
+	// change the JS side doesn't get to fire (Cmd+H before any document
+	// is loaded, OS-level Alt+Tab). The SetAppVisibility hook is the
+	// primary entry point — this is belt-and-suspenders.
+	go a.watchForeground(ctx)
 
 	syncSvc, err := sync.NewSyncService()
 	if err != nil {
@@ -325,6 +342,60 @@ func (a *App) SaveWindowState(x, y, width, height int, maximised bool) {
 	ls.WindowHeight = height
 	ls.WindowMaximised = maximised
 	a.localStateStore.Save(ls)
+}
+
+// IsForeground reports whether the app window is currently in the
+// foreground. Background goroutines consult this before running work
+// that should pause when the user can't see the terminal (F-043).
+func (a *App) IsForeground() bool {
+	return a.foreground.Load()
+}
+
+// SetAppVisibility is the lifecycle hook the frontend fires from
+// document.visibilitychange. It updates the foreground flag, emits a
+// `app:visibility` event so other Go-side listeners (e.g. auto-sync,
+// AI SSE keepalive) can pause/resume, and is safe to call from any
+// goroutine.
+//
+// Pass visible=false when the page goes hidden (tab switch, OS minimise,
+// Cmd+H, etc.). The polling goroutine started in startup() is a
+// fallback for cases where the JS event doesn't fire (e.g. macOS Cmd+H
+// before any document has loaded).
+func (a *App) SetAppVisibility(visible bool) {
+	prev := a.foreground.Load()
+	if prev == visible {
+		return
+	}
+	a.foreground.Store(visible)
+	a.foregroundMu.Lock()
+	a.foregroundMu.Unlock()
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "app:visibility", visible)
+	}
+}
+
+// watchForeground polls WindowIsMinimised as a fallback so that paths
+// which don't fire the JS visibilitychange event (Cmd+H on macOS before
+// the WebView is loaded, OS-level Alt+Tab) still update the foreground
+// flag. Runs every 2s — coarse on purpose, this is a lifecycle hint not
+// a hot path. Exits when ctx is done.
+func (a *App) watchForeground(ctx context.Context) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if a.ctx == nil {
+				continue
+			}
+			visible := !runtime.WindowIsMinimised(a.ctx)
+			if visible != a.foreground.Load() {
+				a.SetAppVisibility(visible)
+			}
+		}
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {
