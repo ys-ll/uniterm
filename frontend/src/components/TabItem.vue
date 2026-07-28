@@ -97,11 +97,13 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useK8sStore } from '../stores/k8sStore'
+import { useContainerStore } from '../stores/containerStore'
 import { useI18n } from '../i18n'
 import {
   CreateSession,
   CloseSession,
   K8sExecSession,
+  ContainerExecSession,
   EnableSessionOutputLog,
   DisableSessionOutputLog,
   GetSessionOutputLogInfo,
@@ -113,7 +115,7 @@ import { msg } from '../services/message'
 import type { TerminalTab, SettingsTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, WorkspaceTab } from '../types/workspace'
 import type { ConnectionConfig } from '../types/session'
 import { waitForTerminalSize } from '../services/terminalManager'
-import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Database, DatabaseZap, Layers, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus, Lock, MoreHorizontal, ShipWheel, Box } from '@lucide/vue'
+import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Database, DatabaseZap, Layers, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus, Lock, MoreHorizontal, ShipWheel, Box, Boxes } from '@lucide/vue'
 
 const props = defineProps<{
   tab: TerminalTab | SettingsTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | WorkspaceTab
@@ -133,6 +135,7 @@ const tabStore = useTabStore()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
 const k8sStore = useK8sStore()
+const containerStore = useContainerStore()
 const { t } = useI18n()
 
 const hovered = ref(false)
@@ -164,10 +167,11 @@ const tabIcon = computed(() => {
   }
   if (t.type === 'monitor') return Activity
   if (t.type === 'k8s') return ShipWheel
+  if (t.type === 'container') return Boxes
   if (t.type === 'workspace') return LayoutDashboard
   if (t.type === 'terminal') {
     const panel = panelStore.getPanel(t.panelId)
-    if (panel?.type === 'k8s-exec') return Box
+    if (panel?.type === 'k8s-exec' || panel?.type === 'container-exec') return Box
     if (panel?.type === 'local') return Laptop
     if (panel?.type === 'serial') return Cable
     if (panel?.type === 'telnet') return Terminal
@@ -201,6 +205,11 @@ const isDisconnected = computed(() => {
   if (props.tab.type === 'k8s') {
     const s = k8sStore.getConnStatus((props.tab as any).connectionId)
     return s === 'connecting' || s === 'error'
+  }
+  // container tab likewise has no panel session; its status lives in containerStore
+  if (props.tab.type === 'container') {
+    const s = containerStore.sessions[(props.tab as any).id]
+    return !s || s.loading || !!s.error
   }
   const panelIds: string[] = props.tab.type === 'workspace' ? props.tab.panelIds : 'panelId' in props.tab ? [props.tab.panelId] : []
   if (panelIds.length === 0) return false
@@ -393,10 +402,12 @@ async function duplicateTab() {
   let info
   if (panel.config) {
     try {
-      if (panel.type === 'k8s-exec') {
-        // k8s-exec can't be rebuilt via CreateSession (no such type); re-dial the exec stream.
+      if (panel.type === 'k8s-exec' || panel.type === 'container-exec') {
+        // Exec panels can't be rebuilt via CreateSession (no such type); re-dial the exec stream.
         const c = panel.config
-        info = await K8sExecSession(c.k8sExecConnId, c.k8sNamespace || '', c.k8sExecPod, c.k8sExecContainer)
+        info = panel.type === 'k8s-exec'
+          ? await K8sExecSession(c.k8sExecConnId, c.k8sNamespace || '', c.k8sExecPod, c.k8sExecContainer)
+          : await ContainerExecSession(c.containerExecConnId, c.containerExecContainerId, c.containerExecShell || 'sh')
         panelStore.bindSession(newPanel.id, info.id)
         sessionStore.initSession(info.id)
         sessionStore.updateStatus(info.id, 'connected')

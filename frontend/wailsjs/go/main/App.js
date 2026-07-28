@@ -38,6 +38,70 @@ export function ConnectSerial(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['ConnectSerial'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function ContainerAction(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ContainerAction'](arg1, arg2, arg3);
+}
+
+export function ContainerConnect(arg1) {
+  return window['go']['main']['App']['ContainerConnect'](arg1);
+}
+
+export function ContainerCreate(arg1, arg2) {
+  return window['go']['main']['App']['ContainerCreate'](arg1, arg2);
+}
+
+export function ContainerDisconnect(arg1) {
+  return window['go']['main']['App']['ContainerDisconnect'](arg1);
+}
+
+export function ContainerExecSession(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ContainerExecSession'](arg1, arg2, arg3);
+}
+
+export function ContainerImages(arg1) {
+  return window['go']['main']['App']['ContainerImages'](arg1);
+}
+
+export function ContainerInspect(arg1, arg2) {
+  return window['go']['main']['App']['ContainerInspect'](arg1, arg2);
+}
+
+export function ContainerList(arg1) {
+  return window['go']['main']['App']['ContainerList'](arg1);
+}
+
+export function ContainerNamespaces(arg1) {
+  return window['go']['main']['App']['ContainerNamespaces'](arg1);
+}
+
+export function ContainerRemoveImage(arg1, arg2) {
+  return window['go']['main']['App']['ContainerRemoveImage'](arg1, arg2);
+}
+
+export function ContainerRename(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ContainerRename'](arg1, arg2, arg3);
+}
+
+export function ContainerSetNamespace(arg1, arg2) {
+  return window['go']['main']['App']['ContainerSetNamespace'](arg1, arg2);
+}
+
+export function ContainerStartLogs(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ContainerStartLogs'](arg1, arg2, arg3, arg4);
+}
+
+export function ContainerStartPull(arg1, arg2) {
+  return window['go']['main']['App']['ContainerStartPull'](arg1, arg2);
+}
+
+export function ContainerStats(arg1) {
+  return window['go']['main']['App']['ContainerStats'](arg1);
+}
+
+export function ContainerStopStream(arg1) {
+  return window['go']['main']['App']['ContainerStopStream'](arg1);
+}
+
 export function CreateCommand(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateCommand'](arg1, arg2, arg3, arg4);
 }
@@ -122,8 +186,8 @@ export function ExecuteStatement(arg1, arg2, arg3) {
   return window['go']['main']['App']['ExecuteStatement'](arg1, arg2, arg3);
 }
 
-export function FetchModels(arg1, arg2) {
-  return window['go']['main']['App']['FetchModels'](arg1, arg2);
+export function FetchModels(arg1, arg2, arg3) {
+  return window['go']['main']['App']['FetchModels'](arg1, arg2, arg3);
 }
 
 export function FileSize(arg1) {

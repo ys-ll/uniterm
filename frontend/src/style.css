@@ -945,6 +945,7 @@ body::before {
   background: var(--bg-surface) !important;
   color: var(--text-primary) !important;
   box-shadow: var(--shadow-md) !important;
+  backdrop-filter: blur(8px);
 }
 .el-popper__arrow {
   display: none !important;

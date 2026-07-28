@@ -3,6 +3,7 @@
 import {database} from '../models';
 import {update} from '../models';
 import {session} from '../models';
+import {container} from '../models';
 import {main} from '../models';
 import {k8s} from '../models';
 import {store} from '../models';
@@ -25,6 +26,38 @@ export function ClearBackgroundImage():Promise<void>;
 export function CloseSession(arg1:string):Promise<void>;
 
 export function ConnectSerial(arg1:string,arg2:number,arg3:number,arg4:number,arg5:string):Promise<session.SessionInfo>;
+
+export function ContainerAction(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function ContainerConnect(arg1:string):Promise<void>;
+
+export function ContainerCreate(arg1:string,arg2:container.CreateOptions):Promise<void>;
+
+export function ContainerDisconnect(arg1:string):Promise<void>;
+
+export function ContainerExecSession(arg1:string,arg2:string,arg3:string):Promise<session.SessionInfo>;
+
+export function ContainerImages(arg1:string):Promise<Array<container.Image>>;
+
+export function ContainerInspect(arg1:string,arg2:string):Promise<container.InspectResult>;
+
+export function ContainerList(arg1:string):Promise<Array<container.Container>>;
+
+export function ContainerNamespaces(arg1:string):Promise<Array<string>>;
+
+export function ContainerRemoveImage(arg1:string,arg2:string):Promise<void>;
+
+export function ContainerRename(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function ContainerSetNamespace(arg1:string,arg2:string):Promise<void>;
+
+export function ContainerStartLogs(arg1:string,arg2:string,arg3:number,arg4:boolean):Promise<string>;
+
+export function ContainerStartPull(arg1:string,arg2:string):Promise<string>;
+
+export function ContainerStats(arg1:string):Promise<Array<container.Stats>>;
+
+export function ContainerStopStream(arg1:string):Promise<void>;
 
 export function CreateCommand(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
@@ -68,7 +101,7 @@ export function ExecuteQuery(arg1:string,arg2:string,arg3:string):Promise<databa
 
 export function ExecuteStatement(arg1:string,arg2:string,arg3:string):Promise<database.ExecResult>;
 
-export function FetchModels(arg1:string,arg2:string):Promise<Array<main.ModelInfo>>;
+export function FetchModels(arg1:string,arg2:string,arg3:string):Promise<Array<main.ModelInfo>>;
 
 export function FileSize(arg1:string):Promise<number>;
 

@@ -1,6 +1,6 @@
 # Supported Protocols
 
-uniTerm supports 20+ connection protocols, covering remote terminals, remote desktops, file transfers, databases, and server monitoring.
+uniTerm supports 20+ connection protocols, covering remote terminals, remote desktops, file transfers, databases, containers, and server monitoring.
 
 ## Remote Terminal
 
@@ -47,3 +47,12 @@ uniTerm supports 20+ connection protocols, covering remote terminals, remote des
 | rqlite | 4001 | Lightweight distributed DB built on SQLite with Raft consensus |
 | Redis | 6379 | In-memory key-value store with visual key browsing and editing |
 | MongoDB | 27017 | Document database with tree browsing, query editor, and inline editing |
+
+## Containers
+
+| Type | Connection | Description |
+|------|----------|------|
+| Kubernetes | kubeconfig (optional SSH tunnel) | Cluster resource browsing and management, YAML editing, Pod logs and exec terminals, CPU/memory metrics |
+| Docker | Local / remote over SSH | Container and image management with lifecycle actions, logs, exec, and image pull |
+| Podman | Local / remote over SSH | Docker-compatible container engine, container and image management |
+| nerdctl | Local / remote over SSH | containerd container management with namespace switching |

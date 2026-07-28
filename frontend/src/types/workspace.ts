@@ -1,4 +1,4 @@
-export type PanelType = 'ssh' | 'telnet' | 'mosh' | 'sftp' | 'settings' | 'rdp' | 'vnc' | 'spice' | 'local' | 'database' | 'monitor' | 'serial' | 'k8s' | 'k8s-exec' | 'other'
+export type PanelType = 'ssh' | 'telnet' | 'mosh' | 'sftp' | 'settings' | 'rdp' | 'vnc' | 'spice' | 'local' | 'database' | 'monitor' | 'serial' | 'k8s' | 'k8s-exec' | 'container' | 'container-exec' | 'other'
 export type PanelStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 import type { ConnectionConfig } from './session'
@@ -6,6 +6,9 @@ export type { ConnectionConfig }
 
 import type { K8sTab } from './k8s'
 export type { K8sTab }
+
+import type { ContainerTab } from './container'
+export type { ContainerTab }
 
 export interface Panel {
   id: string
@@ -28,7 +31,7 @@ export type LayoutNode =
 
 // ── Tab types ──
 
-export type Tab = TerminalTab | SettingsTab | WorkspaceTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | StartTab | K8sTab
+export type Tab = TerminalTab | SettingsTab | WorkspaceTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | StartTab | K8sTab | ContainerTab
 
 export interface TerminalTab {
   type: 'terminal'

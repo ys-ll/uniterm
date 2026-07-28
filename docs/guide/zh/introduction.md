@@ -1,6 +1,6 @@
 # 关于 uniTerm
 
-uniTerm 是一款轻量级全能终端模拟器，支持 **20+** 种连接协议，覆盖远程终端、远程桌面、文件传输、数据库管理和服务器监控。内置**自主 AI Agent**，可独立规划并执行多轮 Shell 命令。
+uniTerm 是一款轻量级全能终端模拟器，支持 **20+** 种连接协议，覆盖远程终端、远程桌面、文件传输、数据库管理、容器和服务器监控。内置**自主 AI Agent**，可独立规划并执行多轮 Shell 命令。
 
 
 ## 核心特性
@@ -36,6 +36,10 @@ uniTerm 是一款轻量级全能终端模拟器，支持 **20+** 种连接协议
 支持 **MySQL / PostgreSQL / Oracle / SQL Server / rqlite / Redis**，在终端内直接浏览表结构和执行查询。
 
 ![数据库](/imgs/database_light.webp)
+
+#### 容器
+
+集成 **Kubernetes / Docker / Podman / nerdctl**，可管理本机或 SSH 远程主机上的集群资源与容器镜像，支持生命周期操作、日志跟随、exec 进入容器终端等。
 
 
 ### AI 助理

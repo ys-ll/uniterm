@@ -28,11 +28,12 @@
       size="small"
       height="calc(100% - 40px)"
       class="k8s-list-table"
+      border
       v-loading="isLoading"
       @row-click="r => emit('open-detail', r)"
     >
-      <el-table-column label="Name"><template #default="{ row }">{{ row.metadata?.name }}</template></el-table-column>
-      <el-table-column v-for="pc in frame.crd.printerColumns" :key="pc.name" :label="pc.name">
+      <el-table-column label="Name" show-overflow-tooltip><template #default="{ row }">{{ row.metadata?.name }}</template></el-table-column>
+      <el-table-column v-for="pc in frame.crd.printerColumns" :key="pc.name" :label="pc.name" show-overflow-tooltip>
         <template #default="{ row }">{{ evalJsonPath(row, pc.jsonPath) }}</template>
       </el-table-column>
       <el-table-column label="Age"><template #default="{ row }">{{ age(row.metadata?.creationTimestamp) }}</template></el-table-column>
@@ -55,6 +56,7 @@
       size="small"
       height="calc(100% - 40px)"
       class="k8s-list-table"
+      border
       v-loading="isLoading"
       :row-class-name="rowClassName"
       @row-click="onRowClick"
@@ -65,6 +67,7 @@
         :label="col.header"
         :width="col.width"
         sortable
+        show-overflow-tooltip
         :sort-method="(a, b) => compareCells(col, a, b)"
         :filters="col.filterable ? enumFilters(col) : undefined"
         :filter-method="col.filterable ? (val, row) => cellText(col.value(row, usageOf(row))) === val : undefined"

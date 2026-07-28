@@ -1,19 +1,20 @@
 # Changelog
 
-## v1.6.0-alpha
+## v1.6.0
 
 ### What's Changed
 
 **New Features**
-- Kubernetes management. Connect to clusters via kubeconfig with optional SSH tunnel; browse and manage resources, edit YAML, follow Pod logs, exec into containers in a terminal tab, and view Pod/Node CPU and memory metrics.
 - AI skills. Create, import, and manage skills under Settings → Skills & Commands, then type `/` in the AI input to attach one to your request; the AI can also save new skills itself. (@surenwuyuwuqiu)
 - AI commands: reusable prompt templates. Pick one from the `/` dropdown to attach it as a `/name` tag, optionally type arguments, and send; managed under Settings → Skills & Commands. (@surenwuyuwuqiu)
-- OpenAI Responses API protocol support — a third AI protocol option for providers whose channel is natively the Responses API (e.g. codex-style channels).
+- Kubernetes management. Connect to clusters via kubeconfig with optional SSH tunnel; browse and manage resources, edit YAML, follow Pod logs, exec into containers in a terminal tab, and view Pod/Node CPU and memory metrics.
+- Container management for Docker, Podman, and nerdctl — manage containers and images on the local machine or on remote hosts over SSH: live status, lifecycle actions, logs, exec, image pull, and more.
+- Redis Sentinel (failover) connection mode. Choose Sentinel mode in the Redis connection form and supply a sentinel node list plus the master name; all existing Redis operations work unchanged. (@surenwuyuwuqiu)
 
 **Improvements**
+- OpenAI Responses API protocol support — a third AI protocol option for providers whose channel is natively the Responses API (e.g. codex-style channels).
 - Drag-and-drop reordering for connection groups and connections in the sidebar, with the custom order persisted. Reordering is paused while search or type filters are active.
 - Tab titles are now capped at a max width with ellipsis; hovering shows the full name in a tooltip. (@surenwuyuwuqiu)
-- macOS Cmd+C now copies the terminal selection when one exists (passes through otherwise; Ctrl+C interrupt unaffected). (@surenwuyuwuqiu)
 
 **Bug Fixes**
 - Fixed SSH keepalive silently stopping, which let the server drop the connection for idleness: the wait-for-reply loop could wedge on an internal lock and halt heartbeats entirely. Keepalive is now send-only with the interval aligned to OpenSSH defaults (60s); tunnel keepalive got the same fix.
@@ -23,8 +24,9 @@
 - Fixed the RDP fullscreen connection bar showing a minimize button (the window has no taskbar entry, so minimizing made it unrecoverable).
 - Fixed RDP security dialog auto-dismiss failing on Chinese Windows due to a missing '连接(&N)' button caption.
 - Fixed RDP keyboard focus not following mouse clicks in multi-monitor setups.
-- Fixed file-drop and loading masks becoming invisible when a custom background image is set.
-- Fixed the selected AI skill being lost when a message was queued while the agent was running. (@surenwuyuwuqiu)
+- Fixed macOS Cmd+C/V/X/A/Z not working in text fields app-wide: the native Edit menu was inadvertently removed when hiding Wails' default menus; it is now restored on macOS only. (@surenwuyuwuqiu)
+- Fixed AI "fetch models" failing against Anthropic-compatible endpoints (404 or auth error); the model list request is now protocol-aware, using the `/v1/models` path with x-api-key auth for Anthropic.
+- Fixed some remote apps (e.g. hermes CLI on Ubuntu 26.04) failing with a tcsetattr error: SSH PTY modes now use the standard baud rate 38400 instead of a non-standard value that polluted the remote termios.
 - Fixed RPM packages failing to install on Fedora due to wrong dependency names.
 
 Thanks to @surenwuyuwuqiu for their contributions to this release.
@@ -32,15 +34,16 @@ Thanks to @surenwuyuwuqiu for their contributions to this release.
 ### 更新内容
 
 **新功能**
-- Kubernetes 管理。通过 kubeconfig 接入集群（支持 SSH 隧道），浏览与管理集群资源、编辑 YAML、跟随查看 Pod 日志、exec 进入容器终端，并展示 Pod/Node CPU、内存指标。
 - AI 技能（Skills）。在设置 → 技能与命令中创建、导入和管理技能，AI 输入框输入 `/` 即可为本次请求挂载；AI 也可自行保存新技能。（@surenwuyuwuqiu）
 - AI 命令（Commands）：可复用的 Prompt 模板。`/` 下拉选择后以 `/名称` 标签挂载，可附加参数后发送；在设置 → 技能与命令中管理。（@surenwuyuwuqiu）
-- 支持 OpenAI Responses API 协议——第三种 AI 协议选项，适用于原生 Responses API 通道的服务商（如 codex 类通道）。
+- Kubernetes 管理。通过 kubeconfig 接入集群（支持 SSH 隧道），浏览与管理集群资源、编辑 YAML、跟随查看 Pod 日志、exec 进入容器终端，并展示 Pod/Node CPU、内存指标。
+- 容器管理：支持 Docker、Podman、nerdctl，管理本机或 SSH 远程主机的容器与镜像，可查看状态、生命周期操作、日志、exec、镜像拉取等。
+- Redis 哨兵连接模式。在 Redis 连接表单中选择哨兵模式，填写哨兵节点列表和主节点名即可；现有全部 Redis 操作无需改动。（@surenwuyuwuqiu）
 
 **改进**
+- 支持 OpenAI Responses API 协议——第三种 AI 协议选项，适用于原生 Responses API 通道的服务商（如 codex 类通道）。
 - 侧边栏连接分组与连接支持拖拽排序，顺序持久化保存；搜索或类型过滤生效时暂停排序。
 - 标签标题限制最大宽度，超出部分显示省略号，悬停 tooltip 显示完整名称。（@surenwuyuwuqiu）
-- macOS 下终端有选区时 Cmd+C 复制选中内容（无选区时透传，不影响 Ctrl+C 中断）。（@surenwuyuwuqiu）
 
 **Bug 修复**
 - 修复 SSH 保活静默失效、连接因空闲被服务端断开的问题：等待回复的保活分支可能卡死在内部锁上，导致心跳完全停发。保活改为只发不等回复，间隔对齐 OpenSSH 默认值（60 秒）；隧道保活同步修复。
@@ -50,8 +53,9 @@ Thanks to @surenwuyuwuqiu for their contributions to this release.
 - 修复 RDP 全屏连接条显示最小化按钮的问题（窗口无任务栏入口，最小化后无法恢复）。
 - 修复中文 Windows 下 RDP 安全对话框自动关闭失败的问题（缺少「连接(&N)」按钮文本）。
 - 修复多显示器环境下 RDP 点击后键盘焦点不跟随的问题。
-- 修复设置自定义背景图后文件拖拽遮罩与加载遮罩不可见的问题。
-- 修复 AI 运行中排队的消息丢失已选技能的问题。（@surenwuyuwuqiu）
+- 修复 macOS 下文本框内 Cmd+C/V/X/A/Z 全平台失效的问题：此前隐藏 Wails 默认菜单时误删了原生 Edit 菜单，现仅在 macOS 上恢复标准菜单。（@surenwuyuwuqiu）
+- 修复 AI「拉取模型列表」在 Anthropic 兼容端点上失败（404 或鉴权错误）的问题：拉取请求改为协议感知，Anthropic 使用 `/v1/models` 路径与 x-api-key 鉴权。
+- 修复部分远程程序（如 Ubuntu 26.04 上的 hermes CLI）报 tcsetattr 错误的问题：SSH PTY 模式改用标准波特率 38400，不再使用会污染远端 termios 的非标准值。
 - 修复 RPM 安装包在 Fedora 上因依赖名错误无法安装的问题。
 
 感谢 @surenwuyuwuqiu 对本版本的贡献。

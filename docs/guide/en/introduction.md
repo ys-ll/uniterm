@@ -1,6 +1,6 @@
 # About uniTerm
 
-uniTerm is a lightweight all-in-one terminal emulator supporting **20+** connection protocols, covering remote terminals, remote desktops, file transfers, database management, and server monitoring. It features a built-in **autonomous AI Agent** that can independently plan and execute multi-round shell commands.
+uniTerm is a lightweight all-in-one terminal emulator supporting **20+** connection protocols, covering remote terminals, remote desktops, file transfers, database management, containers, and server monitoring. It features a built-in **autonomous AI Agent** that can independently plan and execute multi-round shell commands.
 
 
 ## Core Features
@@ -36,6 +36,10 @@ Integrated **RDP** (Windows Remote Desktop), **VNC** (Linux remote control), and
 Supports **MySQL / PostgreSQL / Oracle / SQL Server / rqlite / Redis**, allowing you to browse table structures and execute queries directly within the terminal.
 
 ![Database](/imgs/database_light.webp)
+
+#### Containers
+
+Integrated **Kubernetes / Docker / Podman / nerdctl** management for cluster resources and container images, on the local machine or remote hosts over SSH — with lifecycle actions, log following, and exec into a container terminal.
 
 
 ### AI Assistant

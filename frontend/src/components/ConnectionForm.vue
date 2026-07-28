@@ -21,7 +21,7 @@
         <div class="subtype-grid">
           <button
             v-for="st in currentSubTypes"
-            :key="st.type + (st.dbType || '')"
+            :key="st.type + (st.dbType || '') + (st.containerRuntime || '')"
             class="subtype-btn"
             :class="{ active: isSubTypeActive(st) }"
             @click="selectType(st)"
@@ -67,7 +67,7 @@
                 <el-input v-model="form.redisMasterName" placeholder="mymaster" />
               </el-form-item>
             </template>
-            <el-form-item :label="form.type === 's3' ? 'Endpoint' : form.type === 'webdav' ? 'URL' : t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial' && form.type !== 'k8s' && !isRedisSentinel">
+            <el-form-item :label="form.type === 's3' ? 'Endpoint' : form.type === 'webdav' ? 'URL' : t('conn.host')" required v-if="form.type !== 'local' && form.type !== 'serial' && form.type !== 'k8s' && form.type !== 'container' && !isRedisSentinel">
               <div class="host-port-row">
                 <el-input v-model="form.host" class="host-input" :placeholder="form.type === 's3' ? 'e.g. s3.amazonaws.com' : form.type === 'webdav' ? 'https://dav.example.com/dav/' : t('conn.hostPlaceholder')" />
                 <template v-if="form.type !== 's3' && form.type !== 'webdav'">
@@ -76,7 +76,7 @@
                 </template>
               </div>
             </el-form-item>
-            <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local' && form.type !== 'serial' && form.type !== 'k8s'" :label="form.type === 's3' ? 'Access Key' : t('conn.user')">
+            <el-form-item v-if="form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local' && form.type !== 'serial' && form.type !== 'k8s' && form.type !== 'container'" :label="form.type === 's3' ? 'Access Key' : t('conn.user')">
               <el-input v-model="form.user" :placeholder="form.type === 's3' ? 'Access Key ID' : t('conn.userPlaceholder')" />
             </el-form-item>
             <el-form-item v-if="form.type === 'ssh' || form.type === 'mosh'" :label="t('conn.authType')">
@@ -93,7 +93,7 @@
                 </div>
               </el-form-item>
             </template>
-            <el-form-item v-if="form.type !== 'local' && form.type !== 'serial' && form.type !== 'k8s' && ((form.authType === 'password' && form.type !== 'rdp') || (form.type === 'rdp' && !form.rdpEnableNLA) || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="form.type === 's3' ? 'Secret Key' : t('conn.password')">
+            <el-form-item v-if="form.type !== 'local' && form.type !== 'serial' && form.type !== 'k8s' && form.type !== 'container' && ((form.authType === 'password' && form.type !== 'rdp') || (form.type === 'rdp' && !form.rdpEnableNLA) || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3') && !(form.type === 'database' && form.dbType === 'rqlite')" :label="form.type === 's3' ? 'Secret Key' : t('conn.password')">
               <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" :placeholder="form.type === 's3' ? 'Secret Access Key' : ''" />
             </el-form-item>
             <template v-if="isRedisSentinel">
@@ -222,6 +222,35 @@
                     <el-icon><RefreshCw :size="16" /></el-icon>
                   </el-button>
                 </div>
+              </el-form-item>
+            </template>
+            <!-- ── Container 字段 ── -->
+            <template v-if="form.type === 'container'">
+              <el-form-item :label="t('conn.containerTransport')">
+                <el-radio-group v-model="form.containerTransport">
+                  <el-radio-button label="ssh">{{ t('conn.transportSSH') }}</el-radio-button>
+                  <el-radio-button label="local">{{ t('conn.transportLocal') }}</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item v-if="form.containerTransport === 'ssh'" :label="t('conn.containerSSHRef')" required>
+                <el-select
+                  v-model="form.containerSSHConnId"
+                  :placeholder="t('conn.containerSSHRefPlaceholder')"
+                  filterable
+                >
+                  <el-option
+                    v-for="c in sshConnections"
+                    :key="c.id"
+                    :label="`${c.name} (${c.user}@${c.host}:${c.port})`"
+                    :value="c.id"
+                  />
+                </el-select>
+                <div class="field-hint">
+                  {{ sshConnections.length ? t('conn.containerSSHRefHint') : t('conn.containerNoSSH') }}
+                </div>
+              </el-form-item>
+              <el-form-item v-if="form.containerTransport === 'local'">
+                <div class="field-hint">{{ t('conn.containerLocalHint') }}</div>
               </el-form-item>
             </template>
             <template v-if="form.type === 'rdp' && isWindows">
@@ -422,6 +451,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import type { ConnectionConfig, PostLoginExpectStep } from '../types/session'
 import { OpenFileDialog } from '../../wailsjs/go/main/App'
+import { ElMessage } from 'element-plus'
 import { Plus, Trash2, ChevronDown, ChevronRight, FolderOpen, RefreshCw, Terminal, Monitor, Database, DatabaseZap, Layers, SquareTerminal, Zap, Laptop, Cable, FolderUp, HardDrive, Cloud, Globe, MonitorCloud, MonitorSmartphone, Boxes, ShipWheel } from '@lucide/vue'
 import { ListSerialPorts } from '../../wailsjs/go/main/App'
 import { listContexts } from '../services/k8sClient'
@@ -435,6 +465,7 @@ const settingsStore = useSettingsStore()
 interface SubTypeInfo {
   type: string
   dbType?: string
+  containerRuntime?: string
   label: string
   icon: any
 }
@@ -447,7 +478,7 @@ const categories = computed(() => [
   { key: 'container', label: t('conn.categoryContainer'), icon: Boxes },
 ])
 
-const allSubTypes = computed(() => ({
+const allSubTypes = computed((): Record<string, SubTypeInfo[]> => ({
   terminal: [
     { type: 'ssh', label: 'SSH (SFTP)', icon: SquareTerminal },
     { type: 'telnet', label: 'Telnet', icon: Terminal },
@@ -477,6 +508,9 @@ const allSubTypes = computed(() => ({
   ],
   container: [
     { type: 'k8s', label: 'Kubernetes', icon: ShipWheel },
+    { type: 'container', containerRuntime: 'docker', label: 'Docker', icon: Boxes },
+    { type: 'container', containerRuntime: 'podman', label: 'Podman', icon: Boxes },
+    { type: 'container', containerRuntime: 'nerdctl', label: 'nerdctl', icon: Boxes },
   ],
 }))
 
@@ -486,6 +520,9 @@ function isSubTypeActive(st: SubTypeInfo): boolean {
   if (st.dbType) {
     return form.type === 'database' && form.dbType === st.dbType
   }
+  if (st.containerRuntime) {
+    return form.type === 'container' && form.containerRuntime === st.containerRuntime
+  }
   return form.type === st.type
 }
 
@@ -493,6 +530,9 @@ function selectType(st: SubTypeInfo) {
   if (st.dbType) {
     form.type = 'database'
     form.dbType = st.dbType
+  } else if (st.containerRuntime) {
+    form.type = 'container'
+    form.containerRuntime = st.containerRuntime as 'docker' | 'podman' | 'nerdctl'
   } else {
     form.type = st.type
   }
@@ -604,7 +644,7 @@ const category = computed(() => {
   if (FILETRANSFER_TYPES.includes(form.type)) return 'filetransfer'
   if (REMOTE_TYPES.includes(form.type)) return 'remote'
   if (form.type === 'database') return 'database'
-  if (form.type === 'k8s') return 'container'
+  if (form.type === 'k8s' || form.type === 'container') return 'container'
   return 'terminal'
 })
 
@@ -614,7 +654,7 @@ const sshConnections = computed(() =>
     .sort((a, b) => a.name.localeCompare(b.name))
 )
 
-const TUNNEL_UNSUPPORTED = ['spice', 'mosh', 'local', 'serial']
+const TUNNEL_UNSUPPORTED = ['spice', 'mosh', 'local', 'serial', 'container']
 const showTunnel = computed(() =>
   !TUNNEL_UNSUPPORTED.includes(form.type)
 )
@@ -676,6 +716,9 @@ const form = reactive<ConnectionConfig>({
   k8sConfigInline: '',
   k8sContext: '',
   k8sNamespace: 'default',
+  containerTransport: 'ssh',
+  containerSSHConnId: undefined,
+  containerRuntime: 'docker',
 })
 
 const rdpResolutions = [
@@ -756,6 +799,11 @@ watch(() => props.editConfig, (config) => {
     // Sync k8s source-mode radio from restored config
     if (config.type === 'k8s') {
       k8sSourceMode.value = config.k8sConfigInline ? 'inline' : 'file'
+    }
+    // Defaults for container connections saved before these fields existed
+    if (config.type === 'container') {
+      form.containerTransport = config.containerTransport ?? 'ssh'
+      form.containerRuntime = config.containerRuntime ?? 'docker'
     }
     // Sync resolution dropdown to the config's fixed size
     const match = rdpResolutions.find(r => r.w === config.rdpFixedWidth && r.h === config.rdpFixedHeight)
@@ -875,6 +923,9 @@ function resetForm() {
   form.k8sConfigInline = ''
   form.k8sContext = ''
   form.k8sNamespace = 'default'
+  form.containerTransport = 'ssh'
+  form.containerSSHConnId = undefined
+  form.containerRuntime = 'docker'
   k8sSourceMode.value = 'inline'
   k8sContexts.value = []
   k8sContextsLoading.value = false
@@ -994,7 +1045,7 @@ function normalizeForm(): ConnectionConfig {
   if (redisSentinel) {
     if (!normalized.redisSentinels?.trim()) throw new Error(t('conn.redisSentinelsRequired'))
     if (!normalized.redisMasterName?.trim()) throw new Error(t('conn.redisMasterNameRequired'))
-  } else if (normalized.type !== 'local' && normalized.type !== 'serial' && normalized.type !== 'k8s' && !normalized.host.trim()) {
+  } else if (normalized.type !== 'local' && normalized.type !== 'serial' && normalized.type !== 'k8s' && normalized.type !== 'container' && !normalized.host.trim()) {
     throw new Error(t('conn.hostRequired'))
   }
   if (normalized.type === 's3') {
@@ -1008,6 +1059,7 @@ function normalizeForm(): ConnectionConfig {
     normalized.name = generateUniqueName(
       normalized.type === 'serial' ? (normalized.serialPort || 'Serial')
         : normalized.type === 'k8s' ? (normalized.k8sContext || 'Kubernetes')
+        : normalized.type === 'container' ? (normalized.containerRuntime || 'container')
         : redisSentinel ? (normalized.redisMasterName?.trim() || 'redis')
         : normalized.host.trim()
     )
@@ -1046,7 +1098,18 @@ function removeExpectStep(index: number) {
   form.postLoginExpectSteps?.splice(index, 1)
 }
 
+function validateContainer(): boolean {
+  if (form.type !== 'container') return true
+  if (form.containerTransport === 'ssh' && !form.containerSSHConnId) {
+    ElMessage.error(t('conn.containerSSHRefRequired'))
+    return false
+  }
+  if (form.containerTransport === 'ssh' && !sshConnections.value.length) return false
+  return true
+}
+
 function onSave() {
+  if (!validateContainer()) return
   try {
     const config = normalizeForm()
     emit('save', config)
@@ -1060,6 +1123,7 @@ function onSave() {
 }
 
 function onConnect() {
+  if (!validateContainer()) return
   try {
     const config = normalizeForm()
     emit('connect', config)

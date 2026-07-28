@@ -1029,7 +1029,7 @@ async function fetchModelList() {
   modelFetching.value = true
   modelSuggestions.value = []
   try {
-    const models = await FetchModels(modelForm.apiKey, modelForm.baseURL)
+    const models = await FetchModels(modelForm.apiKey, modelForm.baseURL, modelForm.protocol)
     modelSuggestions.value = (models || []).map(m => ({
       value: m.display_name || m.id
     }))

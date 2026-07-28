@@ -1,7 +1,7 @@
 <div align="center">
   <img src="build/appicon.png" alt="uniTerm" width="128" height="128" />
   <h1>uniTerm</h1>
-  <p>一款轻量级一站式终端软件，支持 SSH、RDP、VNC、SFTP、数据库 等 20 余种协议<br>内置可自主执行的 AI Agent，规划并执行多轮 Shell 命令</p>
+  <p>一款轻量级一站式终端软件，支持 SSH、RDP、VNC、SFTP、数据库、Kubernetes 等 20 余种协议<br>内置可自主执行的 AI Agent，规划并执行多轮 Shell 命令</p>
   <p><a href="https://uniterm.net">🌐 软件首页</a> &nbsp;|&nbsp; <a href="https://uniterm.net/guide/zh/introduction">📖 用户手册</a> &nbsp;|&nbsp; <a href="https://github.com/ys-ll/uniterm">💻 GitHub</a> &nbsp;|&nbsp; <a href="https://gitee.com/ys-l/uniterm">💻 Gitee</a></p>
 </div>
 
@@ -38,14 +38,14 @@
 
 ### 全功能终端
 
-远程终端（SSH / Telnet / Mosh）、本地 & 串口终端（PowerShell / CMD / Git Bash / WSL）、文件传输、远程桌面、数据库、Kubernetes、服务器监控 —— 覆盖全部远程访问场景。
+远程终端（SSH / Telnet / Mosh）、本地 & 串口终端（PowerShell / CMD / Git Bash / WSL）、文件传输、远程桌面、数据库、容器、服务器监控 —— 覆盖全部远程访问场景。
 
 - **远程终端** — SSH / Telnet / Mosh，密码/私钥认证；含 SSH 隧道端口转发（任意连接可经 SSH 跳板访问）
 - **本地 & 串口终端** — PowerShell / CMD / Git Bash / WSL，以及串口连接（波特率等参数、本地回显）
 - **文件传输** — SFTP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，双栏浏览、鼠标拖拽上传下载，SSH 内 `rz`/`sz`
 - **远程桌面** — RDP（Windows 远程桌面）、VNC（Linux 远程控制）、SPICE（KVM/QEMU 虚拟机）
 - **数据库客户端** — MySQL / PostgreSQL / Oracle / SQL Server / rqlite / Redis / MongoDB
-- **Kubernetes**（v1.6.0-alpha）— 集群资源浏览与 YAML 编辑、Pod 日志与 exec 终端、CPU/内存指标
+- **容器** — Kubernetes / Docker / Podman / nerdctl
 - **服务器监控** — CPU/内存/磁盘/网络、进程、端口、网卡实时监控
 
 ### AI 助理
@@ -58,7 +58,7 @@
 - **对话持久化** — 会话聊天记录按标签页保存，重新打开应用后历史记录仍然保留。
 - **终端智能协作** — AI 命令直接在当前终端标签页中执行，支持固定到指定标签页或跟随当前激活终端。分屏中人与 AI 各司其职，同屏协作互不干扰。
 - **智能补全** — SSH 终端输入时，根据历史命令和 AI 能力实时提供命令补全建议。
-- **技能与命令**（v1.6.0-alpha）— 可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可挂载触发，AI 也可自行沉淀新技能。
+- **技能与命令** — 可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可挂载触发，AI 也可自行沉淀新技能。
 
 ### 个性化能力
 
@@ -97,7 +97,10 @@
 | 数据库 | rqlite | 基于 SQLite、Raft 共识的轻量分布式数据库 |
 | 数据库 | Redis | 内存键值数据库，可视化键值浏览与编辑 |
 | 数据库 | MongoDB | 文档数据库，树形浏览、查询编辑与行内编辑 |
-| Kubernetes | Kubernetes | 集群资源浏览与管理、Pod 日志与 exec 终端、性能指标 |
+| 容器 | Kubernetes | 集群资源浏览与管理、Pod 日志与 exec 终端、性能指标 |
+| 容器 | Docker | 容器与镜像管理，支持本机或 SSH 远程主机 |
+| 容器 | Podman | 兼容 Docker 的容器引擎，支持本机或 SSH 远程主机 |
+| 容器 | nerdctl | containerd 容器管理，支持切换 namespace |
 
 Oracle Database 支持基于纯 Go 驱动实现。uniTerm 不随安装包分发 Oracle Database、Oracle Instant Client、OJDBC、Wallet 文件或 Oracle 品牌素材；用户需自行确保其 Oracle 授权、凭据和数据库访问权限合规。
 

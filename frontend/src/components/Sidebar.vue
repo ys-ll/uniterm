@@ -308,6 +308,7 @@
       <!-- Database & Monitor -->
       <div v-if="selectedConn && selectedConn.type === 'database'" class="menu-item" @click="doConnectDB">{{ t('db.connectDB') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'k8s'" class="menu-item" @click="doConnectK8s">{{ t('sidebar.connectK8s') }}</div>
+      <div v-if="selectedConn && selectedConn.type === 'container'" class="menu-item" @click="doConnect">{{ t('sidebar.connectContainer') }}</div>
       <div v-if="selectedConn && selectedConn.type === 'ssh'" class="menu-item" @click="doConnectMonitor">{{ t('sidebar.connectMonitor') }}</div>
       <div class="menu-divider" />
       <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doEdit()">{{ t('sidebar.edit') }}</div>
@@ -453,7 +454,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide } from 'vue'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Layers, Activity, Laptop, Cable, Pencil, MoreHorizontal, ArrowRightLeft, FolderTree, ShipWheel } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Layers, Activity, Laptop, Cable, Pencil, MoreHorizontal, ArrowRightLeft, FolderTree, ShipWheel, Boxes } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { msg } from '../services/message'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -1644,6 +1645,7 @@ function getShellLabel(path: string): string {
 }
 
 function getSubtitle(conn: ConnectionConfig): string {
+  if (conn.type === 'container') return `${conn.containerRuntime}`
   return formatConnSubtitle(conn, getShellLabel)
 }
 
@@ -1665,6 +1667,7 @@ function connIcon(conn: ConnectionConfig) {
     case 'database': return conn.dbType === 'redis' ? DatabaseZap : conn.dbType === 'mongodb' ? Layers : Database
     case 'monitor': return Activity
     case 'k8s': return ShipWheel
+    case 'container': return Boxes
     default: return SquareTerminal
   }
 }

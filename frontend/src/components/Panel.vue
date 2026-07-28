@@ -96,6 +96,7 @@ import {
   CreateSession,
   CloseSession,
   K8sExecSession,
+  ContainerExecSession,
   EnableSessionOutputLog,
   DisableSessionOutputLog,
   GetSessionOutputLogInfo,
@@ -350,27 +351,29 @@ async function retryConnection(silent = false) {
   }
   if (!props.panel.config) return
 
-  // K8s exec: rebuild the exec WebSocket via K8sExecSession (not CreateSession,
-  // which has no 'k8s-exec' type). Needs the original connId/ns/pod/container
-  // stored on the config at open time.
-  if (props.panel.type === 'k8s-exec') {
+  // Exec panels (k8s-exec / container-exec): rebuild the exec stream via the
+  // dedicated wails method — CreateSession has no such type. The original
+  // params live on the config from open time.
+  if (props.panel.type === 'k8s-exec' || props.panel.type === 'container-exec') {
     const c = props.panel.config
     const now = new Date()
     const pad = (n: number) => String(n).padStart(2, '0')
     const at = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
     baseTerminalRef.value?.write(RESET_MOUSE_MODES + `\r\n\x1b[33mReconnecting... (${at})\x1b[0m\r\n`)
-    if (!c.k8sExecConnId || !c.k8sExecPod || !c.k8sExecContainer) {
-      baseTerminalRef.value?.write(`\r\n\x1b[31mReconnect failed: exec session parameters missing.\x1b[0m\r\n`)
-      baseTerminalRef.value?.setRetryOnEnter(true)
-      return
-    }
     try {
-      const info = await K8sExecSession(c.k8sExecConnId, c.k8sNamespace || '', c.k8sExecPod, c.k8sExecContainer)
+      let info
+      if (props.panel.type === 'k8s-exec') {
+        if (!c.k8sExecConnId || !c.k8sExecPod || !c.k8sExecContainer) throw new Error('exec session parameters missing')
+        info = await K8sExecSession(c.k8sExecConnId, c.k8sNamespace || '', c.k8sExecPod, c.k8sExecContainer)
+      } else {
+        if (!c.containerExecConnId || !c.containerExecContainerId) throw new Error('exec session parameters missing')
+        info = await ContainerExecSession(c.containerExecConnId, c.containerExecContainerId, c.containerExecShell || 'sh')
+      }
       panelStore.bindSession(props.panel.id, info.id)
       sessionStore.initSession(info.id)
       sessionStore.updateStatus(info.id, 'connected')
     } catch (e: any) {
-      baseTerminalRef.value?.write(`\r\n\x1b[31mReconnect failed: ${e}\x1b[0m\r\n`)
+      baseTerminalRef.value?.write(`\r\n\x1b[31mReconnect failed: ${e?.message || e}\x1b[0m\r\n`)
       baseTerminalRef.value?.setRetryOnEnter(true)
     }
     return

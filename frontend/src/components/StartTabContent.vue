@@ -125,6 +125,7 @@
                   <Database v-else :size="28" />
                 </el-icon>
                 <el-icon v-else-if="config.type === 'k8s'"><ShipWheel :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'container'"><Boxes :size="28" /></el-icon>
                 <el-icon v-else><Server :size="28" /></el-icon>
               </div>
               <div>
@@ -210,6 +211,7 @@
                   <Database v-else :size="28" />
                 </el-icon>
                 <el-icon v-else-if="config.type === 'k8s'"><ShipWheel :size="28" /></el-icon>
+                <el-icon v-else-if="config.type === 'container'"><Boxes :size="28" /></el-icon>
                 <el-icon v-else><Server :size="28" /></el-icon>
               </div>
               <div>
@@ -281,6 +283,7 @@
                 <Database v-else :size="28" />
               </el-icon>
               <el-icon v-else-if="config.type === 'k8s'"><ShipWheel :size="28" /></el-icon>
+              <el-icon v-else-if="config.type === 'container'"><Boxes :size="28" /></el-icon>
               <el-icon v-else><Server :size="28" /></el-icon>
             </div>
             <div>
@@ -345,6 +348,7 @@
       <!-- Database & Monitor -->
       <div v-if="contextMenuConfig && contextMenuConfig.type === 'database'" class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doConnectDb(contextMenuConfig)">{{ t('db.connectDB') }}</div>
       <div v-if="contextMenuConfig && contextMenuConfig.type === 'k8s'" class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doConnectK8s(contextMenuConfig)">{{ t('sidebar.connectK8s') }}</div>
+      <div v-if="contextMenuConfig && contextMenuConfig.type === 'container'" class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doConnect(contextMenuConfig, $event)">{{ t('sidebar.connectContainer') }}</div>
       <div v-if="contextMenuConfig && contextMenuConfig.type === 'ssh'" class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doConnectMonitor(contextMenuConfig)">{{ t('sidebar.connectMonitor') }}</div>
       <div class="menu-divider" />
       <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && doEditConnection(contextMenuConfig)">{{ t('sidebar.edit') }}</div>
@@ -441,7 +445,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import { GetRecentConnections } from '../../wailsjs/go/main/App'
 import { formatConnSubtitle } from '../utils/quickConnect'
-import { Filter, Plus, Laptop, Cable, SquareTerminal, Terminal, Database, DatabaseZap, Layers, Monitor, MonitorSmartphone, MonitorCloud, FolderUp, HardDrive, Cloud, Globe, Server, Folder, FolderOpen, Zap, MoreHorizontal, ChevronDown, ShipWheel } from '@lucide/vue'
+import { Filter, Plus, Laptop, Cable, SquareTerminal, Terminal, Database, DatabaseZap, Layers, Monitor, MonitorSmartphone, MonitorCloud, FolderUp, HardDrive, Cloud, Globe, Server, Folder, FolderOpen, Zap, MoreHorizontal, ChevronDown, ShipWheel, Boxes } from '@lucide/vue'
 
 const props = defineProps<{
   tab: StartTab

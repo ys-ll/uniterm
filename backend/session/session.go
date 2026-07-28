@@ -122,6 +122,10 @@ type ConnectionConfig struct {
 	K8sContext      string `json:"k8sContext,omitempty"`      // 选中的 context 名，为空则用 current-context
 	K8sNamespace    string `json:"k8sNamespace,omitempty"`    // 默认 namespace，"" = all
 	K8sInsecureTls  bool   `json:"k8sInsecureTls,omitempty"`  // 覆盖 kubeconfig 中的 insecure-skip-tls-verify
+	// Container-specific fields
+	ContainerTransport string `json:"containerTransport,omitempty"` // "ssh" | "local"
+	ContainerSSHConnID string `json:"containerSSHConnId,omitempty"` // 引用的 SSH 连接（transport=ssh）
+	ContainerRuntime   string `json:"containerRuntime,omitempty"`   // "docker" | "podman" | "nerdctl"
 	// LogOnConnect, when true, tells the App layer to enable the
 	// session output log automatically the first time this panel binds
 	// a session. It has no effect on later reconnects — a manually

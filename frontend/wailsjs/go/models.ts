@@ -1,3 +1,256 @@
+export namespace container {
+	
+	export class Container {
+	    id: string;
+	    name: string;
+	    image: string;
+	    state: string;
+	    status: string;
+	    ports: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Container(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.image = source["image"];
+	        this.state = source["state"];
+	        this.status = source["status"];
+	        this.ports = source["ports"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class Mount {
+	    source: string;
+	    destination: string;
+	    rw: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Mount(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.destination = source["destination"];
+	        this.rw = source["rw"];
+	    }
+	}
+	export class PortMapping {
+	    hostIp?: string;
+	    hostPort: string;
+	    containerPort: string;
+	    protocol: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortMapping(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hostIp = source["hostIp"];
+	        this.hostPort = source["hostPort"];
+	        this.containerPort = source["containerPort"];
+	        this.protocol = source["protocol"];
+	    }
+	}
+	export class ContainerDetail {
+	    id: string;
+	    name: string;
+	    image: string;
+	    state: string;
+	    status: string;
+	    startedAt: string;
+	    finishedAt: string;
+	    exitCode?: number;
+	    oomKilled: boolean;
+	    pid: number;
+	    restartPolicy: string;
+	    entrypoint: string;
+	    command: string;
+	    workDir: string;
+	    user: string;
+	    networkMode: string;
+	    ip: string;
+	    gateway: string;
+	    ports: PortMapping[];
+	    mounts: Mount[];
+	    env: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ContainerDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.image = source["image"];
+	        this.state = source["state"];
+	        this.status = source["status"];
+	        this.startedAt = source["startedAt"];
+	        this.finishedAt = source["finishedAt"];
+	        this.exitCode = source["exitCode"];
+	        this.oomKilled = source["oomKilled"];
+	        this.pid = source["pid"];
+	        this.restartPolicy = source["restartPolicy"];
+	        this.entrypoint = source["entrypoint"];
+	        this.command = source["command"];
+	        this.workDir = source["workDir"];
+	        this.user = source["user"];
+	        this.networkMode = source["networkMode"];
+	        this.ip = source["ip"];
+	        this.gateway = source["gateway"];
+	        this.ports = this.convertValues(source["ports"], PortMapping);
+	        this.mounts = this.convertValues(source["mounts"], Mount);
+	        this.env = source["env"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CreateOptions {
+	    image: string;
+	    name: string;
+	    ports: PortMapping[];
+	    volumes: string[];
+	    env: string[];
+	    restart: string;
+	    command: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.image = source["image"];
+	        this.name = source["name"];
+	        this.ports = this.convertValues(source["ports"], PortMapping);
+	        this.volumes = source["volumes"];
+	        this.env = source["env"];
+	        this.restart = source["restart"];
+	        this.command = source["command"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Image {
+	    id: string;
+	    repository: string;
+	    tag: string;
+	    size: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Image(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.repository = source["repository"];
+	        this.tag = source["tag"];
+	        this.size = source["size"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class InspectResult {
+	    detail: ContainerDetail;
+	    raw: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new InspectResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.detail = this.convertValues(source["detail"], ContainerDetail);
+	        this.raw = source["raw"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	export class Stats {
+	    id: string;
+	    name: string;
+	    cpuPercent: string;
+	    memUsage: string;
+	    memPercent: string;
+	    netIO: string;
+	    blockIO: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Stats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.cpuPercent = source["cpuPercent"];
+	        this.memUsage = source["memUsage"];
+	        this.memPercent = source["memPercent"];
+	        this.netIO = source["netIO"];
+	        this.blockIO = source["blockIO"];
+	    }
+	}
+
+}
+
 export namespace database {
 	
 	export class ColumnDef {
@@ -359,6 +612,9 @@ export namespace session {
 	    k8sContext?: string;
 	    k8sNamespace?: string;
 	    k8sInsecureTls?: boolean;
+	    containerTransport?: string;
+	    containerSSHConnId?: string;
+	    containerRuntime?: string;
 	    logOnConnect?: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -419,6 +675,9 @@ export namespace session {
 	        this.k8sContext = source["k8sContext"];
 	        this.k8sNamespace = source["k8sNamespace"];
 	        this.k8sInsecureTls = source["k8sInsecureTls"];
+	        this.containerTransport = source["containerTransport"];
+	        this.containerSSHConnId = source["containerSSHConnId"];
+	        this.containerRuntime = source["containerRuntime"];
 	        this.logOnConnect = source["logOnConnect"];
 	    }
 	

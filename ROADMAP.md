@@ -56,10 +56,10 @@ Legend: ✅ Shipped, 🚧 Planned
 
 | Protocol | Status | Since | Notes | Contributor |
 |----------|--------|-------|-------|-------------|
-| Kubernetes | ✅ | v1.6.0-alpha | Cluster browsing and pod management |  |
-| Docker | 🚧 | — | Manage remote containers over SSH |  |
-| nerdctl | 🚧 | — | Manage remote containers over SSH |  |
-| Podman | 🚧 | — | Manage remote containers over SSH |  |
+| Kubernetes | ✅ | v1.6.0 | Cluster browsing and pod management |  |
+| Docker | ✅ | v1.6.0 | Local and remote (SSH) container management |  |
+| nerdctl | ✅ | v1.6.0 | Local and remote (SSH) container management |  |
+| Podman | ✅ | v1.6.0 | Local and remote (SSH) container management |  |
 
 ## Core Features
 
@@ -72,8 +72,8 @@ Legend: ✅ Shipped, 🚧 Planned
 | Message Queue | ✅ | v1.4.1 | Queue messages while the agent is running |  |
 | NL Database Query | ✅ | v1.4.1 | Natural-language database query generation |  |
 | Multi-Panel AI Lock | ✅ | v1.5.0 | Control multiple terminals simultaneously |  |
-| Skill Support | ✅ | v1.6.0-alpha | Packaged, reusable workflows the agent can invoke | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
-| Prompt Library | ✅ | v1.6.0-alpha | Manage and trigger reusable AI prompts | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
+| Skill Support | ✅ | v1.6.0 | Packaged, reusable workflows the agent can invoke | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
+| Prompt Library | ✅ | v1.6.0 | Manage and trigger reusable AI prompts | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
 | Interaction Modes | 🚧 | — | Chat / read-only / agent modes to constrain AI actions |  |
 | MCP Server | 🚧 | — | Expose uniTerm as an MCP server for external AI agents |  |
 | MCP Client | 🚧 | — | Connect external MCP servers to extend uniTerm's AI |  |

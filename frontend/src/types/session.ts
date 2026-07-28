@@ -16,7 +16,7 @@ export interface PostLoginExpectStep {
 export interface ConnectionConfig {
   id: string
   name: string
-  type: 'ssh' | 'telnet' | 'mosh' | 'rdp' | 'vnc' | 'spice' | 'database' | 'local' | 'sftp' | 'monitor' | 'ftp' | 'serial' | 'smb' | 'webdav' | 's3' | 'k8s'
+  type: 'ssh' | 'telnet' | 'mosh' | 'rdp' | 'vnc' | 'spice' | 'database' | 'local' | 'sftp' | 'monitor' | 'ftp' | 'serial' | 'smb' | 'webdav' | 's3' | 'k8s' | 'container'
   host: string
   port: number
   user: string
@@ -102,6 +102,14 @@ export interface ConnectionConfig {
   k8sExecConnId?: string
   k8sExecPod?: string
   k8sExecContainer?: string
+  // Container connection (type: 'container')
+  containerTransport?: 'ssh' | 'local'
+  containerSSHConnId?: string
+  containerRuntime?: 'docker' | 'podman' | 'nerdctl'
+  // Container exec terminal (container-exec panel) — 重连参数
+  containerExecConnId?: string
+  containerExecContainerId?: string
+  containerExecShell?: string
 }
 
 export interface SessionInfo {
