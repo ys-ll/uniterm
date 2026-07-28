@@ -3,6 +3,40 @@ import { SessionWrite } from '../../wailsjs/go/main/App'
 import { getManagedTerminal } from '../services/terminalManager'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
+import { watch } from 'vue'
+
+// F-317: maintain a title→panelId index for O(1) lookups in
+// resolveActiveSession. The original implementation spread panelStore.panels
+// into an array and ran two .find passes per command call (O(n) per call).
+// A vue watch on the reactive panels Map keeps the index in sync with
+// add / remove / rename; we rebuild on every change because titles can
+// duplicate and the index is tiny.
+const panelTitleIndex: Map<string, string[]> = new Map()
+let panelTitleIndexInit = false
+
+function rebuildPanelTitleIndex(panels: Map<string, { id: string; title: string }>): void {
+  panelTitleIndex.clear()
+  for (const p of panels.values()) {
+    const arr = panelTitleIndex.get(p.title)
+    if (arr) arr.push(p.id)
+    else panelTitleIndex.set(p.title, [p.id])
+  }
+}
+
+function ensurePanelTitleIndex(): void {
+  if (panelTitleIndexInit) return
+  panelTitleIndexInit = true
+  const panelStore = usePanelStore()
+  rebuildPanelTitleIndex(panelStore.panels as Map<string, { id: string; title: string }>)
+  // Watch the reactive Map: rebuild on size change (set/delete) and on any
+  // title mutation (deep watch on the values). The index is tiny, so a full
+  // rebuild is cheaper than a more granular diff.
+  watch(
+    () => panelStore.panels,
+    () => rebuildPanelTitleIndex(panelStore.panels as Map<string, { id: string; title: string }>),
+    { deep: true, flush: 'sync' }
+  )
+}
 
 export interface ExecuteResult {
   output: string
@@ -187,15 +221,36 @@ function resolveActiveSession(panelTitle?: string): { sessionId: string; shellPa
   let panel
 
   if (panelTitle) {
-    // Match by title. panelStore.panels is a Map<string, Panel>
-    const allPanels = [...panelStore.panels.values()]
-    // Try exact title match first
-    panel = allPanels.find(p => p.title === panelTitle)
-    // Try suffix match for duplicate names: "title (id: xxx)"
-    if (!panel) {
+    ensurePanelTitleIndex()
+    // F-317: O(1) exact title match via the title→panelId index. The index
+    // covers add/remove/rename via a vue watch; titles can duplicate, so we
+    // verify the cached id still points at a panel with the requested title.
+    let panelId: string | undefined
+    const ids = panelTitleIndex.get(panelTitle)
+    if (ids && ids.length > 0) {
+      const candidate = panelStore.getPanel(ids[0])
+      if (candidate && candidate.title === panelTitle) {
+        panelId = ids[0]
+      } else {
+        // Stale entry (title just changed). Rebuild on demand.
+        rebuildPanelTitleIndex(panelStore.panels as Map<string, { id: string; title: string }>)
+        const refreshed = panelTitleIndex.get(panelTitle)
+        if (refreshed && refreshed.length > 0) panelId = refreshed[0]
+      }
+    } else {
+      // Title isn't in the index yet — rebuild and try once more.
+      rebuildPanelTitleIndex(panelStore.panels as Map<string, { id: string; title: string }>)
+      const refreshed = panelTitleIndex.get(panelTitle)
+      if (refreshed && refreshed.length > 0) panelId = refreshed[0]
+    }
+    if (panelId) {
+      panel = panelStore.getPanel(panelId)
+    } else {
+      // Suffix match for duplicate names: "title (id: xxx)". The id is
+      // already known, so use getPanel for an O(1) by-id lookup.
       const suffixMatch = panelTitle.match(/^(.+)\s+\(id:\s*(.+)\)$/)
       if (suffixMatch) {
-        panel = allPanels.find(p => p.title === suffixMatch[1] && p.id === suffixMatch[2])
+        panel = panelStore.getPanel(suffixMatch[2])
       }
     }
     if (!panel || !panel.sessionId) {

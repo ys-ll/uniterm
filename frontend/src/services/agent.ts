@@ -17,14 +17,23 @@ import {
 // Global token listener management: only one runAgent instance should receive
 // ai:token events at a time. Registering a new listener automatically cancels
 // the previous one, preventing duplicate streaming into multiple assistant
-// messages when a stop/continue sequence races.
+// messages when a stop/continue sequence races. F-315: each register call
+// bumps a generation counter; the returned cleanup only clears module state
+// when its generation still matches, so an early-return path that gets
+// superseded by a re-entry (approveTool → runAgent; rejectTool / answer /
+// dismissQuestion setTimeout→runAgent) can't accidentally clobber a newer
+// pair by running its stale cleanup.
 let activeTokenUnsubscribe: (() => void) | null = null
 let activeAssistantMsg: AIMessage | null = null
+let activeGeneration = 0
 
 function registerTokenListener(callback: (data: any) => void): () => void {
   activeTokenUnsubscribe?.()
   activeTokenUnsubscribe = EventsOn('ai:token', callback)
+  activeGeneration++
+  const myGeneration = activeGeneration
   return () => {
+    if (myGeneration !== activeGeneration) return
     activeTokenUnsubscribe?.()
     activeTokenUnsubscribe = null
     activeAssistantMsg = null
@@ -215,6 +224,23 @@ function validateReadSkillFileInput(raw: unknown): ReadSkillFileInput {
     name: validateRequiredString(obj.name, 'name'),
     path: validateRequiredString(obj.path, 'path'),
   }
+}
+
+// F-312: cap the bytes stored in a tool message so a single tool call can't
+// blow up the conversation computed. The model can still see the beginning
+// and end of long output; the in-between is dropped with a clear marker.
+// 32 KB total, 8 KB head, 16 KB tail — biased to the tail because error
+// messages and final state almost always live at the bottom of terminal output.
+const TOOL_RESULT_MAX_BYTES = 32 * 1024
+const TOOL_RESULT_HEAD_BYTES = 8 * 1024
+const TOOL_RESULT_TAIL_BYTES = 16 * 1024
+
+function capToolResult(text: string): string {
+  if (text.length <= TOOL_RESULT_MAX_BYTES) return text
+  const head = text.slice(0, TOOL_RESULT_HEAD_BYTES)
+  const tail = text.slice(text.length - TOOL_RESULT_TAIL_BYTES)
+  const omitted = text.length - TOOL_RESULT_HEAD_BYTES - TOOL_RESULT_TAIL_BYTES
+  return `${head}\n\n─────── [已截断: 工具结果共 ${text.length} 字节, 已省略 ${omitted} 字节] ────────\n调整工具参数（如 head_lines / tail_lines）或分段调用以查看被截断部分。\n\n${tail}`
 }
 
 function getShellName(path?: string): string {
@@ -423,17 +449,41 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
   // Track whether streaming already delivered text, to skip onChunk duplication
   let streamedText = ''
 
+  // F-311: buffer SSE tokens into a non-reactive string and flush at rAF
+  // cadence (~16ms / 60Hz) instead of mutating `activeAssistantMsg.content`
+  // per token. Per-token `+=` on a deep-reactive string triggers Vue's dep
+  // graph on every token (100+/s for fast models); one assignment per rAF
+  // caps re-renders at the display refresh rate.
+  let pendingText = ''
+  let flushRafId: number | null = null
+
+  function flushStream() {
+    flushRafId = null
+    if (pendingText && activeAssistantMsg) {
+      activeAssistantMsg.content += pendingText
+    }
+    pendingText = ''
+  }
+
   // Register stream event listener (fires from Go backend SSE events)
   const cleanupTokenListener = registerTokenListener((data: any) => {
     if (store.stopRequested) return
     if (activeAssistantMsg && data.text) {
-      activeAssistantMsg.content += data.text
+      pendingText += data.text
       streamedText += data.text
       store.status = 'outputting'
+      if (flushRafId === null) {
+        flushRafId = requestAnimationFrame(flushStream)
+      }
     }
   })
 
   function cleanupStreamListeners() {
+    if (flushRafId !== null) {
+      cancelAnimationFrame(flushRafId)
+      flushRafId = null
+    }
+    flushStream()
     cleanupTokenListener()
     setActiveAssistantMsg(null)
   }
@@ -506,6 +556,13 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     try {
       store.status = 'thinking'
       await chat(chatOptions)
+      // F-311: drain any rAF-buffered tokens so the assistant message holds
+      // the full text before we read .content for _rawApiMsg / doSave.
+      if (flushRafId !== null) {
+        cancelAnimationFrame(flushRafId)
+        flushRafId = null
+      }
+      flushStream()
       // Preserve raw API message blocks for conversation history
       if (chatOptions._rawApiMsg) {
         assistantMsg._rawApiMsg = chatOptions._rawApiMsg
@@ -668,7 +725,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `${status}\n${result.output}`,
+          content: capToolResult(`${status}\n${result.output}`),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -720,7 +777,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output || '(command started)',
+          content: capToolResult(result.output || '(command started)'),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -740,7 +797,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output || '(terminal is empty)',
+          content: capToolResult(result.output || '(terminal is empty)'),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -774,7 +831,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `${status}\n${result.output}`,
+          content: capToolResult(`${status}\n${result.output}`),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -808,7 +865,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output || '(input sent)',
+          content: capToolResult(result.output || '(input sent)'),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -827,7 +884,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: result.output || 'Sent Ctrl+C to interrupt the running command.',
+          content: capToolResult(result.output || 'Sent Ctrl+C to interrupt the running command.'),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -926,7 +983,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `[Skill loaded: ${name}]\n${manifest}`,
+          content: capToolResult(`[Skill loaded: ${name}]\n${manifest}`),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -952,7 +1009,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `[Skill file: ${name}/${path}]\n${content}`,
+          content: capToolResult(`[Skill file: ${name}/${path}]\n${content}`),
           tool_call_id: tu.id
         })
       } catch (e: any) {
@@ -1015,7 +1072,7 @@ export async function approveTool(_messageId: string) {
       store.addMessage({
         id: `msg-${Date.now()}`,
         role: 'tool',
-        content: result.output || '(command started)',
+        content: capToolResult(result.output || '(command started)'),
         tool_call_id: cmd.toolId
       })
     } else {
@@ -1024,7 +1081,7 @@ export async function approveTool(_messageId: string) {
       store.addMessage({
         id: `msg-${Date.now()}`,
         role: 'tool',
-        content: `${status}\n${result.output}`,
+        content: capToolResult(`${status}\n${result.output}`),
         tool_call_id: cmd.toolId
       })
     }

@@ -26,7 +26,7 @@ const (
 	// server/NAT/firewall idle timeout doesn't drop an otherwise-healthy
 	// connection. Dead-connection detection is NOT done here — see readLoop
 	// (EOF) and the OS-level TCP keepalive set in Connect.
-	sshKeepAliveInterval = 60 * time.Second
+	sshKeepAliveInterval = 90 * time.Second
 )
 
 type SSHSession struct {
@@ -48,8 +48,11 @@ type SSHSession struct {
 	expectOutput *postLoginOutputBuffer
 
 	enc            encoding.Encoding // input(write) codec; nil = utf-8 passthrough
+	encoder        transform.Transformer // cached encoder; nil = utf-8 passthrough (F-003)
 	decoder        *encoding.Decoder // persistent streaming decoder for output(read)
 	decodeLeftover []byte            // trailing partial multibyte bytes between reads
+	decodeScratch  []byte            // reusable src buffer for decodeOutput (F-002)
+	encScratch     []byte            // reusable dst buffer for encodeInput (F-003)
 
 	// Disconnect diagnostics (see readLoop / disconnect logs).
 	lastRecv atomic.Value // []byte: tail of most recent server output (diagnostics)
@@ -311,13 +314,20 @@ func (s *SSHSession) readStderr() {
 }
 
 func (s *SSHSession) readLoop() {
-	buf := make([]byte, 4096)
+	// 16K read buffer (F-001) reused across iterations. Each consumer either
+	// copies into its own storage (decodeOutput, offerExpectOutput's string
+	// conversion) or passes the slice to a callback that owns the data
+	// lifecycle (emitData / emitBinary), so reusing the backing array is safe.
+	// F-004: lastRecv is only read on the disconnect path below, so we defer
+	// its copy to that point to avoid one allocation per chunk.
+	buf := make([]byte, 16*1024)
+	var lastData []byte
 	for {
 		n, err := s.stdout.Read(buf)
 		if n > 0 {
 			s.RecordReadActivity()
-			data := append([]byte(nil), buf[:n]...)
-			s.lastRecv.Store(append([]byte(nil), data...))
+			data := buf[:n]
+			lastData = data
 			s.offerExpectOutput(data)
 			if s.IsZmodemMode() {
 				s.emitBinary(data)
@@ -330,6 +340,13 @@ func (s *SSHSession) readLoop() {
 			}
 		}
 		if err != nil {
+			// Copy the last received chunk into lastRecv so the
+			// disconnect diagnostics in this loop and session.Wait()
+			// can show what the server sent right before the link
+			// dropped. Only one copy per session, not per read.
+			if lastData != nil {
+				s.lastRecv.Store(append([]byte(nil), lastData...))
+			}
 			if err != io.EOF {
 				log.Writef("ssh disconnect: read error: %v, %s", err, s.kaDiag())
 				s.emitData([]byte(fmt.Sprintf("\r\n\x1b[31m[read error: %v]\x1b[0m\r\n", err)))
@@ -523,8 +540,10 @@ func (s *SSHSession) SetEncoding(name string) {
 	s.enc = enc
 	if enc == nil {
 		s.decoder = nil
+		s.encoder = nil
 	} else {
 		s.decoder = enc.NewDecoder()
+		s.encoder = enc.NewEncoder()
 	}
 	s.decodeLeftover = nil
 	s.mu.Unlock()
@@ -539,9 +558,10 @@ func (s *SSHSession) decodeOutput(data []byte) []byte {
 	if s.decoder == nil {
 		return data
 	}
-	src := make([]byte, 0, len(s.decodeLeftover)+len(data))
-	src = append(src, s.decodeLeftover...)
-	src = append(src, data...)
+	s.decodeScratch = s.decodeScratch[:0]
+	s.decodeScratch = append(s.decodeScratch, s.decodeLeftover...)
+	s.decodeScratch = append(s.decodeScratch, data...)
+	src := s.decodeScratch
 
 	var out []byte
 	dst := make([]byte, 8192)
@@ -554,7 +574,14 @@ func (s *SSHSession) decodeOutput(data []byte) []byte {
 		}
 		break // nil or ErrShortSrc: remaining src is an incomplete trailing rune
 	}
-	s.decodeLeftover = append([]byte(nil), src...)
+	// Buffer any incomplete trailing rune into a fresh slice so the next
+	// read's append(s.decodeScratch, data...) isn't racing with decodeLeftover
+	// backing storage.
+	if len(src) > 0 {
+		s.decodeLeftover = append(s.decodeLeftover[:0], src...)
+	} else {
+		s.decodeLeftover = src[:0]
+	}
 	return out
 }
 
@@ -562,16 +589,18 @@ func (s *SSHSession) decodeOutput(data []byte) []byte {
 // before writing to the remote. Each call handles a complete UTF-8 input.
 func (s *SSHSession) encodeInput(data []byte) []byte {
 	s.mu.RLock()
-	enc := s.enc
+	encoder := s.encoder
 	s.mu.RUnlock()
-	if enc == nil {
+	if encoder == nil {
 		return data
 	}
-	out, err := enc.NewEncoder().Bytes(data)
-	if err != nil {
+	encoder.Reset()
+	s.encScratch = s.encScratch[:0]
+	nDst, _, err := encoder.Transform(s.encScratch, data, true)
+	if err != nil && err != transform.ErrShortSrc {
 		return data
 	}
-	return out
+	return s.encScratch[:nDst]
 }
 
 // encodingByName maps a connection's encoding setting to an x/text codec.

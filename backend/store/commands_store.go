@@ -7,7 +7,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
+
+// commandsListCacheTTL 是 List() 的内存缓存有效期。失效由两类信号触发：
+// 1) TTL 到期（兜底，保证跨进程编辑也能被看见）
+// 2) 任何写操作（CreateCommand/SaveCommand/Delete/SetEnabled/SetLocked/SetSortOrder）显式失效
+const commandsListCacheTTL = 2 * time.Second
 
 // commands 采用「单文件式」存储：每个 command 是 commands/<name>.md（frontmatter 存 description，正文是 prompt 模板）。
 // 与 skill 不同，命令是用户显式触发的 prompt，无 references/scripts，故不用目录式。
@@ -52,6 +59,12 @@ type commandPrefsData struct {
 
 // CommandsStore 管理 commands 目录扫描与偏好持久化。configDir 由 app.go 传入（~/.../uniTerm）。
 type CommandsStore struct {
+	mu sync.Mutex // 保护 listCache / listAt
+	// listCache 是 List() 的最近一次完整合并结果；listAt 是填入时刻。
+	// 读路径：cache 未过期 → 直接返回副本；过期或被显式失效 → 走 scanAndLoad 重扫。
+	listCache []CommandMeta
+	listAt    time.Time
+
 	configDir string
 }
 
@@ -64,6 +77,14 @@ func (s *CommandsStore) commandsRoot() string {
 }
 func (s *CommandsStore) prefsPath() string {
 	return filepath.Join(s.commandsRoot(), commandPrefsFile)
+}
+
+// invalidateListCache 在写路径调用，下一次 List() 强制重扫。
+func (s *CommandsStore) invalidateListCache() {
+	s.mu.Lock()
+	s.listCache = nil
+	s.listAt = time.Time{}
+	s.mu.Unlock()
 }
 
 // ---- 偏好读写（commands.json）----
@@ -94,13 +115,42 @@ func (s *CommandsStore) savePrefs(data commandPrefsData) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.prefsPath(), bytes, 0600)
+	return atomicWriteFile(s.prefsPath(), bytes, 0600)
 }
 
 // ---- 文件扫描（内容/存在性以 commands/*.md 为真相源）----
 
 // List 返回所有 command（合并文件扫描与偏好），按 sortOrder、name 排序。
+// 走内存缓存：同一进程内 2 秒内的重复 List 跳过目录扫描与 .md 文件读取。
 func (s *CommandsStore) List() ([]CommandMeta, error) {
+	s.mu.Lock()
+	if !s.listAt.IsZero() && time.Since(s.listAt) < commandsListCacheTTL && s.listCache != nil {
+		cached := s.listCache
+		s.mu.Unlock()
+		out := make([]CommandMeta, len(cached))
+		copy(out, cached)
+		return out, nil
+	}
+	s.mu.Unlock()
+
+	metas, err := s.scanAndLoad()
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.listCache = metas
+	s.listAt = time.Now()
+	s.mu.Unlock()
+
+	out := make([]CommandMeta, len(metas))
+	copy(out, metas)
+	return out, nil
+}
+
+// scanAndLoad 走磁盘全路径：扫 commands/*.md、合并 prefs、补默认/清理孤儿、按 sortOrder+name 排序。
+// List() 的缓存未命中、或任何写路径主动失效缓存后，会走到这里。
+func (s *CommandsStore) scanAndLoad() ([]CommandMeta, error) {
 	root := s.commandsRoot()
 	metas := []CommandMeta{}
 	entries, err := os.ReadDir(root)
@@ -214,7 +264,11 @@ func (s *CommandsStore) setPref(name string, fn func(p *commandPref)) error {
 	if !found {
 		return fmt.Errorf("command %q not found", name)
 	}
-	return s.savePrefs(prefs)
+	if err := s.savePrefs(prefs); err != nil {
+		return err
+	}
+	s.invalidateListCache()
+	return nil
 }
 
 func (s *CommandsStore) SetEnabled(name string, enabled bool) error {
@@ -253,7 +307,7 @@ func (s *CommandsStore) CreateCommand(name, description, argumentHint, body stri
 	}
 	mdPath := filepath.Join(s.commandsRoot(), name+commandFileExt)
 	content := assembleCommandMD(name, description, argumentHint, body)
-	if err := os.WriteFile(mdPath, []byte(content), 0644); err != nil {
+	if err := atomicWriteFile(mdPath, []byte(content), 0644); err != nil {
 		return err
 	}
 	prefs, err := s.loadPrefs()
@@ -283,7 +337,11 @@ func (s *CommandsStore) CreateCommand(name, description, argumentHint, body stri
 			Version:   1,
 		})
 	}
-	return s.savePrefs(prefs)
+	if err := s.savePrefs(prefs); err != nil {
+		return err
+	}
+	s.invalidateListCache()
+	return nil
 }
 
 // SaveCommand 覆盖已有 command 的正文（仅限未锁定项）。
@@ -309,9 +367,10 @@ func (s *CommandsStore) SaveCommand(name, description, argumentHint, body string
 	}
 	mdPath := filepath.Join(s.commandsRoot(), name+commandFileExt)
 	content := assembleCommandMD(name, description, argumentHint, body)
-	if err := os.WriteFile(mdPath, []byte(content), 0644); err != nil {
+	if err := atomicWriteFile(mdPath, []byte(content), 0644); err != nil {
 		return err
 	}
+	s.invalidateListCache() // .md 先于 setPref 写入，先失效以免窗口内读到旧版本
 	return s.setPref(name, func(p *commandPref) {
 		p.Version++
 		p.CreatedAt = nowRFC3339()
@@ -327,6 +386,7 @@ func (s *CommandsStore) Delete(name string) error {
 	if err := os.Remove(mdPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	s.invalidateListCache() // .md 已删除，先失效
 	// 清理偏好（靠 List 的孤儿清理去除偏好项）
 	return s.setPref(name, func(p *commandPref) {})
 }

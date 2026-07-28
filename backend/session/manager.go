@@ -89,16 +89,31 @@ func (sm *SessionManager) Add(s Session) {
 	sm.sessions[s.ID()] = s
 }
 
+// Init evicts dead sessions from the map at startup. A previous run may
+// have left behind sessions in StatusDisconnected / StatusError state
+// (failed/abandoned entries) that the bounded in-memory map would
+// otherwise carry forward forever.
+func (sm *SessionManager) Init() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	for id, s := range sm.sessions {
+		switch s.Status() {
+		case StatusDisconnected, StatusError:
+			delete(sm.sessions, id)
+		}
+	}
+}
+
 func (sm *SessionManager) Close(sessionID string) error {
 	sm.mu.Lock()
-	s, ok := sm.sessions[sessionID]
+	sess, ok := sm.sessions[sessionID]
 	delete(sm.sessions, sessionID)
 	sm.mu.Unlock()
 
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
-	return s.Disconnect()
+	return sess.Disconnect()
 }
 
 func (sm *SessionManager) Get(sessionID string) (Session, bool) {

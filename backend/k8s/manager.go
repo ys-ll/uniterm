@@ -2,11 +2,14 @@ package k8s
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -21,7 +24,16 @@ type Manager struct {
 	conns   map[string]*connection
 	watches map[string]*watchHandle
 	logs    map[string]*logHandle
-	emit    EventEmitter
+	// emit is set once in startup via SetEventEmitter and never changes,
+	// so we store it in atomic.Value to let StartWatch/StartLogStream
+	// capture it without grabbing the manager mutex (F-413).
+	emit atomic.Value // EventEmitter
+
+	// kubeconfigCache memoizes ParseBytes results keyed on sha256 of the
+	// raw YAML bytes — kubeconfigs are re-parsed on every tab open, and
+	// a 20-context config pays a full yaml.Unmarshal + per-cluster base64
+	// decode + per-user X509KeyPair parse each time (F-405).
+	kubeconfigCache sync.Map // map[string]*Kubeconfig (sha256 hex → *Kubeconfig)
 }
 
 type connection struct {
@@ -38,31 +50,99 @@ type connection struct {
 type watchHandle struct {
 	connID string
 	cancel context.CancelFunc
+	// done is closed by runWatchLoop when the goroutine exits (terminal
+	// onEnd). The sweeper uses this to prune handles whose backing
+	// goroutine has exited without anyone calling StopWatch / Disconnect
+	// (e.g. Wails frontend HMR reload leaks — F-413).
+	done chan struct{}
 }
 
 type logHandle struct {
 	connID string
 	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 func NewManager() *Manager {
-	return &Manager{
+	m := &Manager{
 		conns:   make(map[string]*connection),
 		watches: make(map[string]*watchHandle),
 		logs:    make(map[string]*logHandle),
-		emit:    func(string, any) {},
+	}
+	m.emit.Store(EventEmitter(func(string, any) {}))
+	go m.sweepLoop()
+	return m
+}
+
+// sweepLoop periodically prunes watchHandles / logHandles whose backing
+// goroutine has exited but were never explicitly stopped (e.g. Wails
+// frontend HMR reload in dev left the handles behind). Each handle's
+// `done` channel is closed by runWatchLoop / runLogLoop when the
+// goroutine returns; we use that as the exit signal (F-413).
+func (m *Manager) sweepLoop() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		m.sweepOnce()
+	}
+}
+
+func (m *Manager) sweepOnce() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, wh := range m.watches {
+		select {
+		case <-wh.done:
+			delete(m.watches, id)
+			if c, ok := m.conns[wh.connID]; ok {
+				delete(c.watches, id)
+			}
+		default:
+		}
+	}
+	for id, lh := range m.logs {
+		select {
+		case <-lh.done:
+			delete(m.logs, id)
+		default:
+		}
 	}
 }
 
 func (m *Manager) SetEventEmitter(e EventEmitter) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.emit = e
+	m.emit.Store(e)
+}
+
+// cachedParseBytes returns a cached *Kubeconfig for the given raw YAML,
+// or parses it on miss. Cache key is the sha256 of the raw bytes so
+// identical kubeconfigs share a parse result (F-405).
+func (m *Manager) cachedParseBytes(raw []byte) (*Kubeconfig, error) {
+	key := sha256Hex(raw)
+	if v, ok := m.kubeconfigCache.Load(key); ok {
+		return v.(*Kubeconfig), nil
+	}
+	kc, err := ParseBytes(raw)
+	if err != nil {
+		return nil, err
+	}
+	actual, _ := m.kubeconfigCache.LoadOrStore(key, kc)
+	return actual.(*Kubeconfig), nil
+}
+
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	const hex = "0123456789abcdef"
+	out := make([]byte, len(sum)*2)
+	for i, s := range sum {
+		out[i*2] = hex[s>>4]
+		out[i*2+1] = hex[s&0x0f]
+	}
+	return string(out)
 }
 
 // ListContexts parses the given kubeconfig YAML and returns context metadata.
 func (m *Manager) ListContexts(kubeconfigYAML []byte) ([]ContextInfo, error) {
-	kc, err := ParseBytes(kubeconfigYAML)
+	kc, err := m.cachedParseBytes(kubeconfigYAML)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +166,7 @@ type ConnectOptions struct {
 
 // ConnectWith 是 Connect 的可选参数版本，供 app.go 在需要 dial 劫持 / 生命周期回调时使用。
 func (m *Manager) ConnectWith(kubeconfigYAML []byte, contextName string, opts ConnectOptions) (string, error) {
-	kc, err := ParseBytes(kubeconfigYAML)
+	kc, err := m.cachedParseBytes(kubeconfigYAML)
 	if err != nil {
 		return "", fmt.Errorf("kubeconfig: %w", err)
 	}
@@ -168,7 +248,9 @@ func (m *Manager) StartWatch(connID, path string) (string, error) {
 	watchID := uuid.New().String()
 	eventName := "k8s:watch:" + watchID
 	endName := "k8s:watch-end:" + watchID
+	reconnectingName := "k8s:watch-reconnecting:" + watchID
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 
 	// 先注册再启流：避免 stream 立即 EOF 时 onEnd 抢在注册之前跑，导致句柄泄漏。
 	m.mu.Lock()
@@ -180,20 +262,23 @@ func (m *Manager) StartWatch(connID, path string) (string, error) {
 	}
 	client := conn.client
 	base := conn.base
-	emit := m.emit
-	m.watches[watchID] = &watchHandle{connID: connID, cancel: cancel}
+	m.watches[watchID] = &watchHandle{connID: connID, cancel: cancel, done: done}
 	conn.watches[watchID] = struct{}{}
 	m.mu.Unlock()
+
+	// emit is set once at startup and never changes; load via atomic
+	// instead of grabbing the manager mutex (F-413).
+	emit := m.emit.Load().(EventEmitter)
 
 	err := startWatchStream(ctx, client, base, path,
 		func(ev WatchEvent) { emit(eventName, ev) },
 		func(err error) {
+			// 终端结束（ctx 取消 / 干净 EOF）才走这里：emit 终态事件并清 map。
 			payload := map[string]any{"error": ""}
 			if err != nil {
 				payload["error"] = err.Error()
 			}
 			emit(endName, payload)
-			// 主动清理 map
 			m.mu.Lock()
 			delete(m.watches, watchID)
 			if c, ok := m.conns[connID]; ok {
@@ -201,6 +286,12 @@ func (m *Manager) StartWatch(connID, path string) (string, error) {
 			}
 			m.mu.Unlock()
 		},
+		func(err error) {
+			// 重连退避前仅发轻量 reconnecting 事件，不动 maps — 防止 apiserver 抖动时
+			// 每 1s/2s/4s/… 都抢 mutex + EventsEmit (F-404)。
+			emit(reconnectingName, map[string]any{"error": err.Error()})
+		},
+		done,
 	)
 	if err != nil {
 		m.mu.Lock()
@@ -234,7 +325,9 @@ func (m *Manager) StartLogStream(connID, ns, pod, container string, tailLines in
 	streamID := uuid.New().String()
 	eventName := "k8s:log:" + streamID
 	endName := "k8s:log-end:" + streamID
+	reconnectingName := "k8s:log-reconnecting:" + streamID
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 
 	m.mu.Lock()
 	conn, ok := m.conns[connID]
@@ -243,9 +336,13 @@ func (m *Manager) StartLogStream(connID, ns, pod, container string, tailLines in
 		cancel()
 		return "", fmt.Errorf("connection %q not found", connID)
 	}
-	client, base, emit := conn.client, conn.base, m.emit
-	m.logs[streamID] = &logHandle{connID: connID, cancel: cancel}
+	client, base := conn.client, conn.base
+	m.logs[streamID] = &logHandle{connID: connID, cancel: cancel, done: done}
 	m.mu.Unlock()
+
+	// emit is set once at startup and never changes; load via atomic
+	// instead of grabbing the manager mutex (F-413).
+	emit := m.emit.Load().(EventEmitter)
 
 	path := buildLogPath(ns, pod, container, tailLines, timestamps, previous)
 	err := startLogStream(ctx, client, base, path,
@@ -260,6 +357,10 @@ func (m *Manager) StartLogStream(connID, ns, pod, container string, tailLines in
 			delete(m.logs, streamID)
 			m.mu.Unlock()
 		},
+		func(err error) {
+			emit(reconnectingName, map[string]any{"error": err.Error()})
+		},
+		done,
 	)
 	if err != nil {
 		m.mu.Lock()

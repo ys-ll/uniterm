@@ -74,6 +74,8 @@ func TestRecentStore_Persistence(t *testing.T) {
 
 	s.Record("conn-1")
 	s.Record("conn-2")
+	// Record is debounced; flush via Close before reading from a fresh store.
+	s.Close()
 
 	// Create a new store pointing to same dir — should read persisted data
 	s2 := NewRecentStore(dir)

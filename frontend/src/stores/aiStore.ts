@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, shallowReactive, shallowRef, watch, markRaw } from 'vue'
 import type { AIMessage, AIConfig, ExecutionMode, AISession, AIAgentStatus } from '../types/ai'
 import { SaveAIConfig, LoadAIConfig, SaveAISessions, LoadAISessions } from '../../wailsjs/go/main/App'
 import { useLocalStateStore } from './localStateStore'
@@ -29,11 +29,37 @@ function estimateTokens(text: string): number {
   return Math.ceil(asciiChars / 3.5 + nonAsciiChars / 1.8)
 }
 
+// F-310: cache token estimates per message in a WeakMap so the per-token
+// `conversation` re-evaluation (shouldn't happen post-F-301, but guards
+// against any remaining hot reads) doesn't re-stringify _rawApiMsg.
+const tokenEstimateCache = new WeakMap<AIMessage, number>()
+
+// F-314: cache the serialized _rawApiMsg JSON per message so doSave doesn't
+// re-stringify on every save. The cache is keyed by the AIMessage object and
+// stores the object reference alongside the JSON so agent.ts can safely
+// replace _rawApiMsg (it assigns a new object) without invalidating reads.
+const rawApiMsgJsonCache = new WeakMap<AIMessage, { obj: object; json: string }>()
+
+function getRawApiMsgJson(msg: AIMessage): string {
+  if (!msg._rawApiMsg) return ''
+  // F-316: inactive sessions retain _rawApiMsg as a JSON string. The disk
+  // form is already the JSON we want to persist; double-stringifying would
+  // produce a quoted string. Use it verbatim.
+  if (typeof msg._rawApiMsg === 'string') return msg._rawApiMsg
+  const cached = rawApiMsgJsonCache.get(msg)
+  if (cached && cached.obj === msg._rawApiMsg) return cached.json
+  const json = JSON.stringify(msg._rawApiMsg)
+  rawApiMsgJsonCache.set(msg, { obj: msg._rawApiMsg, json })
+  return json
+}
+
 /**
  * Estimate tokens for an AIMessage, including content, tool_calls, and
- * serialized _rawApiMsg.
+ * serialized _rawApiMsg. Cached on the message itself after first compute.
  */
 function estimateMessageTokens(msg: AIMessage): number {
+  const cached = tokenEstimateCache.get(msg)
+  if (cached !== undefined) return cached
   let total = estimateTokens(msg.content)
   if (msg.tool_calls) {
     for (const tc of msg.tool_calls) {
@@ -42,8 +68,9 @@ function estimateMessageTokens(msg: AIMessage): number {
     }
   }
   if (msg._rawApiMsg) {
-    total += estimateTokens(JSON.stringify(msg._rawApiMsg))
+    total += estimateTokens(getRawApiMsgJson(msg))
   }
+  tokenEstimateCache.set(msg, total)
   return total
 }
 
@@ -132,6 +159,10 @@ const DEFAULT_CONFIG: AIConfig = {
 async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], currentSessionId: string | null }> {
   try {
     const data = await LoadAISessions() as any
+    // F-316: keep _rawApiMsg as a JSON string in inactive sessions. Parse
+    // only when the session is opened (in init / switchSession). Inactive
+    // sessions retain the raw string form; the conversation computed refs
+    // parsed objects only for the active session.
     const sessions: AISession[] = (data.sessions || []).map((s: any) => ({
       id: s.id,
       name: s.name,
@@ -144,7 +175,7 @@ async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], curre
         tool_call_id: m.tool_call_id,
         tool_calls: m.tool_calls || [],
         pendingTools: m.pendingTools || [],
-        _rawApiMsg: m._rawApiMsg ? JSON.parse(m._rawApiMsg) : undefined,
+        _rawApiMsg: m._rawApiMsg || undefined,
       }))
     }))
     return { sessions, currentSessionId: data.currentSessionId || null }
@@ -260,12 +291,18 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   function addMessage(msg: AIMessage): AIMessage {
-    const r = reactive({ ...msg }) as AIMessage
-    messages.value.push(r)
+    // F-302: shallowReactive + markRaw _rawApiMsg. The raw API block is only
+    // mutated by the LLM, never read by UI components, so it doesn't need
+    // deep reactive tracking. The shallow wrapper covers the message's
+    // own fields (content, pendingTools) without descending into nested arrays.
+    const wrapped: AIMessage = msg._rawApiMsg
+      ? (shallowReactive({ ...msg, _rawApiMsg: markRaw(msg._rawApiMsg) }) as AIMessage)
+      : (shallowReactive({ ...msg }) as AIMessage)
+    messages.value.push(wrapped)
     if (currentSessionId.value) {
       const s = sessions.value.find(s => s.id === currentSessionId.value)
       if (s) {
-        s.messages.push(r)
+        s.messages.push(wrapped)
         s.updatedAt = Date.now()
         if (msg.role === 'user' && s.name === t('ai.newSession')) {
           const trimmed = msg.content.trim()
@@ -273,14 +310,15 @@ export const useAIStore = defineStore('ai', () => {
             s.name = trimmed.length > 20 ? trimmed.slice(0, 20) + '...' : trimmed
           }
         }
-        doSave()
+        debouncedSave()
       }
     }
-    return r
+    messagesVersion.value++
+    return wrapped
   }
 
   function addSkillCard(name: string, source: 'explicit' | 'auto') {
-    const r = reactive({
+    const r = shallowReactive({
       id: `skill-${Date.now()}`,
       role: 'user' as const,
       content: '',
@@ -293,13 +331,14 @@ export const useAIStore = defineStore('ai', () => {
       if (s) {
         s.messages.push(r)
         s.updatedAt = Date.now()
-        doSave()
+        debouncedSave()
       }
     }
+    messagesVersion.value++
   }
 
   function addCommandCard(name: string, args: string) {
-    const r = reactive({
+    const r = shallowReactive({
       id: `cmd-${Date.now()}`,
       role: 'user' as const,
       content: '',
@@ -312,9 +351,10 @@ export const useAIStore = defineStore('ai', () => {
       if (s) {
         s.messages.push(r)
         s.updatedAt = Date.now()
-        doSave()
+        debouncedSave()
       }
     }
+    messagesVersion.value++
   }
 
   function clearMessages() {
@@ -324,9 +364,10 @@ export const useAIStore = defineStore('ai', () => {
       if (s) {
         s.messages = []
         s.updatedAt = Date.now()
-        doSave()
+        debouncedSave()
       }
     }
+    messagesVersion.value++
   }
 
   async function init() {
@@ -350,19 +391,29 @@ export const useAIStore = defineStore('ai', () => {
     if (currentSessionId.value) {
       const s = sessions.value.find(s => s.id === currentSessionId.value)
       if (s) {
-        messages.value = s.messages.map(m => {
-          const msg = { ...m }
-          if (typeof msg._rawApiMsg === 'string' && msg._rawApiMsg) {
-            try { msg._rawApiMsg = JSON.parse(msg._rawApiMsg) } catch { delete msg._rawApiMsg }
+        // F-316: parse _rawApiMsg in place so messages.value and s.messages
+        // share the same backing object — agent.ts mutations to the active
+        // message propagate to the stored session and survive a save.
+        for (const m of s.messages) {
+          if (typeof m._rawApiMsg === 'string' && m._rawApiMsg) {
+            try {
+              m._rawApiMsg = JSON.parse(m._rawApiMsg)
+            } catch {
+              delete m._rawApiMsg
+            }
           }
-          return reactive(msg) as AIMessage
-        })
+          if (m._rawApiMsg) {
+            m._rawApiMsg = markRaw(m._rawApiMsg)
+          }
+        }
+        messages.value = s.messages.map(m => shallowReactive(m) as AIMessage)
       } else {
         createSession()
       }
     } else {
       createSession()
     }
+    messagesVersion.value++
   }
 
   async function initConfig() {
@@ -396,30 +447,56 @@ export const useAIStore = defineStore('ai', () => {
     config.value = { ...config.value, ...updates }
   }
 
+  // F-314: serialize a session to the JSON shape persisted to disk.
+  // The session structure is rebuilt each save (cheap), but the heavy
+  // JSON.stringify of _rawApiMsg is cached per-message via getRawApiMsgJson.
+  function serializeSession(s: AISession): Record<string, unknown> {
+    return {
+      id: s.id,
+      name: s.name,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      messages: s.messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        tool_call_id: m.tool_call_id || '',
+        tool_calls: m.tool_calls || [],
+        pendingTools: m.pendingTools || [],
+        _rawApiMsg: getRawApiMsgJson(m),
+      }))
+    }
+  }
+
   async function doSave() {
     try {
       const data = {
-        sessions: sessions.value.map(s => ({
-          id: s.id,
-          name: s.name,
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt,
-          messages: s.messages.map(m => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            tool_call_id: m.tool_call_id || '',
-            tool_calls: m.tool_calls || [],
-            pendingTools: m.pendingTools || [],
-            _rawApiMsg: m._rawApiMsg ? JSON.stringify(m._rawApiMsg) : '',
-          }))
-        })),
+        sessions: sessions.value.map(s => serializeSession(s)),
         currentSessionId: currentSessionId.value || '',
       }
       await SaveAISessions(data as any)
     } catch {
       // ignore save errors
     }
+  }
+
+  // F-304: debounce doSave by 500ms to coalesce bursts from addMessage and
+  // multi-token streaming. saveNow() flushes immediately for explicit user
+  // actions (deleteSession, renameSession, after-chat completion).
+  let saveTimer: ReturnType<typeof setTimeout> | null = null
+  function debouncedSave() {
+    if (saveTimer) return
+    saveTimer = setTimeout(() => {
+      saveTimer = null
+      doSave()
+    }, 500)
+  }
+  async function saveNow() {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
+    await doSave()
   }
 
   function createSession(name?: string) {
@@ -439,6 +516,7 @@ export const useAIStore = defineStore('ai', () => {
       sessions.value = sessions.value.slice(0, 15)
     }
     clearQueue()
+    messagesVersion.value++
     // Don't save empty sessions — only persist when first message is added
   }
 
@@ -446,15 +524,31 @@ export const useAIStore = defineStore('ai', () => {
     const s = sessions.value.find(s => s.id === sessionId)
     if (!s) return
     currentSessionId.value = sessionId
-    messages.value = s.messages.map(m => reactive({ ...m }) as AIMessage)
+    // F-316: parse _rawApiMsg in place so messages.value and s.messages
+    // share the same backing object — agent.ts mutations to the active
+    // message propagate to the stored session and survive a save.
+    for (const m of s.messages) {
+      if (typeof m._rawApiMsg === 'string' && m._rawApiMsg) {
+        try {
+          m._rawApiMsg = JSON.parse(m._rawApiMsg)
+        } catch {
+          delete m._rawApiMsg
+        }
+      }
+      if (m._rawApiMsg) {
+        m._rawApiMsg = markRaw(m._rawApiMsg)
+      }
+    }
+    messages.value = s.messages.map(m => shallowReactive(m) as AIMessage)
     clearQueue()
+    messagesVersion.value++
   }
 
   function deleteSession(sessionId: string) {
     const idx = sessions.value.findIndex(s => s.id === sessionId)
     if (idx === -1) return
     sessions.value.splice(idx, 1)
-    doSave()
+    saveNow()
     if (currentSessionId.value === sessionId) {
       if (sessions.value.length > 0) {
         switchSession(sessions.value[0].id)
@@ -468,7 +562,7 @@ export const useAIStore = defineStore('ai', () => {
     const s = sessions.value.find(s => s.id === sessionId)
     if (s) {
       s.name = name
-      doSave()
+      saveNow()
     }
   }
 
@@ -482,8 +576,13 @@ export const useAIStore = defineStore('ai', () => {
     stopRequested.value = false
   }
 
-  // Build Anthropic-native message array (system is separate top-level field)
-  const conversation = computed(() => {
+  // Build Anthropic-native message array (system is separate top-level field).
+  // F-301: conversation is rebuilt only when messagesVersion bumps (add/remove),
+  // not when per-token content mutates. Stored as a shallowRef; the computed
+  // wrapper preserves the existing public API.
+  const conversationValue = shallowRef<Array<Record<string, unknown>>>([])
+
+  function buildConversation() {
     // Token budget: 80% of Claude's 200K context window, minus headroom
     const MAX_CONTEXT_TOKENS = 160000
 
@@ -496,71 +595,92 @@ export const useAIStore = defineStore('ai', () => {
 
     // Walk backwards through messages, accumulate token estimates.
     // Stop when we exceed the budget.
-    const kept: typeof messages.value = []
-    for (let i = messages.value.length - 1; i >= 0; i--) {
-      const msg = messages.value[i]
-      const msgTokens = estimateMessageTokens(msg)
-      if (tokenCount + msgTokens > MAX_CONTEXT_TOKENS) break
-      tokenCount += msgTokens
-      kept.unshift(msg)
-    }
-
-    let recentMsgs = kept
-
-    // Don't start the conversation with an orphaned tool_result whose matching
-    // tool_use was truncated out of the window. Strip leading tool messages
-    // until we hit a user or assistant message.
-    while (recentMsgs.length > 0 && recentMsgs[0].role === 'tool') {
-      recentMsgs.shift()
-    }
-
-    // Collect all resolved tool_use IDs from tool_result messages
-    const resolvedIds = new Set<string>()
-    for (const m of recentMsgs) {
-      if (m.role === 'tool' && m.tool_call_id) {
-        resolvedIds.add(m.tool_call_id)
+    const msgs = messages.value
+    const n = msgs.length
+    const kept: AIMessage[] = []
+    const keptStart = (() => {
+      let start = n
+      for (let i = n - 1; i >= 0; i--) {
+        const msgTokens = estimateMessageTokens(msgs[i])
+        if (tokenCount + msgTokens > MAX_CONTEXT_TOKENS) break
+        tokenCount += msgTokens
+        start = i
       }
-    }
+      // Strip leading tool messages whose matching tool_use was truncated out.
+      while (start < n && msgs[start].role === 'tool') start++
+      return start
+    })()
+    for (let i = keptStart; i < n; i++) kept.push(msgs[i])
 
+    // F-313: single forward pass that:
+    //   - collects resolved tool_use IDs from tool_result messages,
+    //   - filters dangling tool_use blocks (assistant raw / legacy),
+    //   - merges consecutive user messages,
+    //   - validates pairings (assistant tool_use ↔ user tool_result).
+    const resolvedIds = new Set<string>()
     const result: Array<Record<string, unknown>> = []
+    const pendingMsgId = pendingCommand.value?.messageId
 
-    for (const m of recentMsgs) {
+    const isMessagePending = (m: AIMessage) => !!(m.pendingTools?.length || pendingMsgId === m.id)
+
+    for (let i = 0; i < kept.length; i++) {
+      const m = kept[i]
+      const pending = isMessagePending(m)
+
       if (m.id.startsWith('dbg-')) continue
-      if (m.needsContinue) continue  // UI-only prompts, not part of LLM conversation
-      // skill/command cards are UI-only markers; never send them to the API
+      if (m.needsContinue) continue
       if ((m.skillName || m.commandName) && !m.content) continue
-      // restored/legacy empty user messages produce invalid empty text blocks
       if (m.role === 'user' && !m.content && !m._contextHeader) continue
 
-      // Tool messages: ones with tool_call_id are real tool_results for the API;
-      // ones without are display-only system errors and must not be sent.
+      // Tool message: register id, emit as user tool_result wrapper.
       if (m.role === 'tool') {
         if (m.tool_call_id) {
-          result.push({
-            role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: m.content }]
-          })
+          resolvedIds.add(m.tool_call_id)
+          const toolResultBlocks = [{
+            type: 'tool_result',
+            tool_use_id: m.tool_call_id,
+            content: m.content
+          }]
+
+          // Pair-validate backward: if previous result is assistant with
+          // tool_use blocks, prune any block that doesn't have a matching
+          // tool_result in this new message.
+          const prev = result[result.length - 1]
+          if (prev && prev.role === 'assistant' && Array.isArray(prev.content)) {
+            const prevBlocks = prev.content as Array<Record<string, unknown>>
+            const filtered = prevBlocks.filter((b) => {
+              if (b.type === 'tool_use') {
+                return toolResultBlocks.some((tr) => tr.tool_use_id === (b.id as string))
+              }
+              return true
+            })
+            if (filtered.length === 0) {
+              result.pop()
+            } else {
+              prev.content = filtered
+            }
+          }
+
+          // Two consecutive tool messages must each appear as their own
+          // user wrapper so they pair with their respective tool_use blocks.
+          // Don't merge into the previous user.
+          result.push({ role: 'user', content: toolResultBlocks })
         }
         continue
       }
 
-      // Skip assistant messages that are API error placeholders from before the fix
-      if (m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('[Error:')) {
-        continue
-      }
+      if (m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('[Error:')) continue
 
-      // Assistant with raw API blocks: filter dangling tool_use blocks without matching tool_result
+      // Assistant with raw API blocks: filter dangling tool_use blocks.
       if (m._rawApiMsg) {
         const raw = m._rawApiMsg as Record<string, unknown>
         const content = raw.content
         if (Array.isArray(content)) {
-          const filtered = (content as Array<Record<string, unknown>>).filter((block: Record<string, unknown>) => {
-            if (block.type === 'tool_use') {
-              return resolvedIds.has(block.id as string)
-            }
+          const filtered = (content as Array<Record<string, unknown>>).filter((b) => {
+            if (b.type === 'tool_use') return resolvedIds.has(b.id as string)
             return true
           })
-          if (filtered.length === 0 && !m.content && !(m.pendingTools?.length || pendingCommand.value?.messageId === m.id)) continue
+          if (filtered.length === 0 && !m.content && !pending) continue
           result.push({ ...raw, role: (raw.role as string) || 'assistant', content: filtered })
         } else {
           result.push({ ...raw, role: (raw.role as string) || 'assistant' })
@@ -568,15 +688,13 @@ export const useAIStore = defineStore('ai', () => {
         continue
       }
 
-      // Assistant with legacy tool_calls: filter dangling ones, build content blocks
+      // Assistant with legacy tool_calls.
       if (m.role === 'assistant' && m.tool_calls?.length) {
         const resolved = m.tool_calls.filter(tc => resolvedIds.has(tc.id))
-        if (!m.content && resolved.length === 0 && !(m.pendingTools?.length || pendingCommand.value?.messageId === m.id)) continue
+        if (!m.content && resolved.length === 0 && !pending) continue
 
         const blocks: Array<Record<string, unknown>> = []
-        if (m.content) {
-          blocks.push({ type: 'text', text: m.content })
-        }
+        if (m.content) blocks.push({ type: 'text', text: m.content })
         for (const tc of resolved) {
           let input: Record<string, unknown> = {}
           try { input = JSON.parse(tc.function.arguments) } catch { /* passthrough */ }
@@ -586,80 +704,87 @@ export const useAIStore = defineStore('ai', () => {
         continue
       }
 
-      // Skip empty assistant messages (no content, no tool calls, no raw api msg, no pending tools)
-      if (m.role === 'assistant' && !m.content && !(m.pendingTools?.length || pendingCommand.value?.messageId === m.id)) continue
+      if (m.role === 'assistant' && !m.content && !pending) continue
 
-      // Inject dynamic context header into user messages for the API
-      // (hidden from UI, stored in _contextHeader)
+      // User / plain assistant: dedup consecutive user messages.
+      let content: string
       if (m.role === 'user' && m._contextHeader) {
-        result.push({ role: m.role, content: m._contextHeader + '\n\n' + m.content })
+        content = m._contextHeader + '\n\n' + m.content
       } else {
-        result.push({ role: m.role || 'user', content: m.content })
+        content = m.content
+      }
+      const apiMsg = { role: m.role || 'user', content }
+      const last = result[result.length - 1]
+      if (m.role === 'user' && last && last.role === 'user') {
+        const prevBlocks = Array.isArray(last.content)
+          ? last.content as Array<Record<string, unknown>>
+          : [{ type: 'text', text: last.content as string }]
+        const msgBlocks = Array.isArray(content)
+          ? content as Array<Record<string, unknown>>
+          : [{ type: 'text', text: content as string }]
+        last.content = [...prevBlocks, ...msgBlocks]
+      } else {
+        result.push(apiMsg)
       }
     }
 
-    // Final safety pass: enforce that every tool_use is immediately followed
-    // by a user message containing its matching tool_result, and every
-    // tool_result is immediately preceded by an assistant with its tool_use.
-    // The Anthropic API rejects tool_use blocks that are not resolved in the
-    // very next message.
-    const cleaned: Array<Record<string, unknown>> = []
+    // Pair validation: prune any tool_use blocks whose next-of-pair msg
+    // doesn't carry the matching tool_result. The Anthropic API rejects
+    // tool_use blocks not resolved in the very next message, regardless of
+    // where in the conversation they appear. Walk backward so we can
+    // prune-then-collapse in place.
+    for (let i = result.length - 1; i >= 0; i--) {
+      const msg = result[i]
+      if (msg.role !== 'assistant' || !Array.isArray(msg.content)) continue
+      const next = i + 1 < result.length ? result[i + 1] : null
+      const nextBlocks = next && next.role === 'user' && Array.isArray(next.content)
+        ? next.content as Array<Record<string, unknown>>
+        : null
+      const blocks = (msg.content as Array<Record<string, unknown>>).filter((b) => {
+        if (b.type === 'tool_use') {
+          return nextBlocks !== null && nextBlocks.some((nb) => nb.type === 'tool_result' && nb.tool_use_id === b.id)
+        }
+        return true
+      })
+      if (blocks.length === 0) {
+        result.splice(i, 1)
+      } else {
+        msg.content = blocks
+      }
+    }
+    // Mirror pass: prune tool_result blocks in user messages whose prev
+    // assistant no longer has the matching tool_use (after the previous
+    // pass may have removed it). Drop user messages whose content is empty.
     for (let i = 0; i < result.length; i++) {
       const msg = result[i]
-
-      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-        const nextMsg = i + 1 < result.length ? result[i + 1] : null
-        const blocks = (msg.content as Array<Record<string, unknown>>).filter((block) => {
-          if (block.type === 'tool_use') {
-            if (!nextMsg || nextMsg.role !== 'user' || !Array.isArray(nextMsg.content)) {
-              return false
-            }
-            return (nextMsg.content as Array<Record<string, unknown>>).some(
-              (nb) => nb.type === 'tool_result' && nb.tool_use_id === block.id
-            )
-          }
-          return true
-        })
-        if (blocks.length === 0) continue
-        cleaned.push({ ...msg, content: blocks })
-      } else if (msg.role === 'user' && Array.isArray(msg.content)) {
-        const prevMsg = i > 0 ? result[i - 1] : null
-        const blocks = (msg.content as Array<Record<string, unknown>>).filter((block) => {
-          if (block.type === 'tool_result') {
-            if (!prevMsg || prevMsg.role !== 'assistant' || !Array.isArray(prevMsg.content)) {
-              return false
-            }
-            return (prevMsg.content as Array<Record<string, unknown>>).some(
-              (pb) => pb.type === 'tool_use' && pb.id === block.tool_use_id
-            )
-          }
-          return true
-        })
-        if (blocks.length === 0) continue
-        cleaned.push({ ...msg, content: blocks })
+      if (msg.role !== 'user' || !Array.isArray(msg.content)) continue
+      const prev = i > 0 ? result[i - 1] : null
+      const prevBlocks = prev && prev.role === 'assistant' && Array.isArray(prev.content)
+        ? prev.content as Array<Record<string, unknown>>
+        : null
+      const blocks = (msg.content as Array<Record<string, unknown>>).filter((b) => {
+        if (b.type === 'tool_result') {
+          return prevBlocks !== null && prevBlocks.some((pb) => pb.type === 'tool_use' && pb.id === b.tool_use_id)
+        }
+        return true
+      })
+      if (blocks.length === 0) {
+        result.splice(i, 1)
+        i--
       } else {
-        cleaned.push(msg)
+        msg.content = blocks
       }
     }
 
-    // Additional validation: ensure no consecutive user messages ( Anthropic rejects this )
-    const deduped: Array<Record<string, unknown>> = []
-    for (const msg of cleaned) {
-      if (msg.role === 'user' && deduped.length > 0 && deduped[deduped.length - 1].role === 'user') {
-        const prev = deduped[deduped.length - 1]
-        const prevBlocks = Array.isArray(prev.content) ? prev.content : [{ type: 'text', text: prev.content }]
-        const msgBlocks = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }]
-        prev.content = [...prevBlocks, ...msgBlocks]
-      } else {
-        deduped.push(msg)
-      }
-    }
+    conversationValue.value = result
+  }
 
-    // Messages are inherently dynamic — no cache_control breakpoints here.
-    // Caching is handled entirely on the system prompt (see llm.ts).
+  // F-301: rebuild conversation only when messages are added/removed.
+  const messagesVersion = ref(0)
+  watch(messagesVersion, () => buildConversation())
+  buildConversation()
 
-    return deduped
-  })
+  const conversation = computed(() => conversationValue.value)
 
   const systemPrompt = computed(() => SYSTEM_RULES)
 

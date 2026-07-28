@@ -30,7 +30,8 @@ func (p *mysqlProvider) DSN(host string, port int, user, password, dbName string
 		"parseTime":    "true",
 		"loc":          "Local",
 		"timeout":      "10s",
-		"readTimeout":  "30s",
+		"readTimeout":  "10s",
+		"writeTimeout": "10s",
 	}
 	for k, v := range extraParams {
 		cfg.Params[k] = v

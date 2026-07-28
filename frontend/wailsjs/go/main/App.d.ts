@@ -390,6 +390,8 @@ export function SftpResumeTransfer(arg1:string,arg2:string):Promise<void>;
 
 export function StartTunnel(arg1:string):Promise<session.TunnelState>;
 
+export function StartupError():Promise<string>;
+
 export function StopTunnel(arg1:string):Promise<void>;
 
 export function SyncChangePassword(arg1:string,arg2:string):Promise<void>;

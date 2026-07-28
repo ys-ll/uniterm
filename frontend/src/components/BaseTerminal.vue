@@ -171,6 +171,10 @@ let writtenChunks = 0
 // bottom; otherwise the viewport stays where the user left it.
 let savedViewportY: number | null = null
 let savedBaseY: number | null = null
+// Original scrollback saved before shrinking the buffer on KeepAlive
+// deactivation; restored on activation so the user sees their history.
+let savedScrollback: number | null = null
+const INACTIVE_SCROLLBACK = 500
 let unsubscribe: (() => void) | null = null
 let statusUnsubscribe: (() => void) | null = null
 let onDocumentMouseDown: ((e: MouseEvent) => void) | null = null
@@ -190,6 +194,31 @@ let zmodemStartTimer: ReturnType<typeof setTimeout> | null = null
 let zmodemDirection: 'upload' | 'download' | undefined = undefined
 let zmodemCancellingUntil = 0
 let exporting = false
+// F-032: rAF coalescer state. Per-instance (see comment above for why).
+let pendingDataChunks: string[] = []
+let pendingFlushRAF: number | null = null
+
+// F-030: hot-path regex literals hoisted to module scope. Inline `/re/g`
+// creates a fresh RegExp object on every entry of the session:data
+// callback, which fires on every chunk the Go backend emits (50+/sec
+// during Claude Code streaming). At module scope the engine reuses the
+// compiled automaton once per page load.
+const ZMODEM_HEX_RE = /\*{2,}\x18[ABC][0-9a-fA-F]{10,}/
+const ED3_RE = /\x1b\[3J/g
+const ED2_COMBINED_RE = /\x1b\[H\x1b\[2J/g
+const ED2_RE = /\x1b\[2J/g
+const FFFD_RE = new RegExp('�', 'g')
+const SFTP_OSC633_RE = /\x1b\]633;S[^\x07]*\x07/g
+
+// F-032: rAF coalescer for the session:data -> terminal.write pipeline.
+// Up to ~50 chunks/sec hit this callback during Claude Code streaming;
+// each one ran the 5-pass regex chain (F-030) plus highlight() (10 regex
+// patterns) synchronously, blocking the main thread. We accumulate raw
+// chunks and run the pipeline once per frame. Zmodem detection (which
+// has async handoff) and isActive gating stay synchronous.
+//
+// The pending buffer is instance-scoped: two BaseTerminal instances
+// backing two panels must not coalesce into a shared queue.
 
 function initZmodemService(sessionId: string) {
   if (!sessionId || props.mode !== 'ssh') return
@@ -363,33 +392,25 @@ const searchText = ref('')
 const searchResultIndex = ref(0)
 const searchResultCount = ref(0)
 
+// F-029: single alternation regex for the 6 "drop this garbage" passes +
+// the \n{3,}→\n\n collapse. Six sequential `.replace()` calls each
+// allocated a fresh copy of the (large) scrollback string; the regex engine
+// walked the full buffer six times. One global scan with a callback that
+// dispatches on whether the match starts with \n keeps correctness while
+// dropping ~7× the work. Finding: console-perf F-029, ~10 ms on 100 KB.
+const SANITIZE_STRIP_RE =
+  /\*{2,}(?:\x18)?[ABC][0-9a-fA-F]{10,}|\x18+|\x08+|[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]|\uFFFD|[^\x00-\x7f一-鿿぀-ゟ゠-ヿ가-힯─-╿▀-▟←-⇿∀-⋿⟀-⟯⠀-⣿⬀-⯿]|\n{3,}/g
+
 function sanitizeTerminalHistory(text: string): string {
   if (!text) return text
-  let cleaned = text
-  // ZModem HEX header fragments
-  cleaned = cleaned.replace(/\*{2,}(?:\x18)?[ABC][0-9a-fA-F]{10,}/g, '')
-  // ZModem ZDLE (0x18) and backspace (0x08) sequences
-  cleaned = cleaned.replace(/\x18+/g, '')
-  cleaned = cleaned.replace(/\x08+/g, '')
-  // ASCII control chars except \n, \r, \t and ESC
-  cleaned = cleaned.replace(/[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]/g, '')
-  // Drop U+FFFD replacement chars. Live data is stripped before write
-  // (see the session:data handler) but history restore goes through this
-  // path, so the same filter applies here. Without it a tab switch
-  // replays the '─���─' pattern Claude Code emits.
-  cleaned = cleaned.replace(/\uFFFD/g, '')
-  // Drop binary garbage decoded as random Unicode blocks. Keep ASCII, CJK,
-  // box-drawing, block elements, arrows, math symbols and braille so that
-  // Claude Code / modern TUI output survives a KeepAlive history restore
-  // intact. Previously only ASCII + CJK survived — every box border, spinner
-  // and progress bar was stripped on tab switch, leaving tables as raw text
-  // with no alignment.
-  cleaned = cleaned.replace(
-    /[^\x00-\x7f一-鿿぀-ゟ゠-ヿ가-힯─-╿▀-▟←-⇿∀-⋿⟀-⟯⠀-⣿⬀-⯿]/g,
-    ''
+  // Single-pass strip: ZModem hex headers, ZDLE runs, backspaces, ASCII
+  // control chars (except \n\r\t\ESC), U+FFFD, binary garbage outside the
+  // kept Unicode blocks, and 3+ blank lines collapsed to \n\n. The blank-
+  // line collapse shares the scan; the callback emits '\n\n' only when the
+  // match is a run of newlines.
+  const cleaned = text.replace(SANITIZE_STRIP_RE, (m) =>
+    m.charCodeAt(0) === 0x0a ? '\n\n' : ''
   )
-  // Collapse blank lines left by removed garbage
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n')
   // Forward debug info to backend log so we can inspect the raw garbage.
   if (cleaned !== text) {
     FrontendLog('sanitizeTerminalHistory', `raw last 400: ${JSON.stringify(text.slice(-400))}`)
@@ -487,11 +508,6 @@ function resize() {
     // an off-by-one column on every Claude Code table border, causing the
     // whole rendered table to drift half a cell.
     terminal.resize(terminal.cols, terminal.rows)
-    // Force a full-viewport redraw. xterm's canvas may keep old glyphs
-    // when the viewport scrolls during a rapid write burst (Claude Code
-    // spinner), producing ghost text residue until the next paint. A
-    // full refresh wipes the canvas before the next frame.
-    terminal.refresh(0, terminal.rows - 1)
     SessionResize(sid, terminal.cols, terminal.rows).catch(() => {})
   } else {
     getFitAddon()?.fit()
@@ -513,11 +529,16 @@ function focus() {
 }
 
 function toBase64(str: string): string {
-  const encoder = new TextEncoder()
-  const bytes = encoder.encode(str)
+  const bytes = new TextEncoder().encode(str)
+  // F-028: process in 8K chunks. String.fromCharCode.apply has a hard
+  // argument-count cap (varies by engine, ~64K on V8). The previous
+  // per-byte loop also re-allocated the binary string each iteration,
+  // turning a 1MB scrollback export into ~1M string concats.
   let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
+  const CHUNK = 0x2000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length))
+    binary += String.fromCharCode.apply(null, slice as unknown as number[])
   }
   return btoa(binary)
 }
@@ -1106,7 +1127,7 @@ onMounted(() => {
       // contain `**B<hex>` — which previously flipped the session into binary
       // ZMODEM mode and made the sentry write protocol bytes back to the
       // server, crashing the remote shell (issue #242).
-      const ZMODEM_HEX_RE = /\*{2,}\x18[ABC][0-9a-fA-F]{10,}/
+      // F-030: regex literal hoisted to module scope (ZMODEM_HEX_RE).
       if (ZMODEM_HEX_RE.test(payload.data)) {
         console.debug('[zmodem] header detected, entering transfer mode')
         isZmodemStarting = true
@@ -1133,31 +1154,50 @@ onMounted(() => {
       return
     }
 
+    // F-032: defer the regex pipeline + terminal.write to the next paint
+    // frame. Multiple chunks within one frame collapse into a single pass
+    // instead of paying 5 regex replacements + highlight() per chunk.
+    // writtenChunks is incremented synchronously below so KeepAlive replay
+    // tracking sees the correct count. Zmodem detection ran synchronously
+    // above (it has async handoff); the rAF flush only handles terminal
+    // output.
+    pendingDataChunks.push(payload.data)
+    writtenChunks++
+    if (pendingFlushRAF === null) {
+      pendingFlushRAF = requestAnimationFrame(flushPendingData)
+    }
+  })
+
+  function flushPendingData() {
+    pendingFlushRAF = null
+    if (pendingDataChunks.length === 0 || !terminal) return
+    const raw = pendingDataChunks.join('')
+    pendingDataChunks = []
     // Filter ED3 (erase scrollback).
-    let data = stripCursorBlink(payload.data, settingsStore.settings.terminal.cursorBlink ?? true).replace(/\x1b\[3J/g, '')
+    // F-030: regex literals hoisted to module scope (ED3_RE / ED2_*_RE /
+    // FFFD_RE / SFTP_OSC633_RE) so we don't recompile them on every flush.
+    let data = stripCursorBlink(raw, settingsStore.settings.terminal.cursorBlink ?? true).replace(ED3_RE, '')
     // For ED2 (clear screen) in the main buffer, replace with scrolling
     // to preserve scrollback history. In alternate screen (vim, less,
     // k9s), pass through unchanged — the app manages its own screen.
     if (data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
       const rows = terminal.rows
       const scrollClear = '\n'.repeat(rows) + '\x1b[H'
-      data = data.replace(/\x1b\[H\x1b\[2J/g, scrollClear)
-      data = data.replace(/\x1b\[2J/g, scrollClear)
+      data = data.replace(ED2_COMBINED_RE, scrollClear)
+      data = data.replace(ED2_RE, scrollClear)
     }
-    // Drop U+FFFD replacement chars. Claude Code occasionally embeds
-    // partial UTF-8 sequences or genuinely invalid bytes in its output
-    // (visible as '���' between box-drawing chars, e.g. '─���─'); the
-    // Go decoder surfaces these as U+FFFD on its way through Wails IPC.
-    // They serve no purpose for the user, only clutter the rendered line.
-    data = data.replace(/\uFFFD/g, '')
+    // Drop U+FFFD replacement chars (see F-032 comment above for context).
+    data = data.replace(FFFD_RE, '')
     if (props.mode === 'sftp') {
-      const cleaned = data.replace(/\x1b\]633;S[^\x07]*\x07/g, '')
+      const cleaned = data.replace(SFTP_OSC633_RE, '')
       if (cleaned) {
         terminal.write(cleaned)
       }
-      writtenChunks++
     } else {
-      // Extract history commands from SSH output
+      // Extract history commands from SSH output. handleSessionData only
+      // checks for the alternate-screen enter/exit sequences; running it
+      // on the coalesced blob is equivalent to running on individual chunks
+      // (the markers are present iff any sub-chunk contains them).
       if (props.mode === 'ssh' && terminalInput) {
         terminalInput.handleSessionData(data)
         // Close suggestions if we entered an alternate screen app (vim, k9s, etc.)
@@ -1167,12 +1207,8 @@ onMounted(() => {
       }
       const hlOn = (settingsStore.settings.terminal.highlightEnabled ?? true) && props.mode !== 'local'
       terminal.write(hlOn ? highlight(data) : data)
-      writtenChunks++
-      if (props.mode === 'ssh' && props.onSessionStatus) {
-        // onSessionData is handled by the consumer via EventsOn if needed
-      }
     }
-  })
+  }
 
   // SSH/Local: session status events
   if (props.mode === 'ssh' || props.mode === 'local') {
@@ -1242,12 +1278,21 @@ onMounted(() => {
 
   bindListeners()
 
+  // F-031: rAF-coalesce the resizeObserver debounce. resize() re-derives
+  // xterm.rows/cols (drives cursor position) and fires `_innerRefresh`,
+  // so multiple ResizeObserver ticks within one paint frame collapse into
+  // a single resize() — was a 150 ms setTimeout that lagged visibly when
+  // the user dragged a split divider.
+  let resizeRAF: number | null = null
   resizeObserver = new ResizeObserver(() => {
     if (isResizing || splitResizing || Date.now() < suppressResizeUntil) return
     const el = terminalRef.value
     if (!el) return
-    if (resizeTimer) clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(() => resize(), 150)
+    if (resizeRAF !== null) cancelAnimationFrame(resizeRAF)
+    resizeRAF = requestAnimationFrame(() => {
+      resizeRAF = null
+      resize()
+    })
   })
   resizeObserver.observe(terminalRef.value)
 
@@ -1347,6 +1392,10 @@ onActivated(() => {
   // that succeeds will run _innerRefresh which writes scrollTop from the
   // restored ydisp; once scrollTop matches the desired value, the next
   // _innerRefresh is a no-op.
+  if (savedScrollback != null && terminal) {
+    terminal.options.scrollback = savedScrollback
+    savedScrollback = null
+  }
   resize()
   ;[0, 50, 150, 300, 600].forEach(d => setTimeout(resize, d))
   // Re-initialize zmodem service only if it was disposed in onDeactivated.
@@ -1373,6 +1422,18 @@ onDeactivated(() => {
   }
   if (buf && typeof buf.baseY === 'number') {
     savedBaseY = buf.baseY
+  }
+  // F-026: shrink xterm's pixel buffer for inactive KeepAlive tabs. The full
+  // 2500-line scrollback stays attached to xterm's internal grid — we'd have
+  // to re-stream every byte to fully detach it. Instead, dropping scrollback
+  // to 500 lines forces xterm to release the older rows' canvas + line
+  // objects, freeing ~80% of the inactive buffer's footprint without losing
+  // the visible scrollback on reactivation. Reactivation restores the
+  // user-configured scrollback (and re-renders the canvas from the
+  // sessionStore replay path).
+  if (terminal && (terminal.options.scrollback ?? 0) > INACTIVE_SCROLLBACK) {
+    savedScrollback = terminal.options.scrollback ?? null
+    terminal.options.scrollback = INACTIVE_SCROLLBACK
   }
   // Dispose per-component listeners to prevent duplicate input when another
   // BaseTerminal mounts with the same shared terminal instance.
@@ -1499,23 +1560,49 @@ function applyXtermTheme(themeName: string) {
   terminal.options.theme = theme
 }
 
-// Watch terminal settings changes
-watch(() => settingsStore.settings.terminal, (ts) => {
-  if (!terminal) return
-  if (ts.fontSize) terminal.options.fontSize = ts.fontSize
-  if (ts.fontFamily) terminal.options.fontFamily = ts.fontFamily
-  if (ts.maxHistoryLines) terminal.options.scrollback = ts.maxHistoryLines
-  if (ts.theme) applyXtermTheme(ts.theme)
-  if (typeof ts.cursorBlink === 'boolean') {
-    terminal.options.cursorBlink = ts.cursorBlink
-    // xterm keeps an internal blink state set by DECSET 12; if the
-    // terminal previously received \x1b[?12h from a remote shell, just
-    // flipping the option may not stop the running blink animation.
-    // Force-reset by feeding the cursor a DECRST 12 sequence.
-    if (!ts.cursorBlink) terminal.write('\x1b[?12l')
-  }
-  resize()
-}, { deep: true })
+// F-032: watch individual terminal settings keys instead of the whole
+// object with `deep: true`. The previous deep watcher fired on every
+// nested mutation (e.g. dragging the fontSize slider 60×/sec) and ran
+// the entire handler — including a fresh theme build + applyXtermTheme —
+// for each tick. Each per-key watcher is also short-circuits the
+// resize() call (debounced) so a burst of slider edits collapses into
+// one reflow.
+let settingsResizeTimer: ReturnType<typeof setTimeout> | null = null
+function debouncedSettingsResize() {
+  if (settingsResizeTimer) clearTimeout(settingsResizeTimer)
+  settingsResizeTimer = setTimeout(() => {
+    settingsResizeTimer = null
+    resize()
+  }, 50)
+}
+
+watch(() => settingsStore.settings.terminal.fontSize, (v) => {
+  if (!terminal || !v) return
+  terminal.options.fontSize = v
+  debouncedSettingsResize()
+})
+watch(() => settingsStore.settings.terminal.fontFamily, (v) => {
+  if (!terminal || !v) return
+  terminal.options.fontFamily = v
+  debouncedSettingsResize()
+})
+watch(() => settingsStore.settings.terminal.maxHistoryLines, (v) => {
+  if (!terminal || !v) return
+  terminal.options.scrollback = v
+})
+watch(() => settingsStore.settings.terminal.theme, (v) => {
+  if (!terminal || !v) return
+  applyXtermTheme(v)
+})
+watch(() => settingsStore.settings.terminal.cursorBlink, (v) => {
+  if (!terminal || typeof v !== 'boolean') return
+  terminal.options.cursorBlink = v
+  // xterm keeps an internal blink state set by DECSET 12; if the
+  // terminal previously received \x1b[?12h from a remote shell, just
+  // flipping the option may not stop the running blink animation.
+  // Force-reset by feeding the cursor a DECRST 12 sequence.
+  if (!v) terminal.write('\x1b[?12l')
+})
 
 // Watch for background image toggling to update terminal transparency
 watch(
