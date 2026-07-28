@@ -71,6 +71,12 @@ type App struct {
 	foreground   atomic.Bool
 	foregroundMu stdsync.RWMutex
 
+	// F-204: last-saved connection snapshot, used to compute delta
+	// emits so a SaveConnections burst doesn't ship the entire store
+	// across the bridge on every call. Guarded by lastConnSnapshotMu.
+	lastConnSnapshot   session.ConnectionStoreData
+	lastConnSnapshotMu stdsync.RWMutex
+
 	// Session output log state (issue #227). Logs are keyed by panelID so
 	// they survive reconnects — a single panel may cycle through many
 	// session objects and the log file spans all of them. sessionToPanel
@@ -376,7 +382,63 @@ func (a *App) SetAppVisibility(visible bool) {
 	}
 }
 
-// watchForeground polls WindowIsMinimised as a fallback so that paths
+// connDelta is the wire shape for store:connections:delta — only the
+// changed connection (or all connections on first emit) crosses the
+// bridge instead of the full store blob. See F-204.
+type connDelta struct {
+	Kind string                    `json:"kind"`             // "upsert" | "remove" | "replace"
+	ID   string                    `json:"id,omitempty"`     // for upsert/remove
+	Conn *session.ConnectionConfig `json:"connection,omitempty"`
+	All  *session.ConnectionStoreData `json:"all,omitempty"`  // for replace (first emit)
+}
+
+// computeConnDelta returns the set of upsert/remove deltas between
+// the last snapshot and newData. If no snapshot exists yet (first save
+// after startup), returns a single "replace" delta carrying the full
+// new data so the frontend can hydrate without waiting for a sync.
+func (a *App) computeConnDelta(newData session.ConnectionStoreData) []connDelta {
+	a.lastConnSnapshotMu.RLock()
+	prev := a.lastConnSnapshot
+	a.lastConnSnapshotMu.RUnlock()
+
+	if prev.Connections == nil && prev.Groups == nil {
+		// F-204: no prior snapshot — ship a single replace so the
+		// frontend can hydrate without waiting for sync.
+		all := newData
+		return []connDelta{{Kind: "replace", All: &all}}
+	}
+
+	prevIDs := make(map[string]struct{}, len(prev.Connections))
+	for _, c := range prev.Connections {
+		prevIDs[c.ID] = struct{}{}
+	}
+	newIDs := make(map[string]struct{}, len(newData.Connections))
+	for _, c := range newData.Connections {
+		newIDs[c.ID] = struct{}{}
+	}
+
+	var deltas []connDelta
+	for _, c := range newData.Connections {
+		if _, ok := prevIDs[c.ID]; !ok {
+			cc := c
+			deltas = append(deltas, connDelta{Kind: "upsert", ID: c.ID, Conn: &cc})
+		}
+	}
+	for id := range prevIDs {
+		if _, ok := newIDs[id]; !ok {
+			deltas = append(deltas, connDelta{Kind: "remove", ID: id})
+		}
+	}
+	return deltas
+}
+
+// saveConnSnapshot updates the snapshot used for future delta
+// computation. Called after every successful Save.
+func (a *App) saveConnSnapshot(data session.ConnectionStoreData) {
+	a.lastConnSnapshotMu.Lock()
+	a.lastConnSnapshot = data
+	a.lastConnSnapshotMu.Unlock()
+}
 // which don't fire the JS visibilitychange event (Cmd+H on macOS before
 // the WebView is loaded, OS-level Alt+Tab) still update the foreground
 // flag. Runs every 2s — coarse on purpose, this is a lifecycle hint not
@@ -420,12 +482,12 @@ func (a *App) SaveConnections(data session.ConnectionStoreData) error {
 	if a.connectionStore == nil {
 		return fmt.Errorf("connection store not initialized")
 	}
-	// F-211: SaveConnections is the most-fired Save method (every connection
-	// edit triggers it). Run the atomic-rename write off the Wails handler
-	// thread so the UI doesn't stall on fsync. The frontend already treats
-	// store:connections:changed as the source of truth, so a small post-
-	// write window is acceptable. Save errors are surfaced via the returned
-	// error (rare path — the goroutine logs on failure).
+	// F-211 + F-204: write off the handler thread AND only ship the
+	// diff across the bridge. The frontend listens on
+	// store:connections:delta for save-time edits and on
+	// store:connections:changed (full blob) for sync-driven reloads —
+	// so the hot path now transfers a few-byte delta instead of every
+	// connection on every keystroke.
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- a.connectionStore.Save(data)
@@ -436,8 +498,12 @@ func (a *App) SaveConnections(data session.ConnectionStoreData) error {
 			log.Writef("SaveConnections async: %v", err)
 			return
 		}
+		deltas := a.computeConnDelta(data)
+		a.saveConnSnapshot(data)
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "store:connections:changed", data)
+			for _, d := range deltas {
+				runtime.EventsEmit(a.ctx, "store:connections:delta", d)
+			}
 		}
 		a.triggerAutoSync()
 	}()
