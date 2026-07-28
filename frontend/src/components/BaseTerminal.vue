@@ -194,6 +194,18 @@ let zmodemDirection: 'upload' | 'download' | undefined = undefined
 let zmodemCancellingUntil = 0
 let exporting = false
 
+// F-030: hot-path regex literals hoisted to module scope. Inline `/re/g`
+// creates a fresh RegExp object on every entry of the session:data
+// callback, which fires on every chunk the Go backend emits (50+/sec
+// during Claude Code streaming). At module scope the engine reuses the
+// compiled automaton once per page load.
+const ZMODEM_HEX_RE = /\*{2,}\x18[ABC][0-9a-fA-F]{10,}/
+const ED3_RE = /\x1b\[3J/g
+const ED2_COMBINED_RE = /\x1b\[H\x1b\[2J/g
+const ED2_RE = /\x1b\[2J/g
+const FFFD_RE = new RegExp('�', 'g')
+const SFTP_OSC633_RE = /\x1b\]633;S[^\x07]*\x07/g
+
 function initZmodemService(sessionId: string) {
   if (!sessionId || props.mode !== 'ssh') return
   // Don't create a duplicate zmodem service if a transfer is already
@@ -1106,7 +1118,7 @@ onMounted(() => {
       // contain `**B<hex>` — which previously flipped the session into binary
       // ZMODEM mode and made the sentry write protocol bytes back to the
       // server, crashing the remote shell (issue #242).
-      const ZMODEM_HEX_RE = /\*{2,}\x18[ABC][0-9a-fA-F]{10,}/
+      // F-030: regex literal hoisted to module scope (ZMODEM_HEX_RE).
       if (ZMODEM_HEX_RE.test(payload.data)) {
         console.debug('[zmodem] header detected, entering transfer mode')
         isZmodemStarting = true
@@ -1134,24 +1146,28 @@ onMounted(() => {
     }
 
     // Filter ED3 (erase scrollback).
-    let data = stripCursorBlink(payload.data, settingsStore.settings.terminal.cursorBlink ?? true).replace(/\x1b\[3J/g, '')
+    // F-030: regex literals hoisted to module scope (ED3_RE / ED2_*_RE /
+    // FFFD_RE / SFTP_OSC633_RE) so we don't recompile them on every chunk.
+    // Inline `/re/g` inside this callback allocated a fresh RegExp ~50/sec
+    // during Claude Code streaming.
+    let data = stripCursorBlink(payload.data, settingsStore.settings.terminal.cursorBlink ?? true).replace(ED3_RE, '')
     // For ED2 (clear screen) in the main buffer, replace with scrolling
     // to preserve scrollback history. In alternate screen (vim, less,
     // k9s), pass through unchanged — the app manages its own screen.
     if (data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
       const rows = terminal.rows
       const scrollClear = '\n'.repeat(rows) + '\x1b[H'
-      data = data.replace(/\x1b\[H\x1b\[2J/g, scrollClear)
-      data = data.replace(/\x1b\[2J/g, scrollClear)
+      data = data.replace(ED2_COMBINED_RE, scrollClear)
+      data = data.replace(ED2_RE, scrollClear)
     }
     // Drop U+FFFD replacement chars. Claude Code occasionally embeds
     // partial UTF-8 sequences or genuinely invalid bytes in its output
     // (visible as '���' between box-drawing chars, e.g. '─���─'); the
     // Go decoder surfaces these as U+FFFD on its way through Wails IPC.
     // They serve no purpose for the user, only clutter the rendered line.
-    data = data.replace(/\uFFFD/g, '')
+    data = data.replace(FFFD_RE, '')
     if (props.mode === 'sftp') {
-      const cleaned = data.replace(/\x1b\]633;S[^\x07]*\x07/g, '')
+      const cleaned = data.replace(SFTP_OSC633_RE, '')
       if (cleaned) {
         terminal.write(cleaned)
       }
