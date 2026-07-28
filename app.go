@@ -335,6 +335,9 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.sessionManager != nil {
 		a.sessionManager.CloseAll()
 	}
+	if a.terminalHistoryStore != nil {
+		_ = a.terminalHistoryStore.Close()
+	}
 	os.RemoveAll(a.webviewDataPath)
 }
 
