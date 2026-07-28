@@ -2309,9 +2309,13 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 				if currentBlock != nil {
 					currentTextBuf.WriteString(delta.Text)
 				}
-				runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-					"text":  delta.Text,
-					"index": currentBlockIndex,
+				// F-320: typed struct + dropped unused fields so
+				// the per-token EventsEmit doesn't allocate a
+				// fresh map[string]interface{}. The ai:token payload
+				// carries only text + index.
+				runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
+					Text:  delta.Text,
+					Index: currentBlockIndex,
 				})
 			case "input_json_delta":
 				if currentBlock != nil {
