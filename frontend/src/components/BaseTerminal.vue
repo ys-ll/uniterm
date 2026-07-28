@@ -1258,12 +1258,21 @@ onMounted(() => {
 
   bindListeners()
 
+  // F-031: rAF-coalesce the resizeObserver debounce. resize() re-derives
+  // xterm.rows/cols (drives cursor position) and fires `_innerRefresh`,
+  // so multiple ResizeObserver ticks within one paint frame collapse into
+  // a single resize() — was a 150 ms setTimeout that lagged visibly when
+  // the user dragged a split divider.
+  let resizeRAF: number | null = null
   resizeObserver = new ResizeObserver(() => {
     if (isResizing || splitResizing || Date.now() < suppressResizeUntil) return
     const el = terminalRef.value
     if (!el) return
-    if (resizeTimer) clearTimeout(resizeTimer)
-    resizeTimer = setTimeout(() => resize(), 150)
+    if (resizeRAF !== null) cancelAnimationFrame(resizeRAF)
+    resizeRAF = requestAnimationFrame(() => {
+      resizeRAF = null
+      resize()
+    })
   })
   resizeObserver.observe(terminalRef.value)
 
