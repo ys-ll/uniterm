@@ -3,10 +3,14 @@ package main
 import (
 	"embed"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+
+	// F-201: register pprof handlers on the default mux.
+	_ "net/http/pprof"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -19,6 +23,11 @@ import (
 )
 
 var Version = "dev"
+
+// devBuild is true for `wails dev` (Version == "dev"); false for production
+// builds where `-ldflags '-X main.Version=...'` sets a real version string.
+// Used to gate the pprof HTTP listener so production binaries don't open it.
+var devBuild = Version == "dev"
 
 //go:embed all:frontend/dist
 var assets embed.FS
@@ -38,6 +47,12 @@ func main() {
 		println("Failed to init log:", err.Error())
 	}
 	defer log.Close()
+
+	// F-201: expose net/http/pprof on localhost:6060 for dev builds only.
+	// Production builds (wails build) leave Version unchanged from "dev"
+	// unless ldflags set it; gate behind a build flag so production does
+	// not open a listener.
+	startPprofIfDev()
 
 	webviewDataPath := filepath.Join(os.TempDir(), fmt.Sprintf("uniTerm-webview2-%d", os.Getpid()))
 	os.MkdirAll(webviewDataPath, 0700)
@@ -116,4 +131,24 @@ func main() {
 		fmt.Println("Error:", err.Error())
 		log.Writef("Wails run error: %v", err)
 	}
+}
+
+// startPprofIfDev spawns a goroutine that serves net/http/pprof on
+// localhost:6060 — only when running a dev build. Production builds
+// (Version != "dev") deliberately skip this so end-users never have
+// the debug listener open.
+//
+// The listener stays up for the lifetime of the process; its only job
+// is to let `go tool pprof http://localhost:6060/debug/pprof/profile`
+// connect and capture CPU/heap/block/goroutine profiles during
+// reproduction of perf issues (see F-201 / audit §8.2).
+func startPprofIfDev() {
+	if !devBuild {
+		return
+	}
+	go func() {
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil && err != http.ErrServerClosed {
+			log.Writef("pprof listener failed: %v", err)
+		}
+	}()
 }
