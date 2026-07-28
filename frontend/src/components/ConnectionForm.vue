@@ -336,6 +336,10 @@
                   <el-option :label="t('conn.ftpEncryptionRequired')" value="required" />
                 </el-select>
               </el-form-item>
+              <el-form-item v-if="form.ftpEncryption !== 'none'" :label="t('conn.ftpSkipVerify')">
+                <el-switch v-model="form.ftpSkipVerify" />
+                <div class="field-hint">{{ t('conn.ftpSkipVerifyDesc') }}</div>
+              </el-form-item>
               <el-form-item :label="t('conn.ftpPassive')">
                 <el-switch v-model="form.ftpPassive" />
               </el-form-item>
@@ -660,6 +664,7 @@ const form = reactive<ConnectionConfig>({
   ftpEncryption: 'none',
   ftpPassive: true,
   ftpEncoding: 'utf-8',
+  ftpSkipVerify: false,
   encoding: 'utf-8',
   shellPath: '',
   smbDomain: 'WORKGROUP',
@@ -855,6 +860,7 @@ function resetForm() {
   form.ftpEncryption = 'none'
   form.ftpPassive = true
   form.ftpEncoding = 'utf-8'
+  form.ftpSkipVerify = false
   form.encoding = 'utf-8'
   form.shellPath = ''
   form.serialPort = ''

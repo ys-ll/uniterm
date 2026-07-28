@@ -817,6 +817,8 @@
   "conn.ftpEncryptionRequired": "Required",
   "conn.ftpPassive": "Passive Mode",
   "conn.ftpEncoding": "Encoding",
+  "conn.ftpSkipVerify": "Allow insecure TLS (skip verification)",
+  "conn.ftpSkipVerifyDesc": "Disables certificate verification for FTPS. Vulnerable to MITM attacks — only enable for trusted self-signed certificates.",
   "conn.encoding": "Encoding",
   "quickCommands.quickCommandsTab": "Quick Commands",
   "quickCommands.historyTab": "History",

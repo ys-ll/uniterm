@@ -76,6 +76,11 @@ export interface ConnectionConfig {
   ftpEncryption?: string  // "none" | "auto" | "required"
   ftpPassive?: boolean
   ftpEncoding?: string    // "utf-8" | "gbk" | "shift-jis" | "latin-1"
+  // Opt in to FTPS InsecureSkipVerify. Defaults to false (verify enabled).
+  // Off by default preserves backwards compatibility for users today who
+  // rely on it for self-signed certs — but the toggle now exists so the
+  // choice is explicit, and a one-shot session-log warning fires on connect.
+  ftpSkipVerify?: boolean
   // SMB-specific
   smbDomain?: string
   smbShare?: string

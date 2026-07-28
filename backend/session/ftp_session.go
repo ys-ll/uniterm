@@ -55,7 +55,7 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 	}
 
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: config.FtpSkipVerify,
 	}
 
 	var conn *ftp.ServerConn
@@ -98,6 +98,12 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 	s.conn = conn
 	s.cwd = "/"
 	s.setStatus(StatusConnected)
+	// One-shot session log warning when the user has opted in to
+	// InsecureSkipVerify. Surfaces the MITM risk in the session feed so
+	// it can't be silently enabled by a forgotten checkbox.
+	if config.FtpSkipVerify && encryption != "none" {
+		s.emitData([]byte("\x1b[33m[FTP TLS verify disabled - connection is vulnerable to MITM]\x1b[0m\r\n"))
+	}
 	return nil
 }
 

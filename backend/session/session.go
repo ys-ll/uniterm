@@ -101,6 +101,12 @@ type ConnectionConfig struct {
 	FtpEncryption string `json:"ftpEncryption,omitempty"` // "none"(default) | "auto" | "required"
 	FtpPassive    bool   `json:"ftpPassive"`              // passive mode (default true)
 	FtpEncoding   string `json:"ftpEncoding,omitempty"`   // "utf-8" | "gbk" | "shift-jis" | "latin-1"
+	// FtpSkipVerify opts in to tls.Config.InsecureSkipVerify for FTPS connections.
+	// Defaults to false (verify enabled). Off by default preserves backwards
+	// compatibility for users today who rely on it for self-signed certs —
+	// but the toggle now exists so the choice is explicit, and a one-shot
+	// session-log warning fires on connect when it is enabled.
+	FtpSkipVerify bool `json:"ftpSkipVerify,omitempty"`
 	// SMB-specific fields
 	SmbDomain string `json:"smbDomain,omitempty"`
 	SmbShare  string `json:"smbShare,omitempty"`
