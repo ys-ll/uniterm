@@ -1187,3 +1187,124 @@ body.drag-active .zone {
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
 }
+
+/* macOS 26 - light (Liquid Glass simulation) */
+[data-theme="macos26"] {
+  --bg-base: #ffffff;
+  --bg-elevated: #ececef;
+  --bg-surface: #ffffff;
+  --bg-overlay: #f5f5f7;
+  --bg-hover: #f0f0f3;
+  --bg-active: #e5e5e8;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-muted: #86868b;
+  --text-disabled: #a1a1a6;
+  --accent: #007aff;
+  --accent-glow: rgba(0, 122, 255, 0.20);
+  --accent-subtle: rgba(0, 122, 255, 0.10);
+  --info: #0064cd;
+  --info-subtle: rgba(0, 100, 205, 0.08);
+  --on-accent: #ffffff;
+  --chart-1: #30b257;
+  --chart-2: #1e88e5;
+  --chart-3: #ff9500;
+  --chart-4: #af52de;
+  --chart-4-alt: #c184e8;
+  --success: #28a745;
+  --success-dim: #1e7e34;
+  --success-subtle: rgba(40, 167, 69, 0.08);
+  --success-glow: rgba(40, 167, 69, 0.18);
+  --warning: #ff9500;
+  --warning-subtle: rgba(255, 149, 0, 0.10);
+  --error: #ff3b30;
+  --error-subtle: rgba(255, 59, 48, 0.08);
+  --error-glow: rgba(255, 59, 48, 0.18);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --scrim: rgba(255, 255, 255, 0.5);
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.20);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #ffffff;
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color: #ececef;
+  --el-fill-color-light: #f5f5f7;
+  --el-fill-color-lighter: #f0f0f3;
+  --el-text-color-primary: #1d1d1f;
+  --el-text-color-regular: #6e6e73;
+  --el-text-color-secondary: #86868b;
+  --el-text-color-placeholder: #a1a1a6;
+  --el-border-color: rgba(0, 0, 0, 0.16);
+  --el-border-color-light: rgba(0, 0, 0, 0.10);
+  --el-border-color-lighter: rgba(0, 0, 0, 0.08);
+  --el-input-height: 28px;
+  --el-component-size: 28px;
+}
+
+/* macOS 26 - dark (Liquid Glass dark) */
+@media (prefers-color-scheme: dark) {
+  [data-theme="macos26"] {
+    --bg-base: #1e1e1e;
+    --bg-elevated: #2c2c2e;
+    --bg-surface: #1e1e1e;
+    --bg-overlay: #3a3a3c;
+    --bg-hover: #3a3a3c;
+    --bg-active: #48484a;
+    --text-primary: #f5f5f7;
+    --text-secondary: #aeaeb2;
+    --text-muted: #8e8e93;
+    --text-disabled: #636366;
+    --accent: #0a84ff;
+    --accent-glow: rgba(10, 132, 255, 0.22);
+    --accent-subtle: rgba(10, 132, 255, 0.12);
+    --info: #64d2ff;
+    --info-subtle: rgba(100, 210, 255, 0.10);
+    --on-accent: #ffffff;
+    --success: #30d158;
+    --success-dim: #28a745;
+    --success-subtle: rgba(48, 209, 88, 0.10);
+    --success-glow: rgba(48, 209, 88, 0.20);
+    --warning: #ff9f0a;
+    --warning-subtle: rgba(255, 159, 10, 0.12);
+    --error: #ff453a;
+    --error-subtle: rgba(255, 69, 58, 0.10);
+    --error-glow: rgba(255, 69, 58, 0.20);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(255, 255, 255, 0.18);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(0, 0, 0, 0.4);
+    --el-bg-color: #1e1e1e;
+    --el-bg-color-page: #1e1e1e;
+    --el-fill-color-blank: #1e1e1e;
+    --el-fill-color: #2c2c2e;
+    --el-fill-color-light: #3a3a3c;
+    --el-fill-color-lighter: #48484a;
+    --el-text-color-primary: #f5f5f7;
+    --el-text-color-regular: #aeaeb2;
+    --el-text-color-secondary: #8e8e93;
+    --el-text-color-placeholder: #636366;
+    --el-border-color: rgba(255, 255, 255, 0.18);
+    --el-border-color-light: rgba(255, 255, 255, 0.10);
+    --el-border-color-lighter: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* macOS 26 - body Liquid Glass radial gradient */
+[data-theme="macos26"] body {
+  background: radial-gradient(ellipse at top, rgba(255, 255, 255, 0.6) 0%, transparent 50%), var(--bg-base);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="macos26"] body {
+    background: radial-gradient(ellipse at top, rgba(255, 255, 255, 0.04) 0%, transparent 60%), var(--bg-base);
+  }
+}
