@@ -2395,6 +2395,32 @@ func toString(v interface{}) string {
 	}
 }
 
+// F-306: typed SSE shapes for OpenAI Chat Completions. Only the few
+// fields the loop reads (delta.content, delta.tool_calls[], choice.finish_reason)
+// get decoded; the rest is discarded by the json decoder.
+type openaiDeltaToolCall struct {
+	Index    *int   `json:"index,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Function struct {
+		Name      string `json:"name,omitempty"`
+		Arguments string `json:"arguments,omitempty"`
+	} `json:"function"`
+}
+
+type openaiStreamDelta struct {
+	Content   string                `json:"content"`
+	ToolCalls []openaiDeltaToolCall `json:"tool_calls"`
+}
+
+type openaiStreamChoice struct {
+	Delta        openaiStreamDelta `json:"delta"`
+	FinishReason string            `json:"finish_reason"`
+}
+
+type openaiStreamEvent struct {
+	Choices []openaiStreamChoice `json:"choices"`
+}
+
 // chatCompletionOpenAI converts the Anthropic-format request to OpenAI,
 // calls the OpenAI Chat Completions API with SSE streaming, and converts
 // the response back to Anthropic format so the frontend sees no difference.
@@ -2536,23 +2562,18 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			return string(resultJSON), nil
 		}
 
-		var event map[string]interface{}
-		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
+		var ev openaiStreamEvent
+		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
 			continue
 		}
-
-		choices, _ := event["choices"].([]interface{})
-		if len(choices) == 0 {
+		if len(ev.Choices) == 0 {
 			continue
 		}
-		choice, _ := choices[0].(map[string]interface{})
-		delta, _ := choice["delta"].(map[string]interface{})
-		if delta == nil {
-			continue
-		}
+		choice := ev.Choices[0]
+		delta := choice.Delta
 
 		// Handle text content
-		if textDelta, ok := delta["content"].(string); ok && textDelta != "" {
+		if delta.Content != "" {
 			if currentBlock == nil || currentBlock["type"] != "text" {
 				// Close previous block if any
 				if currentBlock != nil {
@@ -2571,65 +2592,63 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 					"content_block": currentBlock,
 				})
 			}
-			currentBlock["text"] = currentBlock["text"].(string) + textDelta
+			currentBlock["text"] = currentBlock["text"].(string) + delta.Content
 			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-				"text":  textDelta,
+				"text":  delta.Content,
 				"index": currentBlockIndex,
 			})
 		}
 
 		// Handle tool_calls in delta
-		if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
-			for _, tc := range toolCalls {
-				tcMap, _ := tc.(map[string]interface{})
-				idxF, _ := tcMap["index"].(float64)
-				idx := int(idxF)
+		for _, tc := range delta.ToolCalls {
+			if tc.Index == nil {
+				continue
+			}
+			idx := *tc.Index
 
-				if _, exists := activeToolCalls[idx]; !exists {
-					// Close current text block if open
-					if currentBlock != nil {
-						contentBlocks = append(contentBlocks, currentBlock)
-						runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-							"index": currentBlockIndex,
-						})
-						currentBlock = nil
-					}
-					currentBlockIndex++
-					activeToolCalls[idx] = map[string]interface{}{
-						"type":  "tool_use",
-						"id":    tcMap["id"],
-						"name":  "",
-						"input": "",
-					}
-					runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
+			if _, exists := activeToolCalls[idx]; !exists {
+				// Close current text block if open
+				if currentBlock != nil {
+					contentBlocks = append(contentBlocks, currentBlock)
+					runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
 						"index": currentBlockIndex,
-						"content_block": map[string]interface{}{
-							"type": "tool_use",
-							"id":   tcMap["id"],
-						},
 					})
+					currentBlock = nil
 				}
+				currentBlockIndex++
+				activeToolCalls[idx] = map[string]interface{}{
+					"type":  "tool_use",
+					"id":    tc.ID,
+					"name":  "",
+					"input": "",
+				}
+				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
+					"index": currentBlockIndex,
+					"content_block": map[string]interface{}{
+						"type": "tool_use",
+						"id":   tc.ID,
+					},
+				})
+			}
 
-				atc := activeToolCalls[idx]
-				if fn, ok := tcMap["function"].(map[string]interface{}); ok {
-					if name, ok := fn["name"].(string); ok && name != "" {
-						atc["name"] = name
-					}
-					if args, ok := fn["arguments"].(string); ok && args != "" {
-						if atc["input"] == nil {
-							atc["input"] = ""
-						}
-						atc["input"] = atc["input"].(string) + args
-						runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
-							"partial_json": args,
-						})
-					}
+			atc := activeToolCalls[idx]
+			if tc.Function.Name != "" {
+				atc["name"] = tc.Function.Name
+			}
+			if args := tc.Function.Arguments; args != "" {
+				if atc["input"] == nil {
+					atc["input"] = ""
 				}
+				atc["input"] = atc["input"].(string) + args
+				runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
+					"partial_json": args,
+				})
 			}
 		}
 
 		// Handle finish_reason on the choice level
-		if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" && finishReason != "null" {
+		finishReason := choice.FinishReason
+		if finishReason != "" && finishReason != "null" {
 			// Close any open text block
 			if currentBlock != nil {
 				contentBlocks = append(contentBlocks, currentBlock)
