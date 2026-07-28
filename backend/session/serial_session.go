@@ -107,7 +107,9 @@ func (s *SerialSession) SetSerialConfig(cfg SerialConfig) {
 }
 
 func (s *SerialSession) readLoop() {
-	buf := make([]byte, 4096)
+	// 16 KiB reused read buffer; emitData/emitBinary's callbacks copy the
+	// bytes, so buf[:n] can be handed off without an extra allocation.
+	buf := make([]byte, 16384)
 	for {
 		// Bail out promptly if Disconnect has been called (s.port.Close()
 		// inside Disconnect will also trip an err on the next Read, but the
@@ -120,8 +122,7 @@ func (s *SerialSession) readLoop() {
 		}
 		n, err := s.port.Read(buf)
 		if n > 0 {
-			data := make([]byte, n)
-			copy(data, buf[:n])
+			data := buf[:n]
 			if s.IsZmodemMode() {
 				s.emitBinary(data)
 			} else if looksLikeZmodemHeader(data) {
