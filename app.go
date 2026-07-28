@@ -418,12 +418,28 @@ func (a *App) SaveConnections(data session.ConnectionStoreData) error {
 	if a.connectionStore == nil {
 		return fmt.Errorf("connection store not initialized")
 	}
-	err := a.connectionStore.Save(data)
-	if err == nil {
-		runtime.EventsEmit(a.ctx, "store:connections:changed", data)
+	// F-211: SaveConnections is the most-fired Save method (every connection
+	// edit triggers it). Run the atomic-rename write off the Wails handler
+	// thread so the UI doesn't stall on fsync. The frontend already treats
+	// store:connections:changed as the source of truth, so a small post-
+	// write window is acceptable. Save errors are surfaced via the returned
+	// error (rare path — the goroutine logs on failure).
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- a.connectionStore.Save(data)
+	}()
+	go func() {
+		err := <-errCh
+		if err != nil {
+			log.Writef("SaveConnections async: %v", err)
+			return
+		}
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "store:connections:changed", data)
+		}
 		a.triggerAutoSync()
-	}
-	return err
+	}()
+	return nil
 }
 
 func (a *App) LoadConnections() (session.ConnectionStoreData, error) {
@@ -439,11 +455,17 @@ func (a *App) SaveTunnels(data session.TunnelStoreData) error {
 	if a.tunnelStore == nil {
 		return fmt.Errorf("tunnel store not initialized")
 	}
-	err := a.tunnelStore.Save(data)
-	if err == nil {
-		runtime.EventsEmit(a.ctx, "store:tunnels:changed", data)
-	}
-	return err
+	// F-211: tunnel save touches fs (atomic-rename), keep handler fast.
+	go func() {
+		if err := a.tunnelStore.Save(data); err != nil {
+			log.Writef("SaveTunnels async: %v", err)
+			return
+		}
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "store:tunnels:changed", data)
+		}
+	}()
+	return nil
 }
 
 func (a *App) LoadTunnels() (session.TunnelStoreData, error) {
@@ -875,11 +897,15 @@ func (a *App) SaveQuickCommands(data store.QuickCommandData) error {
 	if a.quickCommandsStore == nil {
 		return fmt.Errorf("quick commands store not initialized")
 	}
-	err := a.quickCommandsStore.Save(data)
-	if err == nil {
+	// F-211: same async pattern as SaveConnections / SaveTunnels.
+	go func() {
+		if err := a.quickCommandsStore.Save(data); err != nil {
+			log.Writef("SaveQuickCommands async: %v", err)
+			return
+		}
 		a.triggerAutoSync()
-	}
-	return err
+	}()
+	return nil
 }
 
 func (a *App) LoadQuickCommands() (store.QuickCommandData, error) {
