@@ -80,6 +80,7 @@ type App struct {
 	// reconnects don't re-enable a log the user manually stopped.
 	panelLogs          map[string]*session.OutputLogger
 	sessionToPanel     map[string]string
+	panelToSession     map[string]string // F-212: inverse index, O(1) lookup
 	panelAutoTriggered map[string]bool
 	panelLogMu         stdsync.Mutex
 	// customLogDir, when non-empty, overrides defaultSessionLogDir()
@@ -102,6 +103,7 @@ func NewApp(webviewDataPath string) *App {
 		webviewDataPath:    webviewDataPath,
 		panelLogs:          make(map[string]*session.OutputLogger),
 		sessionToPanel:     make(map[string]string),
+		panelToSession:     make(map[string]string), // F-212
 		panelAutoTriggered: make(map[string]bool),
 		k8sManager:         k8s.NewManager(),
 		errCh:              make(chan error, 16),
@@ -3290,7 +3292,11 @@ func (a *App) RegisterSessionForPanel(sessionID, panelID string) {
 		return
 	}
 	a.panelLogMu.Lock()
+	// F-212: also maintain the inverse index so panel→session lookups
+	// in panelLogTitle / EnableSessionOutputLog / DisableSessionOutputLog
+	// are O(1) instead of scanning every binding.
 	a.sessionToPanel[sessionID] = panelID
+	a.panelToSession[panelID] = sessionID
 	logger := a.panelLogs[panelID]
 	autoTriggered := a.panelAutoTriggered[panelID]
 	a.panelLogMu.Unlock()
@@ -3340,7 +3346,15 @@ func (a *App) UnregisterSession(sessionID string) {
 		return
 	}
 	a.panelLogMu.Lock()
-	delete(a.sessionToPanel, sessionID)
+	if panelID, ok := a.sessionToPanel[sessionID]; ok {
+		delete(a.sessionToPanel, sessionID)
+		// F-212: only clear the inverse index when it still points at
+		// the session we're unregistering \u2014 the panel may already be
+		// bound to a different session (the next reconnect).
+		if a.panelToSession[panelID] == sessionID {
+			delete(a.panelToSession, panelID)
+		}
+	}
 	a.panelLogMu.Unlock()
 	a.installWriter(sessionID, nil)
 }
@@ -3371,14 +3385,10 @@ func (a *App) installWriter(sessionID string, logger *session.OutputLogger) {
 // current session's Title if available, otherwise a short synthetic
 // name derived from panelID.
 func (a *App) panelLogTitle(panelID string) (name, protocol string) {
+	// F-212: O(1) lookup via the inverse index maintained in
+	// RegisterSessionForPanel / UnregisterSession.
 	a.panelLogMu.Lock()
-	var sessionID string
-	for sid, pid := range a.sessionToPanel {
-		if pid == panelID {
-			sessionID = sid
-			break
-		}
-	}
+	sessionID := a.panelToSession[panelID]
 	a.panelLogMu.Unlock()
 	if sessionID != "" && a.sessionManager != nil {
 		if s, ok := a.sessionManager.Get(sessionID); ok {
@@ -3420,16 +3430,9 @@ func (a *App) EnableSessionOutputLog(panelID, dir string) (string, error) {
 		logger = &session.OutputLogger{}
 		a.panelLogs[panelID] = logger
 	}
-	// Find any session currently bound to this panel so we can wire the
-	// writer while we still hold the lock (avoids a race with concurrent
-	// register/unregister calls).
-	var sessionID string
-	for sid, pid := range a.sessionToPanel {
-		if pid == panelID {
-			sessionID = sid
-			break
-		}
-	}
+	// F-212: O(1) inverse-index lookup instead of scanning
+	// sessionToPanel.
+	sessionID := a.panelToSession[panelID]
 	a.panelLogMu.Unlock()
 
 	path, err := logger.Enable(dir, name, protocol)
@@ -3452,13 +3455,9 @@ func (a *App) DisableSessionOutputLog(panelID string) error {
 	a.panelLogMu.Lock()
 	logger := a.panelLogs[panelID]
 	delete(a.panelLogs, panelID)
-	var sessionID string
-	for sid, pid := range a.sessionToPanel {
-		if pid == panelID {
-			sessionID = sid
-			break
-		}
-	}
+	// F-212: O(1) inverse-index lookup instead of scanning
+	// sessionToPanel.
+	sessionID := a.panelToSession[panelID]
 	a.panelLogMu.Unlock()
 	if sessionID != "" {
 		a.installWriter(sessionID, nil)
