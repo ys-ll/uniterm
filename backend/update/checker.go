@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ys-ll/uniterm/backend/log"
@@ -30,6 +31,11 @@ type cacheEntry struct {
 	Result    UpdateInfo `json:"result"`
 	Source    string     `json:"source"`
 	Timestamp time.Time  `json:"timestamp"`
+	// ETag captured from the GitHub API response so a follow-up call
+	// inside the disk-cache TTL window can send If-None-Match and let
+	// GitHub return 304 Not Modified, skipping the body decode entirely
+	// (F-409).
+	ETag string `json:"etag,omitempty"`
 }
 
 func normalizeVersion(v string) string {
@@ -138,6 +144,21 @@ func shouldUpdate(current, latest string) bool {
 
 const cacheTTL = 5 * time.Minute
 
+// sharedClient is a package-level *http.Client with keep-alive enabled.
+// Reusing it avoids the per-call TCP+TLS handshake to api.github.com /
+// gitee.com on every Check() (F-409).
+var (
+	sharedClientOnce sync.Once
+	sharedClient     *http.Client
+)
+
+func sharedHTTPClient() *http.Client {
+	sharedClientOnce.Do(func() {
+		sharedClient = &http.Client{Timeout: 10 * time.Second}
+	})
+	return sharedClient
+}
+
 func cachePath() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -196,17 +217,19 @@ func Check(currentVersion, source string) (*UpdateInfo, error) {
 		apiURL = "https://gitee.com/api/v5/repos/ys-l/uniterm/releases/latest"
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(
-		"GET",
-		apiURL,
-		nil,
-	)
+	// F-409: reuse a package-level client with keep-alive; send the
+	// cached ETag on the second-and-subsequent within-TTL call so
+	// GitHub/Gitee can answer 304 without re-serializing the release.
+	client := sharedHTTPClient()
+	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		log.Writef("[update] create request error: %v", err)
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("User-Agent", "uniTerm")
+	if prev := loadCache(); prev != nil && prev.Source == source && prev.ETag != "" {
+		req.Header.Set("If-None-Match", prev.ETag)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -216,6 +239,22 @@ func Check(currentVersion, source string) (*UpdateInfo, error) {
 	defer resp.Body.Close()
 
 	log.Writef("[update] %s API response status: %d", source, resp.StatusCode)
+
+	// 304: nothing changed since our cached ETag. Refresh timestamp
+	// so the disk TTL window slides forward and reuse the cached
+	// payload.
+	if resp.StatusCode == http.StatusNotModified {
+		if prev := loadCache(); prev != nil && prev.Source == source {
+			prev.Timestamp = time.Now()
+			saveCache(prev)
+			result := prev.Result
+			result.Current = currentVersion
+			result.HasUpdate = shouldUpdate(currentVersion, result.Latest)
+			return &result, nil
+		}
+		// No prior cache to fall back to — fall through and treat as error.
+		return nil, fmt.Errorf("unexpected status: 304 (no prior cache)")
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -241,7 +280,12 @@ func Check(currentVersion, source string) (*UpdateInfo, error) {
 		HasUpdate:  shouldUpdate(currentVersion, release.TagName),
 	}
 
-	saveCache(&cacheEntry{Result: result, Source: source, Timestamp: time.Now()})
+	saveCache(&cacheEntry{
+		Result:    result,
+		Source:    source,
+		Timestamp: time.Now(),
+		ETag:      resp.Header.Get("ETag"),
+	})
 
 	return &result, nil
 }
