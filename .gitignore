@@ -37,6 +37,7 @@ Thumbs.db
 .claude/
 .superpowers/
 docs/superpowers/
+.worktrees/
 
 # Root package files (project uses frontend/ for Node.js)
 /package.json
