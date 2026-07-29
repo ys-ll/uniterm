@@ -2030,8 +2030,20 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				})
 				currentBlock = nil
 			}
-			// Close any open tool_use blocks
+			// Close any open tool_use blocks and parse their input JSON.
+			// This mirrors the finish_reason branch — without it, an upstream
+			// that emits [DONE] without a preceding finish_reason (or whose
+			// finish_reason delta failed to unmarshal at line 2061's silent
+			// `continue`) would leave tool_use blocks with `input` as a raw
+			// JSON string or even an empty string, which the frontend's
+			// `block.input || {}` would coerce to "" and break the dispatcher.
 			for idx, tc := range activeToolCalls {
+				if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
+					var inputObj map[string]interface{}
+					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
+						tc["input"] = inputObj
+					}
+				}
 				contentBlocks = append(contentBlocks, tc)
 				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
 					"index": idx,
@@ -2039,13 +2051,24 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			}
 			activeToolCalls = make(map[int]map[string]interface{})
 
-			// Emit message_delta and message_stop
+			// Derive stopReason: any tool_use block means "tool_use".
+			// Previously this was hardcoded to "end_turn" — if the upstream
+			// finished mid-tool-call the frontend would route the next turn
+			// as if the model had finished its answer.
+			stopReason := "end_turn"
+			for _, b := range contentBlocks {
+				if b["type"] == "tool_use" {
+					stopReason = "tool_use"
+					break
+				}
+			}
+
 			runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
 				"message": map[string]interface{}{
 					"role":    messageRole,
 					"content": contentBlocks,
 				},
-				"stop_reason": "end_turn",
+				"stop_reason": stopReason,
 			})
 
 			fullMessage := map[string]interface{}{
