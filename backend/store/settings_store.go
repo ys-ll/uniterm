@@ -137,6 +137,16 @@ func NewSettingsStore() (*SettingsStore, error) {
 	return &SettingsStore{configDir: appDir}, nil
 }
 
+// NewSettingsStoreWithDir creates a settings store rooted at the given
+// directory; used by tests that need isolation from the user's real
+// config directory.
+func NewSettingsStoreWithDir(dir string) (*SettingsStore, error) {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+	return &SettingsStore{configDir: dir}, nil
+}
+
 func (s *SettingsStore) SetPasswordStore(ps PasswordStore) {
 	s.passwordStore = ps
 }
