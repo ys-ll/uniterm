@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -177,12 +178,26 @@ func main() {
 // is to let `go tool pprof http://localhost:6060/debug/pprof/profile`
 // connect and capture CPU/heap/block/goroutine profiles during
 // reproduction of perf issues (see F-201 / audit §8.2).
+//
+// /debug/diag/metrics serves the in-process diag metrics registry as
+// JSON, so dev can `curl http://localhost:6060/debug/diag/metrics` to
+// eyeball per-op percentile sketches without round-tripping through
+// the Vue viewer.
 func startPprofIfDev() {
 	if !devBuild {
 		return
 	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/diag/metrics", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(diag.Snapshot())
+	})
+	// pprof handlers self-register on http.DefaultServeMux (from the
+	// blank import of net/http/pprof above); expose that handler tree
+	// under /debug/pprof/ on our own mux.
+	mux.Handle("/debug/pprof/", http.DefaultServeMux)
 	go func() {
-		if err := http.ListenAndServe("localhost:6060", nil); err != nil && err != http.ErrServerClosed {
+		if err := http.ListenAndServe("localhost:6060", mux); err != nil && err != http.ErrServerClosed {
 			log.Writef("pprof listener failed: %v", err)
 		}
 	}()
