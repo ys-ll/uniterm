@@ -838,6 +838,20 @@ onMounted(() => {
     suggestions.loadHistory()
   }
 
+  // xterm.js converts wheel to ESC [ A / ESC [ B (arrow up/down) and
+  // forwards them to the PTY when its buffer can't be scrolled —
+  // e.g. once a TUI like Claude Code enters alt-screen via DECSET 1049.
+  // bash treats those arrows as no-ops, but Ink-style input reads them
+  // as input-history shortcuts, so the wheel cycles prior prompts
+  // instead of moving the viewport. We silently swallow wheel in
+  // alt-screen so the BUG goes away; outside alt-screen xterm's default
+  // (native scrollback scroll) is left untouched.
+  terminal.attachCustomWheelEventHandler((event: WheelEvent) => {
+    if (!settingsStore.settings.terminal.swallowWheelInAltScreen) return true
+    if (!(terminalInput?.isInAlternateScreen())) return true
+    return false
+  })
+
   if (props.mode === 'ssh' || props.mode === 'local') {
     // Restore terminal content from session buffer on first mount only.
     // Subsequent mounts reuse the shared terminal whose buffer already

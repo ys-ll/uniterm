@@ -55,6 +55,14 @@ export interface TerminalSettings {
   // Override for the session output log directory. Empty means the
   // OS default under ~/Documents/uniTerm/logs.
   sessionLogDir: string
+  // When true (default), wheel events inside an alt-screen TUI (e.g. Claude
+  // Code via Ink) are swallowed so xterm.js does NOT forward them as arrow
+  // up/down to the PTY — Ink reads those arrows as input-history shortcuts,
+  // so without this suppression the wheel cycles prior prompts instead of
+  // scrolling the viewport. Set to false to restore xterm's default
+  // forwarding behavior. Outside alt-screen this setting has no effect;
+  // wheel always falls back to xterm's native scrollback scroll.
+  swallowWheelInAltScreen: boolean
 }
 
 export interface AIModelConfig {
@@ -167,7 +175,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     smartCompletion: true,
     highlightEnabled: true,
     cursorBlink: true,
-    sessionLogDir: ''
+    sessionLogDir: '',
+    swallowWheelInAltScreen: true
   },
   ai: {
     maxTurns: 20,
