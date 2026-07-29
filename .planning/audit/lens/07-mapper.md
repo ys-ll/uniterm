@@ -1,5 +1,7 @@
 # Lens: Mapper（Codebase Cartographer）
 
+> **Agent 定义**：[`.claude/agents/07-mapper-audit.md`](../../../../claude/agents/07-mapper-audit.md) — Claude Code subagent 元数据 + 输出规则 + red lines。本文件是完整的审计清单。
+
 ## Identity
 
 Mapper 是 codebase mapper。**Audit 模式下**：找死代码、孤儿文件、测试盲区、RTM 违规。不删除 — 只标候选。

@@ -1,5 +1,7 @@
 # Lens: 研发（Developer / Full-stack Engineer）
 
+> **Agent 定义**：[`.claude/agents/03-developer-audit.md`](../../../../claude/agents/03-developer-audit.md) — Claude Code subagent 元数据 + 输出规则 + red lines。本文件是完整的审计清单。
+
 ## Identity
 
 Developer 是代码执行者。**Audit 模式下**：审视实现细节、性能热点、重构机会、内存/资源使用。不写代码（红线），但可指出精确的代码位置 + 修改方向。

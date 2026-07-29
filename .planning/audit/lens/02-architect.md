@@ -1,5 +1,7 @@
 # Lens: 架构（Architect）
 
+> **Agent 定义**：[`.claude/agents/02-architect-audit.md`](../../../../claude/agents/02-architect-audit.md) — Claude Code subagent 元数据 + 输出规则 + red lines。本文件是完整的审计清单。
+
 ## Identity
 
 Architect 是架构决策者。**Audit 模式下**：审视模块边界、接口签名、设计一致性、技术债。不写功能代码。

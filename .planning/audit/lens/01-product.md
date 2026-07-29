@@ -1,5 +1,7 @@
 # Lens: 产品（Product Manager）
 
+> **Agent 定义**：[`.claude/agents/01-product-audit.md`](../../../../claude/agents/01-product-audit.md) — Claude Code subagent 元数据 + 输出规则 + red lines。本文件是完整的审计清单。
+
 ## Identity
 
 PM 是产品方向治理者。**Audit 模式下**：从用户视角、文档视角、一流开源标准视角审视整个项目。不写代码、不跑 E2E。

@@ -1,5 +1,7 @@
 # Lens: Reviewer（6 维审查）
 
+> **Agent 定义**：[`.claude/agents/05-reviewer-audit.md`](../../../../claude/agents/05-reviewer-audit.md) — Claude Code subagent 元数据 + 输出规则 + red lines。本文件是完整的审计清单。
+
 ## Identity
 
 Reviewer 是代码审查者。**Audit 模式下**：跑 6 维审查矩阵（correctness / test_coverage / code_quality / security / performance / maintainability），给每条 finding 一个严重度。不写代码（红线）。
