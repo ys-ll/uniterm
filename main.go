@@ -19,6 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/ys-ll/uniterm/backend/diag"
 	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/store"
 )
@@ -48,6 +49,16 @@ func main() {
 		println("Failed to init log:", err.Error())
 	}
 	defer log.Close()
+
+	// Initialize the structured diagnostic logger. Settings are read from
+	// the user's persisted diag config; falls back to defaults on error.
+	if dir, err := os.UserHomeDir(); err == nil {
+		logDir := filepath.Join(dir, ".uniterm", "logs")
+		diagCfg := diagConfigFromSettings()
+		if err := diag.Init(logDir, diagCfg); err != nil {
+			println("Failed to init diag:", err.Error())
+		}
+	}
 
 	// F-201: expose net/http/pprof on localhost:6060 for dev builds only.
 	// Production builds (wails build) leave Version unchanged from "dev"
@@ -175,4 +186,35 @@ func startPprofIfDev() {
 			log.Writef("pprof listener failed: %v", err)
 		}
 	}()
+}
+
+// diagConfigFromSettings reads the persisted diag config and converts it
+// to a *diag.DiagConfig. Falls back to defaults on any error.
+func diagConfigFromSettings() *diag.DiagConfig {
+	cfg := &diag.DiagConfig{
+		FileSizeCap: 10 << 20,
+		DirSizeCap:  50 << 20,
+		KeepFiles:   5,
+		Level:       diag.LevelInfo,
+	}
+	if configDir, err := os.UserConfigDir(); err == nil {
+		if s, err := store.NewSettingsStoreWithDir(filepath.Join(configDir, "uniTerm")); err == nil {
+			if settings, err := s.Load(); err == nil {
+				d := settings.Diag
+				if d.FileSizeCapMiB > 0 {
+					cfg.FileSizeCap = int64(d.FileSizeCapMiB) << 20
+				}
+				if d.DirSizeCapMiB > 0 {
+					cfg.DirSizeCap = int64(d.DirSizeCapMiB) << 20
+				}
+				if d.KeepFiles > 0 {
+					cfg.KeepFiles = d.KeepFiles
+				}
+				if d.Level != "" {
+					cfg.Level = diag.Level(d.Level)
+				}
+			}
+		}
+	}
+	return cfg
 }
