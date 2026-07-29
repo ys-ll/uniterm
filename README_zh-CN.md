@@ -9,6 +9,10 @@
 
 <a href="README.md">English</a> &nbsp;|&nbsp; 简体中文
 
+
+ 
+
+
 <br>
 
 <a href="https://github.com/ys-ll/uniterm/releases/latest"><img src="https://img.shields.io/github/v/release/ys-ll/uniterm" alt="GitHub release" /></a>
@@ -18,6 +22,10 @@
 <a href="https://gitee.com/ys-l/uniterm"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgitee.com%2Fapi%2Fv5%2Frepos%2Fys-l%2Funiterm&query=%24.stargazers_count&label=Stars&style=social&logo=gitee" alt="Gitee stars" /></a>
 
 </div>
+
+>本仓库基于上游项目 ys-ll/uniterm Fork 创建。
+>我进一步对代码进行了大规模、激进的功能重构、体验优化与底层改造。所有改动均独立维护在此 Fork 分支内；若产生对上游通用、具备普适价值的修复与功能改进，我会> >整理代码并主动向上游仓库提交 Pull Request，回馈原项目社区。
+>本分支内大量定制化改造内容偏向个人使用场景，不一定适合合并进入上游主线，因此部分变更将长期保留在本 Fork 中
 
 ## 目录
 
