@@ -1246,11 +1246,21 @@ onMounted(() => {
         if (props.onSessionStatus) {
           props.onSessionStatus(payload.status)
         }
-        terminal?.write('\r\n\x1b[31mConnection failed. Press Enter to retry.\x1b[0m\r\n')
+        if (props.mode === 'local') {
+          terminal?.write('\r\n\x1b[31mFailed to start shell. Press Enter to retry.\x1b[0m\r\n')
+        } else {
+          terminal?.write('\r\n\x1b[31mConnection failed. Press Enter to retry.\x1b[0m\r\n')
+        }
       } else if (payload.status === 'disconnected') {
         retryOnEnter = true
         if (props.onSessionStatus) {
           props.onSessionStatus(payload.status)
+        }
+        if (props.mode === 'local') {
+          // Local sessions auto-reconnect on disconnect (Panel.vue handles
+          // the retry). Don't print "Press Enter to retry" — the shell may
+          // not even be back yet, and Enter alone won't help.
+          terminal?.write('\r\n\x1b[33mShell exited — reconnecting...\x1b[0m\r\n')
         }
       } else {
         // Focus terminal on connecting so user can type password immediately.

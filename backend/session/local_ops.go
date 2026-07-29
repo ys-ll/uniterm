@@ -5,6 +5,7 @@ import (
 	"os"
 	osUser "os/user"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -17,6 +18,50 @@ type localFSOps struct {
 func newLocalFSOps() localFSOps {
 	homeDir, _ := os.UserHomeDir()
 	return localFSOps{localCwd: homeDir}
+}
+
+// safeAbsPath returns the absolute path for a user-provided path, refusing
+// any relative path that resolves (after following symlinks) outside
+// localCwd. Absolute paths are trusted and returned cleaned.
+//
+// Containment matters because remote content (downloaded via FTP/SFTP/etc.)
+// can plant symlinks or `..` segments in the local directory; without this
+// guard, LocalPutContent / LocalRemove / LocalMkdir / LocalCopy / LocalMove
+// / LocalRename would follow the symlink and operate on files the user never
+// intended to touch (e.g. overwrite ~/.ssh/authorized_keys or recursively
+// delete a parent directory).
+func (o *localFSOps) safeAbsPath(p string) (string, error) {
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p), nil
+	}
+	abs := filepath.Clean(filepath.Join(o.localCwd, p))
+
+	// Resolve symlinks so a planted link inside localCwd can't escape.
+	// EvalSymlinks fails when the leaf doesn't exist yet (we're about to
+	// create it); in that case resolve the parent and re-join the leaf so
+	// a symlink in the parent still trips the check.
+	resolved := abs
+	if r, err := filepath.EvalSymlinks(abs); err == nil {
+		resolved = r
+	} else {
+		parent, base := filepath.Split(abs)
+		rp, perr := filepath.EvalSymlinks(parent)
+		if perr != nil {
+			return "", perr
+		}
+		resolved = filepath.Join(rp, base)
+	}
+
+	// Resolve localCwd too so a symlink at the root doesn't cause false
+	// escapes (user picked ~/downloads which is itself a symlink).
+	root := o.localCwd
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	}
+	if resolved != root && !strings.HasPrefix(resolved, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes local directory: %s", p)
+	}
+	return abs, nil
 }
 
 func (o *localFSOps) ListLocal(dir string) (FileListResult, error) {
@@ -106,8 +151,9 @@ func (o *localFSOps) ChangeLocalDir(dir string) (FileListResult, error) {
 }
 
 func (o *localFSOps) LocalRemove(p string, recursive bool) error {
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(o.localCwd, p)
+	p, err := o.safeAbsPath(p)
+	if err != nil {
+		return err
 	}
 	if recursive {
 		return os.RemoveAll(p)
@@ -129,37 +175,37 @@ func (o *localFSOps) LocalRemove(p string, recursive bool) error {
 }
 
 func (o *localFSOps) LocalRename(oldName, newName string) error {
-	old := oldName
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(o.localCwd, old)
+	old, err := o.safeAbsPath(oldName)
+	if err != nil {
+		return err
 	}
-	newPath := newName
-	if !filepath.IsAbs(newPath) {
-		newPath = filepath.Join(o.localCwd, newPath)
+	newPath, err := o.safeAbsPath(newName)
+	if err != nil {
+		return err
 	}
 	return os.Rename(old, newPath)
 }
 
 func (o *localFSOps) LocalMkdir(dir string) error {
-	p := dir
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(o.localCwd, p)
+	p, err := o.safeAbsPath(dir)
+	if err != nil {
+		return err
 	}
 	return os.MkdirAll(p, 0755)
 }
 
 func (o *localFSOps) LocalGetContent(localPath string) ([]byte, error) {
-	p := localPath
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(o.localCwd, p)
+	p, err := o.safeAbsPath(localPath)
+	if err != nil {
+		return nil, err
 	}
 	return os.ReadFile(p)
 }
 
 func (o *localFSOps) LocalPutContent(localPath string, content []byte) error {
-	p := localPath
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(o.localCwd, p)
+	p, err := o.safeAbsPath(localPath)
+	if err != nil {
+		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
 		return err
@@ -168,25 +214,25 @@ func (o *localFSOps) LocalPutContent(localPath string, content []byte) error {
 }
 
 func (o *localFSOps) LocalCopy(oldPath, newPath string) error {
-	old := oldPath
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(o.localCwd, old)
+	old, err := o.safeAbsPath(oldPath)
+	if err != nil {
+		return err
 	}
-	n := newPath
-	if !filepath.IsAbs(n) {
-		n = filepath.Join(o.localCwd, n)
+	n, err := o.safeAbsPath(newPath)
+	if err != nil {
+		return err
 	}
 	return localCopyRecursive(old, n)
 }
 
 func (o *localFSOps) LocalMove(oldPath, newPath string) error {
-	old := oldPath
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(o.localCwd, old)
+	old, err := o.safeAbsPath(oldPath)
+	if err != nil {
+		return err
 	}
-	n := newPath
-	if !filepath.IsAbs(n) {
-		n = filepath.Join(o.localCwd, n)
+	n, err := o.safeAbsPath(newPath)
+	if err != nil {
+		return err
 	}
 	return os.Rename(old, n)
 }

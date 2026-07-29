@@ -213,6 +213,10 @@ func (s *LocalSession) Disconnect() error {
 	// session marked down while the child is still being reaped.
 	if s.pty != nil {
 		s.pty.Close()
+		// Nil the handle so post-Disconnect Write/Resize return
+		// `not connected` (matching the Windows branch's s.cpty = nil)
+		// instead of silently writing to a closed fd.
+		s.pty = nil
 	}
 	if s.cmd != nil && s.cmd.Process != nil && s.waitDone != nil {
 		select {
