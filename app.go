@@ -3800,6 +3800,17 @@ func (a *App) DiagnosticLogSummary() (diag.Summary, error) {
 	return diag.Snapshot(), nil
 }
 
+// ExportDiagnosticBundle writes the active log directory + manifest as a
+// tar.gz at the given target path. Returns an error if diag has not been
+// initialised.
+func (a *App) ExportDiagnosticBundle(targetPath string) error {
+	dir := diag.LogsDir()
+	if dir == "" {
+		return fmt.Errorf("diag not initialized")
+	}
+	return diag.ExportBundle(dir, targetPath)
+}
+
 // GetDefaultShell returns the system's default shell path for local terminals.
 func (a *App) GetDefaultShell() string {
 	switch goruntime.GOOS {
