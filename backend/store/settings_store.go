@@ -112,6 +112,18 @@ type AppSettings struct {
 	SFTPBookmarks        SFTPBookmarks         `json:"sftpBookmarks"`
 	CustomTerminalThemes []CustomTerminalTheme `json:"customTerminalThemes"`
 	DefaultLocalShell    string                `json:"defaultLocalShell"`
+	Diag                 DiagSettings          `json:"diag"`
+}
+
+// DiagSettings controls the backend/diag structured logger.
+type DiagSettings struct {
+	Enabled         bool   `json:"enabled"`
+	Level           string `json:"level"`
+	FileSizeCapMiB  int    `json:"fileSizeCapMiB"`
+	DirSizeCapMiB   int    `json:"dirSizeCapMiB"`
+	RateLimitPerSec int    `json:"rateLimitPerSec"`
+	DedupWindowSec  int    `json:"dedupWindowSec"`
+	KeepFiles       int    `json:"keepFiles"`
 }
 
 type SFTPBookmarks struct {
@@ -286,6 +298,15 @@ func defaultSettings() AppSettings {
 			RemotePaths: []string{},
 		},
 		CustomTerminalThemes: []CustomTerminalTheme{},
+		Diag: DiagSettings{
+			Enabled:         true,
+			Level:           "INFO",
+			FileSizeCapMiB:  10,
+			DirSizeCapMiB:   50,
+			RateLimitPerSec: 200,
+			DedupWindowSec:  5,
+			KeepFiles:       5,
+		},
 	}
 }
 

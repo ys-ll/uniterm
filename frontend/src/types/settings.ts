@@ -147,6 +147,16 @@ export interface SFTPBookmarks {
   remotePaths: string[]
 }
 
+export interface DiagSettings {
+  enabled: boolean
+  level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
+  fileSizeCapMiB: number
+  dirSizeCapMiB: number
+  rateLimitPerSec: number
+  dedupWindowSec: number
+  keepFiles: number
+}
+
 export interface AppSettings {
   theme: Theme
   language: Language
@@ -159,6 +169,7 @@ export interface AppSettings {
   sftpBookmarks: SFTPBookmarks
   customTerminalThemes: CustomTerminalTheme[]
   defaultLocalShell: string
+  diag: DiagSettings
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -201,7 +212,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
     remotePaths: []
   },
   customTerminalThemes: [],
-  defaultLocalShell: ''
+  defaultLocalShell: '',
+  diag: {
+    enabled: true,
+    level: 'INFO',
+    fileSizeCapMiB: 10,
+    dirSizeCapMiB: 50,
+    rateLimitPerSec: 200,
+    dedupWindowSec: 5,
+    keepFiles: 5
+  }
 }
 
 export interface TerminalThemeEntry { label: string; value: string; type: 'dark' | 'light' }
