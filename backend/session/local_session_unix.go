@@ -155,6 +155,11 @@ func (s *LocalSession) readLoop() {
 			return
 		default:
 		}
+		// Disconnect nils s.pty; a concurrent Disconnect can land here
+		// between the select and the read load. Bail before dereferencing.
+		if s.pty == nil {
+			return
+		}
 
 		n, err := s.pty.Read(buf)
 		if n > 0 {

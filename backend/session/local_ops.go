@@ -16,7 +16,14 @@ type localFSOps struct {
 }
 
 func newLocalFSOps() localFSOps {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil || homeDir == "" {
+		// Stripped environments (some sandboxes / minimal containers) can
+		// fail UserHomeDir. Fall back to TempDir so safeAbsPath's containment
+		// check still has an absolute prefix to compare against — without
+		// this, an empty root would let every relative path through.
+		homeDir = os.TempDir()
+	}
 	return localFSOps{localCwd: homeDir}
 }
 
