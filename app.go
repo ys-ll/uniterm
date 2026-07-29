@@ -699,6 +699,15 @@ func (a *App) LoadAIConfig() (store.AIConfig, error) {
 	return store.AIConfig{}, nil
 }
 
+// ClassifyCommandRisk is the server-side override for the AI model's
+// self-reported risk on execute_command / start_command. The frontend
+// dispatcher uses this to compute the effective risk as the maximum of
+// the model-claimed value and the server-classified value. Pure function;
+// no I/O, no panic, safe to call from any goroutine.
+func (a *App) ClassifyCommandRisk(command string) string {
+	return string(store.ClassifyCommandRisk(command))
+}
+
 // AI Session Store methods
 
 func (a *App) SaveAISessions(data store.AISessionData) error {
