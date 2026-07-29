@@ -357,6 +357,8 @@
   "settings.highlightDesc": "自动高亮时间、IP、关键词、字符串等模式",
   "settings.cursorBlink": "光标闪烁",
   "settings.cursorBlinkDesc": "是否启用终端光标闪烁",
+  "settings.swallowWheelInAltScreen": "在 alt-screen 中吞掉滚轮事件",
+  "settings.swallowWheelInAltScreenDesc": "在 Claude Code 这类 TUI 内启用后，滚轮只滚动 xterm 历史，不会被 TUI 解释为输入历史。关闭后恢复 xterm 默认行为。",
   "settings.sessionLogDir": "日志保存目录",
   "settings.sessionLogDirDesc": "会话日志文件的存放位置。",
   "settings.browse": "浏览…",

@@ -357,6 +357,8 @@
   "settings.highlightDesc": "Highlight timestamps, IPs, keywords, strings, etc.",
   "settings.cursorBlink": "Cursor Blink",
   "settings.cursorBlinkDesc": "Whether the terminal cursor blinks",
+  "settings.swallowWheelInAltScreen": "Swallow wheel events in alt-screen",
+  "settings.swallowWheelInAltScreenDesc": "In TUIs like Claude Code, this makes the wheel scroll xterm's history instead of triggering input history on the TUI side. Off restores xterm's default forwarding.",
   "settings.sessionLogDir": "Log directory",
   "settings.sessionLogDirDesc": "Where session logs are saved.",
   "settings.browse": "Browse…",

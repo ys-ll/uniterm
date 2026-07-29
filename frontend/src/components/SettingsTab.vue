@@ -346,6 +346,17 @@
 
           <div class="setting-card">
             <div class="setting-info">
+              <div class="setting-title">{{ t('settings.swallowWheelInAltScreen') }}</div>
+              <div class="setting-desc">{{ t('settings.swallowWheelInAltScreenDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-switch :model-value="settingsStore.settings.terminal.swallowWheelInAltScreen ?? true"
+                @update:model-value="(v: boolean) => { settingsStore.settings.terminal.swallowWheelInAltScreen = v; settingsStore.save() }" />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
               <div class="setting-title">{{ t('settings.sessionLogDir') }}</div>
               <div class="setting-desc">{{ t('settings.sessionLogDirDesc') }}</div>
             </div>
