@@ -146,6 +146,7 @@ func write(level Level, tag, msg string, fields map[string]any) {
 		}
 		entry.Goroutine = goroutineID()
 	}
+	FillLevels(level)
 	line, _ := json.Marshal(entry)
 	line = append(line, '\n')
 	l.mu.Lock()
