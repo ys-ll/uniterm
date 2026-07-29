@@ -433,9 +433,9 @@ export function StopTunnel(arg1:string):Promise<void>;
 
 export function SyncChangePassword(arg1:string,arg2:string):Promise<void>;
 
-export function SyncConfigureRepo(arg1:string,arg2:string,arg3:string,arg4:string):Promise<sync.SyncResult>;
-
 export function SyncConfigureLocalRepo(arg1:string,arg2:string):Promise<sync.SyncResult>;
+
+export function SyncConfigureRepo(arg1:string,arg2:string,arg3:string,arg4:string):Promise<sync.SyncResult>;
 
 export function SyncDeleteRepo():Promise<void>;
 

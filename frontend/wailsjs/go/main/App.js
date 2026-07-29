@@ -850,12 +850,12 @@ export function SyncChangePassword(arg1, arg2) {
   return window['go']['main']['App']['SyncChangePassword'](arg1, arg2);
 }
 
-export function SyncConfigureRepo(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SyncConfigureRepo'](arg1, arg2, arg3, arg4);
-}
-
 export function SyncConfigureLocalRepo(arg1, arg2) {
   return window['go']['main']['App']['SyncConfigureLocalRepo'](arg1, arg2);
+}
+
+export function SyncConfigureRepo(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SyncConfigureRepo'](arg1, arg2, arg3, arg4);
 }
 
 export function SyncDeleteRepo() {

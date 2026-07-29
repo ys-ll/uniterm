@@ -34,9 +34,7 @@ Thumbs.db
 *.test
 
 # Claude Code
-.claude/*
-!.claude/agents/
-!.claude/agents/**
+.claude/
 .superpowers/
 docs/superpowers/
 .worktrees/
