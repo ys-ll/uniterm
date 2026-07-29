@@ -30,6 +30,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ys-ll/uniterm/backend/container"
 	"github.com/ys-ll/uniterm/backend/database"
+	"github.com/ys-ll/uniterm/backend/diag"
 	"github.com/ys-ll/uniterm/backend/k8s"
 	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/platform"
@@ -3766,9 +3767,21 @@ func (a *App) RemoveTempFile(path string) error {
 // FrontendLog writes a frontend log message to the application log file.
 // This is the canonical interface for the frontend to persist debug/audit
 // messages alongside backend logs.
-func (a *App) FrontendLog(tag string, message string) {
-	_ = log.Init()
-	log.Writef("[%s] %s", tag, message)
+func (a *App) FrontendLog(level, tag, message, fieldsJSON string) {
+	var fields map[string]any
+	if fieldsJSON != "" {
+		_ = json.Unmarshal([]byte(fieldsJSON), &fields)
+	}
+	switch level {
+	case "DEBUG":
+		diag.Debug(tag, message, fields)
+	case "WARN":
+		diag.Warn(tag, message, fields)
+	case "ERROR":
+		diag.Error(tag, message, fields)
+	default:
+		diag.Info(tag, message, fields)
+	}
 }
 
 // GetDefaultShell returns the system's default shell path for local terminals.

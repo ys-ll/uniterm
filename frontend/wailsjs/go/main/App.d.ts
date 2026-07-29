@@ -105,7 +105,7 @@ export function FetchModels(arg1:string,arg2:string,arg3:string):Promise<Array<m
 
 export function FileSize(arg1:string):Promise<number>;
 
-export function FrontendLog(arg1:string,arg2:string):Promise<void>;
+export function FrontendLog(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function GetAppInfo():Promise<main.AppInfo>;
 

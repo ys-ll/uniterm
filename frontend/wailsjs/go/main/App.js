@@ -194,8 +194,8 @@ export function FileSize(arg1) {
   return window['go']['main']['App']['FileSize'](arg1);
 }
 
-export function FrontendLog(arg1, arg2) {
-  return window['go']['main']['App']['FrontendLog'](arg1, arg2);
+export function FrontendLog(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['FrontendLog'](arg1, arg2, arg3, arg4);
 }
 
 export function GetAppInfo() {

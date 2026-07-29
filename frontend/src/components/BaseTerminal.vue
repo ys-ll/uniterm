@@ -414,8 +414,8 @@ function sanitizeTerminalHistory(text: string): string {
   )
   // Forward debug info to backend log so we can inspect the raw garbage.
   if (cleaned !== text) {
-    FrontendLog('sanitizeTerminalHistory', `raw last 400: ${JSON.stringify(text.slice(-400))}`)
-    FrontendLog('sanitizeTerminalHistory', `cleaned last 400: ${JSON.stringify(cleaned.slice(-400))}`)
+    FrontendLog('INFO', 'sanitizeTerminalHistory', `raw last 400: ${JSON.stringify(text.slice(-400))}`, '')
+    FrontendLog('INFO', 'sanitizeTerminalHistory', `cleaned last 400: ${JSON.stringify(cleaned.slice(-400))}`, '')
   }
   return cleaned
 }
