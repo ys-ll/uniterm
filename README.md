@@ -19,6 +19,11 @@ English &nbsp;|&nbsp; <a href="README_zh-CN.md">简体中文</a>
 
 </div>
 
+
+>This repository is forked from the upstream project ys-ll/uniterm.
+>I have conducted extensive and aggressive refactoring, experience optimization and underlying modifications to the source code with the assistance of LLM >programming tools. All changes are maintained independently within this fork. Any universally applicable bug fixes and feature improvements will be sorted out >and submitted to the upstream repository via Pull Requests to contribute back to the original community.
+>Note that many customized changes in this fork are tailored to personal usage scenarios and may not be suitable for merging into the upstream mainline, so some >modifications will remain in this fork permanently.
+
 ## Table of Contents
 
 - [Features](#features)
