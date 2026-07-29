@@ -566,7 +566,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     })
     setActiveAssistantMsg(assistantMsg)
 
-    const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+    let toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
     const chatOptions: any = {
       system: buildSystemPrompt(),
@@ -648,9 +648,23 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       return
     }
 
-    // Enforce single tool call
+    // Single-tool-call-per-turn enforcement. The model occasionally returns
+    // a batch of tool_use blocks (e.g. parallel read tool calls). We execute
+    // the first one this turn and surface the rest as synthetic tool_result
+    // messages so the model sees "this was skipped, re-issue next turn"
+    // instead of silently dropping them. Without this, the model would
+    // assume its second/third calls executed and would not re-issue them
+    // on the next turn — wasting tokens and producing phantom side effects.
     if (toolUses.length > 1) {
-      toolUses.splice(1)
+      for (const dropped of toolUses.slice(1)) {
+        store.addMessage({
+          id: `msg-${Date.now()}-${dropped.id}`,
+          role: 'tool',
+          content: '[Skipped: only one tool call per turn. Re-issue in your next turn.]',
+          tool_call_id: dropped.id
+        })
+      }
+      toolUses = toolUses.slice(0, 1)
     }
 
     // Store tool calls in the message for UI confirmation
