@@ -120,7 +120,12 @@ func Info(tag, msg string, fields map[string]any)  { write(LevelInfo, tag, msg, 
 func Warn(tag, msg string, fields map[string]any)  { write(LevelWarn, tag, msg, fields) }
 func Error(tag, msg string, fields map[string]any) { write(LevelError, tag, msg, fields) }
 
+// rb is the package-wide dedup window. Set in Init via the wired
+// configureRotator (no-op stub until Task 9 wires it).
+var rb = newRingBuffer(5 * time.Second)
+
 func write(level Level, tag, msg string, fields map[string]any) {
+	count, _ := rb.Merge(level, tag, msg, fields)
 	if !allowRate(tag) {
 		return
 	}
@@ -136,7 +141,7 @@ func write(level Level, tag, msg string, fields map[string]any) {
 		Tag:        tag,
 		Msg:        msg,
 		Fields:     fields,
-		DedupCount: 1,
+		DedupCount: count,
 	}
 	if devBuild {
 		if _, file, line, ok := runtime.Caller(2); ok {
