@@ -193,6 +193,8 @@ import { CreateSession, CloseSession, RDPHide, RDPShow, RDPSetPosition, RecordRe
 import { getTerminalSize, waitForTerminalSize } from './services/terminalManager'
 import { EventsOn, ClipboardGetText, Quit } from '../wailsjs/runtime'
 import { msg } from './services/message'
+import { call } from './composables/api'
+import { runtimeLog } from './services/runtimeLog'
 import type { ConnectionConfig } from './types/session'
 import { parseQuickConnect } from './utils/quickConnect'
 
@@ -646,6 +648,7 @@ function onMacSystemShortcut(e: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  runtimeLog.install()
   connectionStore.load()
   aiStore.init()
   updateCheck.initAutoCheck()
@@ -944,7 +947,7 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
   if (tab && tab.type === 'rdp') {
     const p = panelStore.getPanel(tab.panelId)
     if (p?.sessionId) {
-      try { await CloseSession(p.sessionId) } catch (_) {}
+      try { await call('CloseSession', () => CloseSession(p.sessionId)) } catch (_) {}
     }
   }
   // Close VNC session
@@ -1145,7 +1148,7 @@ async function onConnect(config: ConnectionConfig, keepOpen?: boolean, wasEdit?:
   config.initialCols = 0
   config.initialRows = 0
   try {
-    const info = await CreateSession(config.type, config)
+    const info = await call('CreateSession', () => CreateSession(config.type, config))
     sessionId = info.id
   } catch (e) {
     console.error('Failed to create session:', e)
@@ -1179,7 +1182,7 @@ async function onConnect(config: ConnectionConfig, keepOpen?: boolean, wasEdit?:
     config.initialRows = size.rows
   }
   try {
-    await SessionStart(sessionId, config)
+    await call('SessionStart', () => SessionStart(sessionId, config))
   } catch (e) {
     console.error('Failed to start session:', e)
     // Session is registered in the backend but never connected — close it
