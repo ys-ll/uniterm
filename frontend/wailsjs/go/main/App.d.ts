@@ -125,6 +125,17 @@ export function GetDefaultShell():Promise<string>;
 
 export function GetDesktopPath():Promise<string>;
 
+// NOTE: Manual mirror of `app.go` diag bindings. `wails dev` will regenerate
+// this file and overwrite these declarations. Return shapes use `any` because
+// `diag.Entry` / `diag.Summary` are not modelled in `models.ts`; the typed
+// view lives in `frontend/src/types/diag.ts` and `DiagnosticsTab.vue` casts
+// through that.
+export function GetDiagnosticLogs(arg1:string,arg2:Array<string>,arg3:string,arg4:string,arg5:number):Promise<Array<any>>;
+
+export function DiagnosticLogSummary():Promise<any>;
+
+export function ExportDiagnosticBundle(arg1:string):Promise<void>;
+
 export function GetDisks(arg1:string):Promise<Array<session.DiskInfo>>;
 
 export function GetNetworkCards(arg1:string):Promise<Array<session.NetCardInfo>>;

@@ -226,6 +226,22 @@ export function GetDefaultSessionLogDir() {
   return window['go']['main']['App']['GetDefaultSessionLogDir']();
 }
 
+// NOTE: Manual mirror of `app.go` diag bindings. `wails dev` will regenerate
+// this file and overwrite these wrappers. Keep the signature in sync with
+// `(*App).GetDiagnosticLogs` / `(*App).DiagnosticLogSummary` /
+// `(*App).ExportDiagnosticBundle` in `app.go` until the next regeneration.
+export function GetDiagnosticLogs(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['GetDiagnosticLogs'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function DiagnosticLogSummary() {
+  return window['go']['main']['App']['DiagnosticLogSummary']();
+}
+
+export function ExportDiagnosticBundle(arg1) {
+  return window['go']['main']['App']['ExportDiagnosticBundle'](arg1);
+}
+
 export function GetDefaultShell() {
   return window['go']['main']['App']['GetDefaultShell']();
 }

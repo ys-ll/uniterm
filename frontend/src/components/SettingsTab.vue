@@ -384,6 +384,11 @@
         <CommandsManager />
       </div>
 
+      <!-- Diagnostics -->
+      <div v-if="settingsStore.activeCategory === 'diagnostics'" class="settings-section">
+        <DiagnosticsTab />
+      </div>
+
       <!-- Sync settings -->
       <div v-if="settingsStore.activeCategory === 'sync'" class="settings-section sync-settings">
         <h2 class="section-title">{{ t('settings.sync') }}</h2>
@@ -700,7 +705,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, computed, onMounted } from 'vue'
-import { Settings, Monitor, MessageCircleMore, Info, RefreshCw, Pencil, Trash2, Globe, Keyboard, Plus, BookOpen, Wrench } from '@lucide/vue'
+import { Settings, Monitor, MessageCircleMore, Info, RefreshCw, Pencil, Trash2, Globe, Keyboard, Plus, BookOpen, Wrench, Activity } from '@lucide/vue'
 import { msg } from '../services/message'
 import { FetchModels, ChatCompletion, GetPlatform, GetSystemFonts, GetDefaultSessionLogDir, OpenDirectoryDialog, OpenFileDialogFiltered, SetBackgroundImage, ClearBackgroundImage, GetBackgroundImage } from '../../wailsjs/go/main/App'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -715,6 +720,7 @@ import { FONT_OPTIONS, LANGUAGE_OPTIONS, DEFAULT_KEYBOARD, SHORTCUT_LABELS, USER
 import { formatFontFamily } from '../utils/formatFontFamily'
 import SkillsManager from './SkillsManager.vue'
 import CommandsManager from './CommandsManager.vue'
+import DiagnosticsTab from './DiagnosticsTab.vue'
 import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings } from '../types/settings'
 import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
 import { uninstallGlobalListener, installGlobalListener } from '../composables/useKeyboardShortcuts'
@@ -825,7 +831,7 @@ async function pickLogDir() {
 }
 
 watch(() => settingsStore.openCategory, (cat) => {
-  if (cat && (cat === 'basic' || cat === 'terminal' || cat === 'ai' || cat === 'sync' || cat === 'about' || cat === 'keyboard')) {
+  if (cat && (cat === 'basic' || cat === 'terminal' || cat === 'ai' || cat === 'sync' || cat === 'about' || cat === 'keyboard' || cat === 'diagnostics')) {
     settingsStore.activeCategory = cat
     settingsStore.openCategory = null
   }
@@ -950,6 +956,7 @@ const categories = computed(() => {
     { key: 'keyboard', label: t('shortcut.title'), icon: Keyboard },
     { key: 'ai', label: t('settings.ai'), icon: MessageCircleMore },
     { key: 'skills', label: t('settings.skillsAndCommands'), icon: Wrench },
+    { key: 'diagnostics', label: t('diag.title'), icon: Activity },
     { key: 'sync', label: t('settings.sync'), icon: RefreshCw },
     { key: 'about', label: t('settings.about'), icon: Info },
   ]
