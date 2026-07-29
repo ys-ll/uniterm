@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -13,6 +14,7 @@ import (
 var (
 	mu       sync.Mutex
 	global   *Logger
+	logsDir  string // set on Init, persists across Close so Query still works
 	devBuild = os.Getenv("UNITERM_DEV") == "1"
 	rotator  *Rotator
 )
@@ -69,6 +71,7 @@ func Init(dir string, cfg *DiagConfig) error {
 		flushCh: make(chan struct{}, 1),
 	}
 	global = l
+	logsDir = dir
 	configureRotator(dir, cfg)
 	go l.flusher()
 	return nil
@@ -183,4 +186,83 @@ func indexOf(b []byte, s string) int {
 		}
 	}
 	return -1
+}
+
+type QueryOpts struct {
+	Since  string
+	Levels []string
+	Tag    string
+	Text   string
+	Limit  int
+}
+
+// Query reads recent NDJSON entries from the active log file and applies
+// the provided filters. Returns an empty slice if diag has not been
+// initialised or the log file is missing.
+func Query(opts QueryOpts) ([]Entry, error) {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 500
+	}
+	mu.Lock()
+	dir := logsDir
+	mu.Unlock()
+	if dir == "" {
+		return nil, nil
+	}
+	f, err := os.Open(filepath.Join(dir, "uniterm.log"))
+	if err != nil {
+		return nil, nil
+	}
+	defer f.Close()
+	var since time.Time
+	if opts.Since != "" {
+		since, _ = time.Parse(time.RFC3339, opts.Since)
+	}
+	levelSet := map[Level]bool{}
+	for _, l := range opts.Levels {
+		levelSet[Level(l)] = true
+	}
+	var out []Entry
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for sc.Scan() {
+		var e Entry
+		if json.Unmarshal(sc.Bytes(), &e) != nil {
+			continue
+		}
+		if !since.IsZero() && e.parseTime().Before(since) {
+			continue
+		}
+		if len(levelSet) > 0 && !levelSet[e.Level] {
+			continue
+		}
+		if opts.Tag != "" && e.Tag != opts.Tag {
+			continue
+		}
+		if opts.Text != "" && !strings.Contains(e.Msg, opts.Text) {
+			continue
+		}
+		out = append(out, e)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (e Entry) parseTime() time.Time {
+	t, _ := time.Parse(time.RFC3339Nano, e.Ts)
+	return t
+}
+
+// LogsDir returns the directory the active logger writes to, or "" if
+// diag.Init has not been called.
+func LogsDir() string {
+	mu.Lock()
+	defer mu.Unlock()
+	if logsDir == "" && global != nil {
+		logsDir = global.dir
+	}
+	return logsDir
 }

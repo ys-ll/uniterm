@@ -3784,6 +3784,22 @@ func (a *App) FrontendLog(level, tag, message, fieldsJSON string) {
 	}
 }
 
+// GetDiagnosticLogs reads recent NDJSON log entries, optionally filtered.
+func (a *App) GetDiagnosticLogs(since string, levels []string, tag string, text string, limit int) ([]diag.Entry, error) {
+	return diag.Query(diag.QueryOpts{
+		Since:  since,
+		Levels: levels,
+		Tag:    tag,
+		Text:   text,
+		Limit:  limit,
+	})
+}
+
+// DiagnosticLogSummary returns aggregate counts + op stats from the in-process metrics registry.
+func (a *App) DiagnosticLogSummary() (diag.Summary, error) {
+	return diag.Snapshot(), nil
+}
+
 // GetDefaultShell returns the system's default shell path for local terminals.
 func (a *App) GetDefaultShell() string {
 	switch goruntime.GOOS {
