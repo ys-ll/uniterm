@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+
+	"github.com/ys-ll/uniterm/backend/diag"
 )
 
 // EventEmitter 是 Manager 用来推送 watch 事件的抽象；
@@ -234,7 +236,19 @@ func (m *Manager) Disconnect(connID string) {
 	}
 }
 
-func (m *Manager) Request(ctx context.Context, connID, method, path string, body []byte, contentType string) (int, []byte, error) {
+// Request is the centralised k8s REST helper. All frontend k8s calls
+// funnel through this; we record each one so diag.Snapshot() exposes
+// the live API latency under a single bucket name regardless of which
+// resource path the UI is hitting.
+func (m *Manager) Request(ctx context.Context, connID, method, path string, body []byte, contentType string) (status int, respBody []byte, err error) {
+	start := time.Now()
+	defer func() {
+		recErr := err
+		if recErr == nil && status >= 500 {
+			recErr = fmt.Errorf("k8s api status=%d", status)
+		}
+		diag.Record("k8s.api.call", time.Since(start), recErr)
+	}()
 	m.mu.RLock()
 	conn, ok := m.conns[connID]
 	m.mu.RUnlock()

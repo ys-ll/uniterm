@@ -17,6 +17,8 @@ import (
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/ys-ll/uniterm/backend/diag"
 )
 
 type SFTPSession struct {
@@ -50,6 +52,17 @@ func (s *SFTPSession) SetMaxConcurrency(n int) {
 	if n > 0 {
 		s.sem = make(chan struct{}, n)
 	}
+}
+
+// sftpTimed records one SFTP op to the diag metrics registry and
+// preserves the wrapped error for the caller. Keep the bucket names
+// stable — diag.Snapshot() groups by name, so renaming an op drops the
+// historical sketch.
+func sftpTimed(name string, fn func() error) error {
+	start := time.Now()
+	err := fn()
+	diag.Record("sftp.op."+name, time.Since(start), err)
+	return err
 }
 
 func (s *SFTPSession) Connect(config ConnectionConfig) error {
@@ -231,7 +244,12 @@ func (s *SFTPSession) ListRemote(dir string) (FileListResult, error) {
 	} else if !path.IsAbs(dir) {
 		dir = path.Join(s.cwd, dir)
 	}
-	infos, err := s.sftpClient.ReadDir(dir)
+	var infos []os.FileInfo
+	err := sftpTimed("readdir", func() error {
+		var inner error
+		infos, inner = s.sftpClient.ReadDir(dir)
+		return inner
+	})
 	if err != nil {
 		return FileListResult{}, err
 	}
@@ -386,7 +404,7 @@ func (s *SFTPSession) MakeDir(dir string) error {
 	if !path.IsAbs(p) {
 		p = path.Join(s.cwd, p)
 	}
-	return s.sftpClient.Mkdir(p)
+	return sftpTimed("mkdir", func() error { return s.sftpClient.Mkdir(p) })
 }
 
 func (s *SFTPSession) Remove(p string, recursive bool) error {
@@ -397,23 +415,25 @@ func (s *SFTPSession) Remove(p string, recursive bool) error {
 		p = path.Join(s.cwd, p)
 	}
 	if recursive {
-		return s.rmRecursive(p)
+		return sftpTimed("removeRecursive", func() error { return s.rmRecursive(p) })
 	}
-	fi, err := s.sftpClient.Stat(p)
-	if err != nil {
-		return err
-	}
-	if fi.IsDir() {
-		infos, err := s.sftpClient.ReadDir(p)
+	return sftpTimed("remove", func() error {
+		fi, err := s.sftpClient.Stat(p)
 		if err != nil {
 			return err
 		}
-		if len(infos) > 0 {
-			return fmt.Errorf("directory not empty (%d items), use recursive=true", len(infos))
+		if fi.IsDir() {
+			infos, err := s.sftpClient.ReadDir(p)
+			if err != nil {
+				return err
+			}
+			if len(infos) > 0 {
+				return fmt.Errorf("directory not empty (%d items), use recursive=true", len(infos))
+			}
+			return s.sftpClient.RemoveDirectory(p)
 		}
-		return s.sftpClient.RemoveDirectory(p)
-	}
-	return s.sftpClient.Remove(p)
+		return s.sftpClient.Remove(p)
+	})
 }
 
 func (s *SFTPSession) Rename(oldName, newName string) error {
@@ -428,7 +448,7 @@ func (s *SFTPSession) Rename(oldName, newName string) error {
 	if !path.IsAbs(newPath) {
 		newPath = path.Join(s.cwd, newPath)
 	}
-	return s.sftpClient.Rename(old, newPath)
+	return sftpTimed("rename", func() error { return s.sftpClient.Rename(old, newPath) })
 }
 
 func (s *SFTPSession) Chmod(p string, mode os.FileMode) error {
@@ -438,7 +458,7 @@ func (s *SFTPSession) Chmod(p string, mode os.FileMode) error {
 	if !path.IsAbs(p) {
 		p = path.Join(s.cwd, p)
 	}
-	return s.sftpClient.Chmod(p, mode)
+	return sftpTimed("chmod", func() error { return s.sftpClient.Chmod(p, mode) })
 }
 
 func (s *SFTPSession) Get(remotePath, localPath string, recursive bool) (string, error) {
@@ -658,18 +678,20 @@ func (s *SFTPSession) PutContent(remotePath string, content []byte) error {
 	if !path.IsAbs(rp) {
 		rp = path.Join(s.cwd, rp)
 	}
-	// Ensure parent directory exists
-	parentDir := path.Dir(rp)
-	if err := s.sftpClient.MkdirAll(parentDir); err != nil {
+	return sftpTimed("writeContent", func() error {
+		// Ensure parent directory exists
+		parentDir := path.Dir(rp)
+		if err := s.sftpClient.MkdirAll(parentDir); err != nil {
+			return err
+		}
+		f, err := s.sftpClient.Create(rp)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = f.Write(content)
 		return err
-	}
-	f, err := s.sftpClient.Create(rp)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = f.Write(content)
-	return err
+	})
 }
 
 // GetContent reads the full content of a remote file.
@@ -681,8 +703,14 @@ func (s *SFTPSession) GetContent(remotePath string) ([]byte, error) {
 	if !path.IsAbs(rp) {
 		rp = path.Join(s.cwd, rp)
 	}
-	f, err := s.sftpClient.Open(rp)
-	if err != nil {
+	var (
+		f   *sftp.File
+		err error
+	)
+	if err := sftpTimed("open", func() error {
+		f, err = s.sftpClient.Open(rp)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 	defer f.Close()

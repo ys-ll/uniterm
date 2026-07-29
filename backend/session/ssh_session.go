@@ -17,6 +17,7 @@ import (
 	"golang.org/x/text/encoding/traditionalchinese"
 	"golang.org/x/text/transform"
 
+	"github.com/ys-ll/uniterm/backend/diag"
 	"github.com/ys-ll/uniterm/backend/log"
 )
 
@@ -77,7 +78,14 @@ func shouldPromptForSSHPassword(config ConnectionConfig) bool {
 	return config.AuthType == "" || config.AuthType == "password"
 }
 
-func (s *SSHSession) Connect(config ConnectionConfig) error {
+func (s *SSHSession) Connect(config ConnectionConfig) (err error) {
+	start := time.Now()
+	defer func() {
+		// Record connects (success or failure) under a stable op name so
+		// diag.Snapshot() groups repeated connects in the percentile
+		// sketch without leaking host/port into the bucket key.
+		diag.Record("ssh.connect", time.Since(start), err)
+	}()
 	s.SetLogOnConnect(config.LogOnConnect)
 	s.setStatus(StatusConnecting)
 	if config.Name != "" {
