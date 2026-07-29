@@ -14,6 +14,7 @@ var (
 	mu       sync.Mutex
 	global   *Logger
 	devBuild = os.Getenv("UNITERM_DEV") == "1"
+	rotator  *Rotator
 )
 
 type Logger struct {
@@ -72,10 +73,6 @@ func Init(dir string, cfg *DiagConfig) error {
 	go l.flusher()
 	return nil
 }
-
-// configureRotator is implemented in rotate.go; it is a no-op when the
-// rotator is not yet wired (Task 9).
-var configureRotator = func(dir string, cfg *DiagConfig) {}
 
 // InitLegacy is kept for tests that don't care about DiagConfig.
 func InitLegacy(dir string) error { return Init(dir, nil) }
@@ -154,6 +151,7 @@ func write(level Level, tag, msg string, fields map[string]any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	_, _ = l.bw.Write(line)
+	rotateIfNeeded(l)
 	select {
 	case l.flushCh <- struct{}{}:
 	default:
