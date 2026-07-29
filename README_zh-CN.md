@@ -136,7 +136,12 @@ Oracle Database 支持基于纯 Go 驱动实现。uniTerm 不随安装包分发 
     <img src="docs/imgs/database_light.webp" alt="数据库浏览器" width="45%" loading="eager" />
   </picture>
 </p>
+<p align="center">
+  <picture>
+    <source srcset="docs/imgs/kubernetes.webp" media="(prefers-color-scheme: dark)" />
+    <img src="docs/imgs/kubernetes_light.webp" alt="Kubernetes 管理" width="45%" loading="eager" />
   </picture>
+  <img src="docs/imgs/background_image.webp" alt="终端背景图片" width="45%" loading="eager" />
 </p>
 
 ## 下载安装

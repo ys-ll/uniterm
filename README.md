@@ -136,7 +136,12 @@ Oracle Database support is implemented with a pure Go driver. uniTerm does not b
     <img src="docs/imgs/database_light.webp" alt="Database Browser" width="45%" loading="eager" />
   </picture>
 </p>
+<p align="center">
+  <picture>
+    <source srcset="docs/imgs/kubernetes.webp" media="(prefers-color-scheme: dark)" />
+    <img src="docs/imgs/kubernetes_light.webp" alt="Kubernetes Management" width="45%" loading="eager" />
   </picture>
+  <img src="docs/imgs/background_image.webp" alt="Terminal Background Image" width="45%" loading="eager" />
 </p>
 
 ## Download

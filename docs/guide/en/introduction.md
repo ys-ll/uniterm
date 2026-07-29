@@ -41,6 +41,8 @@ Supports **MySQL / PostgreSQL / Oracle / SQL Server / rqlite / Redis**, allowing
 
 Integrated **Kubernetes / Docker / Podman / nerdctl** management for cluster resources and container images, on the local machine or remote hosts over SSH — with lifecycle actions, log following, and exec into a container terminal.
 
+![Kubernetes](/imgs/kubernetes_light.webp)
+
 
 ### AI Assistant
 
@@ -51,6 +53,7 @@ uniTerm features a built-in autonomous AI Agent that can independently plan and 
 - **Flexible Execution Modes** — Skip, dangerous commands only, dangerous + write, confirm all — you control the level of supervision over the AI Agent.
 - **Persistent Conversations** — Conversation history is saved per session and can be resumed even after restarting the application.
 - **In-Terminal Integration** — AI commands are executed directly in the active terminal tab, and can be pinned to a specific tab or always follow the active tab.
+- **Skills & Commands** — Capture reusable workflows as **skills** (which the AI can invoke on its own) and parameterized prompts as **commands**, invoked quickly in the conversation via `/name`.
 - **Smart Completion** — Receive real-time suggestions from command history and AI while typing in SSH terminals.
 
 ![AI Assistant](/imgs/ai_assistant_light.webp)

@@ -27,7 +27,8 @@ const sidebarZh = [
       { text: '文件传输', link: '/zh/connections/file-transfer' },
       { text: '远程桌面', link: '/zh/connections/remote-desktop' },
       { text: '服务器监控', link: '/zh/connections/server-monitor' },
-      { text: '数据库', link: '/zh/connections/databases' }
+      { text: '数据库', link: '/zh/connections/databases' },
+      { text: '容器', link: '/zh/connections/containers' }
     ]
   },
   {
@@ -72,7 +73,8 @@ const sidebarEn = [
       { text: 'File Transfer', link: '/en/connections/file-transfer' },
       { text: 'Remote Desktop', link: '/en/connections/remote-desktop' },
       { text: 'Server Monitor', link: '/en/connections/server-monitor' },
-      { text: 'Databases', link: '/en/connections/databases' }
+      { text: 'Databases', link: '/en/connections/databases' },
+      { text: 'Containers', link: '/en/connections/containers' }
     ]
   },
   {
