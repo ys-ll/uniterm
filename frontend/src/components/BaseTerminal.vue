@@ -100,6 +100,7 @@ import {
 } from '../services/terminalManager'
 import { getXtermTheme } from '../composables/useTerminal'
 import { resolveXtermBackground } from '../composables/useTerminalTheme'
+import { decideWheelAction } from '../composables/useTerminal.wheel'
 import { stripCursorBlink } from '../utils/cursor'
 import { useTerminalInput } from '../composables/useTerminalInput'
 import { useSuggestions, quickCommandCache } from '../composables/useSuggestions'
@@ -847,9 +848,15 @@ onMounted(() => {
   // alt-screen so the BUG goes away; outside alt-screen xterm's default
   // (native scrollback scroll) is left untouched.
   terminal.attachCustomWheelEventHandler((event: WheelEvent) => {
-    if (!settingsStore.settings.terminal.swallowWheelInAltScreen) return true
-    if (!(terminalInput?.isInAlternateScreen())) return true
-    return false
+    const decision = decideWheelAction(
+      event.deltaY,
+      settingsStore.settings.terminal.swallowWheelInAltScreen ?? true,
+      terminalInput?.isInAlternateScreen() ?? false
+    )
+    if (!decision.forward) {
+      terminal.scrollLines(decision.scrollLines)
+    }
+    return decision.forward
   })
 
   if (props.mode === 'ssh' || props.mode === 'local') {
