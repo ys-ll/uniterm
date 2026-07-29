@@ -1633,14 +1633,9 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 		return "", fmt.Errorf("marshal modified request: %w", err)
 	}
 
-	// Anthropic base URL conventionally omits /v1 (client appends /v1/messages).
-	// Tolerate legacy configs that already include the /v1 suffix.
-	base := strings.TrimRight(baseURL, "/")
-	var url string
-	if strings.HasSuffix(base, "/v1") {
-		url = base + "/messages"
-	} else {
-		url = base + "/v1/messages"
+	url, err := buildURL(baseURL, "anthropic")
+	if err != nil {
+		return "", err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
@@ -1919,7 +1914,10 @@ func toString(v interface{}) string {
 // calls the OpenAI Chat Completions API with SSE streaming, and converts
 // the response back to Anthropic format so the frontend sees no difference.
 func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
-	url := strings.TrimRight(baseURL, "/") + "/chat/completions"
+	url, err := buildURL(baseURL, "openai")
+	if err != nil {
+		return "", err
+	}
 
 	// --- Build OpenAI-format request body ---
 	openaiBody := map[string]interface{}{
@@ -2333,7 +2331,10 @@ func convertAnthropicMessageToResponses(msg map[string]interface{}) []map[string
 // events back to Anthropic-format events so the frontend sees no difference.
 // Stateless: full history is sent as `input` each turn; reasoning items are ignored.
 func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
-	url := strings.TrimRight(baseURL, "/") + "/responses"
+	url, err := buildURL(baseURL, "responses")
+	if err != nil {
+		return "", err
+	}
 
 	// --- Build Responses-format request body ---
 	respBody := map[string]interface{}{
@@ -2592,18 +2593,23 @@ type ModelInfo struct {
 // /v1/models with the x-api-key + anthropic-version headers, mirroring
 // chatCompletionAnthropic's URL and auth handling.
 func (a *App) FetchModels(apiKey, baseURL, protocol string) ([]ModelInfo, error) {
-	base := strings.TrimRight(baseURL, "/")
-
-	var url string
-	if protocol == "anthropic" {
-		// Base URL conventionally omits /v1; tolerate legacy configs with it.
-		if strings.HasSuffix(base, "/v1") {
-			url = base + "/models"
-		} else {
-			url = base + "/v1/models"
-		}
-	} else {
-		url = base + "/models"
+	// For /models the protocol only changes the URL shape for anthropic;
+	// all OpenAI-compatible variants (including Chinese LLMs) hit /v1/models.
+	buildProtocol := protocol
+	if buildProtocol == "" {
+		buildProtocol = "openai"
+	}
+	if buildProtocol == "glm-native" || buildProtocol == "custom" {
+		buildProtocol = "openai"
+	}
+	url, err := buildURL(baseURL, buildProtocol)
+	if err != nil {
+		return nil, err
+	}
+	// buildURL always appends /chat/completions or /responses. For models,
+	// we want /models instead. Re-strip the suffix and add /models.
+	if idx := strings.LastIndex(url, "/"); idx > 0 {
+		url = url[:idx+1] + "models"
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
