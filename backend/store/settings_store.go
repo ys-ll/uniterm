@@ -19,13 +19,19 @@ type TerminalSettings struct {
 	FontSize         int    `json:"fontSize"`
 	SelectionAction  string `json:"selectionAction"`
 	RightClickAction string `json:"rightClickAction"`
+	MiddleClickAction string `json:"middleClickAction"`
 	MaxHistoryLines  int    `json:"maxHistoryLines"`
 	SmartCompletion  *bool  `json:"smartCompletion"`
 	HighlightEnabled *bool  `json:"highlightEnabled"`
+	CursorBlink      *bool  `json:"cursorBlink"`
 	// SessionLogDir overrides the default directory used for session
 	// output logs (issue #227). Empty means: use the OS-appropriate
 	// default under ~/Documents/uniTerm/logs.
 	SessionLogDir string `json:"sessionLogDir,omitempty"`
+	// SwallowWheelInAltScreen, when true (default), suppresses wheel
+	// events inside an alt-screen TUI (e.g. Claude Code via Ink) so
+	// xterm.js does not forward them as arrow up/down to the PTY.
+	SwallowWheelInAltScreen *bool `json:"swallowWheelInAltScreen"`
 }
 
 // TerminalThemeColors mirrors xterm.js's ITheme shape: the 4 base colors
@@ -237,12 +243,15 @@ func defaultSettings() AppSettings {
 		Theme:    "dark",
 		Language: "system",
 		Terminal: TerminalSettings{
-			Theme:            "uniterm-dark",
-			FontFamily:       "Consolas, \"Courier New\", monospace",
-			FontSize:         14,
-			SelectionAction:  "none",
-			RightClickAction: "menu",
-			MaxHistoryLines:  5000,
+			Theme:                  "uniterm-dark",
+			FontFamily:             "Consolas, \"Courier New\", monospace",
+			FontSize:               14,
+			SelectionAction:        "none",
+			RightClickAction:       "menu",
+			MiddleClickAction:      "paste",
+			MaxHistoryLines:        5000,
+			CursorBlink:            boolPtr(true),
+			SwallowWheelInAltScreen: boolPtr(true),
 		},
 		AI: AISettings{
 			MaxTurns: intPtr(20),
