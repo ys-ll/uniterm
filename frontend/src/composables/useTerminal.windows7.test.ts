@@ -17,20 +17,20 @@ vi.mock('../utils/cursor', () => ({ stripCursorBlink: (x: string) => x }))
 
 import { getXtermTheme } from './useTerminal'
 
-describe('getXtermTheme — uniterm-windows11-light', () => {
-  it('returns the Windows Terminal 11 default light palette', () => {
-    const theme = getXtermTheme('uniterm-windows11-light')
+describe('getXtermTheme — uniterm-windows7', () => {
+  it('returns the Win7 Aurora wallpaper palette', () => {
+    const theme = getXtermTheme('uniterm-windows7')
 
-    expect(theme.background).toBe('#f3f7fc')
-    expect(theme.foreground).toBe('#1c1c1c')
-    expect(theme.cursor).toBe('#1c1c1c')
+    // Aurora teal-blue ground, lifted slightly off the wallpaper
+    expect(theme.background).toBe('#1a3a5c')
+    expect(theme.foreground).toBe('#dceaf2')
+    expect(theme.cursor).toBe('#a8d4e8')
 
-    // Signature Windows Terminal blue
-    expect(theme.blue).toBe('#0037da')
-    expect(theme.brightBlue).toBe('#0037da')
-
-    // Light bg → brightWhite is intentionally dark
-    expect(theme.brightWhite).toBe('#1c1c1c')
+    // Signature aurora blue + teal ANSI colors
+    expect(theme.blue).toBe('#7ab8e8')
+    expect(theme.cyan).toBe('#7ad8d8')
+    expect(theme.brightBlue).toBe('#90d0ff')
+    expect(theme.brightCyan).toBe('#90e8e8')
 
     // 20 expected fields (4 base + 16 ANSI)
     expect(Object.keys(theme).sort()).toEqual(

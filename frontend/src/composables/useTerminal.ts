@@ -120,51 +120,60 @@ export function getXtermTheme(
         brightCyan: "#33b3b3",
         brightWhite: "#2d2d2d",
       };
-    case "uniterm-windows11":
+    case "uniterm-windows7":
+      // Win7 default wallpaper ("Aurora") palette: a deep teal-blue ground
+      // lifted slightly off the wallpaper's near-black so ANSI brights stay
+      // legible, light cream foreground echoing the aurora highlights, and
+      // a 16-color ANSI table biased toward the wallpaper's blue/teal/violet
+      // aurora tones.
       return {
-        background: "#0c0c0c",
-        foreground: "#cccccc",
-        cursor: "#ffffff",
-        selectionBackground: "rgba(255, 255, 255, 0.4)",
-        black: "#0c0c0c",
-        red: "#e74856",
-        green: "#16c60c",
-        yellow: "#f9f1a5",
-        blue: "#3b78ff",
-        magenta: "#b4009e",
-        cyan: "#61d6d6",
-        white: "#cccccc",
-        brightBlack: "#767676",
-        brightRed: "#e74856",
-        brightGreen: "#16c60c",
-        brightYellow: "#f9f1a5",
-        brightBlue: "#3b78ff",
-        brightMagenta: "#b4009e",
-        brightCyan: "#61d6d6",
-        brightWhite: "#f2f2f2",
+        background: "#1a3a5c",
+        foreground: "#dceaf2",
+        cursor: "#a8d4e8",
+        selectionBackground: "rgba(168, 212, 232, 0.35)",
+        black: "#0d2436",
+        red: "#e89090",
+        green: "#7ad49a",
+        yellow: "#e8d68a",
+        blue: "#7ab8e8",
+        magenta: "#b894d4",
+        cyan: "#7ad8d8",
+        white: "#c8dae8",
+        brightBlack: "#5a8aa8",
+        brightRed: "#ff9c9c",
+        brightGreen: "#90e0aa",
+        brightYellow: "#ffe89c",
+        brightBlue: "#90d0ff",
+        brightMagenta: "#d4aae8",
+        brightCyan: "#90e8e8",
+        brightWhite: "#ffffff",
       };
-    case "uniterm-windows11-light":
+    case "uniterm-windows7-light":
+      // Light counterpart: same aurora palette but flipped onto a pale
+      // sky-blue ground lifted from the wallpaper's lighter wisps. Still
+      // off-white (not #f3f7fc — that washed out) so the ANSI brights
+      // don't blow out, foreground is the wallpaper's deep teal-blue.
       return {
-        background: "#f3f7fc",
-        foreground: "#1c1c1c",
-        cursor: "#1c1c1c",
-        selectionBackground: "rgba(28, 28, 28, 0.4)",
-        black: "#000000",
-        red: "#c50f1f",
-        green: "#13a10e",
-        yellow: "#c19c00",
-        blue: "#0037da",
-        magenta: "#881798",
-        cyan: "#3a96dd",
-        white: "#cccccc",
-        brightBlack: "#767676",
-        brightRed: "#c50f1f",
-        brightGreen: "#13a10e",
-        brightYellow: "#c19c00",
-        brightBlue: "#0037da",
-        brightMagenta: "#881798",
-        brightCyan: "#3a96dd",
-        brightWhite: "#1c1c1c",
+        background: "#bcd5e3",
+        foreground: "#0d2436",
+        cursor: "#1a4a7c",
+        selectionBackground: "rgba(13, 36, 54, 0.2)",
+        black: "#0d2436",
+        red: "#a04040",
+        green: "#3a8a5a",
+        yellow: "#a08020",
+        blue: "#2a6aaa",
+        magenta: "#7a4a9a",
+        cyan: "#3a8a8a",
+        white: "#c8dae8",
+        brightBlack: "#5a8aa8",
+        brightRed: "#c85050",
+        brightGreen: "#5aaa7a",
+        brightYellow: "#c8a040",
+        brightBlue: "#4a8acc",
+        brightMagenta: "#9a6ab8",
+        brightCyan: "#5ab0b0",
+        brightWhite: "#0d2436",
       };
     case "uniterm-light":
       return {
