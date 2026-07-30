@@ -17,6 +17,10 @@ vi.mock('../../wailsjs/go/main/App', () => ({
   GetSkillFile: vi.fn(),
   ListSkillFiles: vi.fn(),
   SessionWrite: vi.fn(),
+  // Default mock returns 'read' so getRisk() / effectiveRisk() see a
+  // permissive server classifier. Specific scenarios override via
+  // vi.mocked(ClassifyCommandRisk).mockReturnValue(...).
+  ClassifyCommandRisk: vi.fn(() => 'read'),
 }))
 
 vi.mock('./terminalManager', () => ({

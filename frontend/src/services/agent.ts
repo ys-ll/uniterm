@@ -5,7 +5,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSkillStore } from '../stores/skillStore'
-import { GetSkillFile, ListSkillFiles } from '../../wailsjs/go/main/App'
+import { GetSkillFile, ListSkillFiles, ClassifyCommandRisk } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 import type { AIMessage } from '../types/ai'
 import {
@@ -94,6 +94,35 @@ function shouldConfirm(risk: RiskLevel): boolean {
     case 'bypass': return false
     default: return risk !== 'read'
   }
+}
+
+// effectiveRisk merges the model-claimed risk with the server-classified risk.
+// The server classifier runs regexes over the raw command string and never
+// returns a less-strict level than the model claimed. This defends against
+// prompt injection / compromised-model scenarios where the model downgrades
+// risk to bypass user confirmation.
+//
+// Synchronous call to ClassifyCommandRisk is intentional: the classifier is
+// a pure regex function on the Go side (no I/O), and the Wails binding call
+// returns in microseconds. UI latency is unaffected.
+//
+// Exported for direct unit testing — the full agent-loop integration is
+// covered by manual / e2e tests, but the merge logic is pure and deserves
+// fast feedback in the test runner.
+export function effectiveRisk(modelRisk: RiskLevel, command: string): RiskLevel {
+  let serverRisk: RiskLevel
+  try {
+    const sr = ClassifyCommandRisk(command)
+    if (sr === 'read' || sr === 'write' || sr === 'dangerous') {
+      serverRisk = sr as RiskLevel
+    } else {
+      serverRisk = 'dangerous' // unknown server value: conservative
+    }
+  } catch {
+    serverRisk = 'dangerous' // binding failure: conservative
+  }
+  const order: Record<RiskLevel, number> = { read: 0, write: 1, dangerous: 2 }
+  return order[serverRisk] > order[modelRisk] ? serverRisk : modelRisk
 }
 
 // ---- Tool input validators (FE-P0-3) ----
@@ -537,7 +566,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     })
     setActiveAssistantMsg(assistantMsg)
 
-    const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+    let toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
     const chatOptions: any = {
       system: buildSystemPrompt(),
@@ -619,9 +648,23 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       return
     }
 
-    // Enforce single tool call
+    // Single-tool-call-per-turn enforcement. The model occasionally returns
+    // a batch of tool_use blocks (e.g. parallel read tool calls). We execute
+    // the first one this turn and surface the rest as synthetic tool_result
+    // messages so the model sees "this was skipped, re-issue next turn"
+    // instead of silently dropping them. Without this, the model would
+    // assume its second/third calls executed and would not re-issue them
+    // on the next turn — wasting tokens and producing phantom side effects.
     if (toolUses.length > 1) {
-      toolUses.splice(1)
+      for (const dropped of toolUses.slice(1)) {
+        store.addMessage({
+          id: `msg-${Date.now()}-${dropped.id}`,
+          role: 'tool',
+          content: '[Skipped: only one tool call per turn. Re-issue in your next turn.]',
+          tool_call_id: dropped.id
+        })
+      }
+      toolUses = toolUses.slice(0, 1)
     }
 
     // Store tool calls in the message for UI confirmation
@@ -682,7 +725,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       const timeoutMs = Math.max(5000, Math.min(timeoutSec * 1000, 300000))
       const headLines = validated.head_lines
       const tailLines = validated.tail_lines
-      const risk = getRisk(tu)
+      const risk = effectiveRisk(getRisk(tu), command)
 
       if (shouldConfirm(risk)) {
         store.setPendingCommand({
@@ -745,7 +788,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         throw e
       }
       const command = validated.command
-      const risk = getRisk(tu)
+      const risk = effectiveRisk(getRisk(tu), command)
 
       if (shouldConfirm(risk)) {
         store.setPendingCommand({

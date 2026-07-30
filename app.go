@@ -4114,7 +4114,7 @@ func (a *App) K8sExecSession(connID, namespace, pod, container string) (*session
 		return nil, fmt.Errorf("k8s manager not initialized")
 	}
 	// initial size fallback; real size arrives via Resize after the frontend mounts xterm
-	wsConn, err := a.k8sManager.DialExec(connID, namespace, pod, container, 80, 24)
+	wsConn, err := a.k8sManager.DialExec(context.Background(), connID, namespace, pod, container, 80, 24)
 	if err != nil {
 		return nil, err
 	}
