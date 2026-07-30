@@ -55,7 +55,16 @@ func TestLogStreamDeliversLines(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		if strings.HasPrefix(name, "k8s:log:") {
-			got = append(got, payload.(string))
+			// DEV-036: log lines are now batched in 50ms windows, so
+			// the emit payload is an array of strings. The test only
+			// fires 3 lines with 3ms gaps, but they all flush in one
+			// batch on the next 50ms tick.
+			switch v := payload.(type) {
+			case string:
+				got = append(got, v)
+			case []string:
+				got = append(got, v...)
+			}
 		}
 	})
 

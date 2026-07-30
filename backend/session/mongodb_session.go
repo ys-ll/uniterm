@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/ys-ll/uniterm/backend/log"
@@ -103,7 +105,7 @@ func buildMongoURI(config ConnectionConfig) string {
 	if config.User != "" && config.Password != "" {
 		uri += fmt.Sprintf("%s:%s@", config.User, config.Password)
 	}
-	uri += fmt.Sprintf("%s:%d", host, port)
+	uri += net.JoinHostPort(host, strconv.Itoa(port))
 
 	// Default database
 	if config.DBName != "" {

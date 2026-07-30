@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -24,7 +26,7 @@ type SyncService struct {
 	// ready is closed by NewSyncService() once the disk-touching
 	// init (UserConfigDir → MkdirAll → NewKeychain → NewSyncConfigStore)
 	// has finished. Callers that arrive during the brief startup window
-	// can wait on Ready() with a short timeout (F-407).
+	// can wait on Ready() with a short timeout.
 	ready     chan struct{}
 	readyOnce sync.Once
 }
@@ -63,10 +65,10 @@ func NewSyncService() (*SyncService, error) {
 
 // NewSyncServiceAsync returns a SyncService whose disk-touching init
 // (UserConfigDir / MkdirAll / NewKeychain) runs on a background
-// goroutine. F-407: macOS Security framework keychain IPC + the
-// PBKDF2 600k iterations probe can take 50–500ms+ on first launch —
-// doing it synchronously inside wails.OnStartup blocks the first
-// paint of the main window.
+// goroutine. macOS Security framework keychain IPC + the PBKDF2 600k
+// iterations probe can take 50–500ms+ on first launch — doing it
+// synchronously inside wails.OnStartup blocks the first paint of the
+// main window.
 //
 // Callers should `Ready()` (with a short timeout) before invoking
 // service methods; otherwise methods may fail with
@@ -94,7 +96,7 @@ func NewSyncServiceAsync() (*SyncService, context.Context) {
 }
 
 // Ready returns a channel closed once init has finished. Pair with
-// a short timeout in callers that race startup (F-407).
+// a short timeout in callers that race startup.
 func (s *SyncService) Ready() <-chan struct{} {
 	return s.ready
 }
@@ -139,6 +141,9 @@ func (s *SyncService) Sync() (*SyncResult, error) {
 	}
 	if config.RepoURL == "" {
 		return nil, fmt.Errorf("sync not configured: repo URL not set")
+	}
+	if err := validateRemoteURL(config.RepoURL); err != nil {
+		return nil, fmt.Errorf("invalid repo URL: %w", err)
 	}
 
 	encKey, err := s.keychain.GetEncryptionKey()
@@ -333,9 +338,44 @@ func (s *SyncService) TestConnection() error {
 		}
 		return nil
 	}
+	if err := validateRemoteURL(config.RepoURL); err != nil {
+		return fmt.Errorf("invalid repo URL: %w", err)
+	}
 	username := config.Username
 	token := s.getToken()
 	return TestConnection(config.RepoURL, username, token)
+}
+
+// validateRemoteURL ensures the configured sync repo URL uses a safe git
+// transport (http, https, ssh, git, file). Anything else (file:// pointed
+// at /etc/shadow, custom schemes for SSRF, javascript:, etc.) is rejected
+// before being handed to go-git.
+func validateRemoteURL(raw string) error {
+	if raw == "" {
+		return fmt.Errorf("repo URL is empty")
+	}
+	// Permit SSH-style scp-like syntax (git@host:owner/repo.git) — go-git
+	// accepts it natively, but url.Parse will reject the colon-without-scheme
+	// form. Special-case it as the only non-URL scheme we allow.
+	if !strings.Contains(raw, "://") && strings.Contains(raw, "@") && strings.Contains(raw, ":") {
+		// git@host:path — the ':' after the host is not a scheme separator.
+		if i := strings.Index(raw, "@"); i > 0 {
+			host := raw[i+1:]
+			if j := strings.Index(host, ":"); j > 0 {
+				return nil
+			}
+		}
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("parse URL: %w", err)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "ssh", "git", "file":
+		return nil
+	default:
+		return fmt.Errorf("unsupported scheme %q (allowed: http, https, ssh, git, file)", u.Scheme)
+	}
 }
 
 func (s *SyncService) updateLastSyncResult(status string, errMsg string) {
@@ -366,6 +406,10 @@ func (s *SyncService) PasswordStore() *Keychain {
 func (s *SyncService) ConfigureRepo(repoURL, username, token, masterPassword string) (*SyncResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if err := validateRemoteURL(repoURL); err != nil {
+		return nil, fmt.Errorf("invalid repo URL: %w", err)
+	}
 
 	repo, err := CloneOrOpen(s.repoPath, repoURL, "main", username, token)
 	if err != nil {

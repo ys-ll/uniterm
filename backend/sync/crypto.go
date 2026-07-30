@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -347,4 +348,146 @@ func ReadSaltFile(repoPath string) ([]byte, error) {
 func WriteSaltFile(repoPath string, salt []byte) error {
 	saltPath := filepath.Join(repoPath, ".sync-salt")
 	return os.WriteFile(saltPath, []byte(hex.EncodeToString(salt)), 0600)
+}
+
+// streamChunkSize is the read/write chunk for streamed encrypt/decrypt.
+// 64 KiB is a sweet spot: large enough that AES-GCM fixed-cost stays
+// hidden, small enough that peak memory stays bounded for any file
+// size.
+const streamChunkSize = 64 * 1024
+
+// StreamEncryptFile encrypts src into dest in fixed-size chunks,
+// streaming output to disk without ever holding the whole ciphertext
+// in memory. Memory peak is ~streamChunkSize regardless of file size
+// (was the whole file before).
+//
+// Hash is optional — pass a non-nil hash to accumulate a digest over
+// the plaintext, useful for sync integrity checks.
+//
+// Layout on disk: [baseNonce(12) | chunk0_ct | chunk1_ct | ...].
+// Each chunk_ct = aesGCM.Seal(plaintext, deriveChunkNonce(baseNonce, i), nil).
+// A 16-byte counter is XORed into the last 8 bytes of the base nonce
+// per chunk so per-chunk nonces are deterministic, unique, and
+// require no per-call RNG.
+func StreamEncryptFile(src, dest string, key []byte, h hash.Hash) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	return streamEncrypt(in, dest, key, h)
+}
+
+func streamEncrypt(r io.Reader, dest string, key []byte, h hash.Hash) error {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return fmt.Errorf("create cipher: %w", err)
+	}
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return fmt.Errorf("create GCM: %w", err)
+	}
+	nonceSize := aesGCM.NonceSize()
+	if nonceSize < 8 {
+		return fmt.Errorf("nonce too small for streaming counter: %d", nonceSize)
+	}
+	baseNonce := make([]byte, nonceSize)
+	if _, err := io.ReadFull(rand.Reader, baseNonce); err != nil {
+		return fmt.Errorf("generate nonce: %w", err)
+	}
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := out.Write(baseNonce); err != nil {
+		return err
+	}
+	plain := make([]byte, streamChunkSize)
+	var counter uint64
+	for {
+		n, rerr := io.ReadFull(r, plain)
+		if n > 0 {
+			if h != nil {
+				h.Write(plain[:n])
+			}
+			chunkNonce := deriveChunkNonce(baseNonce, counter)
+			ct := aesGCM.Seal(nil, chunkNonce, plain[:n], nil)
+			if _, err := out.Write(ct); err != nil {
+				return err
+			}
+			counter++
+		}
+		if rerr == io.EOF || rerr == io.ErrUnexpectedEOF {
+			return nil
+		}
+		if rerr != nil {
+			return rerr
+		}
+	}
+}
+
+// StreamDecryptFile decrypts src into dest. Stream-style; memory
+// peak is ~streamChunkSize.
+func StreamDecryptFile(src, dest string, key []byte) error {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return fmt.Errorf("create cipher: %w", err)
+	}
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return fmt.Errorf("create GCM: %w", err)
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	nonceSize := aesGCM.NonceSize()
+	baseNonce := make([]byte, nonceSize)
+	if _, err := io.ReadFull(in, baseNonce); err != nil {
+		return fmt.Errorf("read nonce: %w", err)
+	}
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	ct := make([]byte, streamChunkSize+aesGCM.Overhead())
+	var counter uint64
+	for {
+		n, rerr := io.ReadFull(in, ct)
+		if n > 0 {
+			chunkNonce := deriveChunkNonce(baseNonce, counter)
+			pt, err := aesGCM.Open(nil, chunkNonce, ct[:n], nil)
+			if err != nil {
+				return fmt.Errorf("decrypt chunk %d: %w", counter, err)
+			}
+			if _, err := out.Write(pt); err != nil {
+				return err
+			}
+			counter++
+		}
+		if rerr == io.EOF || rerr == io.ErrUnexpectedEOF {
+			return nil
+		}
+		if rerr != nil {
+			return rerr
+		}
+	}
+}
+
+// deriveChunkNonce XORs the counter into the trailing bytes of the
+// base nonce to produce a unique per-chunk nonce without an RNG call.
+// The high bytes still carry the random base nonce's entropy; the
+// low bytes encode the chunk index. Counter overflow is not a
+// concern at 64 KiB chunks until ~1 EiB read, well past any
+// realistic sync payload.
+func deriveChunkNonce(nonce []byte, counter uint64) []byte {
+	out := make([]byte, len(nonce))
+	copy(out, nonce)
+	for i := 0; i < 8 && i < len(out); i++ {
+		out[len(out)-1-i] ^= byte(counter >> (8 * i))
+	}
+	return out
 }

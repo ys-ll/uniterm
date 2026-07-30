@@ -29,7 +29,7 @@ func (s *TunnelStore) Save(data session.TunnelStoreData) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath(), bytes, 0600)
+	return atomicWriteFile(s.filePath(), bytes, 0600)
 }
 
 func (s *TunnelStore) Load() (session.TunnelStoreData, error) {

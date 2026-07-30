@@ -17,12 +17,12 @@ import {
 // Global token listener management: only one runAgent instance should receive
 // ai:token events at a time. Registering a new listener automatically cancels
 // the previous one, preventing duplicate streaming into multiple assistant
-// messages when a stop/continue sequence races. F-315: each register call
-// bumps a generation counter; the returned cleanup only clears module state
-// when its generation still matches, so an early-return path that gets
-// superseded by a re-entry (approveTool → runAgent; rejectTool / answer /
-// dismissQuestion setTimeout→runAgent) can't accidentally clobber a newer
-// pair by running its stale cleanup.
+// messages when a stop/continue sequence races. Each register call
+// bumps a generation counter; the returned cleanup only clears module
+// state when its generation still matches, so an early-return path that
+// gets superseded by a re-entry (approveTool → runAgent; rejectTool /
+// answer / dismissQuestion setTimeout→runAgent) can't accidentally
+// clobber a newer pair by running its stale cleanup.
 let activeTokenUnsubscribe: (() => void) | null = null
 let activeAssistantMsg: AIMessage | null = null
 let activeGeneration = 0
@@ -255,11 +255,12 @@ function validateReadSkillFileInput(raw: unknown): ReadSkillFileInput {
   }
 }
 
-// F-312: cap the bytes stored in a tool message so a single tool call can't
-// blow up the conversation computed. The model can still see the beginning
-// and end of long output; the in-between is dropped with a clear marker.
-// 32 KB total, 8 KB head, 16 KB tail — biased to the tail because error
-// messages and final state almost always live at the bottom of terminal output.
+// Cap the bytes stored in a tool message so a single tool call can't
+// blow up the conversation computed. The model can still see the
+// beginning and end of long output; the in-between is dropped with a
+// clear marker. 32 KB total, 8 KB head, 16 KB tail — biased to the tail
+// because error messages and final state almost always live at the
+// bottom of terminal output.
 const TOOL_RESULT_MAX_BYTES = 32 * 1024
 const TOOL_RESULT_HEAD_BYTES = 8 * 1024
 const TOOL_RESULT_TAIL_BYTES = 16 * 1024
@@ -478,12 +479,12 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
   // Track whether streaming already delivered text, to skip onChunk duplication
   let streamedText = ''
 
-  // F-311: buffer SSE tokens into a non-reactive string and flush at rAF
-  // cadence (~16ms / 60Hz) instead of mutating `activeAssistantMsg.content`
-  // per token. Per-token `+=` on a deep-reactive string triggers Vue's dep
-  // graph on every token (100+/s for fast models); one assignment per rAF
-  // caps re-renders at the display refresh rate.
-  let pendingText = ''
+  // Buffer SSE tokens into a non-reactive string and flush at rAF cadence
+// (~16ms / 60Hz) instead of mutating `activeAssistantMsg.content` per
+// token. Per-token `+=` on a deep-reactive string triggers Vue's dep
+// graph on every token (100+/s for fast models); one assignment per rAF
+// caps re-renders at the display refresh rate.
+let pendingText = ''
   let flushRafId: number | null = null
 
   function flushStream() {
@@ -585,8 +586,8 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     try {
       store.status = 'thinking'
       await chat(chatOptions)
-      // F-311: drain any rAF-buffered tokens so the assistant message holds
-      // the full text before we read .content for _rawApiMsg / doSave.
+      // Drain any rAF-buffered tokens so the assistant message holds the
+      // full text before we read .content for _rawApiMsg / doSave.
       if (flushRafId !== null) {
         cancelAnimationFrame(flushRafId)
         flushRafId = null

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -124,5 +125,52 @@ users: [{name: u, user: {token: x}}]
 	defer mu.Unlock()
 	if len(got) == 0 || got[0] != "k8s:watch:"+watchID {
 		t.Errorf("events = %v", got)
+	}
+}
+
+// TestManagerConcurrentConnectDisconnect hammers Connect/Disconnect in
+// parallel and verifies map consistency + no race detector trips
+// (F-010 / DBG-024). Runs against an unreachable cluster so Connect
+// returns an error, exercising only the path that touches m.conns
+// without needing the apiserver to be live.
+func TestManagerConcurrentConnectDisconnect(t *testing.T) {
+	const workers = 32
+	const rounds = 25
+	m := NewManager()
+	m.SetEventEmitter(func(string, any) {})
+
+	var wg sync.WaitGroup
+	var errCount atomic.Int64
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			raw := []byte(fmt.Sprintf(`
+apiVersion: v1
+kind: Config
+current-context: t
+contexts: [{name: t, context: {cluster: c, user: u}}]
+clusters: [{name: c, cluster: {server: "https://127.0.0.1:1"}}]
+users: [{name: u, user: {token: x}}]
+`))
+			for r := 0; r < rounds; r++ {
+				connID, err := m.Connect(context.Background(), raw, "t")
+				if err != nil {
+					errCount.Add(1)
+					continue
+				}
+				// Touch maps under concurrent Disconnect.
+				m.Disconnect(connID)
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	// All conns should be cleaned up.
+	m.mu.Lock()
+	remaining := len(m.conns)
+	m.mu.Unlock()
+	if remaining != 0 {
+		t.Errorf("expected 0 conns, got %d", remaining)
 	}
 }

@@ -46,6 +46,7 @@ func (s *SerialSession) Connect(config ConnectionConfig) error {
 	}
 	s.setStatus(StatusConnecting)
 	s.title = fmt.Sprintf("%s@%d", s.config.PortName, s.config.BaudRate)
+	s.LogConnect(s.config.PortName, s.config.BaudRate)
 
 	mode := &serial.Mode{
 		BaudRate: s.config.BaudRate,
@@ -57,6 +58,7 @@ func (s *SerialSession) Connect(config ConnectionConfig) error {
 	port, err := serial.Open(s.config.PortName, mode)
 	if err != nil {
 		s.setStatus(StatusError)
+		s.LogError("serial-open", err)
 		return fmt.Errorf("serial open %s: %w", s.config.PortName, err)
 	}
 	// s.port is assigned once before readLoop starts. Write() is safe to call
@@ -155,6 +157,7 @@ func (s *SerialSession) Write(data []byte) error {
 
 func (s *SerialSession) Disconnect() error {
 	s.quitOnce.Do(func() {
+		s.LogDisconnect("user")
 		close(s.quit)
 		if s.port != nil {
 			s.port.Close()

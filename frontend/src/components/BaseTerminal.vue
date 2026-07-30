@@ -6,10 +6,14 @@
     @dragleave="onDragLeave"
     @drop="onDragDrop"
   >
-    <div ref="terminalRef" class="terminal-area" @contextmenu="menu.onContextMenu"></div>
+    <div
+      ref="terminalRef"
+      class="terminal-area"
+      @contextmenu="menu.onContextMenu"
+    ></div>
 
     <div v-if="dragOver" class="drop-overlay">
-      <span>{{ t('sftp.dropHere') }}</span>
+      <span>{{ t("sftp.dropHere") }}</span>
     </div>
 
     <!-- Search bar -->
@@ -23,14 +27,28 @@
         @keydown.enter.prevent="onSearchNext"
         @keydown.escape="closeSearch"
       />
-      <span class="search-count" v-if="searchText">{{ searchResultIndex + 1 }}/{{ searchResultCount || 0 }}</span>
-      <button class="search-btn" @click="onSearchPrev" :title="t('terminal.searchPrev')">
+      <span class="search-count" v-if="searchText"
+        >{{ searchResultIndex + 1 }}/{{ searchResultCount || 0 }}</span
+      >
+      <button
+        class="search-btn"
+        @click="onSearchPrev"
+        :title="t('terminal.searchPrev')"
+      >
         <ChevronUp :size="14" />
       </button>
-      <button class="search-btn" @click="onSearchNext" :title="t('terminal.searchNext')">
+      <button
+        class="search-btn"
+        @click="onSearchNext"
+        :title="t('terminal.searchNext')"
+      >
         <ChevronDown :size="14" />
       </button>
-      <button class="search-btn" @click="closeSearch" :title="t('terminal.searchClose')">
+      <button
+        class="search-btn"
+        @click="closeSearch"
+        :title="t('terminal.searchClose')"
+      >
         <X :size="14" />
       </button>
     </div>
@@ -42,17 +60,39 @@
       :style="menu.menuStyle.value"
       @click.stop
     >
-      <div class="menu-item" :class="{ disabled: !menu.hasSelection.value }" @click="menu.askAI">
-        {{ t('terminal.askAI') }}
+      <div
+        class="menu-item"
+        :class="{ disabled: !menu.hasSelection.value }"
+        @click="menu.askAI"
+      >
+        {{ t("terminal.askAI") }}
       </div>
-      <div class="menu-item" :class="{ disabled: !menu.hasSelection.value }" @click="menu.copySelection">
-        {{ t('terminal.copy') }}
+      <div
+        class="menu-item"
+        :class="{ disabled: !menu.hasSelection.value }"
+        @click="menu.copySelection"
+      >
+        {{ t("terminal.copy") }}
       </div>
-      <div class="menu-item" :class="{ disabled: !menu.hasSelection.value }" @click="menu.copyAndPaste">
-        {{ t('terminal.copyAndPaste') }}
+      <div
+        class="menu-item"
+        :class="{ disabled: !menu.hasSelection.value }"
+        @click="menu.copyAndPaste"
+      >
+        {{ t("terminal.copyAndPaste") }}
       </div>
-      <div class="menu-item" @click="menu.pasteFromClipboard">{{ t('terminal.paste') }}</div>
-      <div class="menu-item" @click="menu.closeMenu(); exportContent()">{{ t('terminal.export') }}</div>
+      <div class="menu-item" @click="menu.pasteFromClipboard">
+        {{ t("terminal.paste") }}
+      </div>
+      <div
+        class="menu-item"
+        @click="
+          menu.closeMenu();
+          exportContent();
+        "
+      >
+        {{ t("terminal.export") }}
+      </div>
     </div>
 
     <!-- Terminal suggestions popup -->
@@ -62,33 +102,60 @@
       :selected-index="suggestions.state.value.selectedIndex"
       :cursor-x="terminalInput?.cursorPixelPos.value.x ?? 0"
       :cursor-y="terminalInput?.cursorPixelPos.value.y ?? 0"
-      @select="(idx: number) => applySuggestion(suggestions.state.value.items[idx])"
-      @hover="(idx: number) => suggestions.state.value.selectedIndex = idx"
+      @select="
+        (idx: number) => applySuggestion(suggestions.state.value.items[idx])
+      "
+      @hover="(idx: number) => (suggestions.state.value.selectedIndex = idx)"
       @remove="(id: string) => suggestions.removeHistoryCommandById(id)"
     />
 
     <!-- Zmodem transfer panel -->
-    <ZmodemTransfer :session-id="props.sessionId || ''" @cancel="onZmodemCancel" />
+    <ZmodemTransfer
+      :session-id="props.sessionId || ''"
+      @cancel="onZmodemCancel"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, onUnmounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
-import type { Terminal } from '@xterm/xterm'
-import { WebLinksAddon } from '@xterm/addon-web-links'
-import '@xterm/xterm/css/xterm.css'
-import { SessionWrite, SessionResize, SessionEndZmodem } from '../../wailsjs/go/main/App'
-import { WriteFileBase64, SaveFileDialog, FrontendLog, WriteTempFile } from '../../wailsjs/go/main/App'
-import { EventsOn, BrowserOpenURL, ClipboardGetText } from '../../wailsjs/runtime'
-import { useSettingsStore } from '../stores/settingsStore'
-import { useLocalStateStore } from '../stores/localStateStore'
-import { highlight } from '../composables/useHighlight'
-import { onTerminalKey } from '../composables/useKeyboardShortcuts'
-import { useSessionStore } from '../stores/sessionStore'
-import { useTabStore } from '../stores/tabStore'
-import { usePanelStore } from '../stores/panelStore'
-import { useTerminalMenu } from '../composables/useTerminalMenu'
-import { useI18n } from '../i18n'
+import {
+  ref,
+  onMounted,
+  onBeforeUnmount,
+  onUnmounted,
+  onActivated,
+  onDeactivated,
+  watch,
+  nextTick,
+} from "vue";
+import type { Terminal } from "@xterm/xterm";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import "@xterm/xterm/css/xterm.css";
+import {
+  SessionWrite,
+  SessionResize,
+  SessionEndZmodem,
+} from "../../wailsjs/go/main/App";
+import {
+  WriteFileBase64,
+  SaveFileDialog,
+  FrontendLog,
+  WriteTempFile,
+} from "../../wailsjs/go/main/App";
+import {
+  EventsOn,
+  BrowserOpenURL,
+  ClipboardGetText,
+} from "../../wailsjs/runtime";
+import { useSettingsStore } from "../stores/settingsStore";
+import { useLocalStateStore } from "../stores/localStateStore";
+import { highlight } from "../composables/useHighlight";
+import { onTerminalKey } from "../composables/useKeyboardShortcuts";
+import { useSessionStore } from "../stores/sessionStore";
+import { useTabStore } from "../stores/tabStore";
+import { usePanelStore } from "../stores/panelStore";
+import { useTerminalMenu } from "../composables/useTerminalMenu";
+import { useI18n } from "../i18n";
 import {
   acquireTerminal,
   releaseTerminal,
@@ -97,72 +164,74 @@ import {
   getManagedTerminal,
   transferTerminal,
   bumpOnDataGeneration,
-} from '../services/terminalManager'
-import { getXtermTheme } from '../composables/useTerminal'
-import { resolveXtermBackground } from '../composables/useTerminalTheme'
-import { decideWheelAction } from '../composables/useTerminal.wheel'
-import { stripCursorBlink } from '../utils/cursor'
-import { useTerminalInput } from '../composables/useTerminalInput'
-import { useSuggestions, quickCommandCache } from '../composables/useSuggestions'
-import TerminalSuggestion from './TerminalSuggestion.vue'
-import { startZmodemService } from '../services/zmodemService'
-import { useZmodemStore } from '../stores/zmodemStore'
-import ZmodemTransfer from './ZmodemTransfer.vue'
-import { ChevronUp, ChevronDown, X } from '@lucide/vue'
+} from "../services/terminalManager";
+import { getXtermTheme } from "../composables/useTerminal";
+import { resolveXtermBackground } from "../composables/useTerminalTheme";
+import { stripCursorBlink } from "../utils/cursor";
+import { useTerminalInput } from "../composables/useTerminalInput";
+import {
+  useSuggestions,
+  quickCommandCache,
+} from "../composables/useSuggestions";
+import TerminalSuggestion from "./TerminalSuggestion.vue";
+import { startZmodemService } from "../services/zmodemService";
+import { useZmodemStore } from "../stores/zmodemStore";
+import ZmodemTransfer from "./ZmodemTransfer.vue";
+import { ChevronUp, ChevronDown, X } from "@lucide/vue";
 
 const props = defineProps<{
-  mode: 'ssh' | 'sftp' | 'local'
-  sessionId: string | null | undefined
-  onSessionStatus?: (status: string) => void
-  broadcastActive?: boolean
-  workspaceId?: string
-  panelId?: string
-}>()
+  mode: "ssh" | "sftp" | "local";
+  sessionId: string | null | undefined;
+  onSessionStatus?: (status: string) => void;
+  broadcastActive?: boolean;
+  workspaceId?: string;
+  panelId?: string;
+}>();
 
-const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
+const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
 
-const settingsStore = useSettingsStore()
-const sessionStore = useSessionStore()
-const tabStore = useTabStore()
-const panelStore = usePanelStore()
-const zmodemStore = useZmodemStore()
-const localStateStore = useLocalStateStore()
-const { t } = useI18n()
+const settingsStore = useSettingsStore();
+const sessionStore = useSessionStore();
+const tabStore = useTabStore();
+const panelStore = usePanelStore();
+const zmodemStore = useZmodemStore();
+const localStateStore = useLocalStateStore();
+const { t } = useI18n();
 
 // Prevent deactivated (KeepAlive-cached) components from processing
 // terminal events. Only the active component should handle input/output.
-const isActive = ref(true)
+const isActive = ref(true);
 
 // Unique ref per BaseTerminal instance, so each instance independently
 // contributes to the TerminalManager ref count. Without this, two instances
 // rendering the same panel (e.g. KeepAlive'd tab + workspace panel) share
 // the same panelId ref, and one release drops the count to zero.
-const terminalInstanceRef = crypto.randomUUID?.() ||
-  Math.random().toString(36).slice(2, 10) +
-  Date.now().toString(36)
+const terminalInstanceRef =
+  crypto.randomUUID?.() ||
+  Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
-const terminalRef = ref<HTMLDivElement>()
-const searchInputRef = ref<HTMLInputElement>()
-const searchVisible = ref(false)
+const terminalRef = ref<HTMLDivElement>();
+const searchInputRef = ref<HTMLInputElement>();
+const searchVisible = ref(false);
 
-const dragOver = ref(false)
-let dragEnterCount = 0
+const dragOver = ref(false);
+let dragEnterCount = 0;
 
-const suggestions = useSuggestions()
-let terminalInput: ReturnType<typeof useTerminalInput> | null = null
-let terminal: Terminal | null = null
-let onDataDispose: { dispose(): void } | null = null
-let keyHandlerDispose: { dispose(): void } | null = null
+const suggestions = useSuggestions();
+let terminalInput: ReturnType<typeof useTerminalInput> | null = null;
+let terminal: Terminal | null = null;
+let onDataDispose: { dispose(): void } | null = null;
+let keyHandlerDispose: { dispose(): void } | null = null;
 // webLinksAddon is per-component (has component-scoped callbacks). xterm's
 // Terminal.dispose() does not cascade to addons loaded via loadAddon, so
 // we must dispose it explicitly in onUnmounted or its link-provider event
 // listeners stay bound to a disposed terminal.
-let webLinksAddonDispose: { dispose(): void } | null = null
-let resizeObserver: ResizeObserver | null = null
-let intersectionObserver: IntersectionObserver | null = null
+let webLinksAddonDispose: { dispose(): void } | null = null;
+let resizeObserver: ResizeObserver | null = null;
+let intersectionObserver: IntersectionObserver | null = null;
 // Track how many sessionStore chunks have been written to the terminal
 // so we can replay only missed data on KeepAlive reactivation.
-let writtenChunks = 0
+let writtenChunks = 0;
 // Viewport position (top line in the buffer) captured on KeepAlive
 // deactivation so reactivation can restore the user's scroll position
 // instead of jumping to the bottom. baseY at deactivation is also kept so
@@ -170,63 +239,63 @@ let writtenChunks = 0
 // deactivation — if they were, new output during the inactive period
 // (replayed on activation) should pull the viewport down to the new
 // bottom; otherwise the viewport stays where the user left it.
-let savedViewportY: number | null = null
-let savedBaseY: number | null = null
+let savedViewportY: number | null = null;
+let savedBaseY: number | null = null;
 // Original scrollback saved before shrinking the buffer on KeepAlive
 // deactivation; restored on activation so the user sees their history.
-let savedScrollback: number | null = null
-const INACTIVE_SCROLLBACK = 500
-let unsubscribe: (() => void) | null = null
-let statusUnsubscribe: (() => void) | null = null
-let onDocumentMouseDown: ((e: MouseEvent) => void) | null = null
-let onTerminalAuxClick: ((e: MouseEvent) => void) | null = null
-let onOpenSearch: ((e: Event) => void) | null = null
-let onExport: ((e: Event) => void) | null = null
-let onSendRz: ((e: Event) => void) | null = null
+let savedScrollback: number | null = null;
+const INACTIVE_SCROLLBACK = 500;
+let unsubscribe: (() => void) | null = null;
+let statusUnsubscribe: (() => void) | null = null;
+let onDocumentMouseDown: ((e: MouseEvent) => void) | null = null;
+let onTerminalAuxClick: ((e: MouseEvent) => void) | null = null;
+let onOpenSearch: ((e: Event) => void) | null = null;
+let onExport: ((e: Event) => void) | null = null;
+let onSendRz: ((e: Event) => void) | null = null;
 
-let resizeTimer: ReturnType<typeof setTimeout> | null = null
-let isResizing = false
-let splitResizing = false
-let suppressResizeUntil = 0
-let retryOnEnter = false
-let zmodemService: ReturnType<typeof startZmodemService> | null = null
-let isZmodemStarting = false
-let zmodemStartTimer: ReturnType<typeof setTimeout> | null = null
-let zmodemDirection: 'upload' | 'download' | undefined = undefined
-let zmodemCancellingUntil = 0
-let exporting = false
-// F-032: rAF coalescer state. Per-instance (see comment above for why).
-let pendingDataChunks: string[] = []
-let pendingFlushRAF: number | null = null
+let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+let isResizing = false;
+let splitResizing = false;
+let suppressResizeUntil = 0;
+let retryOnEnter = false;
+let zmodemService: ReturnType<typeof startZmodemService> | null = null;
+let isZmodemStarting = false;
+let zmodemStartTimer: ReturnType<typeof setTimeout> | null = null;
+let zmodemDirection: "upload" | "download" | undefined = undefined;
+let zmodemCancellingUntil = 0;
+let exporting = false;
+// rAF coalescer state. Per-instance (see comment above for why).
+let pendingDataChunks: string[] = [];
+let pendingFlushRAF: number | null = null;
 
-// F-030: hot-path regex literals hoisted to module scope. Inline `/re/g`
+// Hot-path regex literals hoisted to module scope. Inline `/re/g`
 // creates a fresh RegExp object on every entry of the session:data
 // callback, which fires on every chunk the Go backend emits (50+/sec
 // during Claude Code streaming). At module scope the engine reuses the
 // compiled automaton once per page load.
-const ZMODEM_HEX_RE = /\*{2,}\x18[ABC][0-9a-fA-F]{10,}/
-const ED3_RE = /\x1b\[3J/g
-const ED2_COMBINED_RE = /\x1b\[H\x1b\[2J/g
-const ED2_RE = /\x1b\[2J/g
-const FFFD_RE = new RegExp('�', 'g')
-const SFTP_OSC633_RE = /\x1b\]633;S[^\x07]*\x07/g
+const ZMODEM_HEX_RE = /\*{2,}\x18[ABC][0-9a-fA-F]{10,}/;
+const ED3_RE = /\x1b\[3J/g;
+const ED2_COMBINED_RE = /\x1b\[H\x1b\[2J/g;
+const ED2_RE = /\x1b\[2J/g;
+const FFFD_RE = new RegExp("�", "g");
+const SFTP_OSC633_RE = /\x1b\]633;S[^\x07]*\x07/g;
 
-// F-032: rAF coalescer for the session:data -> terminal.write pipeline.
-// Up to ~50 chunks/sec hit this callback during Claude Code streaming;
-// each one ran the 5-pass regex chain (F-030) plus highlight() (10 regex
-// patterns) synchronously, blocking the main thread. We accumulate raw
-// chunks and run the pipeline once per frame. Zmodem detection (which
-// has async handoff) and isActive gating stay synchronous.
+// rAF coalescer for the session:data -> terminal.write pipeline. Up to
+// ~50 chunks/sec hit this callback during Claude Code streaming; each
+// one ran the 5-pass regex chain plus highlight() (10 regex patterns)
+// synchronously, blocking the main thread. We accumulate raw chunks and
+// run the pipeline once per frame. Zmodem detection (which has async
+// handoff) and isActive gating stay synchronous.
 //
 // The pending buffer is instance-scoped: two BaseTerminal instances
 // backing two panels must not coalesce into a shared queue.
 
 function initZmodemService(sessionId: string) {
-  if (!sessionId || props.mode !== 'ssh') return
+  if (!sessionId || props.mode !== "ssh") return;
   // Don't create a duplicate zmodem service if a transfer is already
   // active for this session. The existing service (in a deactivated
   // BaseTerminal) continues to handle the transfer.
-  if (zmodemStore.getActiveTransfer(sessionId)) return
+  if (zmodemStore.getActiveTransfer(sessionId)) return;
   zmodemService = startZmodemService({
     // Register abort so any BaseTerminal component can cancel the transfer
     onRegister: (abort) => zmodemStore.registerAbort(sessionId, abort),
@@ -234,90 +303,102 @@ function initZmodemService(sessionId: string) {
     direction: zmodemDirection,
     onComplete: (files, hint) => {
       if (files.length > 0) {
-        terminal?.write(`\r\n\x1b[32mZmodem: ${files.length} file(s) transferred\x1b[0m\r\n`)
+        terminal?.write(
+          `\r\n\x1b[32mZmodem: ${files.length} file(s) transferred\x1b[0m\r\n`,
+        );
       }
       if (hint) {
-        terminal?.write(`\r\n\x1b[33m${hint}\x1b[0m\r\n`)
+        terminal?.write(`\r\n\x1b[33m${hint}\x1b[0m\r\n`);
       }
       if (files.length === 0 && !hint) {
         // 取消或未选择文件：打印提示
-        terminal?.write(`\r\n\x1b[33mZmodem transfer cancelled\x1b[0m\r\n`)
+        terminal?.write(`\r\n\x1b[33mZmodem transfer cancelled\x1b[0m\r\n`);
         // 等吞数据保护过期后再发送一次回车，确保 sz 已退出、bash 恢复前台后触发提示符
-        const cancelUntil = Math.max(zmodemCancellingUntil, zmodemStore.getCancelUntil(sessionId))
-        const remaining = Math.max(0, cancelUntil - Date.now())
+        const cancelUntil = Math.max(
+          zmodemCancellingUntil,
+          zmodemStore.getCancelUntil(sessionId),
+        );
+        const remaining = Math.max(0, cancelUntil - Date.now());
         setTimeout(() => {
-          SessionWrite(sessionId, '\n').catch(() => {})
-        }, remaining + 100)
+          SessionWrite(sessionId, "\n").catch(() => {});
+        }, remaining + 100);
       }
-      zmodemStore.clearTransfers(sessionId)
-      zmodemDirection = undefined
-      disposeZmodemService(sessionId)
-      initZmodemService(sessionId)
+      zmodemStore.clearTransfers(sessionId);
+      zmodemDirection = undefined;
+      disposeZmodemService(sessionId);
+      initZmodemService(sessionId);
     },
     onError: (err) => {
-      terminal?.write(`\r\n\x1b[31mZmodem error: ${err}\x1b[0m\r\n`)
-      zmodemStore.clearTransfers(sessionId)
-      zmodemDirection = undefined
-      disposeZmodemService(sessionId)
-      initZmodemService(sessionId)
+      terminal?.write(`\r\n\x1b[31mZmodem error: ${err}\x1b[0m\r\n`);
+      zmodemStore.clearTransfers(sessionId);
+      zmodemDirection = undefined;
+      disposeZmodemService(sessionId);
+      initZmodemService(sessionId);
     },
-  })
+  });
 }
 
-async function disposeZmodemService(sessionId: string, resetDirection = true, endSession = true) {
-  zmodemService?.dispose()
-  zmodemService = null
-  isZmodemStarting = false
+async function disposeZmodemService(
+  sessionId: string,
+  resetDirection = true,
+  endSession = true,
+) {
+  zmodemService?.dispose();
+  zmodemService = null;
+  isZmodemStarting = false;
   if (resetDirection) {
-    zmodemDirection = undefined
+    zmodemDirection = undefined;
   }
   if (zmodemStartTimer) {
-    clearTimeout(zmodemStartTimer)
-    zmodemStartTimer = null
+    clearTimeout(zmodemStartTimer);
+    zmodemStartTimer = null;
   }
   if (sessionId && endSession) {
-    await SessionEndZmodem(sessionId).catch(() => {})
+    await SessionEndZmodem(sessionId).catch(() => {});
   }
 }
 
 // Native file drop handler (Wails provides real file paths via the OS,
 // bypassing WebView2's File.path limitation).
-let fileDropRegistered = false
+let fileDropRegistered = false;
 
 function onDragOver(e: DragEvent) {
-  if (!e.dataTransfer?.types.includes('Files')) return
-  e.stopPropagation()
-  e.dataTransfer.dropEffect = 'copy'
-  dragOver.value = true
+  if (!e.dataTransfer?.types.includes("Files")) return;
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = "copy";
+  dragOver.value = true;
 }
 
 function onDragEnter(e: DragEvent) {
-  if (!e.dataTransfer?.types.includes('Files')) return
-  e.stopPropagation()
-  dragEnterCount++
-  dragOver.value = true
+  if (!e.dataTransfer?.types.includes("Files")) return;
+  e.stopPropagation();
+  dragEnterCount++;
+  dragOver.value = true;
 }
 
 function onDragLeave() {
-  dragEnterCount--
+  dragEnterCount--;
   if (dragEnterCount <= 0) {
-    dragEnterCount = 0
-    dragOver.value = false
+    dragEnterCount = 0;
+    dragOver.value = false;
   }
 }
 
 function onDragDrop(e: DragEvent) {
-  dragOver.value = false
-  dragEnterCount = 0
-  const files = e.dataTransfer?.files
-  if (!files || files.length === 0 || !props.sessionId) return
+  dragOver.value = false;
+  dragEnterCount = 0;
+  const files = e.dataTransfer?.files;
+  if (!files || files.length === 0 || !props.sessionId) return;
 
   // Reject internal panel/tab drags — let them bubble to workspace handlers
-  if (e.dataTransfer?.types.includes('application/panel-id') ||
-      e.dataTransfer?.types.includes('application/tab-id')) return
+  if (
+    e.dataTransfer?.types.includes("application/panel-id") ||
+    e.dataTransfer?.types.includes("application/tab-id")
+  )
+    return;
 
-  e.preventDefault()
-  handleDroppedFiles(props.sessionId, Array.from(files))
+  e.preventDefault();
+  handleDroppedFiles(props.sessionId, Array.from(files));
 }
 
 // Convert a Windows native path to the format expected by the active shell.
@@ -325,182 +406,218 @@ function onDragDrop(e: DragEvent) {
 // - Git Bash / MSYS2 / Cygwin / MinGW: /c/foo/bar
 // - WSL: /mnt/c/foo/bar
 function toShellPath(nativePath: string, shellPath?: string): string {
-  const isWinPath = /^[A-Za-z]:\\/.test(nativePath)
-  if (!isWinPath) return nativePath.replace(/\\/g, '/')
+  const isWinPath = /^[A-Za-z]:\\/.test(nativePath);
+  if (!isWinPath) return nativePath.replace(/\\/g, "/");
 
-  const lower = (shellPath || '').toLowerCase()
-  let converted: string
-  if (lower.includes('wsl')) {
-    const drive = nativePath.charAt(0).toLowerCase()
-    converted = '/mnt/' + drive + nativePath.slice(2).replace(/\\/g, '/')
-  } else if (lower.includes('bash') || lower.includes('git') || lower.includes('msys') || lower.includes('cygwin') || lower.includes('mingw')) {
-    const drive = nativePath.charAt(0).toLowerCase()
-    converted = '/' + drive + nativePath.slice(2).replace(/\\/g, '/')
+  const lower = (shellPath || "").toLowerCase();
+  let converted: string;
+  if (lower.includes("wsl")) {
+    const drive = nativePath.charAt(0).toLowerCase();
+    converted = "/mnt/" + drive + nativePath.slice(2).replace(/\\/g, "/");
+  } else if (
+    lower.includes("bash") ||
+    lower.includes("git") ||
+    lower.includes("msys") ||
+    lower.includes("cygwin") ||
+    lower.includes("mingw")
+  ) {
+    const drive = nativePath.charAt(0).toLowerCase();
+    converted = "/" + drive + nativePath.slice(2).replace(/\\/g, "/");
   } else {
-    converted = nativePath
+    converted = nativePath;
   }
   // Quote paths with spaces so the shell treats them as a single argument
-  return converted.includes(' ') ? `"${converted}"` : converted
+  return converted.includes(" ") ? `"${converted}"` : converted;
 }
 
 async function handleDroppedFiles(sessionId: string, files: File[]) {
-  const paths: string[] = []
+  const paths: string[] = [];
   for (const f of files) {
-    const nativePath = (f as any).path as string | undefined
+    const nativePath = (f as any).path as string | undefined;
     if (nativePath) {
-      paths.push(nativePath)
+      paths.push(nativePath);
     } else {
       try {
         const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onload = () => resolve((reader.result as string).split(',')[1])
-          reader.onerror = () => reject(reader.error)
-          reader.readAsDataURL(f)
-        })
-        paths.push(await WriteTempFile(f.name, base64))
+          const reader = new FileReader();
+          reader.onload = () =>
+            resolve((reader.result as string).split(",")[1]);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(f);
+        });
+        paths.push(await WriteTempFile(f.name, base64));
       } catch (err) {
-        terminal?.write(`\r\n\x1b[33mFailed to read "${f.name}": ${err}\x1b[0m\r\n`)
+        terminal?.write(
+          `\r\n\x1b[33mFailed to read "${f.name}": ${err}\x1b[0m\r\n`,
+        );
       }
     }
   }
-  if (paths.length === 0) return
+  if (paths.length === 0) return;
 
   // Local terminal: paste file paths as input, adapting format to the shell
-  if (props.mode === 'local') {
-    const panel = panelStore.getPanel(props.panelId || '')
-    const shellPath = panel?.config?.shellPath
-    const text = paths.map(p => toShellPath(p, shellPath)).join(' ')
-    SessionWrite(sessionId, text)
-    return
+  if (props.mode === "local") {
+    const panel = panelStore.getPanel(props.panelId || "");
+    const shellPath = panel?.config?.shellPath;
+    const text = paths.map((p) => toShellPath(p, shellPath)).join(" ");
+    SessionWrite(sessionId, text);
+    return;
   }
 
   // Remote terminal: trigger zmodem upload
-  zmodemStore.setPendingUploadFiles(sessionId, paths)
-  SessionWrite(sessionId, 'rz -be\n')
+  zmodemStore.setPendingUploadFiles(sessionId, paths);
+  SessionWrite(sessionId, "rz -be\n");
 }
 
 function onZmodemCancel() {
-  const ts = Date.now() + 2000
-  zmodemCancellingUntil = ts
+  const ts = Date.now() + 2000;
+  zmodemCancellingUntil = ts;
   if (props.sessionId) {
-    zmodemStore.setCancelUntil(props.sessionId, ts)
-    zmodemStore.abortTransfer(props.sessionId)
+    zmodemStore.setCancelUntil(props.sessionId, ts);
+    zmodemStore.abortTransfer(props.sessionId);
   }
 }
 
 // Search state
-const searchText = ref('')
-const searchResultIndex = ref(0)
-const searchResultCount = ref(0)
+const searchText = ref("");
+const searchResultIndex = ref(0);
+const searchResultCount = ref(0);
 
-// F-029: single alternation regex for the 6 "drop this garbage" passes +
+// Single alternation regex for the 6 "drop this garbage" passes plus
 // the \n{3,}→\n\n collapse. Six sequential `.replace()` calls each
-// allocated a fresh copy of the (large) scrollback string; the regex engine
-// walked the full buffer six times. One global scan with a callback that
-// dispatches on whether the match starts with \n keeps correctness while
-// dropping ~7× the work. Finding: console-perf F-029, ~10 ms on 100 KB.
+// allocated a fresh copy of the (large) scrollback string; the regex
+// engine walked the full buffer six times. One global scan with a
+// callback that dispatches on whether the match starts with \n keeps
+// correctness while dropping ~7× the work. ~10 ms on 100 KB.
 const SANITIZE_STRIP_RE =
-  /\*{2,}(?:\x18)?[ABC][0-9a-fA-F]{10,}|\x18+|\x08+|[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]|\uFFFD|[^\x00-\x7f一-鿿぀-ゟ゠-ヿ가-힯─-╿▀-▟←-⇿∀-⋿⟀-⟯⠀-⣿⬀-⯿]|\n{3,}/g
+  /\*{2,}(?:\x18)?[ABC][0-9a-fA-F]{10,}|\x18+|\x08+|[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]|\uFFFD|[^\x09\x0a\x0d\x1b\p{L}\p{N}\p{P}\p{S}\p{Z}\p{M}]|\n{3,}/gu;
 
 function sanitizeTerminalHistory(text: string): string {
-  if (!text) return text
+  if (!text) return text;
   // Single-pass strip: ZModem hex headers, ZDLE runs, backspaces, ASCII
-  // control chars (except \n\r\t\ESC), U+FFFD, binary garbage outside the
-  // kept Unicode blocks, and 3+ blank lines collapsed to \n\n. The blank-
-  // line collapse shares the scan; the callback emits '\n\n' only when the
+  // control chars (except \n\r\t\ESC), U+FFFD, unassigned / surrogate
+  // code points, and 3+ blank lines collapsed to \n\n. The blank-line
+  // collapse shares the scan; the callback emits '\n\n' only when the
   // match is a run of newlines.
+  //
+  // Claude Code (Ink-based) emits glyphs like ● ⏺ ⏵ ⌘ ⌥ ⌫ ↵ ⏎ ✓ ✗ ■ □
+  // ▶ ◆ ★ which the previous hand-rolled allow-list silently stripped
+  // during history restore — Claude Code's table borders / spinner /
+  // keyboard hints vanished, leaving gaps that the user saw as
+  // "weird ?s". Switched to Unicode property classes so every printable
+  // Letter / Number / Punctuation / Symbol / Separator / Mark passes
+  // through (CJK Extension A, full-width Latin, half-width Katakana,
+  // Misc Symbols, etc.).
   const cleaned = text.replace(SANITIZE_STRIP_RE, (m) =>
-    m.charCodeAt(0) === 0x0a ? '\n\n' : ''
-  )
+    m.charCodeAt(0) === 0x0a ? "\n\n" : "",
+  );
   // Forward debug info to backend log so we can inspect the raw garbage.
   if (cleaned !== text) {
-    FrontendLog('INFO', 'sanitizeTerminalHistory', `raw last 400: ${JSON.stringify(text.slice(-400))}`, '')
-    FrontendLog('INFO', 'sanitizeTerminalHistory', `cleaned last 400: ${JSON.stringify(cleaned.slice(-400))}`, '')
+    FrontendLog(
+      "sanitizeTerminalHistory",
+      `raw last 400: ${JSON.stringify(text.slice(-400))}`,
+    );
+    FrontendLog(
+      "sanitizeTerminalHistory",
+      `cleaned last 400: ${JSON.stringify(cleaned.slice(-400))}`,
+    );
   }
-  return cleaned
+  return cleaned;
 }
 
 // SFTP line buffer
-let inputBuffer = ''
+let inputBuffer = "";
 
 function getTerminalOptions() {
-  const ts = settingsStore.settings.terminal
+  const ts = settingsStore.settings.terminal;
   return {
     fontSize: ts.fontSize || 13,
     fontFamily: ts.fontFamily || 'Consolas, "Courier New", monospace',
-    themeName: ts.theme || 'dark',
+    themeName: ts.theme || "dark",
     scrollback: ts.maxHistoryLines || 2500,
-  }
+  };
 }
 
 function getFitAddon() {
-  return props.sessionId ? getManagedTerminal(props.sessionId)?.fitAddon : undefined
+  return props.sessionId
+    ? getManagedTerminal(props.sessionId)?.fitAddon
+    : undefined;
 }
 
 function getSearchAddon() {
-  return props.sessionId ? getManagedTerminal(props.sessionId)?.searchAddon : undefined
+  return props.sessionId
+    ? getManagedTerminal(props.sessionId)?.searchAddon
+    : undefined;
 }
 
 function getSelection(): string {
-  return terminal?.getSelection() || ''
+  return terminal?.getSelection() || "";
 }
 
-async function applySuggestion(item: ReturnType<typeof suggestions.getSelectedItem>) {
-  if (!item || !terminal || !terminalInput) return
+async function applySuggestion(
+  item: ReturnType<typeof suggestions.getSelectedItem>,
+) {
+  if (!item || !terminal || !terminalInput) return;
 
-  if (item.type === 'ai-preview') {
+  if (item.type === "ai-preview") {
     // Step 1: Generate AI suggestion
-    await suggestions.generateAISuggestion(terminalInput.lineBuffer.value)
-    return
+    await suggestions.generateAISuggestion(terminalInput.lineBuffer.value);
+    return;
   }
 
-  const sid = props.sessionId
+  const sid = props.sessionId;
 
-  if (item.type === 'ai-result' || item.type === 'history' || item.type === 'quick-command') {
+  if (
+    item.type === "ai-result" ||
+    item.type === "history" ||
+    item.type === "quick-command"
+  ) {
     // Replace entire line with Ctrl+U. Using backspaces only works when the
     // replacement is exactly the currentToken; for multi-token input (e.g.
     // "git che" → "git checkout") backspaces leave the earlier text behind.
     if (props.broadcastActive && props.workspaceId) {
-      const targets = tabStore.getBroadcastPanelIdsInWorkspace(props.workspaceId)
+      const targets = tabStore.getBroadcastPanelIdsInWorkspace(
+        props.workspaceId,
+      );
       for (const pid of targets) {
-        const p = panelStore.getPanel(pid)
-        if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
-          SessionWrite(p.sessionId, '\x15')
-          SessionWrite(p.sessionId, item.value)
+        const p = panelStore.getPanel(pid);
+        if (p?.sessionId && (p.type === "ssh" || p.type === "local")) {
+          SessionWrite(p.sessionId, "\x15");
+          SessionWrite(p.sessionId, item.value);
         }
       }
     } else if (sid) {
-      SessionWrite(sid, '\x15')
-      SessionWrite(sid, item.value)
+      SessionWrite(sid, "\x15");
+      SessionWrite(sid, item.value);
     }
-    terminalInput.lineBuffer.value = item.value
-    terminalInput.cursorIndex.value = item.value.length
-    terminalInput.currentToken.value = ''
+    terminalInput.lineBuffer.value = item.value;
+    terminalInput.cursorIndex.value = item.value.length;
+    terminalInput.currentToken.value = "";
   }
 
-  suggestions.close()
+  suggestions.close();
 }
 
 function resize() {
-  if (props.mode === 'ssh' || props.mode === 'local') {
-    const sid = props.sessionId
-    if (!terminal || !sid) return
-    const fitAddon = getFitAddon()
-    if (!fitAddon) return
-    const el = terminalRef.value
-    if (!el) return
+  if (props.mode === "ssh" || props.mode === "local") {
+    const sid = props.sessionId;
+    if (!terminal || !sid) return;
+    const fitAddon = getFitAddon();
+    if (!fitAddon) return;
+    const el = terminalRef.value;
+    if (!el) return;
 
-    const rect = el.getBoundingClientRect()
+    const rect = el.getBoundingClientRect();
     // Skip resize when the component is hidden (e.g. during tab switching
     // with KeepAlive). A zero-size resize would corrupt xterm.js buffers.
-    if (rect.width === 0 || rect.height === 0) return
+    if (rect.width === 0 || rect.height === 0) return;
 
     // Always fit first to update CSS dimensions on the .xterm element.
     // Without this, stale inline pixel dimensions from a previous fit()
     // prevent the terminal from filling the container after window resize
     // (e.g. after duplicating a session tab).
-    fitAddon.fit()
-    if (terminal.cols <= 0 || terminal.rows <= 0) return
+    fitAddon.fit();
+    if (terminal.cols <= 0 || terminal.rows <= 0) return;
 
     // Trust terminal.cols/rows set by fitAddon.fit() — xterm's internal
     // measure already accounts for the scrollbar gutter. The previous
@@ -508,335 +625,377 @@ function resize() {
     // cellWidth) recomputation double-subtracted the gutter and produced
     // an off-by-one column on every Claude Code table border, causing the
     // whole rendered table to drift half a cell.
-    terminal.resize(terminal.cols, terminal.rows)
-    SessionResize(sid, terminal.cols, terminal.rows).catch(() => {})
+    terminal.resize(terminal.cols, terminal.rows);
+    SessionResize(sid, terminal.cols, terminal.rows).catch(() => {});
   } else {
-    getFitAddon()?.fit()
+    getFitAddon()?.fit();
   }
 }
 
 function write(data: string) {
-  terminal?.write(data)
+  terminal?.write(data);
 }
 
 function focus() {
   // Don't steal focus while the user is typing in an input (e.g. renaming a
   // tab); a stray session:status event would otherwise blur the rename box.
-  const el = document.activeElement
-  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable)) {
-    return
+  const el = document.activeElement;
+  if (
+    el &&
+    (el.tagName === "INPUT" ||
+      el.tagName === "TEXTAREA" ||
+      (el as HTMLElement).isContentEditable)
+  ) {
+    return;
   }
-  terminal?.focus()
+  terminal?.focus();
 }
 
 function toBase64(str: string): string {
-  const bytes = new TextEncoder().encode(str)
-  // F-028: process in 8K chunks. String.fromCharCode.apply has a hard
-  // argument-count cap (varies by engine, ~64K on V8). The previous
-  // per-byte loop also re-allocated the binary string each iteration,
-  // turning a 1MB scrollback export into ~1M string concats.
-  let binary = ''
-  const CHUNK = 0x2000
+  const bytes = new TextEncoder().encode(str);
+  // Process in 8K chunks. String.fromCharCode.apply has a hard argument-
+  // count cap (varies by engine, ~64K on V8). The previous per-byte loop
+  // also re-allocated the binary string each iteration, turning a 1MB
+  // scrollback export into ~1M string concats.
+  let binary = "";
+  const CHUNK = 0x2000;
   for (let i = 0; i < bytes.length; i += CHUNK) {
-    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length))
-    binary += String.fromCharCode.apply(null, slice as unknown as number[])
+    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+    binary += String.fromCharCode.apply(null, slice as unknown as number[]);
   }
-  return btoa(binary)
+  return btoa(binary);
 }
 
 async function exportContent() {
-  if (!terminal || exporting) return
-  exporting = true
+  if (!terminal || exporting) return;
+  exporting = true;
   try {
-    let content = ''
+    let content = "";
     try {
-      const buffer = terminal.buffer.active
-      const totalLines = buffer.length
-      const lines = new Array(totalLines)
+      const buffer = terminal.buffer.active;
+      const totalLines = buffer.length;
+      const lines = new Array(totalLines);
       for (let i = 0; i < totalLines; i++) {
-        const line = buffer.getLine(i)
-        lines[i] = line ? line.translateToString() : ''
+        const line = buffer.getLine(i);
+        lines[i] = line ? line.translateToString() : "";
       }
-      content = lines.join('\n')
+      content = lines.join("\n");
     } catch (e) {
-      console.error('Buffer read failed:', e)
-      return
+      console.error("Buffer read failed:", e);
+      return;
     }
     try {
-      const filePath = await SaveFileDialog('terminal.txt')
-      if (!filePath) return
-      await WriteFileBase64(filePath, toBase64(content))
+      const filePath = await SaveFileDialog("terminal.txt");
+      if (!filePath) return;
+      await WriteFileBase64(filePath, toBase64(content));
     } catch (e) {
-      console.error('Export failed:', e)
+      console.error("Export failed:", e);
     }
   } finally {
-    exporting = false
+    exporting = false;
   }
 }
 
 function setRetryOnEnter(value: boolean) {
-  retryOnEnter = value
+  retryOnEnter = value;
 }
 
 function onWindowResize() {
-  const el = terminalRef.value
-  if (!el) return
+  const el = terminalRef.value;
+  if (!el) return;
   if (!isResizing) {
-    isResizing = true
-    el.classList.add('resizing')
+    isResizing = true;
+    el.classList.add("resizing");
   }
-  if (resizeTimer) clearTimeout(resizeTimer)
+  if (resizeTimer) clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    isResizing = false
-    el.classList.remove('resizing')
-    resize()
-  }, 400)
+    isResizing = false;
+    el.classList.remove("resizing");
+    resize();
+  }, 400);
 }
 
 function onSplitResizeStart() {
-  splitResizing = true
+  splitResizing = true;
 }
 
 function onSplitResizeEnd() {
-  splitResizing = false
+  splitResizing = false;
   if (resizeTimer) {
-    clearTimeout(resizeTimer)
-    resizeTimer = null
+    clearTimeout(resizeTimer);
+    resizeTimer = null;
   }
-  suppressResizeUntil = Date.now() + 200
+  suppressResizeUntil = Date.now() + 200;
   nextTick(() => {
     setTimeout(() => {
-      void terminalRef.value?.offsetWidth
-      resize()
-    }, 0)
-  })
+      void terminalRef.value?.offsetWidth;
+      resize();
+    }, 0);
+  });
 }
 
 // Strip OSC sequences that xterm.js generates internally (color queries etc.)
-// and CSI *responses* it auto-generates when the remote app queries the
+// and CSI / DCS *responses* it auto-generates when the remote app queries the
 // terminal (CPR cursor-position, DSR status, DA device-attributes, cell/window
-// size). These are xterm.js talking back to a query — echoing them to the
-// remote as if they were user input corrupts the app: a stray `ESC[2;2R`
-// arriving mid-render makes some remote vims exit, closing the channel (issue
-// #242). This must happen in the alternate screen too — vim/less/tmux are
-// exactly the apps that emit `ESC[6n` and friends. Focus in/out (I/O) is left
-// intact in the alternate screen because full-screen apps legitimately want
-// FocusGained/FocusLost.
-function filterTerminalInput(input: string, inAlternateScreen: boolean): string {
+// size, DECRPM mode report, XTVERSION build id, …). These are xterm.js talking
+// back to a query — echoing them to the remote as if they were user input
+// corrupts the app: a stray `ESC[2;2R` arriving mid-render makes some remote
+// vims exit, closing the channel (issue #242). This must happen in the
+// alternate screen too — vim/less/tmux/Claude Code are exactly the apps that
+// emit `ESC[6n` / `ESC[?25$p` / `ESC[>q` and friends. Focus in/out (I/O) is
+// left intact in the alternate screen because full-screen apps legitimately
+// want FocusGained/FocusLost.
+function filterTerminalInput(
+  input: string,
+  inAlternateScreen: boolean,
+): string {
   // OSC sequences: ESC ] ... BEL or ESC ] ... ESC \
-  let filtered = input.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+  let filtered = input.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+  // DCS responses (XTVERSION, DECRSPS, …): ESC P ... BEL or ESC ... ESC \
+  // xterm.js generates `ESC P>|xterm.js(<version>) ESC \` when an app sends
+  // `ESC[>q` (XTVERSION); without this filter the version string is sent
+  // back to the server as if it were user input and Ink-style apps that
+  // do this query on startup see it pollute their input stream.
+  filtered = filtered.replace(/\x1bP[^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
   // Terminal query responses — strip in both normal and alternate screens.
-  filtered = filtered.replace(/\x1b\[(?:[?>][\d;]*|[\d;]*)([Rntc])/g, '')
+  // Final byte set covers: R (CPR / DECCPR), n (DSR), t (window-size report),
+  // c (DA1). The DECRPM reply uses an intermediate `$` + final `y`, e.g.
+  // `ESC[?25;1$y`, which the bare `[Rntc]` final-bytes class misses — Claude
+  // Code emits DECRQM on startup for modes 25 / 1049 / 2026 / 2004 / 1006,
+  // and the leaked `y`-terminated response lands in the shell as raw bytes
+  // that Ink's input state machine cannot parse.
+  filtered = filtered.replace(/\x1b\[(?:[?>][\d;]*|[\d;]*)\$y/g, "");
+  filtered = filtered.replace(/\x1b\[(?:[?>][\d;]*|[\d;]*)([Rntc])/g, "");
   if (inAlternateScreen) {
-    return filtered
+    return filtered;
   }
   // Normal screen only: also strip focus in/out, which a shell doesn't want.
-  filtered = filtered.replace(/\x1b\[(?:[?>][\d;]*|[\d;]*)([IO])/g, '')
-  return filtered
+  filtered = filtered.replace(/\x1b\[(?:[?>][\d;]*|[\d;]*)([IO])/g, "");
+  return filtered;
 }
 
 function writeTerminalInput(data: string, inAlternateScreen: boolean) {
-  const sid = props.sessionId
-  const filtered = filterTerminalInput(data, inAlternateScreen)
+  const sid = props.sessionId;
+  const filtered = filterTerminalInput(data, inAlternateScreen);
   // Don't send empty input - avoids extra blank line when pressing Enter with no command
-  if (!sid || !filtered) return
+  if (!sid || !filtered) return;
 
   if (props.broadcastActive && props.workspaceId) {
-    const targets = tabStore.getBroadcastPanelIdsInWorkspace(props.workspaceId)
+    const targets = tabStore.getBroadcastPanelIdsInWorkspace(props.workspaceId);
     if (targets.length > 0) {
       for (const pid of targets) {
-        const p = panelStore.getPanel(pid)
-        if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
-          SessionWrite(p.sessionId, filtered)
+        const p = panelStore.getPanel(pid);
+        if (p?.sessionId && (p.type === "ssh" || p.type === "local")) {
+          SessionWrite(p.sessionId, filtered);
         }
       }
-      return
+      return;
     }
   }
 
-  SessionWrite(sid, filtered)
+  SessionWrite(sid, filtered);
 }
 
 function handleTerminalKey(e: KeyboardEvent): boolean {
   // Check global shortcuts first (Ctrl+Shift+/Alt+ combos)
-  if (e.type === 'keydown' && !onTerminalKey(e)) return false
+  if (e.type === "keydown" && !onTerminalKey(e)) return false;
 
   // Paste via Wails clipboard (xterm's DOM paste is unreliable in WKWebView).
   // Bind to the platform's paste shortcut only — Cmd+V on macOS, Ctrl+Shift+V
   // elsewhere. Plain Ctrl+V is never intercepted, so it passes through to the
   // terminal app (vim visual block, bash literal-next…) on every platform.
   const pasteCombo = isMac
-    ? (e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey)
-    : (e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey)
-  if (pasteCombo && (e.key === 'v' || e.key === 'V') && e.type === 'keydown') {
-    e.preventDefault()
-    if (props.mode === 'ssh' || props.mode === 'local') {
-      ClipboardGetText().then(text => {
-        if (text) pasteToSession(text)
-      }).catch(() => {})
+    ? e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
+    : e.ctrlKey && e.shiftKey && !e.metaKey && !e.altKey;
+  if (pasteCombo && (e.key === "v" || e.key === "V") && e.type === "keydown") {
+    e.preventDefault();
+    if (props.mode === "ssh" || props.mode === "local") {
+      ClipboardGetText()
+        .then((text) => {
+          if (text) pasteToSession(text);
+        })
+        .catch(() => {});
     }
-    return false
+    return false;
   }
 
   // macOS Cmd+C: copy selection when there is one. With no selection, don't
   // intercept — let it pass through (Ctrl+C interrupt uses ctrlKey, unaffected).
-  if (isMac && e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'c' || e.key === 'C') && e.type === 'keydown') {
-    const sel = terminal?.getSelection()
+  if (
+    isMac &&
+    e.metaKey &&
+    !e.ctrlKey &&
+    !e.shiftKey &&
+    !e.altKey &&
+    (e.key === "c" || e.key === "C") &&
+    e.type === "keydown"
+  ) {
+    const sel = terminal?.getSelection();
     if (sel) {
-      e.preventDefault()
-      navigator.clipboard.writeText(sel).catch(() => {})
-      return false
+      e.preventDefault();
+      navigator.clipboard.writeText(sel).catch(() => {});
+      return false;
     }
-    return true
+    return true;
   }
 
   // Ctrl+Shift+C: copy terminal selection to clipboard
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'c' || e.key === 'C') && e.type === 'keydown') {
-    const sel = terminal?.getSelection()
+  if (
+    (e.ctrlKey || e.metaKey) &&
+    e.shiftKey &&
+    (e.key === "c" || e.key === "C") &&
+    e.type === "keydown"
+  ) {
+    const sel = terminal?.getSelection();
     if (sel) {
-      navigator.clipboard.writeText(sel).catch(() => {})
+      navigator.clipboard.writeText(sel).catch(() => {});
     }
-    return false
+    return false;
   }
 
   // macOS-style cursor word/line jumping via Option/Cmd + arrow keys
-  if (e.type === 'keydown' && (e.altKey || e.metaKey)) {
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault()
+  if (e.type === "keydown" && (e.altKey || e.metaKey)) {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
       if (e.metaKey) {
         // Cmd+Left → beginning of line
-        SessionWrite(props.sessionId || '', '\x1b[H')
+        SessionWrite(props.sessionId || "", "\x1b[H");
       } else if (e.altKey) {
         // Option+Left → backward word
-        SessionWrite(props.sessionId || '', '\x1bb')
+        SessionWrite(props.sessionId || "", "\x1bb");
       }
-      return false
+      return false;
     }
-    if (e.key === 'ArrowRight') {
-      e.preventDefault()
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
       if (e.metaKey) {
         // Cmd+Right → end of line
-        SessionWrite(props.sessionId || '', '\x1b[F')
+        SessionWrite(props.sessionId || "", "\x1b[F");
       } else if (e.altKey) {
         // Option+Right → forward word
-        SessionWrite(props.sessionId || '', '\x1bf')
+        SessionWrite(props.sessionId || "", "\x1bf");
       }
-      return false
+      return false;
     }
   }
 
   // Suggestion navigation (only on keydown, ignore keyup)
-  if (suggestions.isVisible() && e.type === 'keydown') {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      suggestions.selectNext()
-      return false
+  if (suggestions.isVisible() && e.type === "keydown") {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      suggestions.selectNext();
+      return false;
     }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      suggestions.selectPrev()
-      return false
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      suggestions.selectPrev();
+      return false;
     }
-    if (e.key === 'Tab') {
-      const selected = suggestions.getSelectedItem()
+    if (e.key === "Tab") {
+      const selected = suggestions.getSelectedItem();
       if (selected) {
-        e.preventDefault()
-        applySuggestion(selected)
-        return false
+        e.preventDefault();
+        applySuggestion(selected);
+        return false;
       }
     }
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       // Only apply suggestion if user explicitly selected one with arrow keys
-      const selected = suggestions.getSelectedItem()
+      const selected = suggestions.getSelectedItem();
       if (selected) {
-        e.preventDefault()
-        applySuggestion(selected)
-        return false
+        e.preventDefault();
+        applySuggestion(selected);
+        return false;
       }
       // No selection: let xterm handle Enter normally (terminal command execution)
     }
-    if (e.key === 'Escape') {
-      suggestions.close()
-      return false
+    if (e.key === "Escape") {
+      suggestions.close();
+      return false;
     }
   }
 
-  return true
+  return true;
 }
 
-let bindListeners: (() => void) | null = null
+let bindListeners: (() => void) | null = null;
 
 onMounted(() => {
-  if (!terminalRef.value) return
+  if (!terminalRef.value) return;
 
   // Acquire shared terminal from manager (or create if first mount)
-  const opts = getTerminalOptions()
-  terminal = acquireTerminal(props.sessionId || '', terminalInstanceRef, opts, settingsStore.settings.customTerminalThemes)
+  const opts = getTerminalOptions();
+  terminal = acquireTerminal(
+    props.sessionId || "",
+    terminalInstanceRef,
+    opts,
+    settingsStore.settings.customTerminalThemes,
+  );
 
   // Load WebLinksAddon per-component (has custom callbacks)
-  let hoverEl: HTMLDivElement | null = null
+  let hoverEl: HTMLDivElement | null = null;
   const webLinksAddon = new WebLinksAddon(
     (event, uri) => {
       if (event.ctrlKey || event.metaKey) {
-        BrowserOpenURL(uri)
+        BrowserOpenURL(uri);
       }
     },
     {
       hover(event, _text, _location) {
         if (!hoverEl) {
-          hoverEl = document.createElement('div')
-          hoverEl.className = 'xterm-link-tooltip'
-          terminal!.element!.appendChild(hoverEl)
+          hoverEl = document.createElement("div");
+          hoverEl.className = "xterm-link-tooltip";
+          terminal!.element!.appendChild(hoverEl);
         }
-        const rect = terminal!.element!.getBoundingClientRect()
-        hoverEl.textContent = 'Ctrl + Click to open'
-        hoverEl.style.left = (event.clientX - rect.left + 12) + 'px'
-        hoverEl.style.top = (event.clientY - rect.top - 28) + 'px'
-        hoverEl.style.display = 'block'
+        const rect = terminal!.element!.getBoundingClientRect();
+        hoverEl.textContent = "Ctrl + Click to open";
+        hoverEl.style.left = event.clientX - rect.left + 12 + "px";
+        hoverEl.style.top = event.clientY - rect.top - 28 + "px";
+        hoverEl.style.display = "block";
       },
       leave() {
         if (hoverEl) {
-          hoverEl.style.display = 'none'
+          hoverEl.style.display = "none";
         }
-      }
-    }
-  )
-  terminal.loadAddon(webLinksAddon)
-  webLinksAddonDispose = webLinksAddon
+      },
+    },
+  );
+  terminal.loadAddon(webLinksAddon);
+  webLinksAddonDispose = webLinksAddon;
 
   // Unicode 11 activeVersion is set inside terminalManager.ts right after
   // the addon is loaded, so it's already in effect by the time this
   // component mounts. No need to set it here again.
 
   // Set up search results listener from shared SearchAddon
-  const managed = getManagedTerminal(props.sessionId || '')
+  const managed = getManagedTerminal(props.sessionId || "");
   if (managed) {
     managed.searchAddon.onDidChangeResults((e) => {
-      searchResultIndex.value = e.resultIndex
-      searchResultCount.value = e.resultCount
-    })
+      searchResultIndex.value = e.resultIndex;
+      searchResultCount.value = e.resultCount;
+    });
   }
 
   // Attach terminal DOM to this component's container
-  attachTerminal(props.sessionId || '', terminalRef.value)
+  attachTerminal(props.sessionId || "", terminalRef.value);
 
-  initZmodemService(props.sessionId || '')
+  initZmodemService(props.sessionId || "");
 
   // Initialize terminal input handling for SSH
-  if (props.mode === 'ssh') {
-    const smartOn = settingsStore.settings.terminal.smartCompletion ?? true
+  if (props.mode === "ssh") {
+    const smartOn = settingsStore.settings.terminal.smartCompletion ?? true;
     terminalInput = useTerminalInput(terminal, {
       mode: props.mode,
       sessionId: props.sessionId,
-      enableHistory: true,  // was: smartOn
+      enableHistory: true, // was: smartOn
       onHistoryExtract: (command: string) => {
-        suggestions.addHistoryCommand(command)
+        suggestions.addHistoryCommand(command);
       },
       onResetSuppress: () => {
-        suggestions.resetSuppress()
+        suggestions.resetSuppress();
       },
-    })
-    suggestions.loadHistory()
+    });
+    suggestions.loadHistory();
   }
 
   // xterm.js converts wheel to ESC [ A / ESC [ B (arrow up/down) and
@@ -848,73 +1007,73 @@ onMounted(() => {
   // alt-screen so the BUG goes away; outside alt-screen xterm's default
   // (native scrollback scroll) is left untouched.
   terminal.attachCustomWheelEventHandler((event: WheelEvent) => {
-    const decision = decideWheelAction(
-      event.deltaY,
-      settingsStore.settings.terminal.swallowWheelInAltScreen ?? true,
-      terminalInput?.isInAlternateScreen() ?? false
-    )
-    if (!decision.forward) {
-      terminal.scrollLines(decision.scrollLines)
-    }
-    return decision.forward
-  })
+    if (!settingsStore.settings.terminal.swallowWheelInAltScreen) return true;
+    if (!terminalInput?.isInAlternateScreen()) return true;
+    return false;
+  });
 
-  if (props.mode === 'ssh' || props.mode === 'local') {
+  if (props.mode === "ssh" || props.mode === "local") {
     // Restore terminal content from session buffer on first mount only.
     // Subsequent mounts reuse the shared terminal whose buffer already
     // contains the correct content.
-    const sid = props.sessionId
-    const isNewTerminal = managed?.isNew
+    const sid = props.sessionId;
+    const isNewTerminal = managed?.isNew;
     if (sid && isNewTerminal) {
-      const raw = sessionStore.getData(sid)
-      const history = sanitizeTerminalHistory(raw)
+      const raw = sessionStore.getData(sid);
+      const history = sanitizeTerminalHistory(raw);
       if (history) {
         // Apply syntax highlighting when restoring history so it matches
         // newly arriving lines after a tab switch.
-        const hlOn = (settingsStore.settings.terminal.highlightEnabled ?? true) && props.mode !== 'local'
-        terminal.write(hlOn ? highlight(history) : history)
+        const hlOn =
+          (settingsStore.settings.terminal.highlightEnabled ?? true) &&
+          props.mode !== "local";
+        terminal.write(hlOn ? highlight(history) : history);
       }
     }
     // Always sync writtenChunks to prevent onActivated from replaying
     // all session data when the terminal was reused (isNewTerminal=false).
     if (sid) {
-      writtenChunks = sessionStore.getChunkCount(sid)
+      writtenChunks = sessionStore.getChunkCount(sid);
     }
     // Force initial resize with retries — needed because cell dimensions
     // may not be available immediately, and for reused terminals the cols/rows
     // may hold stale dimensions from the previous container.
-    ;[50, 150, 300, 600, 1000, 2000].forEach(d => setTimeout(() => {
-      if (!terminal) return
-      const el = terminalRef.value
-      const inDOM = el ? document.contains(el) : false
-      const hasXterm = el?.querySelector('.xterm') ? true : false
-      const kids = el?.children.length ?? 0
-      const rect = el?.getBoundingClientRect()
-      getFitAddon()?.fit()
-      const sessionId = props.sessionId
-      if (sessionId && terminal.cols > 0 && terminal.rows > 0) {
-        SessionResize(sessionId, terminal.cols, terminal.rows).catch(() => {})
-      }
-    }, d))
+    [50, 150, 300, 600, 1000, 2000].forEach((d) =>
+      setTimeout(() => {
+        if (!terminal) return;
+        const el = terminalRef.value;
+        const inDOM = el ? document.contains(el) : false;
+        const hasXterm = el?.querySelector(".xterm") ? true : false;
+        const kids = el?.children.length ?? 0;
+        const rect = el?.getBoundingClientRect();
+        getFitAddon()?.fit();
+        const sessionId = props.sessionId;
+        if (sessionId && terminal.cols > 0 && terminal.rows > 0) {
+          SessionResize(sessionId, terminal.cols, terminal.rows).catch(
+            () => {},
+          );
+        }
+      }, d),
+    );
   }
 
   // Bind per-component listeners (onData, keyHandler).
   // Called from onMounted and onActivated; disposed in onDeactivated.
   bindListeners = () => {
     // Dispose previous listeners before re-registering
-    onDataDispose?.dispose()
-    onDataDispose = null
-    keyHandlerDispose?.dispose()
-    keyHandlerDispose = null
+    onDataDispose?.dispose();
+    onDataDispose = null;
+    keyHandlerDispose?.dispose();
+    keyHandlerDispose = null;
 
     // Bump the TERMINAL-SHARED generation counter so that ALL
     // components sharing this terminal can detect stale callbacks.
     // Per-component counter allowed KeepAlive-cached duplicate
     // components to both pass their independent guards.
-    const sidNow = props.sessionId
-    const gen = sidNow ? bumpOnDataGeneration(sidNow) : 0
+    const sidNow = props.sessionId;
+    const gen = sidNow ? bumpOnDataGeneration(sidNow) : 0;
 
-    keyHandlerDispose = terminal.attachCustomKeyEventHandler(handleTerminalKey)
+    keyHandlerDispose = terminal.attachCustomKeyEventHandler(handleTerminalKey);
 
     // Input handling
     onDataDispose = terminal.onData((data) => {
@@ -922,422 +1081,451 @@ onMounted(() => {
       // Check against the MANAGED terminal's current generation.
       // If another component (e.g. KeepAlive-cached) has registered
       // a newer handler on the same shared terminal, bail out.
-      const curGen = sidNow ? (getManagedTerminal(sidNow)?.onDataGeneration ?? gen) : gen
+      const curGen = sidNow
+        ? (getManagedTerminal(sidNow)?.onDataGeneration ?? gen)
+        : gen;
       if (gen !== curGen) {
-        return
+        return;
       }
 
-      if (props.mode === 'ssh' || props.mode === 'local') {
-      if (retryOnEnter && (data === '\r' || data === '\n')) {
-        retryOnEnter = false
-        if (props.onSessionStatus) {
-          props.onSessionStatus('retry')
-        }
-        return
-      }
-
-      // Detect rz/sz command to hint zmodem transfer direction.
-      // Must happen BEFORE terminalInput.handleInput because handleInput
-      // clears the line buffer on Enter.
-      if ((data === '\r' || data === '\n') && terminalInput && !terminalInput.isInAlternateScreen()) {
-        const line = terminalInput.lineBuffer.value.trim()
-        if (/^(?:sudo\s+)?rz\b/.test(line)) {
-          zmodemDirection = 'upload'
-          // Recreate the zmodem service so on_detect sees the new direction.
-          if (props.sessionId) {
-            disposeZmodemService(props.sessionId, false).then(() => {
-              initZmodemService(props.sessionId)
-            })
+      if (props.mode === "ssh" || props.mode === "local") {
+        if (retryOnEnter && (data === "\r" || data === "\n")) {
+          retryOnEnter = false;
+          if (props.onSessionStatus) {
+            props.onSessionStatus("retry");
           }
-        } else if (/^(?:sudo\s+)?sz\b/.test(line)) {
-          zmodemDirection = 'download'
-          if (props.sessionId) {
-            disposeZmodemService(props.sessionId, false).then(() => {
-              initZmodemService(props.sessionId)
-            })
-          }
+          return;
         }
-      }
 
-      // Handle suggestions input (skip in alternate screen apps like vim/k9s)
-      if (terminalInput && !terminalInput.isInAlternateScreen() && (props.mode === 'ssh' || props.mode === 'local')) {
-        terminalInput.handleInput(data)
-
-        // When suggestions are visible, intercept certain keys synchronously
-        if (suggestions.isVisible()) {
-          if (data === '\t') {
-            const selected = suggestions.getSelectedItem()
-            if (selected) {
-              applySuggestion(selected)
-              return
+        // Detect rz/sz command to hint zmodem transfer direction.
+        // Must happen BEFORE terminalInput.handleInput because handleInput
+        // clears the line buffer on Enter.
+        if (
+          (data === "\r" || data === "\n") &&
+          terminalInput &&
+          !terminalInput.isInAlternateScreen()
+        ) {
+          const line = terminalInput.lineBuffer.value.trim();
+          if (/^(?:sudo\s+)?rz\b/.test(line)) {
+            zmodemDirection = "upload";
+            // Recreate the zmodem service so on_detect sees the new direction.
+            if (props.sessionId) {
+              disposeZmodemService(props.sessionId, false).then(() => {
+                initZmodemService(props.sessionId);
+              });
+            }
+          } else if (/^(?:sudo\s+)?sz\b/.test(line)) {
+            zmodemDirection = "download";
+            if (props.sessionId) {
+              disposeZmodemService(props.sessionId, false).then(() => {
+                initZmodemService(props.sessionId);
+              });
             }
           }
-          if (data === '\r' || data === '\n') {
-            const selected = suggestions.getSelectedItem()
-            if (selected) {
-              applySuggestion(selected)
-              return
-            }
-          }
-          if (data === '\x1b') {
-            suggestions.close()
-            return
-          }
         }
 
-        // Defer suggestion update/close so SessionWrite is not blocked
-        const wasVisible = suggestions.isVisible()
-        setTimeout(() => {
-          if (!terminalInput) return
-          const smartOn = settingsStore.settings.terminal.smartCompletion ?? true
-          if (!smartOn) {
-            suggestions.close()
-            return
-          }
-          // Don't show suggestions if line buffer was already cleared (e.g. Enter pressed)
-          if (!terminalInput.lineBuffer.value) {
-            suggestions.close()
-            return
-          }
-          // Only show suggestions if they were already visible or if the
-          // input is a printable character (not arrow keys / navigation).
-          const isPrintable = data.length === 1 && data >= ' '
-          if (!wasVisible && !isPrintable) return
-          if (terminalInput.isAtLineEnd() && terminalInput.currentToken.value && !terminalInput.isPasswordMode()) {
-            suggestions.updateSuggestions(terminalInput.currentToken.value)
-          } else {
-            suggestions.close()
-          }
-        }, 0)
-      } else if (terminalInput?.isInAlternateScreen()) {
-        suggestions.close()
-      }
+        // Handle suggestions input (skip in alternate screen apps like vim/k9s)
+        if (
+          terminalInput &&
+          !terminalInput.isInAlternateScreen() &&
+          (props.mode === "ssh" || props.mode === "local")
+        ) {
+          terminalInput.handleInput(data);
 
-      const sid = props.sessionId
-      const inAlt = terminalInput?.isInAlternateScreen() ?? false
-      if (sid) {
-        writeTerminalInput(data, inAlt)
-      }
-    } else {
-      // SFTP line buffering
-      for (let i = 0; i < data.length; i++) {
-        const char = data[i]
-        const code = data.charCodeAt(i)
-        if (char === '\r' || char === '\n') {
-          if (inputBuffer) {
-            const sid = props.sessionId
-            if (sid) {
-              for (let j = 0; j < inputBuffer.length; j++) {
-                terminal!.write('\b \b')
+          // When suggestions are visible, intercept certain keys synchronously
+          if (suggestions.isVisible()) {
+            if (data === "\t") {
+              const selected = suggestions.getSelectedItem();
+              if (selected) {
+                applySuggestion(selected);
+                return;
               }
-              SessionWrite(sid, inputBuffer)
             }
-            inputBuffer = ''
+            if (data === "\r" || data === "\n") {
+              const selected = suggestions.getSelectedItem();
+              if (selected) {
+                applySuggestion(selected);
+                return;
+              }
+            }
+            if (data === "\x1b") {
+              suggestions.close();
+              return;
+            }
           }
-        } else if (code === 127 || char === '\b') {
-          if (inputBuffer.length > 0) {
-            inputBuffer = inputBuffer.slice(0, -1)
-            terminal!.write('\b \b')
+
+          // Defer suggestion update/close so SessionWrite is not blocked
+          const wasVisible = suggestions.isVisible();
+          setTimeout(() => {
+            if (!terminalInput) return;
+            const smartOn =
+              settingsStore.settings.terminal.smartCompletion ?? true;
+            if (!smartOn) {
+              suggestions.close();
+              return;
+            }
+            // Don't show suggestions if line buffer was already cleared (e.g. Enter pressed)
+            if (!terminalInput.lineBuffer.value) {
+              suggestions.close();
+              return;
+            }
+            // Only show suggestions if they were already visible or if the
+            // input is a printable character (not arrow keys / navigation).
+            const isPrintable = data.length === 1 && data >= " ";
+            if (!wasVisible && !isPrintable) return;
+            if (
+              terminalInput.isAtLineEnd() &&
+              terminalInput.currentToken.value &&
+              !terminalInput.isPasswordMode()
+            ) {
+              suggestions.updateSuggestions(terminalInput.currentToken.value);
+            } else {
+              suggestions.close();
+            }
+          }, 0);
+        } else if (terminalInput?.isInAlternateScreen()) {
+          suggestions.close();
+        }
+
+        const sid = props.sessionId;
+        const inAlt = terminalInput?.isInAlternateScreen() ?? false;
+        if (sid) {
+          writeTerminalInput(data, inAlt);
+        }
+      } else {
+        // SFTP line buffering
+        for (let i = 0; i < data.length; i++) {
+          const char = data[i];
+          const code = data.charCodeAt(i);
+          if (char === "\r" || char === "\n") {
+            if (inputBuffer) {
+              const sid = props.sessionId;
+              if (sid) {
+                for (let j = 0; j < inputBuffer.length; j++) {
+                  terminal!.write("\b \b");
+                }
+                SessionWrite(sid, inputBuffer);
+              }
+              inputBuffer = "";
+            }
+          } else if (code === 127 || char === "\b") {
+            if (inputBuffer.length > 0) {
+              inputBuffer = inputBuffer.slice(0, -1);
+              terminal!.write("\b \b");
+            }
+          } else if (code >= 32 && code <= 126) {
+            inputBuffer += char;
+            terminal!.write(char);
           }
-        } else if (code >= 32 && code <= 126) {
-          inputBuffer += char
-          terminal!.write(char)
         }
       }
-    }
-  })
-
-  } // end bindListeners
+    });
+  }; // end bindListeners
 
   // Selection action: copy to clipboard via xterm's native selection event.
   // Use setTimeout to let xterm finish processing the selection (especially
   // for double-click word selection) before reading getSelection().
-  let lastSelectionText = ''
+  let lastSelectionText = "";
   terminal.onSelectionChange(() => {
-    if (settingsStore.settings.terminal.selectionAction !== 'copy') return
+    if (settingsStore.settings.terminal.selectionAction !== "copy") return;
     setTimeout(() => {
-      const text = terminal?.getSelection()
+      const text = terminal?.getSelection();
       if (text && text !== lastSelectionText) {
-        lastSelectionText = text
-        navigator.clipboard.writeText(text).catch(() => {})
+        lastSelectionText = text;
+        navigator.clipboard.writeText(text).catch(() => {});
       }
-    }, 0)
-  })
+    }, 0);
+  });
 
   // Close suggestion popup when clicking outside
   onDocumentMouseDown = (event: MouseEvent) => {
-    if (!suggestions.isVisible()) return
-    const baseTerminalEl = terminalRef.value?.parentElement
-    const popupEl = baseTerminalEl?.querySelector('.terminal-suggestion-popup')
+    if (!suggestions.isVisible()) return;
+    const baseTerminalEl = terminalRef.value?.parentElement;
+    const popupEl = baseTerminalEl?.querySelector(".terminal-suggestion-popup");
     if (popupEl && !popupEl.contains(event.target as Node)) {
-      suggestions.close()
+      suggestions.close();
     }
-  }
-  document.addEventListener('mousedown', onDocumentMouseDown)
+  };
+  document.addEventListener("mousedown", onDocumentMouseDown);
 
   // Middle-click paste: read setting and paste clipboard if enabled
   onTerminalAuxClick = (event: MouseEvent) => {
-    if (event.button !== 1) return
-    if (!terminalRef.value?.contains(event.target as Node)) return
-    const action = settingsStore.settings.terminal.middleClickAction
-    if (action !== 'paste') return
-    event.preventDefault()
-    event.stopPropagation()
-    ClipboardGetText().then(text => {
-      if (text && props.sessionId) {
-        pasteToSession(text)
-      }
-    }).catch(() => {})
-  }
-  document.addEventListener('auxclick', onTerminalAuxClick)
+    if (event.button !== 1) return;
+    if (!terminalRef.value?.contains(event.target as Node)) return;
+    const action = settingsStore.settings.terminal.middleClickAction;
+    if (action !== "paste") return;
+    event.preventDefault();
+    event.stopPropagation();
+    ClipboardGetText()
+      .then((text) => {
+        if (text && props.sessionId) {
+          pasteToSession(text);
+        }
+      })
+      .catch(() => {});
+  };
+  document.addEventListener("auxclick", onTerminalAuxClick);
 
   // Session data
-  unsubscribe = EventsOn('session:data', (payload: { id: string; data: string }) => {
-    if (!isActive.value) {
-      // Mark notification dot on the tab when inactive terminal receives output
-      // Only process events for this instance's session (events are global)
-      if (payload.id === props.sessionId && props.sessionId) {
-        // Find the panel by sessionId (panels Map is keyed by panelId)
-        let panelId: string | null = null
-        for (const [id, p] of panelStore.panels) {
-          if (p.sessionId === props.sessionId) {
-            panelId = id
-            break
+  unsubscribe = EventsOn(
+    "session:data",
+    (payload: { id: string; data: string }) => {
+      if (!isActive.value) {
+        // Mark notification dot on the tab when inactive terminal receives output
+        // Only process events for this instance's session (events are global)
+        if (payload.id === props.sessionId && props.sessionId) {
+          // Find the panel by sessionId (panels Map is keyed by panelId)
+          let panelId: string | null = null;
+          for (const [id, p] of panelStore.panels) {
+            if (p.sessionId === props.sessionId) {
+              panelId = id;
+              break;
+            }
+          }
+          if (panelId) {
+            const tab = tabStore.tabs.find(
+              (t) =>
+                (t.type === "terminal" && t.panelId === panelId) ||
+                (t.type === "workspace" && t.panelIds.includes(panelId)),
+            );
+            if (tab && tab.id !== tabStore.activeTabId) {
+              tabStore.markTabNotification(tab.id);
+            }
           }
         }
-        if (panelId) {
-          const tab = tabStore.tabs.find(t =>
-            (t.type === 'terminal' && t.panelId === panelId) ||
-            (t.type === 'workspace' && t.panelIds.includes(panelId))
-          )
-          if (tab && tab.id !== tabStore.activeTabId) {
-            tabStore.markTabNotification(tab.id)
+        return;
+      }
+      if (payload.id !== props.sessionId || !terminal) return;
+
+      // 取消后 2 秒内吞掉所有数据，防止残余二进制乱码
+      if (Date.now() < zmodemCancellingUntil) {
+        return;
+      }
+
+      // tab 切换后服务还没重建，但 store 里还有活跃传输（旧的 handleReceive 还在跑），先吞数据
+      const hasStoreTransfer = zmodemStore.getActiveTransfer(
+        props.sessionId || "",
+      );
+      if (!zmodemService && hasStoreTransfer) {
+        return;
+      }
+
+      // Zmodem detection: scan for HEX header in normal terminal output.
+      // Skip if the service was aborted (waiting for the next rz/sz command).
+      const activeZmodem =
+        zmodemService && zmodemStore.getActiveTransfer(props.sessionId || "");
+      if (zmodemService && !activeZmodem && !zmodemService.isAborted?.()) {
+        if (isZmodemStarting) {
+          // Already detected header and waiting for SessionStartZmodem / on_detect.
+          // Feed subsequent data to sentry so it can complete detection without
+          // re-processing the header heuristic on every retry frame.
+          zmodemService.consume(payload.data);
+          return;
+        }
+        // Real ZMODEM headers always contain the ZDLE control byte (0x18)
+        // before the frame type: `**` (ZPAD ZPAD) `\x18` (ZDLE) `[ABC]` then
+        // hex digits. Requiring the 0x18 avoids false positives on ordinary
+        // terminal output — e.g. vim rendering a file whose content happens to
+        // contain `**B<hex>` — which previously flipped the session into binary
+        // ZMODEM mode and made the sentry write protocol bytes back to the
+        // server, crashing the remote shell (issue #242).
+        // Regex literal hoisted to module scope (ZMODEM_HEX_RE).
+        if (ZMODEM_HEX_RE.test(payload.data)) {
+          console.debug("[zmodem] header detected, entering transfer mode");
+          isZmodemStarting = true;
+          if (zmodemStartTimer) clearTimeout(zmodemStartTimer);
+          zmodemStartTimer = setTimeout(() => {
+            isZmodemStarting = false;
+          }, 3000);
+          const sid = props.sessionId;
+          if (sid) {
+            // Consume immediately to avoid losing data during async handoff
+            zmodemService.consume(payload.data);
+            import("../../wailsjs/go/main/App").then(
+              ({ SessionStartZmodem }) => {
+                SessionStartZmodem(sid).catch(() => {});
+              },
+            );
           }
+          // Hide zmodem data from terminal
+          return;
         }
       }
-      return
-    }
-    if (payload.id !== props.sessionId || !terminal) return
 
-    // 取消后 2 秒内吞掉所有数据，防止残余二进制乱码
-    if (Date.now() < zmodemCancellingUntil) {
-      return
-    }
-
-    // tab 切换后服务还没重建，但 store 里还有活跃传输（旧的 handleReceive 还在跑），先吞数据
-    const hasStoreTransfer = zmodemStore.getActiveTransfer(props.sessionId || '')
-    if (!zmodemService && hasStoreTransfer) {
-      return
-    }
-
-    // Zmodem detection: scan for HEX header in normal terminal output.
-    // Skip if the service was aborted (waiting for the next rz/sz command).
-    const activeZmodem = zmodemService && zmodemStore.getActiveTransfer(props.sessionId || '')
-    if (zmodemService && !activeZmodem && !zmodemService.isAborted?.()) {
-      if (isZmodemStarting) {
-        // Already detected header and waiting for SessionStartZmodem / on_detect.
-        // Feed subsequent data to sentry so it can complete detection without
-        // re-processing the header heuristic on every retry frame.
-        zmodemService.consume(payload.data)
-        return
+      // If zmodem is active, skip writing data to terminal (data comes via session:binary)
+      if (activeZmodem) {
+        isZmodemStarting = false;
+        return;
       }
-      // Real ZMODEM headers always contain the ZDLE control byte (0x18)
-      // before the frame type: `**` (ZPAD ZPAD) `\x18` (ZDLE) `[ABC]` then
-      // hex digits. Requiring the 0x18 avoids false positives on ordinary
-      // terminal output — e.g. vim rendering a file whose content happens to
-      // contain `**B<hex>` — which previously flipped the session into binary
-      // ZMODEM mode and made the sentry write protocol bytes back to the
-      // server, crashing the remote shell (issue #242).
-      // F-030: regex literal hoisted to module scope (ZMODEM_HEX_RE).
-      if (ZMODEM_HEX_RE.test(payload.data)) {
-        console.debug('[zmodem] header detected, entering transfer mode')
-        isZmodemStarting = true
-        if (zmodemStartTimer) clearTimeout(zmodemStartTimer)
-        zmodemStartTimer = setTimeout(() => {
-          isZmodemStarting = false
-        }, 3000)
-        const sid = props.sessionId
-        if (sid) {
-          // Consume immediately to avoid losing data during async handoff
-          zmodemService.consume(payload.data)
-          import('../../wailsjs/go/main/App').then(({ SessionStartZmodem }) => {
-            SessionStartZmodem(sid).catch(() => {})
-          })
-        }
-        // Hide zmodem data from terminal
-        return
+
+      // Defer the regex pipeline + terminal.write to the next paint frame.
+// Multiple chunks within one frame collapse into a single pass instead of
+// paying 5 regex replacements + highlight() per chunk. writtenChunks is
+// incremented synchronously below so KeepAlive replay tracking sees the
+// correct count. Zmodem detection ran synchronously above (it has async
+// handoff); the rAF flush only handles terminal output.
+      pendingDataChunks.push(payload.data);
+      writtenChunks++;
+      if (pendingFlushRAF === null) {
+        pendingFlushRAF = requestAnimationFrame(flushPendingData);
       }
-    }
-
-    // If zmodem is active, skip writing data to terminal (data comes via session:binary)
-    if (activeZmodem) {
-      isZmodemStarting = false
-      return
-    }
-
-    // F-032: defer the regex pipeline + terminal.write to the next paint
-    // frame. Multiple chunks within one frame collapse into a single pass
-    // instead of paying 5 regex replacements + highlight() per chunk.
-    // writtenChunks is incremented synchronously below so KeepAlive replay
-    // tracking sees the correct count. Zmodem detection ran synchronously
-    // above (it has async handoff); the rAF flush only handles terminal
-    // output.
-    pendingDataChunks.push(payload.data)
-    writtenChunks++
-    if (pendingFlushRAF === null) {
-      pendingFlushRAF = requestAnimationFrame(flushPendingData)
-    }
-  })
+    },
+  );
 
   function flushPendingData() {
-    pendingFlushRAF = null
-    if (pendingDataChunks.length === 0 || !terminal) return
-    const raw = pendingDataChunks.join('')
-    pendingDataChunks = []
+    pendingFlushRAF = null;
+    if (pendingDataChunks.length === 0 || !terminal) return;
+    const raw = pendingDataChunks.join("");
+    pendingDataChunks = [];
     // Filter ED3 (erase scrollback).
-    // F-030: regex literals hoisted to module scope (ED3_RE / ED2_*_RE /
-    // FFFD_RE / SFTP_OSC633_RE) so we don't recompile them on every flush.
-    let data = stripCursorBlink(raw, settingsStore.settings.terminal.cursorBlink ?? true).replace(ED3_RE, '')
+    // Regex literals hoisted to module scope (ED3_RE / ED2_*_RE / FFFD_RE
+    // / SFTP_OSC633_RE) so we don't recompile them on every flush.
+    let data = stripCursorBlink(
+      raw,
+      settingsStore.settings.terminal.cursorBlink ?? true,
+    ).replace(ED3_RE, "");
     // For ED2 (clear screen) in the main buffer, replace with scrolling
     // to preserve scrollback history. In alternate screen (vim, less,
     // k9s), pass through unchanged — the app manages its own screen.
-    if (data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
-      const rows = terminal.rows
-      const scrollClear = '\n'.repeat(rows) + '\x1b[H'
-      data = data.replace(ED2_COMBINED_RE, scrollClear)
-      data = data.replace(ED2_RE, scrollClear)
+    if (
+      data.includes("\x1b[2J") &&
+      terminal.buffer.active.type !== "alternate"
+    ) {
+      const rows = terminal.rows;
+      const scrollClear = "\n".repeat(rows) + "\x1b[H";
+      data = data.replace(ED2_COMBINED_RE, scrollClear);
+      data = data.replace(ED2_RE, scrollClear);
     }
-    // Drop U+FFFD replacement chars (see F-032 comment above for context).
-    data = data.replace(FFFD_RE, '')
-    if (props.mode === 'sftp') {
-      const cleaned = data.replace(SFTP_OSC633_RE, '')
+    // Drop U+FFFD replacement chars (see rAF comment above for context).
+    data = data.replace(FFFD_RE, "");
+    if (props.mode === "sftp") {
+      const cleaned = data.replace(SFTP_OSC633_RE, "");
       if (cleaned) {
-        terminal.write(cleaned)
+        terminal.write(cleaned);
       }
     } else {
       // Extract history commands from SSH output. handleSessionData only
       // checks for the alternate-screen enter/exit sequences; running it
       // on the coalesced blob is equivalent to running on individual chunks
       // (the markers are present iff any sub-chunk contains them).
-      if (props.mode === 'ssh' && terminalInput) {
-        terminalInput.handleSessionData(data)
+      if (props.mode === "ssh" && terminalInput) {
+        terminalInput.handleSessionData(data);
         // Close suggestions if we entered an alternate screen app (vim, k9s, etc.)
         if (terminalInput.isInAlternateScreen()) {
-          suggestions.close()
+          suggestions.close();
         }
       }
-      const hlOn = (settingsStore.settings.terminal.highlightEnabled ?? true) && props.mode !== 'local'
-      terminal.write(hlOn ? highlight(data) : data)
+      const hlOn =
+        (settingsStore.settings.terminal.highlightEnabled ?? true) &&
+        props.mode !== "local";
+      terminal.write(hlOn ? highlight(data) : data);
     }
   }
 
   // SSH/Local: session status events
-  if (props.mode === 'ssh' || props.mode === 'local') {
-    retryOnEnter = false
-    statusUnsubscribe = EventsOn('session:status', (payload: { id: string; status: string }) => {
-      if (!isActive.value) return
-      if (payload.id !== props.sessionId) return
-      if (payload.status === 'connected') {
-        retryOnEnter = false
-        if (props.onSessionStatus) {
-          props.onSessionStatus(payload.status)
-        }
-        // Force send current terminal size to sync the backend PTY after reconnect.
-        // The new session defaults to 80x24; without this, apps like vim/k9s use the wrong size.
-        if (terminal && terminal.cols > 0 && terminal.rows > 0) {
-          SessionResize(props.sessionId, terminal.cols, terminal.rows).catch(() => {})
-        }
-        resize()
-      } else if (payload.status === 'error') {
-        retryOnEnter = true
-        if (props.onSessionStatus) {
-          props.onSessionStatus(payload.status)
-        }
-        if (props.mode === 'local') {
-          terminal?.write('\r\n\x1b[31mFailed to start shell. Press Enter to retry.\x1b[0m\r\n')
+  if (props.mode === "ssh" || props.mode === "local") {
+    retryOnEnter = false;
+    statusUnsubscribe = EventsOn(
+      "session:status",
+      (payload: { id: string; status: string }) => {
+        if (!isActive.value) return;
+        if (payload.id !== props.sessionId) return;
+        if (payload.status === "connected") {
+          retryOnEnter = false;
+          if (props.onSessionStatus) {
+            props.onSessionStatus(payload.status);
+          }
+          // Force send current terminal size to sync the backend PTY after reconnect.
+          // The new session defaults to 80x24; without this, apps like vim/k9s use the wrong size.
+          if (terminal && terminal.cols > 0 && terminal.rows > 0) {
+            SessionResize(props.sessionId, terminal.cols, terminal.rows).catch(
+              () => {},
+            );
+          }
+          resize();
+        } else if (payload.status === "error") {
+          retryOnEnter = true;
+          if (props.onSessionStatus) {
+            props.onSessionStatus(payload.status);
+          }
+          terminal?.write(
+            "\r\n\x1b[31mConnection failed. Press Enter to retry.\x1b[0m\r\n",
+          );
+        } else if (payload.status === "disconnected") {
+          retryOnEnter = true;
+          if (props.onSessionStatus) {
+            props.onSessionStatus(payload.status);
+          }
         } else {
-          terminal?.write('\r\n\x1b[31mConnection failed. Press Enter to retry.\x1b[0m\r\n')
+          // Focus terminal on connecting so user can type password immediately.
+          focus();
+          if (props.onSessionStatus) {
+            props.onSessionStatus(payload.status);
+          }
         }
-      } else if (payload.status === 'disconnected') {
-        retryOnEnter = true
-        if (props.onSessionStatus) {
-          props.onSessionStatus(payload.status)
-        }
-        if (props.mode === 'local') {
-          // Local sessions auto-reconnect on disconnect (Panel.vue handles
-          // the retry). Don't print "Press Enter to retry" — the shell may
-          // not even be back yet, and Enter alone won't help.
-          terminal?.write('\r\n\x1b[33mShell exited — reconnecting...\x1b[0m\r\n')
-        }
-      } else {
-        // Focus terminal on connecting so user can type password immediately.
-        focus()
-        if (props.onSessionStatus) {
-          props.onSessionStatus(payload.status)
-        }
-      }
-    })
+      },
+    );
   }
 
-  window.addEventListener('resize', onWindowResize)
-  window.addEventListener('split:resize-start', onSplitResizeStart)
-  window.addEventListener('split:resize-end', onSplitResizeEnd)
+  window.addEventListener("resize", onWindowResize);
+  window.addEventListener("split:resize-start", onSplitResizeStart);
+  window.addEventListener("split:resize-end", onSplitResizeEnd);
   onOpenSearch = (e: Event) => {
-    if (!isActive.value) return
-    const detail = (e as CustomEvent).detail
-    if (!props.panelId || detail?.panelId !== props.panelId) return
-    openSearch()
-  }
-  window.addEventListener('terminal:open-search', onOpenSearch)
+    if (!isActive.value) return;
+    const detail = (e as CustomEvent).detail;
+    if (!props.panelId || detail?.panelId !== props.panelId) return;
+    openSearch();
+  };
+  window.addEventListener("terminal:open-search", onOpenSearch);
 
   onExport = (e: Event) => {
-    if (!isActive.value) return
-    const detail = (e as CustomEvent).detail
-    if (!props.panelId || detail?.panelId !== props.panelId) return
-    exportContent()
-  }
-  window.addEventListener('terminal:export', onExport)
+    if (!isActive.value) return;
+    const detail = (e as CustomEvent).detail;
+    if (!props.panelId || detail?.panelId !== props.panelId) return;
+    exportContent();
+  };
+  window.addEventListener("terminal:export", onExport);
 
   onSendRz = (e: Event) => {
-    const detail = (e as CustomEvent).detail
-    if (detail?.panelId && detail.panelId !== props.panelId) return
+    const detail = (e as CustomEvent).detail;
+    if (detail?.panelId && detail.panelId !== props.panelId) return;
     if (props.sessionId) {
-      SessionWrite(props.sessionId, 'rz -be\n')
+      SessionWrite(props.sessionId, "rz -be\n");
     }
-  }
-  window.addEventListener('terminal:send-rz', onSendRz)
+  };
+  window.addEventListener("terminal:send-rz", onSendRz);
 
-  bindListeners()
+  bindListeners();
 
-  // F-031: rAF-coalesce the resizeObserver debounce. resize() re-derives
-  // xterm.rows/cols (drives cursor position) and fires `_innerRefresh`,
-  // so multiple ResizeObserver ticks within one paint frame collapse into
-  // a single resize() — was a 150 ms setTimeout that lagged visibly when
-  // the user dragged a split divider.
-  let resizeRAF: number | null = null
+  // rAF-coalesce the resizeObserver debounce. resize() re-derives
+// xterm.rows/cols (drives cursor position) and fires `_innerRefresh`,
+// so multiple ResizeObserver ticks within one paint frame collapse into
+// a single resize() — was a 150 ms setTimeout that lagged visibly when
+// the user dragged a split divider.
+let resizeRAF: number | null = null;
   resizeObserver = new ResizeObserver(() => {
-    if (isResizing || splitResizing || Date.now() < suppressResizeUntil) return
-    const el = terminalRef.value
-    if (!el) return
-    if (resizeRAF !== null) cancelAnimationFrame(resizeRAF)
+    if (isResizing || splitResizing || Date.now() < suppressResizeUntil) return;
+    const el = terminalRef.value;
+    if (!el) return;
+    if (resizeRAF !== null) cancelAnimationFrame(resizeRAF);
     resizeRAF = requestAnimationFrame(() => {
-      resizeRAF = null
-      resize()
-    })
-  })
-  resizeObserver.observe(terminalRef.value)
+      resizeRAF = null;
+      resize();
+    });
+  });
+  resizeObserver.observe(terminalRef.value);
 
-  if (props.mode === 'ssh') {
+  if (props.mode === "ssh") {
     intersectionObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
+      entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          resize()
+          resize();
         }
-      })
-    })
-    intersectionObserver.observe(terminalRef.value)
+      });
+    });
+    intersectionObserver.observe(terminalRef.value);
   }
-})
+});
 
 onActivated(() => {
   // Component restored from KeepAlive cache.
@@ -1350,12 +1538,17 @@ onActivated(() => {
   // index, so front-trimming of the sessionStore buffer during a
   // long background session doesn't invalidate the tracking position.
   if (props.sessionId) {
-    const total = sessionStore.getChunkCount(props.sessionId)
+    const total = sessionStore.getChunkCount(props.sessionId);
     if (total > writtenChunks) {
-      const tail = sessionStore.getDataFromChunk(props.sessionId, writtenChunks)
-      const hlOn = (settingsStore.settings.terminal.highlightEnabled ?? true) && props.mode !== 'local'
-      terminal?.write(hlOn ? highlight(tail) : tail)
-      writtenChunks = total
+      const tail = sessionStore.getDataFromChunk(
+        props.sessionId,
+        writtenChunks,
+      );
+      const hlOn =
+        (settingsStore.settings.terminal.highlightEnabled ?? true) &&
+        props.mode !== "local";
+      terminal?.write(hlOn ? highlight(tail) : tail);
+      writtenChunks = total;
     }
   }
 
@@ -1365,22 +1558,22 @@ onActivated(() => {
   // was never set and Enter would do nothing despite the reconnect
   // message being replayed above.
   if (props.sessionId) {
-    const st = sessionStore.getStatus(props.sessionId)
-    if (st === 'disconnected' || st === 'error') {
-      retryOnEnter = true
+    const st = sessionStore.getStatus(props.sessionId);
+    if (st === "disconnected" || st === "error") {
+      retryOnEnter = true;
     }
   }
 
-  isActive.value = true
+  isActive.value = true;
   // Re-attach terminal element — another component may have moved it while
   // we were cached (e.g. merge→drag-out→re-merge keeps panelId, KeepAlive
   // reuses the cached BaseTerminal, but the terminal is in holding).
   if (terminalRef.value && props.sessionId) {
-    attachTerminal(props.sessionId, terminalRef.value)
-    nextTick(() => getFitAddon()?.fit())
+    attachTerminal(props.sessionId, terminalRef.value);
+    nextTick(() => getFitAddon()?.fit());
   }
   // Re-register onData/keyHandler listeners that were disposed in onDeactivated.
-  bindListeners?.()
+  bindListeners?.();
   // Restore the user's scroll position captured on deactivation BEFORE
   // resize. resize() triggers viewport.syncScrollArea → _innerRefresh
   // which reads ydisp and writes scrollTop. We must keep ydisp and the
@@ -1404,16 +1597,25 @@ onActivated(() => {
   // If no position was saved, leave the viewport alone — the natural
   // _innerRefresh path during resize lands on the bottom.
   if (savedViewportY != null && savedBaseY != null) {
-    const probeBuf = terminal?.buffer?.active as { baseY?: number; length?: number } | undefined
-    if (probeBuf && typeof probeBuf.baseY === 'number' && typeof probeBuf.length === 'number') {
-      const wasAtBottom = savedViewportY >= savedBaseY - 1
-      const target = wasAtBottom ? probeBuf.baseY : Math.min(savedViewportY, probeBuf.length - 1)
-      terminal?.scrollToLine(target)
-      const vp = terminal?.element?.querySelector('.xterm-viewport') as HTMLElement | null
-      const core = (terminal as any)?._core
-      const rowHeight: number = core?.viewport?._currentRowHeight ?? 0
+    const probeBuf = terminal?.buffer?.active as
+      { baseY?: number; length?: number } | undefined;
+    if (
+      probeBuf &&
+      typeof probeBuf.baseY === "number" &&
+      typeof probeBuf.length === "number"
+    ) {
+      const wasAtBottom = savedViewportY >= savedBaseY - 1;
+      const target = wasAtBottom
+        ? probeBuf.baseY
+        : Math.min(savedViewportY, probeBuf.length - 1);
+      terminal?.scrollToLine(target);
+      const vp = terminal?.element?.querySelector(
+        ".xterm-viewport",
+      ) as HTMLElement | null;
+      const core = (terminal as any)?._core;
+      const rowHeight: number = core?.viewport?._currentRowHeight ?? 0;
       if (vp && rowHeight > 0) {
-        vp.scrollTop = target * rowHeight
+        vp.scrollTop = target * rowHeight;
       }
     }
   }
@@ -1424,222 +1626,249 @@ onActivated(() => {
   // restored ydisp; once scrollTop matches the desired value, the next
   // _innerRefresh is a no-op.
   if (savedScrollback != null && terminal) {
-    terminal.options.scrollback = savedScrollback
-    savedScrollback = null
+    terminal.options.scrollback = savedScrollback;
+    savedScrollback = null;
   }
-  resize()
-  ;[0, 50, 150, 300, 600].forEach(d => setTimeout(resize, d))
+  resize();
+  [0, 50, 150, 300, 600].forEach((d) => setTimeout(resize, d));
   // Re-initialize zmodem service only if it was disposed in onDeactivated.
   // If a transfer was active, the service is still running — skip recreate.
   // safe: no focus() call here, avoids WebView2 crash race with native dialogs.
-  if (props.sessionId && props.mode === 'ssh' && !zmodemService) {
-    initZmodemService(props.sessionId)
+  if (props.sessionId && props.mode === "ssh" && !zmodemService) {
+    initZmodemService(props.sessionId);
   }
   // Note: focus() is intentionally skipped here. Calling focus() during
   // activation can race with native dialogs (OpenDirectoryDialog etc.)
   // and trigger a WebView2 crash (edge.Chromium.Focus parameter error).
-})
+});
 
 onDeactivated(() => {
   // Component deactivated by KeepAlive (e.g. terminal tab moved into workspace).
   // Mark inactive so session event handlers become no-ops.
-  isActive.value = false
+  isActive.value = false;
   // Capture viewport position before listeners are torn down so reactivation
   // can restore the user's scroll position. Reading from the public IBuffer
   // API avoids depending on internal _core field shape.
-  const buf = terminal?.buffer?.active as { viewportY?: number; baseY?: number } | undefined
-  if (buf && typeof buf.viewportY === 'number') {
-    savedViewportY = buf.viewportY
+  const buf = terminal?.buffer?.active as
+    { viewportY?: number; baseY?: number } | undefined;
+  if (buf && typeof buf.viewportY === "number") {
+    savedViewportY = buf.viewportY;
   }
-  if (buf && typeof buf.baseY === 'number') {
-    savedBaseY = buf.baseY
+  if (buf && typeof buf.baseY === "number") {
+    savedBaseY = buf.baseY;
   }
-  // F-026: shrink xterm's pixel buffer for inactive KeepAlive tabs. The full
-  // 2500-line scrollback stays attached to xterm's internal grid — we'd have
-  // to re-stream every byte to fully detach it. Instead, dropping scrollback
-  // to 500 lines forces xterm to release the older rows' canvas + line
-  // objects, freeing ~80% of the inactive buffer's footprint without losing
-  // the visible scrollback on reactivation. Reactivation restores the
-  // user-configured scrollback (and re-renders the canvas from the
-  // sessionStore replay path).
-  if (terminal && (terminal.options.scrollback ?? 0) > INACTIVE_SCROLLBACK) {
-    savedScrollback = terminal.options.scrollback ?? null
-    terminal.options.scrollback = INACTIVE_SCROLLBACK
+  // Shrink xterm's pixel buffer for inactive KeepAlive tabs. The full
+// 2500-line scrollback stays attached to xterm's internal grid — we'd
+// have to re-stream every byte to fully detach it. Instead, dropping
+// scrollback to 500 lines forces xterm to release the older rows'
+// canvas + line objects, freeing ~80% of the inactive buffer's footprint
+// without losing the visible scrollback on reactivation. Reactivation
+// restores the user-configured scrollback (and re-renders the canvas from
+// the sessionStore replay path).
+if (terminal && (terminal.options.scrollback ?? 0) > INACTIVE_SCROLLBACK) {
+    savedScrollback = terminal.options.scrollback ?? null;
+    terminal.options.scrollback = INACTIVE_SCROLLBACK;
   }
   // Dispose per-component listeners to prevent duplicate input when another
   // BaseTerminal mounts with the same shared terminal instance.
-  onDataDispose?.dispose()
-  onDataDispose = null
-  keyHandlerDispose?.dispose()
-  keyHandlerDispose = null
+  onDataDispose?.dispose();
+  onDataDispose = null;
+  keyHandlerDispose?.dispose();
+  keyHandlerDispose = null;
 
   // If a transfer is still active, keep the service running so the background
   // transfer continues. Otherwise dispose and restore backend state.
-  const hasStoreTransfer = zmodemStore.getActiveTransfer(props.sessionId || '')
+  const hasStoreTransfer = zmodemStore.getActiveTransfer(props.sessionId || "");
   if (hasStoreTransfer) {
-    return
+    return;
   }
-  disposeZmodemService(props.sessionId || '')
-})
+  disposeZmodemService(props.sessionId || "");
+});
 
 // Watch sessionId changes to rebind session data
-watch(() => props.sessionId, (newId, oldId) => {
-  if (oldId && oldId !== newId) {
-    if (terminalRef.value) detachTerminal(oldId, terminalRef.value)
-    disposeZmodemService(oldId)
-    // Transfer the terminal to the new sessionId so scrollback is
-    // preserved across reconnects. releaseTerminal is intentionally
-    // skipped — we want to keep the same terminal instance alive.
-    if (newId) transferTerminal(oldId, newId)
-  }
-  // Reset write tracking when session changes so onActivated replay
-  // starts from the correct offset for the new session.
-  writtenChunks = 0
-  // Reset saved scroll position — the new sessionId has a different buffer.
-  savedViewportY = null
-  savedBaseY = null
-  if (newId && (props.mode === 'ssh' || props.mode === 'local')) {
-    initZmodemService(newId)
-    terminal = getManagedTerminal(newId)?.terminal ?? null
-    if (terminalRef.value) {
-      attachTerminal(newId, terminalRef.value)
+watch(
+  () => props.sessionId,
+  (newId, oldId) => {
+    if (oldId && oldId !== newId) {
+      if (terminalRef.value) detachTerminal(oldId, terminalRef.value);
+      disposeZmodemService(oldId);
+      // Transfer the terminal to the new sessionId so scrollback is
+      // preserved across reconnects. releaseTerminal is intentionally
+      // skipped — we want to keep the same terminal instance alive.
+      if (newId) transferTerminal(oldId, newId);
     }
-    // Re-create terminalInput with the new terminal reference.
-    // Otherwise it would still hold the old (disposed) terminal and
-    // cursor position tracking returns {0,0}, pinning the suggestion
-    // popup to the top-left corner.
-    if (props.mode === 'ssh') {
-      const smartOn = settingsStore.settings.terminal.smartCompletion ?? true
-      terminalInput = useTerminalInput(terminal, {
-        mode: props.mode,
-        sessionId: newId,
-        enableHistory: true,  // was: smartOn
-        onHistoryExtract: (command: string) => {
-          suggestions.addHistoryCommand(command)
-        },
-        onResetSuppress: () => {
-          suggestions.resetSuppress()
-        },
-      })
-      suggestions.loadHistory()
+    // Reset write tracking when session changes so onActivated replay
+    // starts from the correct offset for the new session.
+    writtenChunks = 0;
+    // Reset saved scroll position — the new sessionId has a different buffer.
+    savedViewportY = null;
+    savedBaseY = null;
+    if (newId && (props.mode === "ssh" || props.mode === "local")) {
+      initZmodemService(newId);
+      terminal = getManagedTerminal(newId)?.terminal ?? null;
+      if (terminalRef.value) {
+        attachTerminal(newId, terminalRef.value);
+      }
+      // Re-create terminalInput with the new terminal reference.
+      // Otherwise it would still hold the old (disposed) terminal and
+      // cursor position tracking returns {0,0}, pinning the suggestion
+      // popup to the top-left corner.
+      if (props.mode === "ssh") {
+        const smartOn = settingsStore.settings.terminal.smartCompletion ?? true;
+        terminalInput = useTerminalInput(terminal, {
+          mode: props.mode,
+          sessionId: newId,
+          enableHistory: true, // was: smartOn
+          onHistoryExtract: (command: string) => {
+            suggestions.addHistoryCommand(command);
+          },
+          onResetSuppress: () => {
+            suggestions.resetSuppress();
+          },
+        });
+        suggestions.loadHistory();
+      }
+      // Re-bind onData/keyHandler on the new terminal
+      bindListeners?.();
+      const delays = [200, 400, 600, 800, 1000, 1500, 2000];
+      delays.forEach((delay) => {
+        setTimeout(() => resize(), delay);
+      });
     }
-    // Re-bind onData/keyHandler on the new terminal
-    bindListeners?.()
-    const delays = [200, 400, 600, 800, 1000, 1500, 2000]
-    delays.forEach((delay) => {
-      setTimeout(() => resize(), delay)
-    })
-  }
-})
+  },
+);
 
 // ── Search ──
 const searchDecoOptions = {
-  matchBackground: '#515c6e',
-  matchBorder: '#22d3ee',
-  matchOverviewRuler: '#22d3ee',
-  activeMatchBackground: '#22d3ee44',
-  activeMatchBorder: '#22d3ee',
-  activeMatchColorOverviewRuler: '#22d3ee',
-}
+  matchBackground: "#515c6e",
+  matchBorder: "#22d3ee",
+  matchOverviewRuler: "#22d3ee",
+  activeMatchBackground: "#22d3ee44",
+  activeMatchBorder: "#22d3ee",
+  activeMatchColorOverviewRuler: "#22d3ee",
+};
 
 function openSearch() {
-  searchVisible.value = true
+  searchVisible.value = true;
   nextTick(() => {
-    searchInputRef.value?.focus()
+    searchInputRef.value?.focus();
     if (searchText.value) {
-      searchInputRef.value?.select()
-      getSearchAddon()?.findNext(searchText.value, { decorations: searchDecoOptions })
+      searchInputRef.value?.select();
+      getSearchAddon()?.findNext(searchText.value, {
+        decorations: searchDecoOptions,
+      });
     }
-  })
+  });
 }
 
 function closeSearch() {
-  searchVisible.value = false
-  searchText.value = ''
-  searchResultIndex.value = 0
-  searchResultCount.value = 0
-  getSearchAddon()?.clearDecorations()
+  searchVisible.value = false;
+  searchText.value = "";
+  searchResultIndex.value = 0;
+  searchResultCount.value = 0;
+  getSearchAddon()?.clearDecorations();
 }
 
 function onSearchInput() {
   if (!searchText.value) {
-    searchResultIndex.value = 0
-    searchResultCount.value = 0
-    getSearchAddon()?.clearDecorations()
-    return
+    searchResultIndex.value = 0;
+    searchResultCount.value = 0;
+    getSearchAddon()?.clearDecorations();
+    return;
   }
-  getSearchAddon()?.findNext(searchText.value, { incremental: true, decorations: searchDecoOptions })
+  getSearchAddon()?.findNext(searchText.value, {
+    incremental: true,
+    decorations: searchDecoOptions,
+  });
 }
 
 function onSearchNext() {
-  if (!searchText.value) return
-  getSearchAddon()?.findNext(searchText.value, { decorations: searchDecoOptions })
+  if (!searchText.value) return;
+  getSearchAddon()?.findNext(searchText.value, {
+    decorations: searchDecoOptions,
+  });
 }
 
 function onSearchPrev() {
-  if (!searchText.value) return
-  getSearchAddon()?.findPrevious(searchText.value, { decorations: searchDecoOptions })
+  if (!searchText.value) return;
+  getSearchAddon()?.findPrevious(searchText.value, {
+    decorations: searchDecoOptions,
+  });
 }
 
 function applyXtermTheme(themeName: string) {
-  if (!terminal) return
+  if (!terminal) return;
   const theme = resolveXtermBackground(
     getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
     localStateStore.state.backgroundEnabled,
-    localStateStore.state.backgroundImage
-  )
-  terminal.options.theme = theme
+    localStateStore.state.backgroundImage,
+  );
+  terminal.options.theme = theme;
 }
 
-// F-032: watch individual terminal settings keys instead of the whole
-// object with `deep: true`. The previous deep watcher fired on every
-// nested mutation (e.g. dragging the fontSize slider 60×/sec) and ran
-// the entire handler — including a fresh theme build + applyXtermTheme —
-// for each tick. Each per-key watcher is also short-circuits the
-// resize() call (debounced) so a burst of slider edits collapses into
-// one reflow.
-let settingsResizeTimer: ReturnType<typeof setTimeout> | null = null
+// Watch individual terminal settings keys instead of the whole object
+// with `deep: true`. The previous deep watcher fired on every nested
+// mutation (e.g. dragging the fontSize slider 60×/sec) and ran the
+// entire handler — including a fresh theme build + applyXtermTheme —
+// for each tick. Each per-key watcher is also short-circuits the resize()
+// call (debounced) so a burst of slider edits collapses into one reflow.
+let settingsResizeTimer: ReturnType<typeof setTimeout> | null = null;
 function debouncedSettingsResize() {
-  if (settingsResizeTimer) clearTimeout(settingsResizeTimer)
+  if (settingsResizeTimer) clearTimeout(settingsResizeTimer);
   settingsResizeTimer = setTimeout(() => {
-    settingsResizeTimer = null
-    resize()
-  }, 50)
+    settingsResizeTimer = null;
+    resize();
+  }, 50);
 }
 
-watch(() => settingsStore.settings.terminal.fontSize, (v) => {
-  if (!terminal || !v) return
-  terminal.options.fontSize = v
-  debouncedSettingsResize()
-})
-watch(() => settingsStore.settings.terminal.fontFamily, (v) => {
-  if (!terminal || !v) return
-  terminal.options.fontFamily = v
-  debouncedSettingsResize()
-})
-watch(() => settingsStore.settings.terminal.maxHistoryLines, (v) => {
-  if (!terminal || !v) return
-  terminal.options.scrollback = v
-})
-watch(() => settingsStore.settings.terminal.theme, (v) => {
-  if (!terminal || !v) return
-  applyXtermTheme(v)
-})
-watch(() => settingsStore.settings.terminal.cursorBlink, (v) => {
-  if (!terminal || typeof v !== 'boolean') return
-  terminal.options.cursorBlink = v
-  // xterm keeps an internal blink state set by DECSET 12; if the
-  // terminal previously received \x1b[?12h from a remote shell, just
-  // flipping the option may not stop the running blink animation.
-  // Force-reset by feeding the cursor a DECRST 12 sequence.
-  if (!v) terminal.write('\x1b[?12l')
-})
+watch(
+  () => settingsStore.settings.terminal.fontSize,
+  (v) => {
+    if (!terminal || !v) return;
+    terminal.options.fontSize = v;
+    debouncedSettingsResize();
+  },
+);
+watch(
+  () => settingsStore.settings.terminal.fontFamily,
+  (v) => {
+    if (!terminal || !v) return;
+    terminal.options.fontFamily = v;
+    debouncedSettingsResize();
+  },
+);
+watch(
+  () => settingsStore.settings.terminal.maxHistoryLines,
+  (v) => {
+    if (!terminal || !v) return;
+    terminal.options.scrollback = v;
+  },
+);
+watch(
+  () => settingsStore.settings.terminal.theme,
+  (v) => {
+    if (!terminal || !v) return;
+    applyXtermTheme(v);
+  },
+);
+watch(
+  () => settingsStore.settings.terminal.cursorBlink,
+  (v) => {
+    if (!terminal || typeof v !== "boolean") return;
+    terminal.options.cursorBlink = v;
+    // xterm keeps an internal blink state set by DECSET 12; if the
+    // terminal previously received \x1b[?12h from a remote shell, just
+    // flipping the option may not stop the running blink animation.
+    // Force-reset by feeding the cursor a DECRST 12 sequence.
+    if (!v) terminal.write("\x1b[?12l");
+  },
+);
 
 // Watch for background image toggling to update terminal transparency
 watch(
   () => localStateStore.state.backgroundEnabled,
-  () => applyXtermTheme(settingsStore.settings.terminal.theme || 'dark')
-)
+  () => applyXtermTheme(settingsStore.settings.terminal.theme || "dark"),
+);
 
 // Detach terminal before Vue nulls template refs.
 // In Vue 3, onUnmounted fires AFTER template refs are set to null,
@@ -1647,63 +1876,64 @@ watch(
 // onBeforeUnmount fires while refs are still valid.
 onBeforeUnmount(() => {
   if (props.sessionId && terminalRef.value) {
-    detachTerminal(props.sessionId, terminalRef.value)
+    detachTerminal(props.sessionId, terminalRef.value);
   }
-})
+});
 
 onUnmounted(() => {
-  resizeObserver?.disconnect()
-  intersectionObserver?.disconnect()
+  resizeObserver?.disconnect();
+  intersectionObserver?.disconnect();
 
   // Dispose per-component listeners BEFORE releasing terminal.
   // The terminal instance may outlive this component if another
   // component still holds a reference.
-  onDataDispose?.dispose()
-  onDataDispose = null
-  keyHandlerDispose?.dispose()
-  keyHandlerDispose = null
+  onDataDispose?.dispose();
+  onDataDispose = null;
+  keyHandlerDispose?.dispose();
+  keyHandlerDispose = null;
   // webLinksAddon is per-component (its callbacks close over this
   // component's hoverEl). Terminal.dispose() does NOT cascade to
   // addons loaded via loadAddon — dispose it here or its link-provider
   // listeners stay bound to a disposed terminal.
-  webLinksAddonDispose?.dispose()
-  webLinksAddonDispose = null
+  webLinksAddonDispose?.dispose();
+  webLinksAddonDispose = null;
 
   // Release reference (delayed dispose: terminal survives 500ms)
   if (props.sessionId) {
-    releaseTerminal(props.sessionId, terminalInstanceRef)
+    releaseTerminal(props.sessionId, terminalInstanceRef);
   }
 
-  unsubscribe?.()
-  statusUnsubscribe?.()
+  unsubscribe?.();
+  statusUnsubscribe?.();
   if (onDocumentMouseDown) {
-    document.removeEventListener('mousedown', onDocumentMouseDown)
-    onDocumentMouseDown = null
+    document.removeEventListener("mousedown", onDocumentMouseDown);
+    onDocumentMouseDown = null;
   }
   if (onTerminalAuxClick) {
-    document.removeEventListener('auxclick', onTerminalAuxClick)
-    onTerminalAuxClick = null
+    document.removeEventListener("auxclick", onTerminalAuxClick);
+    onTerminalAuxClick = null;
   }
-  window.removeEventListener('resize', onWindowResize)
-  window.removeEventListener('split:resize-start', onSplitResizeStart)
-  window.removeEventListener('split:resize-end', onSplitResizeEnd)
-  if (onOpenSearch) window.removeEventListener('terminal:open-search', onOpenSearch)
-  if (onExport) window.removeEventListener('terminal:export', onExport)
-  if (onSendRz) window.removeEventListener('terminal:send-rz', onSendRz)
-  suggestions.close()
-  if (!zmodemStore.getActiveTransfer(props.sessionId || '')) {
-    disposeZmodemService(props.sessionId || '')
+  window.removeEventListener("resize", onWindowResize);
+  window.removeEventListener("split:resize-start", onSplitResizeStart);
+  window.removeEventListener("split:resize-end", onSplitResizeEnd);
+  if (onOpenSearch)
+    window.removeEventListener("terminal:open-search", onOpenSearch);
+  if (onExport) window.removeEventListener("terminal:export", onExport);
+  if (onSendRz) window.removeEventListener("terminal:send-rz", onSendRz);
+  suggestions.close();
+  if (!zmodemStore.getActiveTransfer(props.sessionId || "")) {
+    disposeZmodemService(props.sessionId || "");
   }
-})
+});
 
 // Paste handling
 function pasteToTerminal(text: string) {
-  if (props.mode === 'sftp' && terminal) {
+  if (props.mode === "sftp" && terminal) {
     for (const char of text) {
-      const code = char.charCodeAt(0)
+      const code = char.charCodeAt(0);
       if (code >= 32 && code <= 126) {
-        inputBuffer += char
-        terminal.write(char)
+        inputBuffer += char;
+        terminal.write(char);
       }
     }
   }
@@ -1712,22 +1942,22 @@ function pasteToTerminal(text: string) {
 // Wrap in bracketed-paste markers when the app enabled the mode, so vim etc.
 // don't re-indent each pasted line.
 function bracketPaste(text: string): string {
-  const sid = props.sessionId
-  const managed = sid ? getManagedTerminal(sid) : undefined
+  const sid = props.sessionId;
+  const managed = sid ? getManagedTerminal(sid) : undefined;
   if (managed?.terminal.modes.bracketedPasteMode) {
-    return '\x1b[200~' + text + '\x1b[201~'
+    return "\x1b[200~" + text + "\x1b[201~";
   }
-  return text
+  return text;
 }
 
 async function pasteToSession(text: string) {
-  if (props.mode === 'ssh' || props.mode === 'local') {
-    const sid = props.sessionId
+  if (props.mode === "ssh" || props.mode === "local") {
+    const sid = props.sessionId;
     if (sid) {
       // Normalize line endings: \r\n -> \r to prevent extra newlines
       // when pasting into editors like vim (Windows clipboard often has \r\n)
-      const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '')
-      SessionWrite(sid, bracketPaste(normalized))
+      const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "");
+      SessionWrite(sid, bracketPaste(normalized));
     }
   }
 }
@@ -1735,35 +1965,41 @@ async function pasteToSession(text: string) {
 const menu = useTerminalMenu({
   getSelection,
   onPaste: async (text) => {
-    if (props.mode === 'ssh' || props.mode === 'local') {
+    if (props.mode === "ssh" || props.mode === "local") {
       if (props.broadcastActive && props.workspaceId) {
-        const targets = tabStore.getBroadcastPanelIdsInWorkspace(props.workspaceId)
+        const targets = tabStore.getBroadcastPanelIdsInWorkspace(
+          props.workspaceId,
+        );
         if (targets.length > 0) {
-          const filtered = filterTerminalInput(text, false)
+          const filtered = filterTerminalInput(text, false);
           for (const pid of targets) {
-            const p = panelStore.getPanel(pid)
-            if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
+            const p = panelStore.getPanel(pid);
+            if (p?.sessionId && (p.type === "ssh" || p.type === "local")) {
               // Bracket per target session — each has its own paste mode.
-              const wrap = getManagedTerminal(p.sessionId)?.terminal.modes.bracketedPasteMode
-              SessionWrite(p.sessionId, wrap ? '\x1b[200~' + filtered + '\x1b[201~' : filtered)
+              const wrap = getManagedTerminal(p.sessionId)?.terminal.modes
+                .bracketedPasteMode;
+              SessionWrite(
+                p.sessionId,
+                wrap ? "\x1b[200~" + filtered + "\x1b[201~" : filtered,
+              );
             }
           }
         } else {
-          await pasteToSession(text)
+          await pasteToSession(text);
         }
       } else {
-        await pasteToSession(text)
+        await pasteToSession(text);
       }
     } else {
-      pasteToTerminal(text)
+      pasteToTerminal(text);
     }
     // Restore focus after paste so the cursor stays active in the terminal
-    focus()
+    focus();
   },
   onAskAI: (text) => {
-    window.dispatchEvent(new CustomEvent('ai:ask', { detail: text }))
+    window.dispatchEvent(new CustomEvent("ai:ask", { detail: text }));
   },
-})
+});
 
 defineExpose({
   getSelection,
@@ -1771,7 +2007,7 @@ defineExpose({
   focus,
   write,
   setRetryOnEnter,
-})
+});
 </script>
 
 <style scoped>

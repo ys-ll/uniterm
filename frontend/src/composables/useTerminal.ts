@@ -1,42 +1,54 @@
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import type { Ref } from 'vue'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { SearchAddon } from '@xterm/addon-search'
-import { WebLinksAddon } from '@xterm/addon-web-links'
-import '@xterm/xterm/css/xterm.css'
-import { SessionWrite, SessionResize } from '../../wailsjs/go/main/App'
-import { EventsOn, BrowserOpenURL } from '../../wailsjs/runtime'
-import { useSettingsStore } from '../stores/settingsStore'
-import { useLocalStateStore } from '../stores/localStateStore'
-import { useSessionStore } from '../stores/sessionStore'
-import { highlight } from './useHighlight'
-import { stripCursorBlink } from '../utils/cursor'
-import { resolveXtermBackground } from './useTerminalTheme'
-import type { CustomTerminalTheme } from '../types/settings'
+import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
+import type { Ref } from "vue";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import "@xterm/xterm/css/xterm.css";
+import { SessionWrite, SessionResize } from "../../wailsjs/go/main/App";
+import { EventsOn, BrowserOpenURL } from "../../wailsjs/runtime";
+import { useSettingsStore } from "../stores/settingsStore";
+import { useLocalStateStore } from "../stores/localStateStore";
+import { useSessionStore } from "../stores/sessionStore";
+import { highlight } from "./useHighlight";
+import { stripCursorBlink } from "../utils/cursor";
+import { resolveXtermBackground } from "./useTerminalTheme";
+import type { CustomTerminalTheme } from "../types/settings";
 
 export interface UseTerminalOptions {
-  onSessionData?: (data: string) => void
-  onSessionStatus?: (status: string) => void
+  onSessionData?: (data: string) => void;
+  onSessionStatus?: (status: string) => void;
 }
+
+// Regex hoisted to module scope so the hot path (60+ chunks/sec of
+// session:data) doesn't recompile them on every chunk. Previously the
+// inline `/.../g` literals created a fresh RegExp object per call,
+// which the runtime could not cache because the literal pattern embedded
+// a dynamic source.
+const RE_ERASE_SCROLLBACK = /\x1b\[3J/g;
+const RE_CSI_HOME_ERASE = /\x1b\[H\x1b\[2J/g;
+const RE_CSI_ERASE = /\x1b\[2J/g;
 
 export interface UseTerminalReturn {
-  terminalRef: Ref<HTMLDivElement | undefined>
-  terminal: Terminal | null
-  fitAddon: FitAddon | null
-  searchAddon: SearchAddon | null
-  write: (data: string) => void
-  resize: () => void
-  getSelection: () => string
-  clear: () => void
-  focus: () => void
-  setRetryOnEnter: (value: boolean) => void
+  terminalRef: Ref<HTMLDivElement | undefined>;
+  terminal: Terminal | null;
+  fitAddon: FitAddon | null;
+  searchAddon: SearchAddon | null;
+  write: (data: string) => void;
+  resize: () => void;
+  getSelection: () => string;
+  clear: () => void;
+  focus: () => void;
+  setRetryOnEnter: (value: boolean) => void;
 }
 
-export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]): any {
-  const custom = customThemes?.find(t => t.id === name)
+export function getXtermTheme(
+  name: string,
+  customThemes?: CustomTerminalTheme[],
+): any {
+  const custom = customThemes?.find((t) => t.id === name);
   if (custom) {
-    const c = custom.colors
+    const c = custom.colors;
     return {
       background: c.background,
       foreground: c.foreground,
@@ -57,380 +69,752 @@ export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]
       brightBlue: c.brightBlue,
       brightMagenta: c.brightMagenta,
       brightCyan: c.brightCyan,
-      brightWhite: c.brightWhite
-    }
+      brightWhite: c.brightWhite,
+    };
   }
   const base = {
-    background: '#1a1a1a',
-    foreground: '#e4e4e7',
-    cursor: '#22d3ee',
-    selectionBackground: 'rgba(34, 211, 238, 0.2)',
-    black: '#1e1e22',
-    red: '#f87171',
-    green: '#34d399',
-    yellow: '#fbbf24',
-    blue: '#60a5fa',
-    magenta: '#c084fc',
-    cyan: '#22d3ee',
-    white: '#b0b0b8',
-    brightBlack: '#3f3f46',
-    brightRed: '#fca5a5',
-    brightGreen: '#6ee7b7',
-    brightYellow: '#fde68a',
-    brightBlue: '#93c5fd',
-    brightMagenta: '#d8b4fe',
-    brightCyan: '#67e8f9',
-    brightWhite: '#d0d0d8'
-  }
+    background: "#1a1a1a",
+    foreground: "#e4e4e7",
+    cursor: "#22d3ee",
+    selectionBackground: "rgba(34, 211, 238, 0.2)",
+    black: "#1e1e22",
+    red: "#f87171",
+    green: "#34d399",
+    yellow: "#fbbf24",
+    blue: "#60a5fa",
+    magenta: "#c084fc",
+    cyan: "#22d3ee",
+    white: "#b0b0b8",
+    brightBlack: "#3f3f46",
+    brightRed: "#fca5a5",
+    brightGreen: "#6ee7b7",
+    brightYellow: "#fde68a",
+    brightBlue: "#93c5fd",
+    brightMagenta: "#d8b4fe",
+    brightCyan: "#67e8f9",
+    brightWhite: "#d0d0d8",
+  };
   switch (name) {
-    case 'uniterm-dark':
-      return base
-    case 'uniterm-soft-gray':
+    case "uniterm-dark":
+      return base;
+    case "uniterm-soft-gray":
       return {
-        background: '#e8e8e8',
-        foreground: '#1a1a1a',
-        cursor: '#1a1a1a',
-        selectionBackground: 'rgba(0, 120, 212, 0.25)',
-        black: '#2d2d2d',
-        red: '#c1395b',
-        green: '#2c8c4f',
-        yellow: '#b07d00',
-        blue: '#1f6fcc',
-        magenta: '#8a44c9',
-        cyan: '#0d8a8a',
-        white: '#5a5a5a',
-        brightBlack: '#6a6a6a',
-        brightRed: '#e85a82',
-        brightGreen: '#4cb87a',
-        brightYellow: '#d99a1a',
-        brightBlue: '#4ca0e8',
-        brightMagenta: '#b06ee0',
-        brightCyan: '#33b3b3',
-        brightWhite: '#2d2d2d'
-      }
-    case 'uniterm-windows11':
+        background: "#e8e8e8",
+        foreground: "#1a1a1a",
+        cursor: "#1a1a1a",
+        selectionBackground: "rgba(0, 120, 212, 0.25)",
+        black: "#2d2d2d",
+        red: "#c1395b",
+        green: "#2c8c4f",
+        yellow: "#b07d00",
+        blue: "#1f6fcc",
+        magenta: "#8a44c9",
+        cyan: "#0d8a8a",
+        white: "#5a5a5a",
+        brightBlack: "#6a6a6a",
+        brightRed: "#e85a82",
+        brightGreen: "#4cb87a",
+        brightYellow: "#d99a1a",
+        brightBlue: "#4ca0e8",
+        brightMagenta: "#b06ee0",
+        brightCyan: "#33b3b3",
+        brightWhite: "#2d2d2d",
+      };
+    case "uniterm-windows11":
       return {
-        background: '#0c0c0c',
-        foreground: '#cccccc',
-        cursor: '#ffffff',
-        selectionBackground: 'rgba(255, 255, 255, 0.4)',
-        black: '#0c0c0c',
-        red: '#e74856',
-        green: '#16c60c',
-        yellow: '#f9f1a5',
-        blue: '#3b78ff',
-        magenta: '#b4009e',
-        cyan: '#61d6d6',
-        white: '#cccccc',
-        brightBlack: '#767676',
-        brightRed: '#e74856',
-        brightGreen: '#16c60c',
-        brightYellow: '#f9f1a5',
-        brightBlue: '#3b78ff',
-        brightMagenta: '#b4009e',
-        brightCyan: '#61d6d6',
-        brightWhite: '#f2f2f2'
-      }
-    case 'uniterm-windows11-light':
+        background: "#0c0c0c",
+        foreground: "#cccccc",
+        cursor: "#ffffff",
+        selectionBackground: "rgba(255, 255, 255, 0.4)",
+        black: "#0c0c0c",
+        red: "#e74856",
+        green: "#16c60c",
+        yellow: "#f9f1a5",
+        blue: "#3b78ff",
+        magenta: "#b4009e",
+        cyan: "#61d6d6",
+        white: "#cccccc",
+        brightBlack: "#767676",
+        brightRed: "#e74856",
+        brightGreen: "#16c60c",
+        brightYellow: "#f9f1a5",
+        brightBlue: "#3b78ff",
+        brightMagenta: "#b4009e",
+        brightCyan: "#61d6d6",
+        brightWhite: "#f2f2f2",
+      };
+    case "uniterm-windows11-light":
       return {
-        background: '#f3f7fc',
-        foreground: '#1c1c1c',
-        cursor: '#1c1c1c',
-        selectionBackground: 'rgba(28, 28, 28, 0.4)',
-        black: '#000000',
-        red: '#c50f1f',
-        green: '#13a10e',
-        yellow: '#c19c00',
-        blue: '#0037da',
-        magenta: '#881798',
-        cyan: '#3a96dd',
-        white: '#cccccc',
-        brightBlack: '#767676',
-        brightRed: '#c50f1f',
-        brightGreen: '#13a10e',
-        brightYellow: '#c19c00',
-        brightBlue: '#0037da',
-        brightMagenta: '#881798',
-        brightCyan: '#3a96dd',
-        brightWhite: '#1c1c1c'
-      }
-    case 'uniterm-light':
+        background: "#f3f7fc",
+        foreground: "#1c1c1c",
+        cursor: "#1c1c1c",
+        selectionBackground: "rgba(28, 28, 28, 0.4)",
+        black: "#000000",
+        red: "#c50f1f",
+        green: "#13a10e",
+        yellow: "#c19c00",
+        blue: "#0037da",
+        magenta: "#881798",
+        cyan: "#3a96dd",
+        white: "#cccccc",
+        brightBlack: "#767676",
+        brightRed: "#c50f1f",
+        brightGreen: "#13a10e",
+        brightYellow: "#c19c00",
+        brightBlue: "#0037da",
+        brightMagenta: "#881798",
+        brightCyan: "#3a96dd",
+        brightWhite: "#1c1c1c",
+      };
+    case "uniterm-light":
       return {
-        background: '#fafafa',
-        foreground: '#2c2c2c',
-        cursor: '#1976d2',
-        selectionBackground: 'rgba(25, 118, 210, 0.15)',
-        black: '#1e1e22',
-        red: '#d32f2f',
-        green: '#388e3c',
-        yellow: '#c68600',
-        blue: '#1976d2',
-        magenta: '#7b1fa2',
-        cyan: '#00838f',
-        white: '#9e9e9e',
-        brightBlack: '#555555',
-        brightRed: '#c62828',
-        brightGreen: '#2e7d32',
-        brightYellow: '#b87a00',
-        brightBlue: '#1565c0',
-        brightMagenta: '#6a1b9a',
-        brightCyan: '#006064',
-        brightWhite: '#424242'
-      }
-    case 'solarized-dark':
+        background: "#fafafa",
+        foreground: "#2c2c2c",
+        cursor: "#1976d2",
+        selectionBackground: "rgba(25, 118, 210, 0.15)",
+        black: "#1e1e22",
+        red: "#d32f2f",
+        green: "#388e3c",
+        yellow: "#c68600",
+        blue: "#1976d2",
+        magenta: "#7b1fa2",
+        cyan: "#00838f",
+        white: "#9e9e9e",
+        brightBlack: "#555555",
+        brightRed: "#c62828",
+        brightGreen: "#2e7d32",
+        brightYellow: "#b87a00",
+        brightBlue: "#1565c0",
+        brightMagenta: "#6a1b9a",
+        brightCyan: "#006064",
+        brightWhite: "#424242",
+      };
+    case "solarized-dark":
       return {
-        background: '#002b36',
-        foreground: '#839496',
-        cursor: '#93a1a1',
-        selectionBackground: 'rgba(147, 161, 161, 0.3)',
-        black: '#073642',
-        red: '#dc322f',
-        green: '#859900',
-        yellow: '#b58900',
-        blue: '#268bd2',
-        magenta: '#d33682',
-        cyan: '#2aa198',
-        white: '#eee8d5',
-        brightBlack: '#002b36',
-        brightRed: '#cb4b16',
-        brightGreen: '#586e75',
-        brightYellow: '#657b83',
-        brightBlue: '#839496',
-        brightMagenta: '#6c71c4',
-        brightCyan: '#93a1a1',
-        brightWhite: '#fdf6e3'
-      }
-    case 'solarized-light':
+        background: "#002b36",
+        foreground: "#839496",
+        cursor: "#93a1a1",
+        selectionBackground: "rgba(147, 161, 161, 0.3)",
+        black: "#073642",
+        red: "#dc322f",
+        green: "#859900",
+        yellow: "#b58900",
+        blue: "#268bd2",
+        magenta: "#d33682",
+        cyan: "#2aa198",
+        white: "#eee8d5",
+        brightBlack: "#002b36",
+        brightRed: "#cb4b16",
+        brightGreen: "#586e75",
+        brightYellow: "#657b83",
+        brightBlue: "#839496",
+        brightMagenta: "#6c71c4",
+        brightCyan: "#93a1a1",
+        brightWhite: "#fdf6e3",
+      };
+    case "solarized-light":
       return {
-        background: '#fdf6e3',
-        foreground: '#657b83',
-        cursor: '#586e75',
-        selectionBackground: 'rgba(88, 110, 117, 0.3)',
-        black: '#002b36',
-        red: '#dc322f',
-        green: '#859900',
-        yellow: '#b58900',
-        blue: '#268bd2',
-        magenta: '#d33682',
-        cyan: '#2aa198',
-        white: '#073642',
-        brightBlack: '#eee8d5',
-        brightRed: '#cb4b16',
-        brightGreen: '#93a1a1',
-        brightYellow: '#839496',
-        brightBlue: '#657b83',
-        brightMagenta: '#6c71c4',
-        brightCyan: '#586e75',
-        brightWhite: '#1e1e1e'
-      }
-    case 'monokai':
+        background: "#fdf6e3",
+        foreground: "#657b83",
+        cursor: "#586e75",
+        selectionBackground: "rgba(88, 110, 117, 0.3)",
+        black: "#002b36",
+        red: "#dc322f",
+        green: "#859900",
+        yellow: "#b58900",
+        blue: "#268bd2",
+        magenta: "#d33682",
+        cyan: "#2aa198",
+        white: "#073642",
+        brightBlack: "#eee8d5",
+        brightRed: "#cb4b16",
+        brightGreen: "#93a1a1",
+        brightYellow: "#839496",
+        brightBlue: "#657b83",
+        brightMagenta: "#6c71c4",
+        brightCyan: "#586e75",
+        brightWhite: "#1e1e1e",
+      };
+    case "monokai":
       return {
-        background: '#272822',
-        foreground: '#f8f8f2',
-        cursor: '#f8f8f0',
-        selectionBackground: 'rgba(248, 248, 240, 0.2)',
-        black: '#272822',
-        red: '#f92672',
-        green: '#a6e22e',
-        yellow: '#f4bf75',
-        blue: '#66d9ef',
-        magenta: '#ae81ff',
-        cyan: '#a1efe4',
-        white: '#f8f8f2',
-        brightBlack: '#75715e',
-        brightRed: '#f92672',
-        brightGreen: '#a6e22e',
-        brightYellow: '#f4bf75',
-        brightBlue: '#66d9ef',
-        brightMagenta: '#ae81ff',
-        brightCyan: '#a1efe4',
-        brightWhite: '#f9f8f5'
-      }
-    case 'dracula':
+        background: "#272822",
+        foreground: "#f8f8f2",
+        cursor: "#f8f8f0",
+        selectionBackground: "rgba(248, 248, 240, 0.2)",
+        black: "#272822",
+        red: "#f92672",
+        green: "#a6e22e",
+        yellow: "#f4bf75",
+        blue: "#66d9ef",
+        magenta: "#ae81ff",
+        cyan: "#a1efe4",
+        white: "#f8f8f2",
+        brightBlack: "#75715e",
+        brightRed: "#f92672",
+        brightGreen: "#a6e22e",
+        brightYellow: "#f4bf75",
+        brightBlue: "#66d9ef",
+        brightMagenta: "#ae81ff",
+        brightCyan: "#a1efe4",
+        brightWhite: "#f9f8f5",
+      };
+    case "dracula":
       return {
-        background: '#282a36',
-        foreground: '#f8f8f2',
-        cursor: '#f8f8f0',
-        selectionBackground: 'rgba(248, 248, 242, 0.2)',
-        black: '#21222c', red: '#ff5555', green: '#50fa7b', yellow: '#f1fa8c',
-        blue: '#bd93f9', magenta: '#ff79c6', cyan: '#8be9fd', white: '#f8f8f2',
-        brightBlack: '#6272a4', brightRed: '#ff6e6e', brightGreen: '#69ff94',
-        brightYellow: '#ffffa5', brightBlue: '#d6acff', brightMagenta: '#ff92df',
-        brightCyan: '#a4ffff', brightWhite: '#ffffff'
-      }
-    case 'molokai':
+        background: "#282a36",
+        foreground: "#f8f8f2",
+        cursor: "#f8f8f0",
+        selectionBackground: "rgba(248, 248, 242, 0.2)",
+        black: "#21222c",
+        red: "#ff5555",
+        green: "#50fa7b",
+        yellow: "#f1fa8c",
+        blue: "#bd93f9",
+        magenta: "#ff79c6",
+        cyan: "#8be9fd",
+        white: "#f8f8f2",
+        brightBlack: "#6272a4",
+        brightRed: "#ff6e6e",
+        brightGreen: "#69ff94",
+        brightYellow: "#ffffa5",
+        brightBlue: "#d6acff",
+        brightMagenta: "#ff92df",
+        brightCyan: "#a4ffff",
+        brightWhite: "#ffffff",
+      };
+    case "molokai":
       return {
-        background: '#1b1d1e',
-        foreground: '#f8f8f2',
-        cursor: '#bbbbbb',
-        selectionBackground: 'rgba(248, 248, 242, 0.2)',
-        black: '#1b1d1e', red: '#f92672', green: '#a6e22e', yellow: '#e6db74',
-        blue: '#66d9ef', magenta: '#ae81ff', cyan: '#a1efe4', white: '#f8f8f2',
-        brightBlack: '#465457', brightRed: '#ff5995', brightGreen: '#b6e354',
-        brightYellow: '#feed6c', brightBlue: '#8cedff', brightMagenta: '#9e6ffe',
-        brightCyan: '#899ca1', brightWhite: '#ffffff'
-      }
-    case 'tomorrow-night':
+        background: "#1b1d1e",
+        foreground: "#f8f8f2",
+        cursor: "#bbbbbb",
+        selectionBackground: "rgba(248, 248, 242, 0.2)",
+        black: "#1b1d1e",
+        red: "#f92672",
+        green: "#a6e22e",
+        yellow: "#e6db74",
+        blue: "#66d9ef",
+        magenta: "#ae81ff",
+        cyan: "#a1efe4",
+        white: "#f8f8f2",
+        brightBlack: "#465457",
+        brightRed: "#ff5995",
+        brightGreen: "#b6e354",
+        brightYellow: "#feed6c",
+        brightBlue: "#8cedff",
+        brightMagenta: "#9e6ffe",
+        brightCyan: "#899ca1",
+        brightWhite: "#ffffff",
+      };
+    case "tomorrow-night":
       return {
-        background: '#1d1f21',
-        foreground: '#c5c8c6',
-        cursor: '#c5c8c6',
-        selectionBackground: 'rgba(197, 200, 198, 0.2)',
-        black: '#1d1f21', red: '#cc6666', green: '#b5bd68', yellow: '#f0c674',
-        blue: '#81a2be', magenta: '#b294bb', cyan: '#8abeb7', white: '#c5c8c6',
-        brightBlack: '#969896', brightRed: '#cc6666', brightGreen: '#b5bd68',
-        brightYellow: '#f0c674', brightBlue: '#81a2be', brightMagenta: '#b294bb',
-        brightCyan: '#8abeb7', brightWhite: '#ffffff'
-      }
-    case 'tomorrow':
-      return { background: '#ffffff', foreground: '#4d4d4c', cursor: '#4d4d4c', selectionBackground: 'rgba(77,77,76,0.2)', black: '#1d1f21', red: '#c82829', green: '#718c00', yellow: '#eab700', blue: '#4271ae', magenta: '#8959a8', cyan: '#3e999f', white: '#8e908c', brightBlack: '#969896', brightRed: '#c82829', brightGreen: '#718c00', brightYellow: '#eab700', brightBlue: '#4271ae', brightMagenta: '#8959a8', brightCyan: '#3e999f', brightWhite: '#4d4d4c' }
-    case 'tomorrow-night-bright':
+        background: "#1d1f21",
+        foreground: "#c5c8c6",
+        cursor: "#c5c8c6",
+        selectionBackground: "rgba(197, 200, 198, 0.2)",
+        black: "#1d1f21",
+        red: "#cc6666",
+        green: "#b5bd68",
+        yellow: "#f0c674",
+        blue: "#81a2be",
+        magenta: "#b294bb",
+        cyan: "#8abeb7",
+        white: "#c5c8c6",
+        brightBlack: "#969896",
+        brightRed: "#cc6666",
+        brightGreen: "#b5bd68",
+        brightYellow: "#f0c674",
+        brightBlue: "#81a2be",
+        brightMagenta: "#b294bb",
+        brightCyan: "#8abeb7",
+        brightWhite: "#ffffff",
+      };
+    case "tomorrow":
       return {
-        background: '#000000',
-        foreground: '#eaeaea',
-        cursor: '#eaeaea',
-        selectionBackground: 'rgba(234, 234, 234, 0.2)',
-        black: '#000000', red: '#d54e53', green: '#b9ca4a', yellow: '#e7c547',
-        blue: '#7aa6da', magenta: '#c397d8', cyan: '#70c0b1', white: '#eaeaea',
-        brightBlack: '#666666', brightRed: '#ff3334', brightGreen: '#9ec400',
-        brightYellow: '#e7c547', brightBlue: '#7aa6da', brightMagenta: '#b77ee0',
-        brightCyan: '#54ced6', brightWhite: '#ffffff'
-      }
-    case 'one-dark':
+        background: "#ffffff",
+        foreground: "#4d4d4c",
+        cursor: "#4d4d4c",
+        selectionBackground: "rgba(77,77,76,0.2)",
+        black: "#1d1f21",
+        red: "#c82829",
+        green: "#718c00",
+        yellow: "#eab700",
+        blue: "#4271ae",
+        magenta: "#8959a8",
+        cyan: "#3e999f",
+        white: "#8e908c",
+        brightBlack: "#969896",
+        brightRed: "#c82829",
+        brightGreen: "#718c00",
+        brightYellow: "#eab700",
+        brightBlue: "#4271ae",
+        brightMagenta: "#8959a8",
+        brightCyan: "#3e999f",
+        brightWhite: "#4d4d4c",
+      };
+    case "tomorrow-night-bright":
       return {
-        background: '#282c34',
-        foreground: '#abb2bf',
-        cursor: '#528bff',
-        selectionBackground: 'rgba(171, 178, 191, 0.2)',
-        black: '#282c34', red: '#e06c75', green: '#98c379', yellow: '#e5c07b',
-        blue: '#61afef', magenta: '#c678dd', cyan: '#56b6c2', white: '#abb2bf',
-        brightBlack: '#545862', brightRed: '#e06c75', brightGreen: '#98c379',
-        brightYellow: '#e5c07b', brightBlue: '#61afef', brightMagenta: '#c678dd',
-        brightCyan: '#56b6c2', brightWhite: '#c8ccd4'
-      }
-    case 'one-light':
+        background: "#000000",
+        foreground: "#eaeaea",
+        cursor: "#eaeaea",
+        selectionBackground: "rgba(234, 234, 234, 0.2)",
+        black: "#000000",
+        red: "#d54e53",
+        green: "#b9ca4a",
+        yellow: "#e7c547",
+        blue: "#7aa6da",
+        magenta: "#c397d8",
+        cyan: "#70c0b1",
+        white: "#eaeaea",
+        brightBlack: "#666666",
+        brightRed: "#ff3334",
+        brightGreen: "#9ec400",
+        brightYellow: "#e7c547",
+        brightBlue: "#7aa6da",
+        brightMagenta: "#b77ee0",
+        brightCyan: "#54ced6",
+        brightWhite: "#ffffff",
+      };
+    case "one-dark":
       return {
-        background: '#fafafa',
-        foreground: '#383a42',
-        cursor: '#526fff',
-        selectionBackground: 'rgba(56, 58, 66, 0.2)',
-        black: '#383a42', red: '#e45649', green: '#50a14f', yellow: '#c18401',
-        blue: '#4078f2', magenta: '#a626a4', cyan: '#0184bc', white: '#fafafa',
-        brightBlack: '#4f525e', brightRed: '#e06c75', brightGreen: '#98c379',
-        brightYellow: '#e5c07b', brightBlue: '#61afef', brightMagenta: '#c678dd',
-        brightCyan: '#56b6c2', brightWhite: '#ffffff'
-      }
-    case 'github-dark':
+        background: "#282c34",
+        foreground: "#abb2bf",
+        cursor: "#528bff",
+        selectionBackground: "rgba(171, 178, 191, 0.2)",
+        black: "#282c34",
+        red: "#e06c75",
+        green: "#98c379",
+        yellow: "#e5c07b",
+        blue: "#61afef",
+        magenta: "#c678dd",
+        cyan: "#56b6c2",
+        white: "#abb2bf",
+        brightBlack: "#545862",
+        brightRed: "#e06c75",
+        brightGreen: "#98c379",
+        brightYellow: "#e5c07b",
+        brightBlue: "#61afef",
+        brightMagenta: "#c678dd",
+        brightCyan: "#56b6c2",
+        brightWhite: "#c8ccd4",
+      };
+    case "one-light":
       return {
-        background: '#0d1117',
-        foreground: '#c9d1d9',
-        cursor: '#c9d1d9',
-        selectionBackground: 'rgba(201, 209, 217, 0.2)',
-        black: '#0d1117', red: '#ff7b72', green: '#3fb950', yellow: '#d29922',
-        blue: '#58a6ff', magenta: '#bc8cff', cyan: '#39c5cf', white: '#b1bac4',
-        brightBlack: '#484f58', brightRed: '#ffa198', brightGreen: '#56d364',
-        brightYellow: '#e3b341', brightBlue: '#79c0ff', brightMagenta: '#d2a8ff',
-        brightCyan: '#56d4dd', brightWhite: '#f0f6fc'
-      }
-    case 'gotham':
+        background: "#fafafa",
+        foreground: "#383a42",
+        cursor: "#526fff",
+        selectionBackground: "rgba(56, 58, 66, 0.2)",
+        black: "#383a42",
+        red: "#e45649",
+        green: "#50a14f",
+        yellow: "#c18401",
+        blue: "#4078f2",
+        magenta: "#a626a4",
+        cyan: "#0184bc",
+        white: "#fafafa",
+        brightBlack: "#4f525e",
+        brightRed: "#e06c75",
+        brightGreen: "#98c379",
+        brightYellow: "#e5c07b",
+        brightBlue: "#61afef",
+        brightMagenta: "#c678dd",
+        brightCyan: "#56b6c2",
+        brightWhite: "#ffffff",
+      };
+    case "github-dark":
       return {
-        background: '#0a0f14',
-        foreground: '#98d1ce',
-        cursor: '#d3ebe9',
-        selectionBackground: 'rgba(152, 209, 206, 0.2)',
-        black: '#0a0f14', red: '#c33027', green: '#26a98b', yellow: '#edb54b',
-        blue: '#195465', magenta: '#4e5165', cyan: '#33859e', white: '#98d1ce',
-        brightBlack: '#10151b', brightRed: '#d26939', brightGreen: '#2a9b72',
-        brightYellow: '#f1c83e', brightBlue: '#25525e', brightMagenta: '#696d87',
-        brightCyan: '#4d97b1', brightWhite: '#d3ebe9'
-      }
-    case 'hybrid':
+        background: "#0d1117",
+        foreground: "#c9d1d9",
+        cursor: "#c9d1d9",
+        selectionBackground: "rgba(201, 209, 217, 0.2)",
+        black: "#0d1117",
+        red: "#ff7b72",
+        green: "#3fb950",
+        yellow: "#d29922",
+        blue: "#58a6ff",
+        magenta: "#bc8cff",
+        cyan: "#39c5cf",
+        white: "#b1bac4",
+        brightBlack: "#484f58",
+        brightRed: "#ffa198",
+        brightGreen: "#56d364",
+        brightYellow: "#e3b341",
+        brightBlue: "#79c0ff",
+        brightMagenta: "#d2a8ff",
+        brightCyan: "#56d4dd",
+        brightWhite: "#f0f6fc",
+      };
+    case "gotham":
       return {
-        background: '#1d1f21',
-        foreground: '#c5c8c6',
-        cursor: '#c5c8c6',
-        selectionBackground: 'rgba(197, 200, 198, 0.2)',
-        black: '#282a2e', red: '#a54242', green: '#8c9440', yellow: '#de935f',
-        blue: '#5f819d', magenta: '#85678f', cyan: '#5e8d87', white: '#707880',
-        brightBlack: '#373b41', brightRed: '#cc6666', brightGreen: '#b5bd68',
-        brightYellow: '#f0c674', brightBlue: '#81a2be', brightMagenta: '#b294bb',
-        brightCyan: '#8abeb7', brightWhite: '#c5c8c6'
-      }
-    case 'nord':
-      return { background: '#2e3440', foreground: '#d8dee9', cursor: '#d8dee9', selectionBackground: 'rgba(216,222,233,0.2)', black: '#3b4252', red: '#bf616a', green: '#a3be8c', yellow: '#ebcb8b', blue: '#81a1c1', magenta: '#b48ead', cyan: '#88c0d0', white: '#e5e9f0', brightBlack: '#4c566a', brightRed: '#bf616a', brightGreen: '#a3be8c', brightYellow: '#ebcb8b', brightBlue: '#81a1c1', brightMagenta: '#b48ead', brightCyan: '#8fbcbb', brightWhite: '#eceff4' }
-    case 'gruvbox-dark':
-      return { background: '#282828', foreground: '#ebdbb2', cursor: '#ebdbb2', selectionBackground: 'rgba(235,219,178,0.2)', black: '#282828', red: '#cc241d', green: '#98971a', yellow: '#d79921', blue: '#458588', magenta: '#b16286', cyan: '#689d6a', white: '#a89984', brightBlack: '#928374', brightRed: '#fb4934', brightGreen: '#b8bb26', brightYellow: '#fabd2f', brightBlue: '#83a598', brightMagenta: '#d3869b', brightCyan: '#8ec07c', brightWhite: '#ebdbb2' }
-    case 'gruvbox-light':
-      return { background: '#fbf1c7', foreground: '#3c3836', cursor: '#3c3836', selectionBackground: 'rgba(60,56,54,0.2)', black: '#fbf1c7', red: '#cc241d', green: '#98971a', yellow: '#d79921', blue: '#458588', magenta: '#b16286', cyan: '#689d6a', white: '#7c6f64', brightBlack: '#928374', brightRed: '#9d0006', brightGreen: '#79740e', brightYellow: '#b57614', brightBlue: '#076678', brightMagenta: '#8f3f71', brightCyan: '#427b58', brightWhite: '#3c3836' }
-    case 'catppuccin-mocha':
-      return { background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc', selectionBackground: 'rgba(205,214,244,0.2)', black: '#45475a', red: '#f38ba8', green: '#a6e3a1', yellow: '#f9e2af', blue: '#89b4fa', magenta: '#f5c2e7', cyan: '#94e2d5', white: '#bac2de', brightBlack: '#585b70', brightRed: '#f38ba8', brightGreen: '#a6e3a1', brightYellow: '#f9e2af', brightBlue: '#89b4fa', brightMagenta: '#f5c2e7', brightCyan: '#94e2d5', brightWhite: '#a6adc8' }
-    case 'catppuccin-latte':
-      return { background: '#eff1f5', foreground: '#4c4f69', cursor: '#dc8a78', selectionBackground: 'rgba(76,79,105,0.2)', black: '#5c5f77', red: '#d20f39', green: '#40a02b', yellow: '#df8e1d', blue: '#1e66f5', magenta: '#ea76cb', cyan: '#179299', white: '#acb0be', brightBlack: '#6c6f85', brightRed: '#d20f39', brightGreen: '#40a02b', brightYellow: '#df8e1d', brightBlue: '#1e66f5', brightMagenta: '#ea76cb', brightCyan: '#179299', brightWhite: '#bcc0cc' }
-    case 'tokyo-night':
-      return { background: '#1a1b26', foreground: '#c0caf5', cursor: '#c0caf5', selectionBackground: 'rgba(192,202,245,0.2)', black: '#15161e', red: '#f7768e', green: '#9ece6a', yellow: '#e0af68', blue: '#7aa2f7', magenta: '#bb9af7', cyan: '#7dcfff', white: '#a9b1d6', brightBlack: '#414868', brightRed: '#f7768e', brightGreen: '#9ece6a', brightYellow: '#e0af68', brightBlue: '#7aa2f7', brightMagenta: '#bb9af7', brightCyan: '#7dcfff', brightWhite: '#c0caf5' }
-    case 'tokyo-day':
-      return { background: '#f8fafc', foreground: '#334155', cursor: '#334155', selectionBackground: 'rgba(51,65,85,0.2)', black: '#e2e8f0', red: '#ef4444', green: '#22c55e', yellow: '#eab308', blue: '#3b82f6', magenta: '#8b5cf6', cyan: '#06b6d4', white: '#64748b', brightBlack: '#94a3b8', brightRed: '#ef4444', brightGreen: '#22c55e', brightYellow: '#eab308', brightBlue: '#3b82f6', brightMagenta: '#8b5cf6', brightCyan: '#06b6d4', brightWhite: '#1e293b' }
-    case 'rose-pine':
-      return { background: '#191724', foreground: '#e0def4', cursor: '#e0def4', selectionBackground: 'rgba(224,222,244,0.2)', black: '#26233a', red: '#eb6f92', green: '#31748f', yellow: '#f6c177', blue: '#9ccfd8', magenta: '#c4a7e7', cyan: '#ebbcba', white: '#e0def4', brightBlack: '#6e6a86', brightRed: '#eb6f92', brightGreen: '#31748f', brightYellow: '#f6c177', brightBlue: '#9ccfd8', brightMagenta: '#c4a7e7', brightCyan: '#ebbcba', brightWhite: '#e0def4' }
-    case 'rose-pine-dawn':
-      return { background: '#faf4ed', foreground: '#575279', cursor: '#575279', selectionBackground: 'rgba(87,82,121,0.2)', black: '#f2e9e1', red: '#b4637a', green: '#286983', yellow: '#ea9d34', blue: '#56949f', magenta: '#907aa9', cyan: '#d7827e', white: '#575279', brightBlack: '#9893a5', brightRed: '#b4637a', brightGreen: '#286983', brightYellow: '#ea9d34', brightBlue: '#56949f', brightMagenta: '#907aa9', brightCyan: '#d7827e', brightWhite: '#575279' }
-    case 'github-light':
-      return { background: '#ffffff', foreground: '#24292f', cursor: '#24292f', selectionBackground: 'rgba(36,41,47,0.2)', black: '#ffffff', red: '#cf222e', green: '#1a7f37', yellow: '#9a6700', blue: '#0969da', magenta: '#8250df', cyan: '#1b7c83', white: '#6e7781', brightBlack: '#57606a', brightRed: '#a40e26', brightGreen: '#116329', brightYellow: '#633d01', brightBlue: '#0550ae', brightMagenta: '#7339ac', brightCyan: '#126061', brightWhite: '#24292f' }
-    case 'everforest-dark':
-      return { background: '#2d353b', foreground: '#d3c6aa', cursor: '#d3c6aa', selectionBackground: 'rgba(211,198,170,0.2)', black: '#475258', red: '#e67e80', green: '#a7c080', yellow: '#dbbc7f', blue: '#7fbbb3', magenta: '#d699b6', cyan: '#83c092', white: '#d3c6aa', brightBlack: '#475258', brightRed: '#e67e80', brightGreen: '#a7c080', brightYellow: '#dbbc7f', brightBlue: '#7fbbb3', brightMagenta: '#d699b6', brightCyan: '#83c092', brightWhite: '#d3c6aa' }
-    case 'everforest-light':
-      return { background: '#fdf6e3', foreground: '#5c6a72', cursor: '#5c6a72', selectionBackground: 'rgba(92,106,114,0.2)', black: '#fdf6e3', red: '#f85552', green: '#8da101', yellow: '#dfa000', blue: '#3a94c5', magenta: '#df69ba', cyan: '#35a77c', white: '#5c6a72', brightBlack: '#a6b0a0', brightRed: '#f85552', brightGreen: '#8da101', brightYellow: '#dfa000', brightBlue: '#3a94c5', brightMagenta: '#df69ba', brightCyan: '#35a77c', brightWhite: '#5c6a72' }
+        background: "#0a0f14",
+        foreground: "#98d1ce",
+        cursor: "#d3ebe9",
+        selectionBackground: "rgba(152, 209, 206, 0.2)",
+        black: "#0a0f14",
+        red: "#c33027",
+        green: "#26a98b",
+        yellow: "#edb54b",
+        blue: "#195465",
+        magenta: "#4e5165",
+        cyan: "#33859e",
+        white: "#98d1ce",
+        brightBlack: "#10151b",
+        brightRed: "#d26939",
+        brightGreen: "#2a9b72",
+        brightYellow: "#f1c83e",
+        brightBlue: "#25525e",
+        brightMagenta: "#696d87",
+        brightCyan: "#4d97b1",
+        brightWhite: "#d3ebe9",
+      };
+    case "hybrid":
+      return {
+        background: "#1d1f21",
+        foreground: "#c5c8c6",
+        cursor: "#c5c8c6",
+        selectionBackground: "rgba(197, 200, 198, 0.2)",
+        black: "#282a2e",
+        red: "#a54242",
+        green: "#8c9440",
+        yellow: "#de935f",
+        blue: "#5f819d",
+        magenta: "#85678f",
+        cyan: "#5e8d87",
+        white: "#707880",
+        brightBlack: "#373b41",
+        brightRed: "#cc6666",
+        brightGreen: "#b5bd68",
+        brightYellow: "#f0c674",
+        brightBlue: "#81a2be",
+        brightMagenta: "#b294bb",
+        brightCyan: "#8abeb7",
+        brightWhite: "#c5c8c6",
+      };
+    case "nord":
+      return {
+        background: "#2e3440",
+        foreground: "#d8dee9",
+        cursor: "#d8dee9",
+        selectionBackground: "rgba(216,222,233,0.2)",
+        black: "#3b4252",
+        red: "#bf616a",
+        green: "#a3be8c",
+        yellow: "#ebcb8b",
+        blue: "#81a1c1",
+        magenta: "#b48ead",
+        cyan: "#88c0d0",
+        white: "#e5e9f0",
+        brightBlack: "#4c566a",
+        brightRed: "#bf616a",
+        brightGreen: "#a3be8c",
+        brightYellow: "#ebcb8b",
+        brightBlue: "#81a1c1",
+        brightMagenta: "#b48ead",
+        brightCyan: "#8fbcbb",
+        brightWhite: "#eceff4",
+      };
+    case "gruvbox-dark":
+      return {
+        background: "#282828",
+        foreground: "#ebdbb2",
+        cursor: "#ebdbb2",
+        selectionBackground: "rgba(235,219,178,0.2)",
+        black: "#282828",
+        red: "#cc241d",
+        green: "#98971a",
+        yellow: "#d79921",
+        blue: "#458588",
+        magenta: "#b16286",
+        cyan: "#689d6a",
+        white: "#a89984",
+        brightBlack: "#928374",
+        brightRed: "#fb4934",
+        brightGreen: "#b8bb26",
+        brightYellow: "#fabd2f",
+        brightBlue: "#83a598",
+        brightMagenta: "#d3869b",
+        brightCyan: "#8ec07c",
+        brightWhite: "#ebdbb2",
+      };
+    case "gruvbox-light":
+      return {
+        background: "#fbf1c7",
+        foreground: "#3c3836",
+        cursor: "#3c3836",
+        selectionBackground: "rgba(60,56,54,0.2)",
+        black: "#fbf1c7",
+        red: "#cc241d",
+        green: "#98971a",
+        yellow: "#d79921",
+        blue: "#458588",
+        magenta: "#b16286",
+        cyan: "#689d6a",
+        white: "#7c6f64",
+        brightBlack: "#928374",
+        brightRed: "#9d0006",
+        brightGreen: "#79740e",
+        brightYellow: "#b57614",
+        brightBlue: "#076678",
+        brightMagenta: "#8f3f71",
+        brightCyan: "#427b58",
+        brightWhite: "#3c3836",
+      };
+    case "catppuccin-mocha":
+      return {
+        background: "#1e1e2e",
+        foreground: "#cdd6f4",
+        cursor: "#f5e0dc",
+        selectionBackground: "rgba(205,214,244,0.2)",
+        black: "#45475a",
+        red: "#f38ba8",
+        green: "#a6e3a1",
+        yellow: "#f9e2af",
+        blue: "#89b4fa",
+        magenta: "#f5c2e7",
+        cyan: "#94e2d5",
+        white: "#bac2de",
+        brightBlack: "#585b70",
+        brightRed: "#f38ba8",
+        brightGreen: "#a6e3a1",
+        brightYellow: "#f9e2af",
+        brightBlue: "#89b4fa",
+        brightMagenta: "#f5c2e7",
+        brightCyan: "#94e2d5",
+        brightWhite: "#a6adc8",
+      };
+    case "catppuccin-latte":
+      return {
+        background: "#eff1f5",
+        foreground: "#4c4f69",
+        cursor: "#dc8a78",
+        selectionBackground: "rgba(76,79,105,0.2)",
+        black: "#5c5f77",
+        red: "#d20f39",
+        green: "#40a02b",
+        yellow: "#df8e1d",
+        blue: "#1e66f5",
+        magenta: "#ea76cb",
+        cyan: "#179299",
+        white: "#acb0be",
+        brightBlack: "#6c6f85",
+        brightRed: "#d20f39",
+        brightGreen: "#40a02b",
+        brightYellow: "#df8e1d",
+        brightBlue: "#1e66f5",
+        brightMagenta: "#ea76cb",
+        brightCyan: "#179299",
+        brightWhite: "#bcc0cc",
+      };
+    case "tokyo-night":
+      return {
+        background: "#1a1b26",
+        foreground: "#c0caf5",
+        cursor: "#c0caf5",
+        selectionBackground: "rgba(192,202,245,0.2)",
+        black: "#15161e",
+        red: "#f7768e",
+        green: "#9ece6a",
+        yellow: "#e0af68",
+        blue: "#7aa2f7",
+        magenta: "#bb9af7",
+        cyan: "#7dcfff",
+        white: "#a9b1d6",
+        brightBlack: "#414868",
+        brightRed: "#f7768e",
+        brightGreen: "#9ece6a",
+        brightYellow: "#e0af68",
+        brightBlue: "#7aa2f7",
+        brightMagenta: "#bb9af7",
+        brightCyan: "#7dcfff",
+        brightWhite: "#c0caf5",
+      };
+    case "tokyo-day":
+      return {
+        background: "#f8fafc",
+        foreground: "#334155",
+        cursor: "#334155",
+        selectionBackground: "rgba(51,65,85,0.2)",
+        black: "#e2e8f0",
+        red: "#ef4444",
+        green: "#22c55e",
+        yellow: "#eab308",
+        blue: "#3b82f6",
+        magenta: "#8b5cf6",
+        cyan: "#06b6d4",
+        white: "#64748b",
+        brightBlack: "#94a3b8",
+        brightRed: "#ef4444",
+        brightGreen: "#22c55e",
+        brightYellow: "#eab308",
+        brightBlue: "#3b82f6",
+        brightMagenta: "#8b5cf6",
+        brightCyan: "#06b6d4",
+        brightWhite: "#1e293b",
+      };
+    case "rose-pine":
+      return {
+        background: "#191724",
+        foreground: "#e0def4",
+        cursor: "#e0def4",
+        selectionBackground: "rgba(224,222,244,0.2)",
+        black: "#26233a",
+        red: "#eb6f92",
+        green: "#31748f",
+        yellow: "#f6c177",
+        blue: "#9ccfd8",
+        magenta: "#c4a7e7",
+        cyan: "#ebbcba",
+        white: "#e0def4",
+        brightBlack: "#6e6a86",
+        brightRed: "#eb6f92",
+        brightGreen: "#31748f",
+        brightYellow: "#f6c177",
+        brightBlue: "#9ccfd8",
+        brightMagenta: "#c4a7e7",
+        brightCyan: "#ebbcba",
+        brightWhite: "#e0def4",
+      };
+    case "rose-pine-dawn":
+      return {
+        background: "#faf4ed",
+        foreground: "#575279",
+        cursor: "#575279",
+        selectionBackground: "rgba(87,82,121,0.2)",
+        black: "#f2e9e1",
+        red: "#b4637a",
+        green: "#286983",
+        yellow: "#ea9d34",
+        blue: "#56949f",
+        magenta: "#907aa9",
+        cyan: "#d7827e",
+        white: "#575279",
+        brightBlack: "#9893a5",
+        brightRed: "#b4637a",
+        brightGreen: "#286983",
+        brightYellow: "#ea9d34",
+        brightBlue: "#56949f",
+        brightMagenta: "#907aa9",
+        brightCyan: "#d7827e",
+        brightWhite: "#575279",
+      };
+    case "github-light":
+      return {
+        background: "#ffffff",
+        foreground: "#24292f",
+        cursor: "#24292f",
+        selectionBackground: "rgba(36,41,47,0.2)",
+        black: "#ffffff",
+        red: "#cf222e",
+        green: "#1a7f37",
+        yellow: "#9a6700",
+        blue: "#0969da",
+        magenta: "#8250df",
+        cyan: "#1b7c83",
+        white: "#6e7781",
+        brightBlack: "#57606a",
+        brightRed: "#a40e26",
+        brightGreen: "#116329",
+        brightYellow: "#633d01",
+        brightBlue: "#0550ae",
+        brightMagenta: "#7339ac",
+        brightCyan: "#126061",
+        brightWhite: "#24292f",
+      };
+    case "everforest-dark":
+      return {
+        background: "#2d353b",
+        foreground: "#d3c6aa",
+        cursor: "#d3c6aa",
+        selectionBackground: "rgba(211,198,170,0.2)",
+        black: "#475258",
+        red: "#e67e80",
+        green: "#a7c080",
+        yellow: "#dbbc7f",
+        blue: "#7fbbb3",
+        magenta: "#d699b6",
+        cyan: "#83c092",
+        white: "#d3c6aa",
+        brightBlack: "#475258",
+        brightRed: "#e67e80",
+        brightGreen: "#a7c080",
+        brightYellow: "#dbbc7f",
+        brightBlue: "#7fbbb3",
+        brightMagenta: "#d699b6",
+        brightCyan: "#83c092",
+        brightWhite: "#d3c6aa",
+      };
+    case "everforest-light":
+      return {
+        background: "#fdf6e3",
+        foreground: "#5c6a72",
+        cursor: "#5c6a72",
+        selectionBackground: "rgba(92,106,114,0.2)",
+        black: "#fdf6e3",
+        red: "#f85552",
+        green: "#8da101",
+        yellow: "#dfa000",
+        blue: "#3a94c5",
+        magenta: "#df69ba",
+        cyan: "#35a77c",
+        white: "#5c6a72",
+        brightBlack: "#a6b0a0",
+        brightRed: "#f85552",
+        brightGreen: "#8da101",
+        brightYellow: "#dfa000",
+        brightBlue: "#3a94c5",
+        brightMagenta: "#df69ba",
+        brightCyan: "#35a77c",
+        brightWhite: "#5c6a72",
+      };
     default:
-      return base
+      return base;
   }
 }
 
 export function useTerminal(
   getSessionId: () => string | null | undefined,
-  options?: UseTerminalOptions
+  options?: UseTerminalOptions,
 ): UseTerminalReturn {
-  const settingsStore = useSettingsStore()
-  const sessionStore = useSessionStore()
+  const settingsStore = useSettingsStore();
+  const sessionStore = useSessionStore();
 
-  const terminalRef = ref<HTMLDivElement>()
-  let terminal: Terminal | null = null
-  let fitAddon: FitAddon | null = null
-  let searchAddon: SearchAddon | null = null
+  const terminalRef = ref<HTMLDivElement>();
+  let terminal: Terminal | null = null;
+  let fitAddon: FitAddon | null = null;
+  let searchAddon: SearchAddon | null = null;
   // Track all loaded addons so we can dispose each on unmount. xterm.addons
   // attach event listeners and (for WebLinks) host elements that survive
   // terminal.dispose() in older versions — explicit dispose() closes those off
   // and prevents the per-reload leak the user reported.
-  const loadedAddons: Array<{ dispose?: () => void }> = []
-  let resizeObserver: ResizeObserver | null = null
-  let intersectionObserver: IntersectionObserver | null = null
-  let unsubscribe: (() => void) | null = null
-  let statusUnsubscribe: (() => void) | null = null
-  let onDocumentMouseUp: (() => void) | null = null
-  let onMouseDownGlobal: ((e: MouseEvent) => void) | null = null
+  const loadedAddons: Array<{ dispose?: () => void }> = [];
+  let resizeObserver: ResizeObserver | null = null;
+  let intersectionObserver: IntersectionObserver | null = null;
+  let unsubscribe: (() => void) | null = null;
+  let statusUnsubscribe: (() => void) | null = null;
+  let onDocumentMouseUp: (() => void) | null = null;
+  let onMouseDownGlobal: ((e: MouseEvent) => void) | null = null;
 
-  let resizeTimer: ReturnType<typeof setTimeout> | null = null
-  let isResizing = false
-  let splitResizing = false
-  let suppressResizeUntil = 0
-  let retryOnEnter = false
-  let hoverEl: HTMLDivElement | null = null
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  let isResizing = false;
+  let splitResizing = false;
+  let suppressResizeUntil = 0;
+  let retryOnEnter = false;
+  let hoverEl: HTMLDivElement | null = null;
   // Cache cellWidth/cellHeight: xterm only recomputes character dimensions
   // when fontSize or fontFamily changes, so we can avoid re-reading internal
   // _renderService on every resize (resize fires 50+ times per second during
   // a drag).
-  let cachedCellWidth = 0
-  let cachedCellHeight = 0
-  let cachedFontKey = ''
+  let cachedCellWidth = 0;
+  let cachedCellHeight = 0;
+  let cachedFontKey = "";
 
   function getTerminalOptions() {
-    const ts = settingsStore.settings.terminal
-    const ls = useLocalStateStore()
-    const themeName = ts.theme || 'uniterm-dark'
+    const ts = settingsStore.settings.terminal;
+    const ls = useLocalStateStore();
+    const themeName = ts.theme || "uniterm-dark";
     const theme = resolveXtermBackground(
       getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
       ls.state.backgroundEnabled,
-      ls.state.backgroundImage
-    )
+      ls.state.backgroundImage,
+    );
     return {
       fontSize: ts.fontSize || 13,
       fontFamily: ts.fontFamily || 'Consolas, "Courier New", monospace',
@@ -440,394 +824,505 @@ export function useTerminal(
       scrollback: ts.maxHistoryLines || 2500,
       allowProposedApi: true,
       allowTransparency: true,
-    }
+    };
   }
 
   // Wrap stripCursorBlink with current blink setting for convenience
   function stripBlink(data: string): string {
-    return stripCursorBlink(data, settingsStore.settings.terminal.cursorBlink ?? true)
+    return stripCursorBlink(
+      data,
+      settingsStore.settings.terminal.cursorBlink ?? true,
+    );
   }
 
   function resize() {
-    const sessionId = getSessionId()
-    if (!terminal || !fitAddon || !sessionId) return
-    const el = terminalRef.value
-    if (!el) return
+    const sessionId = getSessionId();
+    if (!terminal || !fitAddon || !sessionId) return;
+    const el = terminalRef.value;
+    if (!el) return;
 
     // Use getBoundingClientRect to get actual rendered size (bypasses
     // getComputedStyle caching issues during flex shrink).
-    const rect = el.getBoundingClientRect()
+    const rect = el.getBoundingClientRect();
 
     // Read xterm's internally-measured character dimensions.
     // Use try/catch because these are internal APIs that may change between versions.
-    let cellWidth = 0
-    let cellHeight = 0
-    const fontKey = `${terminal.options.fontSize}|${terminal.options.fontFamily}`
-    if (fontKey === cachedFontKey && cachedCellWidth > 0 && cachedCellHeight > 0) {
-      cellWidth = cachedCellWidth
-      cellHeight = cachedCellHeight
+    let cellWidth = 0;
+    let cellHeight = 0;
+    const fontKey = `${terminal.options.fontSize}|${terminal.options.fontFamily}`;
+    if (
+      fontKey === cachedFontKey &&
+      cachedCellWidth > 0 &&
+      cachedCellHeight > 0
+    ) {
+      cellWidth = cachedCellWidth;
+      cellHeight = cachedCellHeight;
     } else {
       try {
-        const core = (terminal as any)._core
-        const dims = core?._renderService?.dimensions
+        const core = (terminal as any)._core;
+        const dims = core?._renderService?.dimensions;
         if (dims) {
-          cellWidth = dims.css?.cell?.width || 0
-          cellHeight = dims.css?.cell?.height || 0
+          cellWidth = dims.css?.cell?.width || 0;
+          cellHeight = dims.css?.cell?.height || 0;
         }
       } catch {
-        cellWidth = 0
-        cellHeight = 0
+        cellWidth = 0;
+        cellHeight = 0;
       }
       if (cellWidth > 0 && cellHeight > 0) {
-        cachedCellWidth = cellWidth
-        cachedCellHeight = cellHeight
-        cachedFontKey = fontKey
+        cachedCellWidth = cellWidth;
+        cachedCellHeight = cellHeight;
+        cachedFontKey = fontKey;
       }
     }
 
     if (cellWidth === 0 || cellHeight === 0) {
       // Fallback to FitAddon if char dims aren't ready yet.
-      fitAddon.fit()
-      if (terminal.cols <= 0 || terminal.rows <= 0) return
-      SessionResize(sessionId, terminal.cols, terminal.rows).catch(() => {})
-      return
+      fitAddon.fit();
+      if (terminal.cols <= 0 || terminal.rows <= 0) return;
+      SessionResize(sessionId, terminal.cols, terminal.rows).catch(() => {});
+      return;
     }
 
     // Use the container's actual rendered size (rect) to compute cols/rows.
     // terminal.element's clientWidth may not shrink when the container shrinks
     // because xterm's internal screen/canvas width can hold it at the old size.
-    const scrollbarWidth = (terminal as any)._core?.viewport?.scrollBarWidth || 0
-    const cols = Math.floor((rect.width - scrollbarWidth) / cellWidth)
-    const rows = Math.floor(rect.height / cellHeight)
-    const newCols = Math.max(2, cols)
-    const newRows = Math.max(1, rows)
+    const scrollbarWidth =
+      (terminal as any)._core?.viewport?.scrollBarWidth || 0;
+    const cols = Math.floor((rect.width - scrollbarWidth) / cellWidth);
+    const rows = Math.floor(rect.height / cellHeight);
+    const newCols = Math.max(2, cols);
+    const newRows = Math.max(1, rows);
 
     if (terminal.cols !== newCols || terminal.rows !== newRows) {
-      terminal.resize(newCols, newRows)
-      SessionResize(sessionId, newCols, newRows).catch(() => {})
+      terminal.resize(newCols, newRows);
+      SessionResize(sessionId, newCols, newRows).catch(() => {});
     }
   }
 
   function write(data: string) {
-    terminal?.write(data)
+    terminal?.write(data);
   }
 
   function getSelection(): string {
-    return terminal?.getSelection() || ''
+    return terminal?.getSelection() || "";
   }
 
   function clear() {
-    terminal?.clear()
+    terminal?.clear();
   }
 
   function focus() {
-    terminal?.focus()
+    terminal?.focus();
   }
 
   function setRetryOnEnter(value: boolean) {
-    retryOnEnter = value
+    retryOnEnter = value;
   }
 
   function onWindowResize() {
-    const el = terminalRef.value
-    if (!el) return
+    const el = terminalRef.value;
+    if (!el) return;
     if (!isResizing) {
-      isResizing = true
-      el.classList.add('resizing')
+      isResizing = true;
+      el.classList.add("resizing");
     }
-    if (resizeTimer) clearTimeout(resizeTimer)
+    if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      isResizing = false
-      el.classList.remove('resizing')
-      resize()
-    }, 400)
+      isResizing = false;
+      el.classList.remove("resizing");
+      resize();
+    }, 400);
   }
 
   function onSplitResizeStart() {
-    splitResizing = true
+    splitResizing = true;
   }
 
   function onSplitResizeEnd() {
-    splitResizing = false
+    splitResizing = false;
     if (resizeTimer) {
-      clearTimeout(resizeTimer)
-      resizeTimer = null
+      clearTimeout(resizeTimer);
+      resizeTimer = null;
     }
-    suppressResizeUntil = Date.now() + 200
+    suppressResizeUntil = Date.now() + 200;
     nextTick(() => {
       setTimeout(() => {
         // Force layout so getComputedStyle returns up-to-date dimensions
-        void terminalRef.value?.offsetWidth
-        resize()
-      }, 0)
-    })
+        void terminalRef.value?.offsetWidth;
+        resize();
+      }, 0);
+    });
   }
 
   onMounted(() => {
-    if (!terminalRef.value) return
+    if (!terminalRef.value) return;
 
-    terminal = new Terminal(getTerminalOptions())
+    terminal = new Terminal(getTerminalOptions());
 
-    fitAddon = new FitAddon()
-    terminal.loadAddon(fitAddon)
-    loadedAddons.push(fitAddon)
+    fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    loadedAddons.push(fitAddon);
     // Register web links addon: underline http/https links, Ctrl+Click to open
     const webLinksAddon = new WebLinksAddon(
       (event, uri) => {
         if (event.ctrlKey || event.metaKey) {
-          BrowserOpenURL(uri)
+          BrowserOpenURL(uri);
         }
       },
       {
         hover(event, _text, _location) {
           if (!hoverEl) {
-            hoverEl = document.createElement('div')
-            hoverEl.className = 'xterm-link-tooltip'
-            terminal!.element!.appendChild(hoverEl)
+            hoverEl = document.createElement("div");
+            hoverEl.className = "xterm-link-tooltip";
+            terminal!.element!.appendChild(hoverEl);
           }
-          const rect = terminal!.element!.getBoundingClientRect()
-          hoverEl.textContent = 'Ctrl + Click to open'
-          hoverEl.style.left = (event.clientX - rect.left + 12) + 'px'
-          hoverEl.style.top = (event.clientY - rect.top - 28) + 'px'
-          hoverEl.style.display = 'block'
+          const rect = terminal!.element!.getBoundingClientRect();
+          hoverEl.textContent = "Ctrl + Click to open";
+          hoverEl.style.left = event.clientX - rect.left + 12 + "px";
+          hoverEl.style.top = event.clientY - rect.top - 28 + "px";
+          hoverEl.style.display = "block";
         },
         leave() {
           if (hoverEl) {
-            hoverEl.style.display = 'none'
+            hoverEl.style.display = "none";
           }
-        }
-      }
-    )
-    terminal.loadAddon(webLinksAddon)
-    loadedAddons.push(webLinksAddon)
+        },
+      },
+    );
+    terminal.loadAddon(webLinksAddon);
+    loadedAddons.push(webLinksAddon);
 
-    searchAddon = new SearchAddon()
-    terminal.loadAddon(searchAddon)
-    loadedAddons.push(searchAddon)
+    searchAddon = new SearchAddon();
+    terminal.loadAddon(searchAddon);
+    loadedAddons.push(searchAddon);
 
-    terminal.open(terminalRef.value)
+    terminal.open(terminalRef.value);
     // Force synchronous layout so grid rows are sized before xterm measures
-    void terminalRef.value.offsetHeight
-    fitAddon.fit()
+    void terminalRef.value.offsetHeight;
+    fitAddon.fit();
 
     // Restore terminal content from session buffer after tab move/merge
-    const sessionId = getSessionId()
+    const sessionId = getSessionId();
     if (sessionId) {
-      const history = sessionStore.getData(sessionId)
+      const history = sessionStore.getData(sessionId);
       if (history) {
         // Apply syntax highlighting when restoring history so it matches
         // newly arriving lines after a tab switch.
-        const hlOn = settingsStore.settings.terminal.highlightEnabled ?? true
-        terminal.write(hlOn ? highlight(stripBlink(history)) : stripBlink(history))
+        const hlOn = settingsStore.settings.terminal.highlightEnabled ?? true;
+        terminal.write(
+          hlOn ? highlight(stripBlink(history)) : stripBlink(history),
+        );
       }
     }
 
     // Retry resize: after a tab move/merge the layout may not be stable yet,
     // so fitAddon.fit() can compute 0 cols/rows and skip SessionResize.
-    ;[100, 300, 600, 1000, 1500].forEach(d => setTimeout(() => resize(), d))
+    [100, 300, 600, 1000, 1500].forEach((d) => setTimeout(() => resize(), d));
 
     terminal.onData((data) => {
-      if (retryOnEnter && (data === '\r' || data === '\n')) {
-        retryOnEnter = false
+      if (retryOnEnter && (data === "\r" || data === "\n")) {
+        retryOnEnter = false;
         if (options?.onSessionStatus) {
-          options.onSessionStatus('retry')
+          options.onSessionStatus("retry");
         }
-        return
+        return;
       }
-      const sid = getSessionId()
+      const sid = getSessionId();
       if (sid) {
-        SessionWrite(sid, data)
+        SessionWrite(sid, data);
       }
-    })
+    });
 
     // Selection action: copy on mouse up (only when a new selection was made).
     // Use mouseDownOnThisTerminal to ensure copy only fires when the user
     // actually started selecting inside this terminal. Without this, clicking
     // another panel (or returning from another app) would trigger copy from
     // this terminal's leftover selection.
-    let selectionStartText = ''
-    let mouseDownOnThisTerminal = false
+    let selectionStartText = "";
+    let mouseDownOnThisTerminal = false;
     onDocumentMouseUp = () => {
-      if (!mouseDownOnThisTerminal) return
-      mouseDownOnThisTerminal = false
-      if (settingsStore.settings.terminal.selectionAction === 'copy') {
-        const text = terminal?.getSelection()
+      if (!mouseDownOnThisTerminal) return;
+      mouseDownOnThisTerminal = false;
+      if (settingsStore.settings.terminal.selectionAction === "copy") {
+        const text = terminal?.getSelection();
         if (text && text !== selectionStartText) {
-          navigator.clipboard.writeText(text)
+          navigator.clipboard.writeText(text);
         }
       }
-    }
-    document.addEventListener('mouseup', onDocumentMouseUp)
-    terminal.element?.addEventListener('mousedown', () => {
-      mouseDownOnThisTerminal = true
-      selectionStartText = terminal?.getSelection() || ''
-    })
+    };
+    document.addEventListener("mouseup", onDocumentMouseUp);
+    terminal.element?.addEventListener("mousedown", () => {
+      mouseDownOnThisTerminal = true;
+      selectionStartText = terminal?.getSelection() || "";
+    });
     onMouseDownGlobal = (e: MouseEvent) => {
       if (!terminal || !terminal.element?.contains(e.target as Node)) {
-        mouseDownOnThisTerminal = false
+        mouseDownOnThisTerminal = false;
       }
-    }
-    document.addEventListener('mousedown', onMouseDownGlobal)
+    };
+    document.addEventListener("mousedown", onMouseDownGlobal);
 
-    unsubscribe = EventsOn('session:data', (payload: { id: string; data: string }) => {
-      const sid = getSessionId()
-      if (payload.id === sid && terminal) {
-        // Filter ED3 (erase scrollback). For ED2 (clear screen), replace with
-        // newline scrolling + home so that current viewport content is pushed
-        // into scrollback before clearing, matching standard terminal behavior.
-        let data = stripBlink(payload.data).replace(/\x1b\[3J/g, '')
-        if (data.includes('\x1b[2J')) {
-          const rows = terminal.rows
-          const scrollClear = '\n'.repeat(rows) + '\x1b[H'
-          data = data.replace(/\x1b\[H\x1b\[2J/g, scrollClear)
-          data = data.replace(/\x1b\[2J/g, scrollClear)
+    unsubscribe = EventsOn(
+      "session:data",
+      (payload: { id: string; data: string }) => {
+        const sid = getSessionId();
+        if (payload.id === sid && terminal) {
+          // stripBlink replaces ESC[ sequences with regex; if the incoming chunk
+          // has no ESC byte, skip the regex call entirely (stripBlink
+          // already handles that case internally; this guard mirrors the
+          // optimization for the outer pattern chain below).
+          // Filter ED3 (erase scrollback). For ED2 (clear screen), replace with
+          // newline scrolling + home so that current viewport content is pushed
+          // into scrollback before clearing, matching standard terminal behavior.
+          let data = stripBlink(payload.data);
+          if (data.indexOf("\x1b[") !== -1) {
+            data = data.replace(RE_ERASE_SCROLLBACK, "");
+            if (data.indexOf("\x1b[2J") !== -1) {
+              const rows = terminal.rows;
+              const scrollClear = "\n".repeat(rows) + "\x1b[H";
+              // Manual regex loop instead of repeated regex compilation.
+              data = data.replace(RE_CSI_HOME_ERASE, scrollClear);
+              data = data.replace(RE_CSI_ERASE, scrollClear);
+            }
+          }
+          const hlOn = settingsStore.settings.terminal.highlightEnabled ?? true;
+          terminal.write(hlOn ? highlight(data) : data);
+          if (options?.onSessionData) {
+            options.onSessionData(data);
+          }
         }
-        const hlOn = settingsStore.settings.terminal.highlightEnabled ?? true
-        terminal.write(hlOn ? highlight(data) : data)
-        if (options?.onSessionData) {
-          options.onSessionData(data)
-        }
-      }
-    })
+      },
+    );
 
-    retryOnEnter = false
-    statusUnsubscribe = EventsOn('session:status', (payload: { id: string; status: string }) => {
-      const sid = getSessionId()
-      if (payload.id !== sid) return
-      if (payload.status === 'connected') {
-        retryOnEnter = false
-        if (options?.onSessionStatus) {
-          options.onSessionStatus(payload.status)
+    retryOnEnter = false;
+    statusUnsubscribe = EventsOn(
+      "session:status",
+      (payload: { id: string; status: string }) => {
+        const sid = getSessionId();
+        if (payload.id !== sid) return;
+        if (payload.status === "connected") {
+          retryOnEnter = false;
+          if (options?.onSessionStatus) {
+            options.onSessionStatus(payload.status);
+          }
+          // Force send current terminal size to sync the backend PTY after reconnect.
+          const sid = getSessionId();
+          if (sid && terminal && terminal.cols > 0 && terminal.rows > 0) {
+            SessionResize(sid, terminal.cols, terminal.rows).catch(() => {});
+          }
+          resize();
+        } else if (payload.status === "error") {
+          retryOnEnter = true;
+          if (options?.onSessionStatus) {
+            options.onSessionStatus(payload.status);
+          }
+          terminal?.write(
+            "\r\n\x1b[31mConnection failed. Press Enter to retry.\x1b[0m\r\n",
+          );
+        } else if (payload.status === "disconnected") {
+          retryOnEnter = true;
+          if (options?.onSessionStatus) {
+            options.onSessionStatus(payload.status);
+          }
+        } else {
+          if (options?.onSessionStatus) {
+            options.onSessionStatus(payload.status);
+          }
         }
-        // Force send current terminal size to sync the backend PTY after reconnect.
-        const sid = getSessionId()
-        if (sid && terminal && terminal.cols > 0 && terminal.rows > 0) {
-          SessionResize(sid, terminal.cols, terminal.rows).catch(() => {})
-        }
-        resize()
-      } else if (payload.status === 'error') {
-        retryOnEnter = true
-        if (options?.onSessionStatus) {
-          options.onSessionStatus(payload.status)
-        }
-        terminal?.write('\r\n\x1b[31mConnection failed. Press Enter to retry.\x1b[0m\r\n')
-      } else if (payload.status === 'disconnected') {
-        retryOnEnter = true
-        if (options?.onSessionStatus) {
-          options.onSessionStatus(payload.status)
-        }
-      } else {
-        if (options?.onSessionStatus) {
-          options.onSessionStatus(payload.status)
-        }
-      }
-    })
+      },
+    );
 
-    window.addEventListener('resize', onWindowResize)
-    window.addEventListener('split:resize-start', onSplitResizeStart)
-    window.addEventListener('split:resize-end', onSplitResizeEnd)
+    window.addEventListener("resize", onWindowResize);
+    window.addEventListener("split:resize-start", onSplitResizeStart);
+    window.addEventListener("split:resize-end", onSplitResizeEnd);
 
     // Also handle container-only resize (AI sidebar drag, etc.)
     resizeObserver = new ResizeObserver(() => {
-      if (isResizing || splitResizing || Date.now() < suppressResizeUntil) return
-      const el = terminalRef.value
-      if (!el) return
-      if (resizeTimer) clearTimeout(resizeTimer)
-      resizeTimer = setTimeout(() => resize(), 150)
-    })
-    resizeObserver.observe(terminalRef.value)
+      if (isResizing || splitResizing || Date.now() < suppressResizeUntil)
+        return;
+      const el = terminalRef.value;
+      if (!el) return;
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => resize(), 150);
+    });
+    resizeObserver.observe(terminalRef.value);
 
     intersectionObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
+      entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          resize()
+          resize();
         }
-      })
-    })
-    intersectionObserver.observe(terminalRef.value)
-  })
+      });
+    });
+    intersectionObserver.observe(terminalRef.value);
+  });
 
   // Watch sessionId changes to rebind session data
-  watch(() => getSessionId(), (newId) => {
-    if (newId && terminal) {
-      // Restore buffered session data that arrived before bindSession
-      const history = sessionStore.getData(newId)
-      if (history) {
-        terminal.write(stripBlink(history))
+  watch(
+    () => getSessionId(),
+    (newId) => {
+      if (newId && terminal) {
+        // Restore buffered session data that arrived before bindSession
+        const history = sessionStore.getData(newId);
+        if (history) {
+          terminal.write(stripBlink(history));
+        }
+        // Retry resize with backoff but stop as soon as one attempt actually
+        // changes the backend-tracked size. The previous 7-fixed-delay
+        // loop fired 7 IPC calls (one per delay) even on a fast first-
+        // attempt success, costing ~6 wasted SessionResize calls per tab
+        // switch.
+        scheduleResizeRetries();
       }
-      // Retry resize multiple times with longer delays to ensure backend Connect is ready
-      const delays = [200, 400, 600, 800, 1000, 1500, 2000]
-      delays.forEach((delay) => {
-        setTimeout(() => resize(), delay)
-      })
-    }
-  })
+    },
+  );
+
+  // Tracks the most recent accepted size so the retry loop can stop
+  // once the backend agrees. Reset on each new sessionId.
+  let lastAcceptedCols = 0;
+  let lastAcceptedRows = 0;
+  function scheduleResizeRetries() {
+    lastAcceptedCols = 0;
+    lastAcceptedRows = 0;
+    const delays = [100, 300, 600, 1000, 1500, 2000];
+    let i = 0;
+    const tryOnce = () => {
+      if (!terminal) return;
+      const sessionId = getSessionId();
+      if (!sessionId) return;
+      const before = { cols: terminal.cols, rows: terminal.rows };
+      resize();
+      // Stop retrying once resize() produced the same dimensions for
+      // two consecutive attempts (i.e. layout has settled).
+      if (
+        before.cols === terminal.cols &&
+        before.rows === terminal.rows &&
+        i > 0 &&
+        lastAcceptedCols === before.cols &&
+        lastAcceptedRows === before.rows
+      ) {
+        return;
+      }
+      lastAcceptedCols = before.cols;
+      lastAcceptedRows = before.rows;
+      i++;
+      if (i >= delays.length) return;
+      setTimeout(tryOnce, delays[i]);
+    };
+    setTimeout(tryOnce, delays[0]);
+  }
 
   function applyXtermTheme(themeName: string) {
-    if (!terminal) return
-    const ls = useLocalStateStore()
+    if (!terminal) return;
+    const ls = useLocalStateStore();
     const theme = resolveXtermBackground(
       getXtermTheme(themeName, settingsStore.settings.customTerminalThemes),
       ls.state.backgroundEnabled,
-      ls.state.backgroundImage
-    )
-    terminal.options.theme = theme
+      ls.state.backgroundImage,
+    );
+    terminal.options.theme = theme;
   }
 
-  // Watch terminal settings changes
-  watch(() => settingsStore.settings.terminal, (ts) => {
-    if (!terminal) return
-    if (ts.fontSize) terminal.options.fontSize = ts.fontSize
-    if (ts.fontFamily) terminal.options.fontFamily = ts.fontFamily
-    if (ts.maxHistoryLines) terminal.options.scrollback = ts.maxHistoryLines
-    if (ts.theme) applyXtermTheme(ts.theme)
-    if (typeof ts.cursorBlink === 'boolean') {
-      terminal.options.cursorBlink = ts.cursorBlink
-      if (!ts.cursorBlink) terminal.write('\x1b[?12l')
-    }
-    resize()
-  }, { deep: true })
+  // Watch terminal settings changes. The previous deep:true watcher
+  // triggered a Vue dep walk over the entire settings object on every
+  // settings commit (selection right-click action, language, theme,
+  // terminal…). We only care about a handful of terminal fields, so
+  // watch each individually — Vue then sees a single ref-equality
+  // change per field, not a full-tree walk. applyXtermTheme stays as one
+  // watcher driven by just the theme string.
+  const t = () => settingsStore.settings.terminal;
+  watch(
+    () => t().fontSize,
+    (v) => {
+      if (terminal && v) terminal.options.fontSize = v;
+    },
+  );
+  watch(
+    () => t().fontFamily,
+    (v) => {
+      if (terminal && v) terminal.options.fontFamily = v;
+    },
+  );
+  watch(
+    () => t().maxHistoryLines,
+    (v) => {
+      if (terminal && v) terminal.options.scrollback = v;
+    },
+  );
+  watch(
+    () => t().theme,
+    (v) => {
+      if (terminal && v) applyXtermTheme(v);
+    },
+  );
+  watch(
+    () => t().cursorBlink,
+    (v) => {
+      if (!terminal) return;
+      if (typeof v === "boolean") {
+        terminal.options.cursorBlink = v;
+        if (!v) terminal.write("\x1b[?12l");
+      }
+    },
+  );
+  // Highlight toggle drives useHighlight's worker; surface the
+  // setting through a watch instead of pulling settings on every
+  // chunk (hot path).
+  watch(
+    () => t().highlightEnabled,
+    () => {
+      /* no-op, consumed in write path */
+    },
+  );
+  // Last-write-wins resize after any of the above.
+  watch(
+    () => `${t().fontSize}|${t().fontFamily}|${t().maxHistoryLines}`,
+    () => {
+      resize();
+    },
+  );
 
   // Watch for background image toggling to update terminal transparency
-  const localStateStore = useLocalStateStore()
+  const localStateStore = useLocalStateStore();
   watch(
     () => localStateStore.state.backgroundEnabled,
-    () => applyXtermTheme(settingsStore.settings.terminal.theme || 'dark')
-  )
+    () => applyXtermTheme(settingsStore.settings.terminal.theme || "dark"),
+  );
 
   onUnmounted(() => {
-    resizeObserver?.disconnect()
-    intersectionObserver?.disconnect()
+    resizeObserver?.disconnect();
+    intersectionObserver?.disconnect();
     // Dispose addons BEFORE terminal — addons detach their own listeners only
     // while the terminal still exists.
     for (const addon of loadedAddons) {
       try {
-        addon.dispose?.()
+        addon.dispose?.();
       } catch {
         // ignore — some addons don't fully implement dispose
       }
     }
-    loadedAddons.length = 0
+    loadedAddons.length = 0;
     // Detach the tooltip element the WebLinksAddon may have left behind.
     if (hoverEl && hoverEl.parentElement) {
-      hoverEl.parentElement.removeChild(hoverEl)
+      hoverEl.parentElement.removeChild(hoverEl);
     }
-    hoverEl = null
-    terminal?.dispose()
-    unsubscribe?.()
-    statusUnsubscribe?.()
+    hoverEl = null;
+    terminal?.dispose();
+    unsubscribe?.();
+    statusUnsubscribe?.();
     if (onDocumentMouseUp) {
-      document.removeEventListener('mouseup', onDocumentMouseUp)
-      onDocumentMouseUp = null
+      document.removeEventListener("mouseup", onDocumentMouseUp);
+      onDocumentMouseUp = null;
     }
     if (onMouseDownGlobal) {
-      document.removeEventListener('mousedown', onMouseDownGlobal)
-      onMouseDownGlobal = null
+      document.removeEventListener("mousedown", onMouseDownGlobal);
+      onMouseDownGlobal = null;
     }
-    window.removeEventListener('resize', onWindowResize)
-    window.removeEventListener('split:resize-start', onSplitResizeStart)
-    window.removeEventListener('split:resize-end', onSplitResizeEnd)
-  })
+    window.removeEventListener("resize", onWindowResize);
+    window.removeEventListener("split:resize-start", onSplitResizeStart);
+    window.removeEventListener("split:resize-end", onSplitResizeEnd);
+  });
 
   return {
     terminalRef,
@@ -839,6 +1334,6 @@ export function useTerminal(
     getSelection,
     clear,
     focus,
-    setRetryOnEnter
-  }
+    setRetryOnEnter,
+  };
 }

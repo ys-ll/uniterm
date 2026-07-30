@@ -5,12 +5,12 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { watch } from 'vue'
 
-// F-317: maintain a title→panelId index for O(1) lookups in
-// resolveActiveSession. The original implementation spread panelStore.panels
-// into an array and ran two .find passes per command call (O(n) per call).
-// A vue watch on the reactive panels Map keeps the index in sync with
-// add / remove / rename; we rebuild on every change because titles can
-// duplicate and the index is tiny.
+// Maintain a title→panelId index for O(1) lookups in resolveActiveSession.
+// The original implementation spread panelStore.panels into an array and
+// ran two .find passes per command call (O(n) per call). A vue watch on
+// the reactive panels Map keeps the index in sync with add / remove /
+// rename; we rebuild on every change because titles can duplicate and
+// the index is tiny.
 const panelTitleIndex: Map<string, string[]> = new Map()
 let panelTitleIndexInit = false
 
@@ -222,9 +222,10 @@ function resolveActiveSession(panelTitle?: string): { sessionId: string; shellPa
 
   if (panelTitle) {
     ensurePanelTitleIndex()
-    // F-317: O(1) exact title match via the title→panelId index. The index
-    // covers add/remove/rename via a vue watch; titles can duplicate, so we
-    // verify the cached id still points at a panel with the requested title.
+    // O(1) exact title match via the title→panelId index. The index
+    // covers add/remove/rename via a vue watch; titles can duplicate, so
+    // we verify the cached id still points at a panel with the requested
+    // title.
     let panelId: string | undefined
     const ids = panelTitleIndex.get(panelTitle)
     if (ids && ids.length > 0) {

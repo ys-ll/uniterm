@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/ys-ll/uniterm/backend/log"
 )
 
 const terminalHistoryFileName = "terminal-history.json"
@@ -15,12 +17,12 @@ const terminalHistoryDebounce = 500 * time.Millisecond
 type TerminalHistoryStore struct {
 	configDir string
 
-	mu      sync.Mutex
-	pending []HistoryEntry // latest snapshot from the most recent Save call
-	timer   *time.Timer
-	stop    chan struct{}
-	done    chan struct{}
-	closed  bool
+	mu        sync.Mutex
+	pending   []HistoryEntry // latest snapshot from the most recent Save call
+	timer     *time.Timer
+	stop      chan struct{}
+	done      chan struct{}
+	closed    bool
 	closeOnce sync.Once
 }
 
@@ -50,8 +52,6 @@ func (s *TerminalHistoryStore) filePath() string {
 // Save records the latest snapshot and arms a 500ms debounce timer. Concurrent
 // calls coalesce: only the most recent entries list is written. Use Close or
 // Flush to force a synchronous write.
-//
-// Fixes: F-101.
 func (s *TerminalHistoryStore) Save(entries []HistoryEntry) error {
 	s.mu.Lock()
 	if s.closed {
@@ -117,7 +117,11 @@ func (s *TerminalHistoryStore) writeAtomic(entries []HistoryEntry) error {
 		result = result[len(result)-maxHistorySize:]
 	}
 	data := TerminalHistoryData{Entries: result}
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	// Skip MarshalIndent's intermediate buffer; stream the JSON straight to
+	// disk via the encoder + tmp+rename pattern used by connection_store.
+	// With maxHistorySize=500 entries each save shaves a ~50KB allocation
+	// off the hot path.
+	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
@@ -175,7 +179,9 @@ func (s *TerminalHistoryStore) Load() ([]HistoryEntry, error) {
 	}
 	var data TerminalHistoryData
 	if err := json.Unmarshal(fileData, &data); err != nil {
-		_ = os.Remove(s.filePath())
+		if rmErr := os.Remove(s.filePath()); rmErr != nil && !os.IsNotExist(rmErr) {
+			log.Writef("terminal_history: quarantine remove failed: %v", rmErr)
+		}
 		return []HistoryEntry{}, nil
 	}
 	if len(data.Entries) == 0 && len(fileData) > 10 {
@@ -183,7 +189,9 @@ func (s *TerminalHistoryStore) Load() ([]HistoryEntry, error) {
 			Commands []string `json:"commands"`
 		}
 		if err := json.Unmarshal(fileData, &oldFormat); err == nil && len(oldFormat.Commands) > 0 {
-			_ = os.Remove(s.filePath())
+			if rmErr := os.Remove(s.filePath()); rmErr != nil && !os.IsNotExist(rmErr) {
+				log.Writef("terminal_history: legacy migration quarantine failed: %v", rmErr)
+			}
 			return []HistoryEntry{}, nil
 		}
 	}

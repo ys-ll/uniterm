@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -15,12 +16,16 @@ func DialSSHClient(config ConnectionConfig) (*ssh.Client, error) {
 		return nil, fmt.Errorf("keyboard-interactive not supported in this context")
 	}
 	authMethods := makeSSHAuthMethods(config, kb)
-	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
+	hostKeyCB, err := sshHostKeyCallback(config)
+	if err != nil {
+		return nil, fmt.Errorf("host key config: %w", err)
+	}
 	clientConfig := &ssh.ClientConfig{
 		User:            config.User,
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCB,
 		Config:          ssh.Config{KeyExchanges: sshKeyExchanges()},
 	}
 	conn, err := net.DialTimeout("tcp", addr, clientConfig.Timeout)

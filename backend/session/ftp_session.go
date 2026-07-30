@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,10 +45,11 @@ func NewFTPSession(id string) *FTPSession {
 func (s *FTPSession) Connect(config ConnectionConfig) error {
 	s.setStatus(StatusConnecting)
 	s.title = fmt.Sprintf("%s@%s", config.User, config.Host)
+	s.LogConnect(config.Host, config.Port)
 
-	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
 	if config.Port <= 0 {
-		addr = fmt.Sprintf("%s:21", config.Host)
+		addr = net.JoinHostPort(config.Host, "21")
 	}
 
 	encryption := config.FtpEncryption
@@ -69,6 +72,7 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 		)
 		if err != nil {
 			s.setStatus(StatusError)
+			s.LogError("dial-tls", err)
 			return fmt.Errorf("ftp dial (TLS required): %w", err)
 		}
 	case "auto":
@@ -86,12 +90,14 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 
 	if err != nil {
 		s.setStatus(StatusError)
+		s.LogError("dial", err)
 		return fmt.Errorf("ftp dial: %w", err)
 	}
 
 	if err := conn.Login(config.User, config.Password); err != nil {
 		conn.Quit()
 		s.setStatus(StatusError)
+		s.LogError("login", err)
 		return fmt.Errorf("ftp login: %w", err)
 	}
 
@@ -116,6 +122,7 @@ func (s *FTPSession) Resize(cols, rows int) error {
 }
 
 func (s *FTPSession) Disconnect() error {
+	s.LogDisconnect("user")
 	// Serialize close against in-flight data transfers and ChangeRemoteDir
 	// (which also touches s.conn without holding connMu — see SESSION-15).
 	// Without connMu here, ftp.ServerConn.Quit() can race a concurrent
@@ -236,7 +243,6 @@ func (s *FTPSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 	}
 	return FileListResult{Files: files, Dir: target}, nil
 }
-
 
 func (s *FTPSession) MakeDir(dir string) error {
 	if err := s.requireClient(); err != nil {

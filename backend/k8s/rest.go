@@ -24,20 +24,20 @@ const maxK8sResponseBytes = 64 * 1024 * 1024
 // defaultK8sRequestTimeout is a safety net for non-watch callers that
 // pass a ctx without a deadline; the http.Client we wrap has Timeout=0
 // (intentional, for watches), so a slow apiserver would otherwise hang
-// the caller's goroutine indefinitely (F-411).
+// the caller's goroutine indefinitely.
 const defaultK8sRequestTimeout = 5 * time.Minute
 
 // debugK8sREST is set by the UNITERM_DEBUG_K8S_REST env var. When true,
 // Do() emits a 300-byte body preview for every successful response —
-// useful for local debugging, but expensive on a 1 Hz polling loop
-// (F-406). Off by default.
+// useful for local debugging, but expensive on a 1 Hz polling loop.
+// Off by default.
 var debugK8sREST = os.Getenv("UNITERM_DEBUG_K8S_REST") == "1"
 
 // Do 是通用 REST 请求 —— 拼 URL、发请求、返回 (status, body, err)。
 // path 必须以 "/" 开头。contentType 可以为空。
 //
 // If ctx has no deadline, a default 5-minute deadline is applied so a
-// hung apiserver cannot pin the caller's goroutine forever (F-411).
+// hung apiserver cannot pin the caller's goroutine forever.
 func Do(ctx context.Context, client *http.Client, base, method, path string, body []byte, contentType string) (int, []byte, error) {
 	if !strings.HasPrefix(path, "/") {
 		return 0, nil, fmt.Errorf("path must start with /: %q", path)
@@ -75,8 +75,8 @@ func Do(ctx context.Context, client *http.Client, base, method, path string, bod
 	if len(b) > maxK8sResponseBytes {
 		return resp.StatusCode, nil, errors.New("response body exceeds 64 MiB limit")
 	}
-	// F-406: body preview is gated behind UNITERM_DEBUG_K8S_REST=1 so a
-	// 1 Hz polling loop doesn't pay fmt.Sprintf + os.File.Write on every
+	// Body preview is gated behind UNITERM_DEBUG_K8S_REST=1 so a 1 Hz
+	// polling loop doesn't pay fmt.Sprintf + os.File.Write on every
 	// successful response. Production logs only status, method, path,
 	// byte count, latency.
 	if debugK8sREST {

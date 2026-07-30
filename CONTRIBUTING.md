@@ -95,7 +95,30 @@ uniTerm/
 | Terminal | xterm.js |
 | AI Protocol | Anthropic Messages API / OpenAI Chat Completions API |
 
-## Questions?
+## Testing
+
+This project runs the full Go test suite under the race detector on every push and pull request (see `.github/workflows/test.yml`).
+
+```bash
+# Run all backend tests with the race detector
+go test -race -count=1 ./backend/...
+
+# Run a single package
+go test -race ./backend/sync/...
+
+# Run a single test by name
+go test -race ./backend/session/ -run TestSocks5Handshake -v
+
+# Run a fuzz target (15s budget; CI uses the same)
+go test -run='^$' -fuzz='^FuzzParseBytes$' -fuzztime=15s ./backend/k8s/
+```
+
+The backend has six fuzz targets (one per parser) that exercise the same code paths the production app uses for YAML / ANSI / frontmatter input. Any change to those parsers should preserve the seed corpus in the `FuzzXxx.Add(...)` calls — they're the regression net for the fuzz contract.
+
+There is no mutation testing infrastructure today; planned for v1.7+. Adding mutants to exercise a particular function is welcome via PR.
+
+---
+
 
 Feel free to ask in [GitHub Issues](https://github.com/ys-ll/uniterm/issues) or start a discussion in [GitHub Discussions](https://github.com/ys-ll/uniterm/discussions).
 
@@ -200,7 +223,30 @@ uniTerm/
 | 终端引擎 | xterm.js |
 | AI 协议 | Anthropic Messages API / OpenAI Chat Completions API |
 
-## 有问题？
+## 测试
+
+每次 push / pull request 都会在 GitHub Actions 上用 race detector 跑完整套 Go 测试（详见 `.github/workflows/test.yml`）。
+
+```bash
+# 跑所有后端测试（带 race detector）
+go test -race -count=1 ./backend/...
+
+# 单跑某个包
+go test -race ./backend/sync/...
+
+# 按名字单跑某个测试
+go test -race ./backend/session/ -run TestSocks5Handshake -v
+
+# 跑某个 fuzz 目标（CI 也是同样的 15s 预算）
+go test -run='^$' -fuzz='^FuzzParseBytes$' -fuzztime=15s ./backend/k8s/
+```
+
+后端有 6 个 fuzz 目标（每个解析器一个），覆盖 YAML / ANSI / frontmatter 等输入路径。修改这些解析器时请保留 `FuzzXxx.Add(...)` 中的 seed corpus —— 它们是 fuzz 契约的回归基线。
+
+目前尚无 mutation testing 基础设施（计划 v1.7+ 引入）；欢迎通过 PR 补齐。
+
+---
+
 
 如有疑问，欢迎在 [GitHub Issues](https://github.com/ys-ll/uniterm/issues) 提问或在 [GitHub Discussions](https://github.com/ys-ll/uniterm/discussions) 发起讨论。
 

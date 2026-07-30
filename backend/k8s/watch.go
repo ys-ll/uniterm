@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ys-ll/uniterm/backend/log"
 )
 
 // WatchEvent 是 apiserver 推给我们的原始事件（object 保持 JSON 原文）。
@@ -23,7 +25,7 @@ type WatchEvent struct {
 // onReconnect (可空) 在每次 transport 失败触发的重连前调用一次，让上层发一个
 // 轻量的「reconnecting」事件而不必动 maps；onEnd 只在终端结束（context 取消 / 干净 EOF）
 // 时调用一次，负责真正的清理。这样 StopWatch 在重连退避期间仍能找到 handle 并
-// 取消，apiserver 抖动期间也不再每 1s/2s/4s/… 抢 manager mutex + EventsEmit (F-404)。
+// 取消，apiserver 抖动期间也不再每 1s/2s/4s/… 抢 manager mutex + EventsEmit。
 //
 // On non-context errors the goroutine reconnects with exponential
 // backoff (1s, 2s, 4s, 8s, max 30s) so an apiserver bounce does not
@@ -40,9 +42,9 @@ func startWatchStream(ctx context.Context, client *http.Client, base, path strin
 
 func runWatchLoop(ctx context.Context, client *http.Client, base, path string,
 	cb func(WatchEvent), onEnd func(error), onReconnect func(error), done chan struct{}) {
+	defer log.Recover("k8s.runWatchLoop")
 	defer close(done)
-	backoff := time.Second
-	const maxBackoff = 30 * time.Second
+	bo := newBackoff(time.Second, 30*time.Second)
 	for {
 		err := runOneWatch(ctx, client, base, path, cb)
 		if ctx.Err() != nil {
@@ -60,20 +62,12 @@ func runWatchLoop(ctx context.Context, client *http.Client, base, path string,
 		// Transport / scanner error — likely apiserver bounce. Surface a
 		// transient reconnect signal (if wired) and back off; onEnd is
 		// reserved for the terminal case so the manager doesn't drop the
-		// handle from its map on every reconnect attempt (F-404).
+		// handle from its map on every reconnect attempt.
 		if onReconnect != nil {
 			onReconnect(err)
 		}
-		select {
-		case <-ctx.Done():
+		if bo.sleep(ctx) != nil {
 			return
-		case <-time.After(backoff):
-		}
-		if backoff < maxBackoff {
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
 		}
 	}
 }
@@ -98,9 +92,9 @@ func runOneWatch(ctx context.Context, client *http.Client, base, path string,
 	}
 	defer resp.Body.Close()
 	scanner := bufio.NewScanner(resp.Body)
-	// F-412: most watch lines are < 2 KiB; start at 4 KiB and let
-	// bufio.Scanner grow on demand up to 4 MiB. The previous 64 KiB
-	// initial cap pinned ~80 MiB across 20 watches even on idle clusters.
+	// Most watch lines are < 2 KiB; start at 4 KiB and let bufio.Scanner
+	// grow on demand up to 4 MiB. The previous 64 KiB initial cap pinned
+	// ~80 MiB across 20 watches even on idle clusters.
 	scanner.Buffer(make([]byte, 0, 4*1024), 4*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Bytes()

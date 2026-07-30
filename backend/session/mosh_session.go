@@ -5,12 +5,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"golang.org/x/crypto/ssh"
 	mosh "github.com/unixshells/mosh-go"
+	"golang.org/x/crypto/ssh"
 )
 
 type MoshSession struct {
@@ -41,15 +42,21 @@ func (s *MoshSession) Connect(config ConnectionConfig) error {
 	} else {
 		s.title = fmt.Sprintf("%s@%s (mosh)", config.User, config.Host)
 	}
+	s.LogConnect(config.Host, config.Port)
 
 	// Step 1: SSH to remote and start mosh-server to get key + UDP port.
 	authMethods := makeSSHAuthMethods(config, nil)
-	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
+	hostKeyCB, err := sshHostKeyCallback(config)
+	if err != nil {
+		s.setStatus(StatusError)
+		return fmt.Errorf("host key config: %w", err)
+	}
 	clientConfig := &ssh.ClientConfig{
 		User:            config.User,
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCB,
 		Config: ssh.Config{
 			KeyExchanges: sshKeyExchanges(),
 		},
@@ -58,6 +65,7 @@ func (s *MoshSession) Connect(config ConnectionConfig) error {
 	conn, err := net.DialTimeout("tcp", addr, clientConfig.Timeout)
 	if err != nil {
 		s.setStatus(StatusError)
+		s.LogError("mosh-ssh-dial", err)
 		return fmt.Errorf("mosh ssh dial: %w", err)
 	}
 
@@ -65,6 +73,7 @@ func (s *MoshSession) Connect(config ConnectionConfig) error {
 	if err != nil {
 		conn.Close()
 		s.setStatus(StatusError)
+		s.LogError("mosh-ssh-handshake", err)
 		return fmt.Errorf("mosh ssh handshake: %w", err)
 	}
 	client := ssh.NewClient(sshConn, chans, reqs)
@@ -73,6 +82,7 @@ func (s *MoshSession) Connect(config ConnectionConfig) error {
 	if err != nil {
 		client.Close()
 		s.setStatus(StatusError)
+		s.LogError("mosh-server", err)
 		return fmt.Errorf("mosh-server: %w", err)
 	}
 
@@ -83,6 +93,7 @@ func (s *MoshSession) Connect(config ConnectionConfig) error {
 	if err != nil {
 		client.Close()
 		s.setStatus(StatusError)
+		s.LogError("mosh-udp-dial", err)
 		return fmt.Errorf("mosh dial: %w", err)
 	}
 
@@ -187,7 +198,7 @@ func startMoshServer(client *ssh.Client) (key string, udpPort int, err error) {
 
 // moshReadInterval is the timeout passed to moshClient.Recv. The previous
 // 100 ms value woke the readLoop 10 times/sec per idle session and was the
-// dominant contributor to the user's reported 900+ idle wakeups (F-009).
+// dominant contributor to the user's reported 900+ idle wakeups.
 // 1 s keeps the keepalive-feel responsive while only waking the goroutine
 // once per second on idle; shutdown still happens via ctx.Done() / s.quit.
 const moshReadInterval = 1 * time.Second
@@ -224,6 +235,7 @@ func (s *MoshSession) Write(data []byte) error {
 
 func (s *MoshSession) Disconnect() error {
 	s.quitOnce.Do(func() {
+		s.LogDisconnect("user")
 		close(s.quit)
 	})
 	if s.cancel != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -58,12 +59,16 @@ func (ts *TunnelService) Start(sessionID string, sshConfig ConnectionConfig, tar
 
 	// 1. Establish SSH connection
 	authMethods := makeSSHAuthMethods(sshConfig, nil)
-	addr := fmt.Sprintf("%s:%d", sshConfig.Host, sshConfig.Port)
+	addr := net.JoinHostPort(sshConfig.Host, strconv.Itoa(sshConfig.Port))
+	hostKeyCB, err := sshHostKeyCallback(sshConfig)
+	if err != nil {
+		return 0, fmt.Errorf("host key config: %w", err)
+	}
 	clientConfig := &ssh.ClientConfig{
 		User:            sshConfig.User,
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCB,
 		Config: ssh.Config{
 			KeyExchanges: sshKeyExchanges(),
 		},
@@ -149,7 +154,7 @@ func (ts *TunnelService) Start(sessionID string, sshConfig ConnectionConfig, tar
 }
 
 // tunnelKeepAlive periodically pings the tunnel's SSH connection with a
-// send-only global keepalive request (same cadence as SSHSession's) purely to
+// send-only global keepalive request (same cadence as SshSession's) purely to
 // keep traffic flowing so an idle jump-host hop isn't dropped by a
 // server/NAT/firewall idle timeout. It does not wait for a reply or tear the
 // connection down: a dead hop surfaces as EOF on the forwarded sessions riding

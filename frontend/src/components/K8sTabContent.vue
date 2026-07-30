@@ -4,7 +4,10 @@
     <div v-else-if="!connId" class="k8s-connecting">Connecting…</div>
     <div v-else class="db-main">
       <div class="db-left" :style="{ width: leftWidth + 'px' }">
-        <K8sTree :model-value="rootResourceKey" @update:model-value="selectResource" />
+        <K8sTree
+          :model-value="rootResourceKey"
+          @update:model-value="selectResource"
+        />
       </div>
       <div class="db-resizer" @mousedown="onResizeStart" />
       <div class="db-right">
@@ -44,227 +47,301 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
-import * as k8sClient from '../services/k8sClient'
-import { usePanelStore } from '../stores/panelStore'
-import { useTabStore } from '../stores/tabStore'
-import { useSessionStore } from '../stores/sessionStore'
-import { useK8sStore } from '../stores/k8sStore'
-import { useTunnelCredentials } from '../composables/useTunnelCredentials'
-import K8sTree from './K8sTree.vue'
-import K8sResourceList from './K8sResourceList.vue'
-import K8sBreadcrumb from './K8sBreadcrumb.vue'
-import K8sDetailDrawer from './K8sDetailDrawer.vue'
-import { parseCRD, crdListPath } from '../services/k8sCrd'
-import type { K8sTab, NavFrame } from '../types/k8s'
-import type { ConnectionConfig } from '../types/session'
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { ElMessageBox, ElMessage } from "element-plus";
+import * as k8sClient from "../services/k8sClient";
+import { usePanelStore } from "../stores/panelStore";
+import { useTabStore } from "../stores/tabStore";
+import { useSessionStore } from "../stores/sessionStore";
+import { useK8sStore } from "../stores/k8sStore";
+import { useTunnelCredentials } from "../composables/useTunnelCredentials";
+import K8sTree from "./K8sTree.vue";
+import K8sResourceList from "./K8sResourceList.vue";
+import K8sBreadcrumb from "./K8sBreadcrumb.vue";
+import K8sDetailDrawer from "./K8sDetailDrawer.vue";
+import { parseCRD, crdListPath } from "../services/k8sCrd";
+import type { K8sTab, NavFrame } from "../types/k8s";
+import type { ConnectionConfig } from "../types/session";
 
-const props = defineProps<{ tab: K8sTab; connection: ConnectionConfig }>()
+const props = defineProps<{ tab: K8sTab; connection: ConnectionConfig }>();
 
-const { resolveTunnelCredentials } = useTunnelCredentials()
+const { resolveTunnelCredentials } = useTunnelCredentials();
 
-const panelStore = usePanelStore()
-const tabStore = useTabStore()
-const sessionStore = useSessionStore()
-const k8sStore = useK8sStore()
+const panelStore = usePanelStore();
+const tabStore = useTabStore();
+const sessionStore = useSessionStore();
+const k8sStore = useK8sStore();
 
-const connId = ref<string>('')
-const error = ref('')
-const initialNamespace = ref<string>(props.tab.namespace || '')
+const connId = ref<string>("");
+const error = ref("");
+const initialNamespace = ref<string>(props.tab.namespace || "");
 
 // Namespaces fetched live from the cluster once connected; falls back to a
 // small static set if the list call fails (RBAC-restricted, etc.).
-const fetchedNamespaces = ref<string[]>([])
+const fetchedNamespaces = ref<string[]>([]);
 const namespaceOptions = computed(() => {
-  const set = new Set<string>()
-  for (const n of fetchedNamespaces.value) set.add(n)
-  if (!set.size) { set.add('default'); set.add('kube-system'); set.add('kube-public') }
-  if (initialNamespace.value) set.add(initialNamespace.value)
-  return Array.from(set)
-})
+  const set = new Set<string>();
+  for (const n of fetchedNamespaces.value) set.add(n);
+  if (!set.size) {
+    set.add("default");
+    set.add("kube-system");
+    set.add("kube-public");
+  }
+  if (initialNamespace.value) set.add(initialNamespace.value);
+  return Array.from(set);
+});
 
 async function loadNamespaces() {
-  if (!connId.value) return
+  if (!connId.value) return;
   try {
-    const { status, data } = await k8sClient.requestJSON<any>(connId.value, 'GET', '/api/v1/namespaces?limit=500')
+    const { status, data } = await k8sClient.requestJSON<any>(
+      connId.value,
+      "GET",
+      "/api/v1/namespaces?limit=500",
+    );
     if (status === 200 && data?.items) {
-      fetchedNamespaces.value = data.items.map((n: any) => n.metadata?.name).filter(Boolean).sort()
+      fetchedNamespaces.value = data.items
+        .map((n: any) => n.metadata?.name)
+        .filter(Boolean)
+        .sort();
     }
-  } catch { /* keep fallback */ }
+  } catch {
+    /* keep fallback */
+  }
 }
 
 // ── nav stack ──────────────────────────────────────────────────
-const navStack = ref<NavFrame[]>([{ kind: 'list', resourceKey: 'pods', namespace: props.tab.namespace || '' }])
-const topFrame = computed(() => navStack.value[navStack.value.length - 1])
+const navStack = ref<NavFrame[]>([
+  { kind: "list", resourceKey: "pods", namespace: props.tab.namespace || "" },
+]);
+const topFrame = computed(() => navStack.value[navStack.value.length - 1]);
 const rootResourceKey = computed(() => {
-  const base = navStack.value[0]
-  return base.kind === 'list' ? base.resourceKey : ''
-})
+  const base = navStack.value[0];
+  return base.kind === "list" ? base.resourceKey : "";
+});
 const currentNamespace = computed(() => {
-  const f = topFrame.value
-  return f.kind === 'custom' ? f.namespace : (f as any).namespace || ''
-})
+  const f = topFrame.value;
+  return f.kind === "custom" ? f.namespace : (f as any).namespace || "";
+});
 
 function selectResource(key: string) {
-  navStack.value = [{ kind: 'list', resourceKey: key, namespace: currentNamespace.value }]
+  navStack.value = [
+    { kind: "list", resourceKey: key, namespace: currentNamespace.value },
+  ];
 }
 function popTo(index: number) {
-  navStack.value = navStack.value.slice(0, index + 1)
+  navStack.value = navStack.value.slice(0, index + 1);
 }
 function setNamespace(ns: string) {
-  const f = topFrame.value
-  if (f.kind === 'list') navStack.value = [{ kind: 'list', resourceKey: f.resourceKey, namespace: ns }]
-  else navStack.value = navStack.value.map((fr, i) => i === navStack.value.length - 1 ? { ...fr, namespace: ns } as NavFrame : fr)
+  const f = topFrame.value;
+  if (f.kind === "list")
+    navStack.value = [
+      { kind: "list", resourceKey: f.resourceKey, namespace: ns },
+    ];
+  else
+    navStack.value = navStack.value.map((fr, i) =>
+      i === navStack.value.length - 1
+        ? ({ ...fr, namespace: ns } as NavFrame)
+        : fr,
+    );
 }
-function viewPods(owner: { kind: string; name: string; uid: string; namespace: string }) {
-  navStack.value = [...navStack.value, {
-    kind: 'owned', resourceKey: 'pods',
-    ownerKind: owner.kind, ownerName: owner.name, ownerUid: owner.uid, namespace: owner.namespace,
-  }]
+function viewPods(owner: {
+  kind: string;
+  name: string;
+  uid: string;
+  namespace: string;
+}) {
+  navStack.value = [
+    ...navStack.value,
+    {
+      kind: "owned",
+      resourceKey: "pods",
+      ownerKind: owner.kind,
+      ownerName: owner.name,
+      ownerUid: owner.uid,
+      namespace: owner.namespace,
+    },
+  ];
 }
 function openCrd(crdObj: any) {
-  const crd = parseCRD(crdObj)
-  navStack.value = [...navStack.value, { kind: 'custom', crd, namespace: '' }]
+  const crd = parseCRD(crdObj);
+  navStack.value = [...navStack.value, { kind: "custom", crd, namespace: "" }];
 }
 
 // ── drawer ─────────────────────────────────────────────────────
-const drawerMode = ref<'detail' | 'logs' | null>(null)
-const drawerTarget = ref<any | null>(null)
-const drawerResourceKey = ref<string>('pods')
-const drawerSelfPathOverride = ref<((obj: any) => string) | undefined>(undefined)
-const drawerInitialTab = ref<'detail' | 'yaml'>('detail')
+const drawerMode = ref<"detail" | "logs" | null>(null);
+const drawerTarget = ref<any | null>(null);
+const drawerResourceKey = ref<string>("pods");
+const drawerSelfPathOverride = ref<((obj: any) => string) | undefined>(
+  undefined,
+);
+const drawerInitialTab = ref<"detail" | "yaml">("detail");
 function openDetail(obj: any) {
-  drawerTarget.value = obj
-  drawerResourceKey.value = resourceKeyOf()
-  drawerSelfPathOverride.value = crSelfPathOverride()
-  drawerInitialTab.value = 'detail'
-  drawerMode.value = 'detail'
+  drawerTarget.value = obj;
+  drawerResourceKey.value = resourceKeyOf();
+  drawerSelfPathOverride.value = crSelfPathOverride();
+  drawerInitialTab.value = "detail";
+  drawerMode.value = "detail";
 }
 function openYaml(obj: any) {
-  drawerTarget.value = obj
-  drawerResourceKey.value = resourceKeyOf()
-  drawerSelfPathOverride.value = crSelfPathOverride()
-  drawerInitialTab.value = 'yaml'
-  drawerMode.value = 'detail'
+  drawerTarget.value = obj;
+  drawerResourceKey.value = resourceKeyOf();
+  drawerSelfPathOverride.value = crSelfPathOverride();
+  drawerInitialTab.value = "yaml";
+  drawerMode.value = "detail";
 }
-function openLogs(pod: any) { drawerTarget.value = pod; drawerResourceKey.value = 'pods'; drawerSelfPathOverride.value = undefined; drawerMode.value = 'logs' }
-function closeDrawer() { drawerMode.value = null; drawerTarget.value = null }
+function openLogs(pod: any) {
+  drawerTarget.value = pod;
+  drawerResourceKey.value = "pods";
+  drawerSelfPathOverride.value = undefined;
+  drawerMode.value = "logs";
+}
+function closeDrawer() {
+  drawerMode.value = null;
+  drawerTarget.value = null;
+}
 function resourceKeyOf(): string {
-  const f = topFrame.value
-  if (f.kind === 'list') return f.resourceKey
-  if (f.kind === 'owned') return f.resourceKey
-  return 'customresourcedefinitions'
+  const f = topFrame.value;
+  if (f.kind === "list") return f.resourceKey;
+  if (f.kind === "owned") return f.resourceKey;
+  return "customresourcedefinitions";
 }
 // CR 实例（custom frame）的 self-path 由 ParsedCRD 派生，避免落到 CRD 集合路径
 function crSelfPathOverride(): ((obj: any) => string) | undefined {
-  const f = topFrame.value
-  if (f.kind !== 'custom') return undefined
-  const crd = f.crd
+  const f = topFrame.value;
+  if (f.kind !== "custom") return undefined;
+  const crd = f.crd;
   return (obj: any) => {
-    const ns = obj.metadata?.namespace || f.namespace
-    return crdListPath(crd, ns).split('?')[0] + '/' + encodeURIComponent(obj.metadata?.name)
-  }
+    const ns = obj.metadata?.namespace || f.namespace;
+    return (
+      crdListPath(crd, ns).split("?")[0] +
+      "/" +
+      encodeURIComponent(obj.metadata?.name)
+    );
+  };
 }
 async function openTerminal(pod: any) {
-  const containers = (pod.spec?.containers || []).map((c: any) => c.name)
-  let container = containers[0]
+  const containers = (pod.spec?.containers || []).map((c: any) => c.name);
+  let container = containers[0];
   try {
     if (containers.length > 1) {
       const { value } = await ElMessageBox.prompt(
-        `Container (${containers.join(', ')})`, 'Select container',
-        { inputValue: containers[0], inputValidator: (v: string) => containers.includes(v) || 'unknown container' },
-      )
-      container = value
+        `Container (${containers.join(", ")})`,
+        "Select container",
+        {
+          inputValue: containers[0],
+          inputValidator: (v: string) =>
+            containers.includes(v) || "unknown container",
+        },
+      );
+      container = value;
     }
-    const ns = pod.metadata?.namespace
-    const info = await k8sClient.execSession(connId.value, ns, pod.metadata?.name, container)
-    const title = `${pod.metadata?.name}/${container}`
+    const ns = pod.metadata?.namespace;
+    const info = await k8sClient.execSession(
+      connId.value,
+      ns,
+      pod.metadata?.name,
+      container,
+    );
+    const title = `${pod.metadata?.name}/${container}`;
     // Store exec params on the config so Panel.vue can rebuild the stream on reconnect.
     const cfg = {
-      id: '', name: title, type: 'k8s-exec' as any, host: '', port: 0, user: '', authType: 'password' as any,
-      k8sExecConnId: connId.value, k8sNamespace: ns, k8sExecPod: pod.metadata?.name, k8sExecContainer: container,
-    }
-    const panel = panelStore.createPanel(cfg as any, 'k8s-exec')
-    panelStore.updateTitle(panel.id, title)
-    panelStore.bindSession(panel.id, info.id)
-    sessionStore.initSession(info.id)
+      id: "",
+      name: title,
+      type: "k8s-exec" as any,
+      host: "",
+      port: 0,
+      user: "",
+      authType: "password" as any,
+      k8sExecConnId: connId.value,
+      k8sNamespace: ns,
+      k8sExecPod: pod.metadata?.name,
+      k8sExecContainer: container,
+    };
+    const panel = panelStore.createPanel(cfg as any, "k8s-exec");
+    panelStore.updateTitle(panel.id, title);
+    panelStore.bindSession(panel.id, info.id);
+    sessionStore.initSession(info.id);
     // Exec socket is already connected when the binding returns; the backend only
     // emits session:status on later transitions (disconnect), so mark it now.
-    sessionStore.updateStatus(info.id, 'connected')
-    const tab = tabStore.createTerminalTab(panel.title, panel.id)
-    panelStore.movePanelToTab(panel.id, tab.id)
+    sessionStore.updateStatus(info.id, "connected");
+    const tab = tabStore.createTerminalTab(panel.title, panel.id);
+    panelStore.movePanelToTab(panel.id, tab.id);
   } catch (e: any) {
-    if (e !== 'cancel' && e !== 'close') ElMessage.error(String(e?.message || e))
+    if (e !== "cancel" && e !== "close")
+      ElMessage.error(String(e?.message || e));
   }
 }
 
 // 左侧宽度 + resizer（抄 DBTabContent）
-const leftWidth = ref(220)
-let resizeStartX = 0
-let resizeStartWidth = 0
-let resizing = false
+const leftWidth = ref(220);
+let resizeStartX = 0;
+let resizeStartWidth = 0;
+let resizing = false;
 function onResizeStart(e: MouseEvent) {
-  resizeStartX = e.clientX
-  resizeStartWidth = leftWidth.value
-  resizing = true
-  document.addEventListener('mousemove', onResizeMove)
-  document.addEventListener('mouseup', onResizeEnd)
+  resizeStartX = e.clientX;
+  resizeStartWidth = leftWidth.value;
+  resizing = true;
+  document.addEventListener("mousemove", onResizeMove);
+  document.addEventListener("mouseup", onResizeEnd);
 }
 function onResizeMove(e: MouseEvent) {
-  const dx = e.clientX - resizeStartX
-  leftWidth.value = Math.max(150, Math.min(500, resizeStartWidth + dx))
+  const dx = e.clientX - resizeStartX;
+  leftWidth.value = Math.max(150, Math.min(500, resizeStartWidth + dx));
 }
 function onResizeEnd() {
-  resizing = false
-  document.removeEventListener('mousemove', onResizeMove)
-  document.removeEventListener('mouseup', onResizeEnd)
+  resizing = false;
+  document.removeEventListener("mousemove", onResizeMove);
+  document.removeEventListener("mouseup", onResizeEnd);
 }
 
 async function connect() {
-  k8sStore.setConnStatus(props.connection.id, 'connecting')
+  k8sStore.setConnStatus(props.connection.id, "connecting");
   try {
-    const cfg = props.connection
-    const source = cfg.k8sConfigInline ? cfg.k8sConfigInline : (cfg.k8sConfigPath || '~/.kube/config')
-    const isPath = !cfg.k8sConfigInline
-    let tunnelUser = ''
-    let tunnelPassword = ''
+    const cfg = props.connection;
+    const source = cfg.k8sConfigInline
+      ? cfg.k8sConfigInline
+      : cfg.k8sConfigPath || "~/.kube/config";
+    const isPath = !cfg.k8sConfigInline;
+    let tunnelUser = "";
+    let tunnelPassword = "";
     if (cfg.tunnelSSHConnId) {
-      const creds = await resolveTunnelCredentials(cfg.tunnelSSHConnId)
+      const creds = await resolveTunnelCredentials(cfg.tunnelSSHConnId);
       if (!creds) {
-        error.value = 'Tunnel credentials cancelled'
-        return
+        error.value = "Tunnel credentials cancelled";
+        return;
       }
-      tunnelUser = creds.user
-      tunnelPassword = creds.password
+      tunnelUser = creds.user;
+      tunnelPassword = creds.password;
     }
     connId.value = await k8sClient.connect(
       source,
       isPath,
-      cfg.k8sContext || '',
-      cfg.tunnelSSHConnId || '',
+      cfg.k8sContext || "",
+      cfg.tunnelSSHConnId || "",
       tunnelUser,
-      tunnelPassword
-    )
-    k8sStore.setConnStatus(props.connection.id, 'connected')
-    loadNamespaces()
+      tunnelPassword,
+      !!cfg.k8sInsecureTls,
+    );
+    k8sStore.setConnStatus(props.connection.id, "connected");
+    loadNamespaces();
   } catch (e: any) {
-    k8sStore.setConnStatus(props.connection.id, 'error')
-    error.value = String(e?.message || e)
+    k8sStore.setConnStatus(props.connection.id, "error");
+    error.value = String(e?.message || e);
   }
 }
 
-onMounted(connect)
+onMounted(connect);
 onBeforeUnmount(() => {
   if (resizing) {
-    document.removeEventListener('mousemove', onResizeMove)
-    document.removeEventListener('mouseup', onResizeEnd)
+    document.removeEventListener("mousemove", onResizeMove);
+    document.removeEventListener("mouseup", onResizeEnd);
   }
   if (connId.value) {
     // K8sResourceList 内部 onBeforeUnmount 已经 unsubscribe 当前订阅。
-    k8sClient.disconnect(connId.value)
+    k8sClient.disconnect(connId.value);
   }
-})
+});
 </script>
 
 <style scoped>

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ys-ll/uniterm/backend/log"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/proxy"
 )
@@ -65,6 +66,7 @@ func (ts *TunnelService) StartTunnel(t Tunnel, resolve ConnResolver) TunnelState
 	// unblocks when the connection drops, so we can flip the tunnel to error.
 	go tunnelKeepAlive(exit, quit, "tunnel="+t.ID)
 	go func() {
+		defer log.Recover("tunnel_forward.waitChain")
 		exit.Wait()
 		select {
 		case <-quit:
@@ -223,11 +225,17 @@ func (ts *TunnelService) dialChain(chain []ConnectionConfig, upstream *SocksProx
 			return nil, nil, fmt.Errorf("dial %s: %w", addr, err)
 		}
 
+		hostKeyCB, err := sshHostKeyCallback(cfg)
+		if err != nil {
+			raw.Close()
+			closeClients(clients)
+			return nil, nil, fmt.Errorf("host key config for %s: %w", addr, err)
+		}
 		clientConfig := &ssh.ClientConfig{
 			User:            cfg.User,
 			Auth:            makeSSHAuthMethods(cfg, nil),
 			Timeout:         30 * time.Second,
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			HostKeyCallback: hostKeyCB,
 		}
 		sshConn, chans, reqs, err := ssh.NewClientConn(raw, addr, clientConfig)
 		if err != nil {
@@ -336,8 +344,16 @@ func acceptLoop(ln net.Listener, quit chan struct{}, handle func(net.Conn)) {
 // ends.
 func pipe(a, b net.Conn) {
 	done := make(chan struct{}, 2)
-	go func() { io.Copy(a, b); done <- struct{}{} }()
-	go func() { io.Copy(b, a); done <- struct{}{} }()
+	go func() {
+		defer log.Recover("tunnel_forward.pipe.a->b")
+		io.Copy(a, b)
+		done <- struct{}{}
+	}()
+	go func() {
+		defer log.Recover("tunnel_forward.pipe.b->a")
+		io.Copy(b, a)
+		done <- struct{}{}
+	}()
 	<-done
 	a.Close()
 	b.Close()
@@ -390,7 +406,7 @@ func (ts *TunnelService) TunnelStates() []TunnelState {
 // --- minimal SOCKS5 server (CONNECT only, no auth) for dynamic tunnels ---
 
 const (
-	socks5Success        = 0x00
+	socks5Success         = 0x00
 	socks5HostUnreachable = 0x04
 )
 

@@ -54,6 +54,7 @@ func (s *ContainerExecSession) Resize(cols, rows int) error { return s.pty.Resiz
 func (s *ContainerExecSession) Disconnect() error {
 	var err error
 	s.quitOnce.Do(func() {
+		s.LogDisconnect("user")
 		err = s.pty.Close()
 		s.setStatus(StatusDisconnected)
 	})

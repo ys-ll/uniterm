@@ -69,8 +69,6 @@ func (s *RecentStore) Load() ([]string, error) {
 // subsequent Records. The id is moved to the front of the list immediately
 // so GetAll returns up-to-date results; only the file write is debounced.
 // Use Flush or Close to force a synchronous write.
-//
-// Fixes: F-102.
 func (s *RecentStore) Record(id string) error {
 	if id == "" {
 		return nil

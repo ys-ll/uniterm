@@ -29,6 +29,7 @@
 
 ## 目录
 
+- [快速开始](#快速开始)
 - [功能特性](#功能特性)
 - [支持的协议](#支持的协议)
 - [界面截图](#界面截图)
@@ -38,9 +39,36 @@
 - [从源码构建](#从源码构建)
 - [项目结构](#项目结构)
 - [路线图](#路线图)
+- [常见问题](#常见问题)
 - [欢迎 Star](#欢迎-star)
 - [反馈与贡献](#反馈与贡献)
 - [开源协议](#开源协议)
+
+## 快速开始
+
+已经装好 uniterm？打开一次，连接到第一台 SSH 服务器：
+
+```bash
+# 1. 安装（任选其一）
+brew install --cask ys-ll/uniterm/uniterm          # macOS
+scoop install uniterm                              # Windows
+sudo dpkg -i uniterm-linux-amd64-latest.deb        # Linux（deb）
+
+# 2. 启动
+open -a uniterm                                    # macOS
+# （Windows / Linux 双击图标）
+
+# 3. 在 UI 中：点击「+ 新建连接」→ SSH → 填入主机/端口/认证 → 连接
+```
+
+或从源码构建：
+
+```bash
+git clone https://github.com/ys-ll/uniterm.git && cd uniterm
+npm --prefix frontend install
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+wails build          # 产物在 build/bin/uniterm
+```
 
 ## 功能特性
 
@@ -251,6 +279,40 @@ uniTerm/
 ## 路线图
 
 已实现的协议 / 功能与后续计划见 [ROADMAP.md](ROADMAP.md)，逐版本的更新记录见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 常见问题
+
+### SSH 公钥认证
+
+uniterm 自动读取 `~/.ssh/id_ed25519`、`~/.ssh/id_rsa` 与 `~/.ssh/id_ecdsa`。也可以在新建连接的「认证 → 私钥」字段里直接粘贴私钥内容，支持带口令的私钥。
+
+### 字体显示异常 / 字符变成方框
+
+终端默认使用 [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)。CJK 字符会回退到系统中最佳的等宽字体。如果某个字符显示为 `□`，请安装覆盖该字符集的字体（如 `Noto Sans Mono CJK`），然后在「设置 → 外观 → 终端字体」中选中。
+
+### 端口转发 / 跳板机
+
+在左侧边栏打开「隧道」面板，点击「+ 新建隧道」，选一条已保存的 SSH 连接作为入口。uniterm 会在 SSH 传输之上开启本地 SOCKS / 端口转发，本机的任何工具都可以走它出去。
+
+### 连接正常但 AI Agent 无法执行命令
+
+AI Agent 直接在当前激活的终端标签页中执行命令。请确认：(1) 已经打开并激活一个 SSH 或本地终端标签页；(2) 「设置 → AI」里配置好了服务商和模型；(3) 执行模式允许该动作——若希望减少中断，把「全部确认」切到「免确认」或「仅高危确认」。
+
+### 我的连接存在哪里？
+
+操作系统的应用数据目录：macOS `~/Library/Application Support/uniterm`、Windows `%APPDATA%\uniterm`、Linux `~/.local/share/uniterm`。AI 设置、技能、快捷命令都在同一目录下。要迁移到新机器，复制该目录即可；或者在设置里打开「云端同步」推送到自己的 GitHub / GitLab / Gitee 私有仓库。
+
+### Linux 报 `libgtk-3-0` / `libwebkit2gtk-4.1-0` 缺失
+
+```
+sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0   # Debian / Ubuntu
+sudo dnf install gtk3 webkit2gtk4.1                # Fedora / RHEL
+sudo pacman -S gtk3 webkit2gtk-4.1                 # Arch
+```
+
+### 如何上报 Bug 或提功能请求？
+
+在 <https://github.com/ys-ll/uniterm/issues> 开 issue。安全问题请按 [SECURITY.md](SECURITY.md) 流程——**不要**开公开 issue。
 
 ## 欢迎 Star
 

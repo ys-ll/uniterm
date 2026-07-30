@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,7 +36,7 @@ type FieldEntry struct {
 // ScoredMember represents a sorted-set member with its score.
 type ScoredMember struct {
 	Score  float64 `json:"score"`
-	Member  string  `json:"member"`
+	Member string  `json:"member"`
 }
 
 // RedisSession implements the Session interface for Redis connections using go-redis.
@@ -97,7 +98,7 @@ func (s *RedisSession) Connect(config ConnectionConfig) error {
 			DB:               0,
 		})
 	} else {
-		addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+		addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
 		client = redis.NewClient(&redis.Options{
 			Addr:     addr,
 			Username: config.User,

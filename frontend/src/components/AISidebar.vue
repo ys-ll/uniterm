@@ -1,33 +1,75 @@
 <template>
-  <div ref="sidebarEl" class="ai-sidebar" :class="{ collapsed: !aiStore.visible, resizing: isResizing, maximized: isMaximized }" :style="{ width: sidebarWidth + 'px' }">
+  <div
+    ref="sidebarEl"
+    class="ai-sidebar"
+    :class="{
+      collapsed: !aiStore.visible,
+      resizing: isResizing,
+      maximized: isMaximized,
+    }"
+    :style="{ width: sidebarWidth + 'px' }"
+  >
     <div class="resize-handle" @mousedown="onResizeStart" />
     <div class="ai-header">
-      <span>{{ t('ai.title') }}</span>
+      <span>{{ t("ai.title") }}</span>
       <div class="ai-actions">
-        <button class="ai-action-btn" @click="onNewSession" :title="t('ai.newSession')">
+        <button
+          class="ai-action-btn"
+          @click="onNewSession"
+          :title="t('ai.newSession')"
+        >
           <el-icon><MessageSquarePlus :size="14" /></el-icon>
         </button>
-        <el-dropdown v-if="aiStore.sessions.length > 0" trigger="click" @command="onSessionCommand">
+        <el-dropdown
+          v-if="aiStore.sessions.length > 0"
+          trigger="click"
+          @command="onSessionCommand"
+        >
           <button class="ai-action-btn" :title="t('ai.recentSessions')">
             <el-icon><History :size="14" /></el-icon>
           </button>
           <template #dropdown>
             <el-dropdown-menu class="dark-dropdown">
-              <el-dropdown-item v-for="s in aiStore.sessions" :key="s.id" :command="s.id" :class="{ active: s.id === aiStore.currentSessionId }">
+              <el-dropdown-item
+                v-for="s in aiStore.sessions"
+                :key="s.id"
+                :command="s.id"
+                :class="{ active: s.id === aiStore.currentSessionId }"
+              >
                 <span class="session-item-name">{{ s.name }}</span>
-                <span class="session-time">{{ formatRelativeTime(s.updatedAt) }}</span>
-                <el-icon class="session-delete" @click.stop="aiStore.deleteSession(s.id)"><Trash2 :size="14" /></el-icon>
+                <span class="session-time">{{
+                  formatRelativeTime(s.updatedAt)
+                }}</span>
+                <el-icon
+                  class="session-delete"
+                  @click.stop="aiStore.deleteSession(s.id)"
+                  ><Trash2 :size="14"
+                /></el-icon>
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <button class="ai-action-btn" @click="searchVisible = !searchVisible" :title="t('ai.search')">
+        <button
+          class="ai-action-btn"
+          @click="searchVisible = !searchVisible"
+          :title="t('ai.search')"
+        >
           <el-icon><Search :size="14" /></el-icon>
         </button>
-        <button class="ai-action-btn" @click="toggleMaximize" :title="isMaximized ? t('ai.restore') : t('ai.maximize')">
-          <el-icon><Shrink v-if="isMaximized" :size="14" /><Expand v-else :size="14" /></el-icon>
+        <button
+          class="ai-action-btn"
+          @click="toggleMaximize"
+          :title="isMaximized ? t('ai.restore') : t('ai.maximize')"
+        >
+          <el-icon
+            ><Shrink v-if="isMaximized" :size="14" /><Expand v-else :size="14"
+          /></el-icon>
         </button>
-        <button class="ai-action-btn" @click="onClose" :title="t('sidebar.collapse')">
+        <button
+          class="ai-action-btn"
+          @click="onClose"
+          :title="t('sidebar.collapse')"
+        >
           <el-icon><X :size="14" /></el-icon>
         </button>
       </div>
@@ -44,11 +86,21 @@
         @keydown.shift.enter.prevent="onSearchPrev"
         @keydown.escape="closeSearch"
       />
-      <span class="search-count" v-if="searchText">{{ currentMatchIndex + 1 }}/{{ totalMatchCount || 0 }}</span>
-      <button class="search-btn" @click="onSearchPrev" :title="t('terminal.searchPrev')">
+      <span class="search-count" v-if="searchText"
+        >{{ currentMatchIndex + 1 }}/{{ totalMatchCount || 0 }}</span
+      >
+      <button
+        class="search-btn"
+        @click="onSearchPrev"
+        :title="t('terminal.searchPrev')"
+      >
         <ChevronUp :size="14" />
       </button>
-      <button class="search-btn" @click="onSearchNext" :title="t('terminal.searchNext')">
+      <button
+        class="search-btn"
+        @click="onSearchNext"
+        :title="t('terminal.searchNext')"
+      >
         <ChevronDown :size="14" />
       </button>
       <button class="search-btn" @click="closeSearch" :title="t('ai.close')">
@@ -68,7 +120,12 @@
         @answer="onAnswer"
         @dismiss="onDismiss"
       />
-      <div v-if="aiStore.isRunning || aiStore.pendingCommand || aiStore.pendingQuestion" class="ai-thinking">
+      <div
+        v-if="
+          aiStore.isRunning || aiStore.pendingCommand || aiStore.pendingQuestion
+        "
+        class="ai-thinking"
+      >
         <div class="thinking-text">{{ statusText }}</div>
       </div>
     </div>
@@ -81,8 +138,12 @@
       :style="aiMenuStyle"
       @click.stop
     >
-      <div class="ai-menu-item" @click="aiCopySelection">{{ t('terminal.copy') }}</div>
-      <div class="ai-menu-item" @click="aiAskSelection">{{ t('terminal.askAI') }}</div>
+      <div class="ai-menu-item" @click="aiCopySelection">
+        {{ t("terminal.copy") }}
+      </div>
+      <div class="ai-menu-item" @click="aiAskSelection">
+        {{ t("terminal.askAI") }}
+      </div>
     </div>
 
     <div class="ai-input">
@@ -90,23 +151,25 @@
       <div class="ai-panel-tags">
         <div class="panel-tags-list">
           <template v-if="lockedPanels.length === 0 && currentIsTerminal">
-            <span class="panel-tag panel-tag-default">{{ currentTerminalLabel }}</span>
+            <span class="panel-tag panel-tag-default">{{
+              currentTerminalLabel
+            }}</span>
           </template>
           <template v-else-if="lockedPanels.length > 0">
-            <span
-              v-for="pid in lockedPanels"
-              :key="pid"
-              class="panel-tag"
-            >
+            <span v-for="pid in lockedPanels" :key="pid" class="panel-tag">
               {{ getPanelDisplayName(pid) }}
-              <button class="panel-tag-close" @click="onRemovePanelTag(pid)">&times;</button>
+              <button class="panel-tag-close" @click="onRemovePanelTag(pid)">
+                &times;
+              </button>
             </span>
           </template>
           <template v-else>
-            <span class="no-terminal-hint">{{ t('ai.noTerminalHint') }}</span>
+            <span class="no-terminal-hint">{{ t("ai.noTerminalHint") }}</span>
           </template>
           <el-dropdown trigger="click" @command="onAddPanelTag">
-            <button class="panel-tag-add-btn" :title="t('ai.addTerminal')">+</button>
+            <button class="panel-tag-add-btn" :title="t('ai.addTerminal')">
+              +
+            </button>
             <template #dropdown>
               <el-dropdown-menu class="dark-dropdown">
                 <el-dropdown-item
@@ -116,7 +179,9 @@
                   :class="{ selected: lockedPanels.includes(p.id) }"
                 >
                   <span>{{ getPanelDisplayName(p.id) }}</span>
-                  <span class="panel-shell-hint">{{ getPanelShellHint(p.id) }}</span>
+                  <span class="panel-shell-hint">{{
+                    getPanelShellHint(p.id)
+                  }}</span>
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -138,7 +203,11 @@
             @mousedown.prevent="onSelectHashPanel(p.title)"
           >
             <span class="hash-panel-name">#{{ p.title }}</span>
-            <span v-if="lockedPanels.includes(p.id)" class="hash-associated-badge">已关联</span>
+            <span
+              v-if="lockedPanels.includes(p.id)"
+              class="hash-associated-badge"
+              >{{ t("ai.hashPanelAssociated") }}</span
+            >
             <span class="hash-panel-hint">{{ getPanelShellHint(p.id) }}</span>
           </div>
         </div>
@@ -155,17 +224,33 @@
             :class="{ highlighted: i === skillHighlightIndex }"
             @mousedown.prevent="onSelectItem(item)"
           >
-            <component :is="item.kind === 'command' ? Terminal : BookOpen" :size="13" class="skill-dropdown-kind-icon" />
+            <component
+              :is="item.kind === 'command' ? Terminal : BookOpen"
+              :size="13"
+              class="skill-dropdown-kind-icon"
+            />
             <span class="skill-dropdown-name">/{{ item.name }}</span>
-            <span v-if="item.kind === 'command' && item.argumentHint" class="skill-dropdown-args">{{ item.argumentHint }}</span>
+            <span
+              v-if="item.kind === 'command' && item.argumentHint"
+              class="skill-dropdown-args"
+              >{{ item.argumentHint }}</span
+            >
             <span class="skill-dropdown-desc">{{ item.description }}</span>
           </div>
         </div>
 
         <div v-if="aiStore.queuedMessages.length" class="queued-area">
-          <div v-for="q in aiStore.queuedMessages" :key="q.id" class="queued-chip">
+          <div
+            v-for="q in aiStore.queuedMessages"
+            :key="q.id"
+            class="queued-chip"
+          >
             <span class="queued-text">{{ q.content }}</span>
-            <button class="queued-remove" :title="t('ai.queueRemove')" @click="aiStore.removeQueuedMessage(q.id)">
+            <button
+              class="queued-remove"
+              :title="t('ai.queueRemove')"
+              @click="aiStore.removeQueuedMessage(q.id)"
+            >
               <X :size="12" />
             </button>
           </div>
@@ -183,52 +268,88 @@
         </div>
         <div class="input-actions">
           <div class="input-actions-left">
-            <button class="ghost-btn hash-btn" title="引用终端" @click="onHashButtonClick">
+            <button
+              class="ghost-btn hash-btn"
+              :title="t('ai.referenceTerminal')"
+              :aria-label="t('ai.referenceTerminal')"
+              @click="onHashButtonClick"
+            >
               <span class="hash-btn-icon">#</span>
             </button>
-            <button class="ghost-btn hash-btn" title="Skill / 命令" @click="onSlashButtonClick">
+            <button
+              class="ghost-btn hash-btn"
+              :title="t('ai.skillCommandPicker')"
+              :aria-label="t('ai.skillCommandPicker')"
+              @click="onSlashButtonClick"
+            >
               <span class="hash-btn-icon">/</span>
             </button>
-            <el-dropdown trigger="click" @command="onModelChange" v-if="settingsStore.settings.ai.models.length > 0">
-              <button class="ghost-btn model-btn" :title="currentModelName">{{ currentModelName }}</button>
+            <el-dropdown
+              trigger="click"
+              @command="onModelChange"
+              v-if="settingsStore.settings.ai.models.length > 0"
+            >
+              <button class="ghost-btn model-btn" :title="currentModelName">
+                {{ currentModelName }}
+              </button>
               <template #dropdown>
                 <el-dropdown-menu class="dark-dropdown">
                   <el-dropdown-item
                     v-for="m in settingsStore.settings.ai.models"
                     :key="m.id"
                     :command="m.id"
-                    :class="{ active: m.id === settingsStore.settings.ai.activeModelId }"
+                    :class="{
+                      active: m.id === settingsStore.settings.ai.activeModelId,
+                    }"
                   >
                     {{ m.name }}
                   </el-dropdown-item>
-                  <el-dropdown-item class="add-model-item" command="__add_model__" :divided="true">
+                  <el-dropdown-item
+                    class="add-model-item"
+                    command="__add_model__"
+                    :divided="true"
+                  >
                     <Plus :size="14" class="add-model-icon" />
-                    <span>{{ t('settings.addModel') }}</span>
+                    <span>{{ t("settings.addModel") }}</span>
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <button v-else class="ghost-btn model-btn add-model-btn" @click="onModelChange('__add_model__')">
-            <Plus :size="14" />
-            <span>{{ t('settings.addModel') }}</span>
-          </button>
+            <button
+              v-else
+              class="ghost-btn model-btn add-model-btn"
+              @click="onModelChange('__add_model__')"
+            >
+              <Plus :size="14" />
+              <span>{{ t("settings.addModel") }}</span>
+            </button>
           </div>
           <div class="input-actions-right">
             <el-dropdown trigger="click" @command="onModeChange">
-              <button class="ghost-btn mode-btn" :title="modeLabel">{{ modeLabel }}</button>
+              <button class="ghost-btn mode-btn" :title="modeLabel">
+                {{ modeLabel }}
+              </button>
               <template #dropdown>
                 <el-dropdown-menu class="dark-dropdown">
                   <el-dropdown-item command="confirm_all">
-                    <span class="mode-option mode-confirm">{{ t('ai.confirmAll') }}</span>
+                    <span class="mode-option mode-confirm">{{
+                      t("ai.confirmAll")
+                    }}</span>
                   </el-dropdown-item>
                   <el-dropdown-item command="confirm_write">
-                    <span class="mode-option mode-write">{{ t('ai.confirmWrite') }}</span>
+                    <span class="mode-option mode-write">{{
+                      t("ai.confirmWrite")
+                    }}</span>
                   </el-dropdown-item>
                   <el-dropdown-item command="confirm_dangerous">
-                    <span class="mode-option mode-warning">{{ t('ai.confirmDangerous') }}</span>
+                    <span class="mode-option mode-warning">{{
+                      t("ai.confirmDangerous")
+                    }}</span>
                   </el-dropdown-item>
                   <el-dropdown-item command="bypass">
-                    <span class="mode-option mode-auto">{{ t('ai.bypass') }}</span>
+                    <span class="mode-option mode-auto">{{
+                      t("ai.bypass")
+                    }}</span>
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -242,1191 +363,1369 @@
             >
               <ArrowUp :size="18" />
             </button>
-            <button v-else class="send-btn stop" :title="t('ai.stop')" @click="onStop">
+            <button
+              v-else
+              class="send-btn stop"
+              :title="t('ai.stop')"
+              @click="onStop"
+            >
               <Square :size="15" :fill="'currentColor'" />
             </button>
           </div>
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed, watch, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { X, Trash2, Expand, Shrink, History, MessageSquarePlus, Search, ChevronDown, ChevronUp, ArrowUp, Square, Plus, BookOpen, Terminal } from '@lucide/vue'
-import { useAIStore } from '../stores/aiStore'
-import { useSettingsStore } from '../stores/settingsStore'
-import { useSkillStore } from '../stores/skillStore'
-import { useCommandStore } from '../stores/commandStore'
-import { useTabStore } from '../stores/tabStore'
-import { usePanelStore } from '../stores/panelStore'
-import { useI18n } from '../i18n'
-import { runAgent, approveTool, rejectTool, continueAgent, answerQuestion, dismissQuestion } from '../services/agent'
-import { CancelChatStream } from '../../wailsjs/go/main/App'
-import { ClipboardGetText } from '../../wailsjs/runtime'
-import type { ExecutionMode } from '../types/ai'
-import AIMessage from './AIMessage.vue'
+import { ref, nextTick, computed, watch, onMounted, onUnmounted } from "vue";
+import { ElMessage } from "element-plus";
+import {
+  X,
+  Trash2,
+  Expand,
+  Shrink,
+  History,
+  MessageSquarePlus,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  ArrowUp,
+  Square,
+  Plus,
+  BookOpen,
+  Terminal,
+} from "@lucide/vue";
+import { useAIStore } from "../stores/aiStore";
+import { useSettingsStore } from "../stores/settingsStore";
+import { useSkillStore } from "../stores/skillStore";
+import { useCommandStore } from "../stores/commandStore";
+import { useTabStore } from "../stores/tabStore";
+import { usePanelStore } from "../stores/panelStore";
+import { useI18n } from "../i18n";
+import {
+  runAgent,
+  approveTool,
+  rejectTool,
+  continueAgent,
+  answerQuestion,
+  dismissQuestion,
+} from "../services/agent";
+import { CancelChatStream } from "../../wailsjs/go/main/App";
+import { ClipboardGetText } from "../../wailsjs/runtime";
+import type { ExecutionMode } from "../types/ai";
+import AIMessage from "./AIMessage.vue";
 
-const aiStore = useAIStore()
-const settingsStore = useSettingsStore()
-const tabStore = useTabStore()
-const panelStore = usePanelStore()
-const skillStore = useSkillStore()
-const commandStore = useCommandStore()
-const { t } = useI18n()
-const editableRef = ref<HTMLDivElement | null>(null)
+const aiStore = useAIStore();
+const settingsStore = useSettingsStore();
+const tabStore = useTabStore();
+const panelStore = usePanelStore();
+const skillStore = useSkillStore();
+const commandStore = useCommandStore();
+const { t } = useI18n();
+const editableRef = ref<HTMLDivElement | null>(null);
 
 // Derive plain text from contenteditable div (hash-tag spans contribute #PanelName)
 function getEditableText(): string {
-  const el = editableRef.value
-  if (!el) return ''
-  let text = ''
+  const el = editableRef.value;
+  if (!el) return "";
+  let text = "";
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      text += node.textContent || ''
+      text += node.textContent || "";
     } else if (node instanceof HTMLElement) {
-      if (node.classList.contains('skill-tag')) {
+      if (node.classList.contains("skill-tag")) {
         // skill tag 不贡献文本(skill 正文单独注入,不发给终端)
-        return
+        return;
       }
-      if (node.classList.contains('command-tag')) {
-        return // command tag 不贡献文本（正文后台组装）
+      if (node.classList.contains("command-tag")) {
+        return; // command tag 不贡献文本（正文后台组装）
       }
-      if (node.classList.contains('hash-tag')) {
-        text += node.getAttribute('data-ref') || node.textContent || ''
+      if (node.classList.contains("hash-tag")) {
+        text += node.getAttribute("data-ref") || node.textContent || "";
       } else {
-        node.childNodes.forEach(walk)
+        node.childNodes.forEach(walk);
       }
     }
-  }
-  el.childNodes.forEach(walk)
-  return text
+  };
+  el.childNodes.forEach(walk);
+  return text;
 }
 
 // 从输入框里提取已插入的 skill 名(取第一个 skill-tag)
 function extractSkillFromInput(): string | null {
-  const el = editableRef.value
-  if (!el) return null
-  const tag = el.querySelector('.skill-tag')
-  return tag?.getAttribute('data-skill') || null
+  const el = editableRef.value;
+  if (!el) return null;
+  const tag = el.querySelector(".skill-tag");
+  return tag?.getAttribute("data-skill") || null;
 }
 
 // Create a skill inline tag span (/name), styled like a hash-tag, carries data-skill
 function createSkillTagSpan(name: string): HTMLSpanElement {
-  const span = document.createElement('span')
-  span.className = 'hash-tag skill-tag'
-  span.setAttribute('data-skill', name)
-  span.contentEditable = 'false'
-  span.textContent = '/' + name
-  const el = editableRef.value
+  const span = document.createElement("span");
+  span.className = "hash-tag skill-tag";
+  span.setAttribute("data-skill", name);
+  span.contentEditable = "false";
+  span.textContent = "/" + name;
+  const el = editableRef.value;
   if (el) {
     for (const attr of el.attributes) {
-      if (attr.name.startsWith('data-v-')) {
-        span.setAttribute(attr.name, '')
-        break
+      if (attr.name.startsWith("data-v-")) {
+        span.setAttribute(attr.name, "");
+        break;
       }
     }
   }
-  return span
+  return span;
 }
 
 function createCommandTagSpan(name: string): HTMLSpanElement {
-  const span = document.createElement('span')
-  span.className = 'hash-tag command-tag'
-  span.setAttribute('data-command', name)
-  span.contentEditable = 'false'
-  span.textContent = '/' + name
-  const el = editableRef.value
+  const span = document.createElement("span");
+  span.className = "hash-tag command-tag";
+  span.setAttribute("data-command", name);
+  span.contentEditable = "false";
+  span.textContent = "/" + name;
+  const el = editableRef.value;
   if (el) {
     for (const attr of el.attributes) {
-      if (attr.name.startsWith('data-v-')) { span.setAttribute(attr.name, ''); break }
+      if (attr.name.startsWith("data-v-")) {
+        span.setAttribute(attr.name, "");
+        break;
+      }
     }
   }
-  return span
+  return span;
 }
 
 function extractCommandFromInput(): { name: string; args: string } | null {
-  const el = editableRef.value
-  if (!el) return null
-  const tag = el.querySelector('.command-tag')
-  const name = tag?.getAttribute('data-command')
-  if (!name) return null
+  const el = editableRef.value;
+  if (!el) return null;
+  const tag = el.querySelector(".command-tag");
+  const name = tag?.getAttribute("data-command");
+  if (!name) return null;
   // 参数 = tag 之后的纯文本
-  let args = ''
-  let after = false
+  let args = "";
+  let after = false;
   const walk = (node: Node) => {
-    if (node === tag) { after = true; return }
-    if (!after) return
-    if (node.nodeType === Node.TEXT_NODE) { args += node.textContent || ''; return }
+    if (node === tag) {
+      after = true;
+      return;
+    }
+    if (!after) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      args += node.textContent || "";
+      return;
+    }
     // skill/command/hash tag 的文本（/name、#panel）不是参数，跳过
-    if (node instanceof HTMLElement && (node.classList.contains('skill-tag') || node.classList.contains('command-tag') || node.classList.contains('hash-tag'))) return
-    node.childNodes.forEach(walk)
-  }
-  el.childNodes.forEach(walk)
-  return { name, args: args.trim() }
+    if (
+      node instanceof HTMLElement &&
+      (node.classList.contains("skill-tag") ||
+        node.classList.contains("command-tag") ||
+        node.classList.contains("hash-tag"))
+    )
+      return;
+    node.childNodes.forEach(walk);
+  };
+  el.childNodes.forEach(walk);
+  return { name, args: args.trim() };
 }
 
 // Create a hash-tag span with scoped CSS attribute so styles apply
 function createHashTagSpan(panelTitle: string): HTMLSpanElement {
-  const span = document.createElement('span')
-  span.className = 'hash-tag'
-  span.setAttribute('data-ref', '#' + panelTitle)
-  span.contentEditable = 'false'
-  span.textContent = '#' + panelTitle
+  const span = document.createElement("span");
+  span.className = "hash-tag";
+  span.setAttribute("data-ref", "#" + panelTitle);
+  span.contentEditable = "false";
+  span.textContent = "#" + panelTitle;
   // Copy scoped style attribute from editable div so Vue scoped CSS matches
-  const el = editableRef.value
+  const el = editableRef.value;
   if (el) {
     for (const attr of el.attributes) {
-      if (attr.name.startsWith('data-v-') || attr.name.startsWith('data-v')) {
-        span.setAttribute(attr.name, '')
-        break
+      if (attr.name.startsWith("data-v-") || attr.name.startsWith("data-v")) {
+        span.setAttribute(attr.name, "");
+        break;
       }
     }
   }
-  return span
+  return span;
 }
 
 // Computed: input text (for watch)
-const inputText = ref('')
-const hasSkillTag = ref(false)
-const hasCommandTag = ref(false)
+const inputText = ref("");
+const hasSkillTag = ref(false);
+const hasCommandTag = ref(false);
 function syncInputText() {
-  inputText.value = getEditableText()
-  hasSkillTag.value = extractSkillFromInput() !== null
-  hasCommandTag.value = extractCommandFromInput() !== null
+  inputText.value = getEditableText();
+  hasSkillTag.value = extractSkillFromInput() !== null;
+  hasCommandTag.value = extractCommandFromInput() !== null;
 }
 
 function onEditableInput() {
-  syncInputText(); refreshHashDropdown(); refreshSkillDropdown()
+  syncInputText();
+  refreshHashDropdown();
+  refreshSkillDropdown();
 }
 
 // MutationObserver as backup — catches changes that don't fire 'input' event
 onMounted(() => {
   if (editableRef.value) {
-    editableObserver = new MutationObserver(() => { syncInputText(); refreshHashDropdown(); refreshSkillDropdown() })
-    editableObserver.observe(editableRef.value, { childList: true, subtree: true, characterData: true })
+    editableObserver = new MutationObserver(() => {
+      syncInputText();
+      refreshHashDropdown();
+      refreshSkillDropdown();
+    });
+    editableObserver.observe(editableRef.value, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
   }
-})
+});
 
 function focusInput() {
   nextTick(() => {
-    editableRef.value?.focus()
-  })
+    editableRef.value?.focus();
+  });
 }
 
 const visibleMessages = computed(() => {
-  return aiStore.messages.filter(m => {
-    if (m.role === 'tool' && m.tool_call_id) return false
-    if (m.role === 'tool' && !m.tool_call_id) return true
-    if (m.role !== 'assistant') return true
-    const hasPending = aiStore.pendingCommand?.messageId === m.id
-    return m.content || m.tool_calls?.length || hasPending || m.needsContinue
-  })
-})
+  return aiStore.messages.filter((m) => {
+    if (m.role === "tool" && m.tool_call_id) return false;
+    if (m.role === "tool" && !m.tool_call_id) return true;
+    if (m.role !== "assistant") return true;
+    const hasPending = aiStore.pendingCommand?.messageId === m.id;
+    return m.content || m.tool_calls?.length || hasPending || m.needsContinue;
+  });
+});
 
 // ── Search ──
-const searchVisible = ref(false)
-const searchText = ref('')
-const searchInputRef = ref<HTMLInputElement>()
-const currentMatchIndex = ref(0)
-const totalMatchCount = ref(0)
+const searchVisible = ref(false);
+const searchText = ref("");
+const searchInputRef = ref<HTMLInputElement>();
+const currentMatchIndex = ref(0);
+const totalMatchCount = ref(0);
 
 function onSearchInput() {
-  currentMatchIndex.value = 0
-  highlightMatches()
+  currentMatchIndex.value = 0;
+  highlightMatches();
 }
 
 function highlightMatches() {
   nextTick(() => {
-    const marks = messagesRef.value?.querySelectorAll('mark.ai-search-highlight')
-    totalMatchCount.value = marks?.length || 0
-    updateActiveMark()
-  })
+    const marks = messagesRef.value?.querySelectorAll(
+      "mark.ai-search-highlight",
+    );
+    totalMatchCount.value = marks?.length || 0;
+    updateActiveMark();
+  });
 }
 
 function updateActiveMark() {
-  const marks = messagesRef.value?.querySelectorAll('mark.ai-search-highlight')
+  const marks = messagesRef.value?.querySelectorAll("mark.ai-search-highlight");
   marks?.forEach((m, i) => {
-    m.classList.toggle('active', i === currentMatchIndex.value)
-  })
+    m.classList.toggle("active", i === currentMatchIndex.value);
+  });
   if (marks && marks[currentMatchIndex.value]) {
-    marks[currentMatchIndex.value].scrollIntoView({ block: 'center', behavior: 'smooth' })
+    marks[currentMatchIndex.value].scrollIntoView({
+      block: "center",
+      behavior: "smooth",
+    });
   }
 }
 
 function onSearchNext() {
-  if (totalMatchCount.value === 0) return
-  currentMatchIndex.value = (currentMatchIndex.value + 1) % totalMatchCount.value
-  updateActiveMark()
+  if (totalMatchCount.value === 0) return;
+  currentMatchIndex.value =
+    (currentMatchIndex.value + 1) % totalMatchCount.value;
+  updateActiveMark();
 }
 
 function onSearchPrev() {
-  if (totalMatchCount.value === 0) return
-  currentMatchIndex.value = (currentMatchIndex.value - 1 + totalMatchCount.value) % totalMatchCount.value
-  updateActiveMark()
+  if (totalMatchCount.value === 0) return;
+  currentMatchIndex.value =
+    (currentMatchIndex.value - 1 + totalMatchCount.value) %
+    totalMatchCount.value;
+  updateActiveMark();
 }
 
 function closeSearch() {
-  searchVisible.value = false
-  searchText.value = ''
-  currentMatchIndex.value = 0
-  totalMatchCount.value = 0
+  searchVisible.value = false;
+  searchText.value = "";
+  currentMatchIndex.value = 0;
+  totalMatchCount.value = 0;
 }
 
 // Watch for DOM changes (messages loaded/streamed) to re-count highlights
-watch(() => [searchText.value, visibleMessages.value.length], () => {
-  if (searchText.value) highlightMatches()
-})
+watch(
+  () => [searchText.value, visibleMessages.value.length],
+  () => {
+    if (searchText.value) highlightMatches();
+  },
+);
 const statusText = computed(() => {
-  if (aiStore.pendingCommand) return t('ai.confirming')
-  if (aiStore.pendingQuestion) return t('ai.awaitingAnswer')
-  const key = `ai.${aiStore.status}` as any
-  return t(key) || t('ai.thinking')
-})
+  if (aiStore.pendingCommand) return t("ai.confirming");
+  if (aiStore.pendingQuestion) return t("ai.awaitingAnswer");
+  const key = `ai.${aiStore.status}` as any;
+  return t(key) || t("ai.thinking");
+});
 
-const messagesRef = ref<HTMLDivElement>()
-const aiMenuRef = ref<HTMLDivElement>()
-const sidebarWidth = ref(360)
-const isResizing = ref(false)
-const isMaximized = ref(false)
-const preMaxWidth = ref(360)
+const messagesRef = ref<HTMLDivElement>();
+const aiMenuRef = ref<HTMLDivElement>();
+const sidebarWidth = ref(360);
+const isResizing = ref(false);
+const isMaximized = ref(false);
+const preMaxWidth = ref(360);
 
 function toggleMaximize() {
   if (isMaximized.value) {
-    sidebarWidth.value = preMaxWidth.value
-    isMaximized.value = false
-    window.dispatchEvent(new CustomEvent('rdp:overlay-pop'))
+    sidebarWidth.value = preMaxWidth.value;
+    isMaximized.value = false;
+    window.dispatchEvent(new CustomEvent("rdp:overlay-pop"));
   } else {
-    preMaxWidth.value = sidebarWidth.value
-    isMaximized.value = true
-    window.dispatchEvent(new CustomEvent('rdp:overlay-push'))
+    preMaxWidth.value = sidebarWidth.value;
+    isMaximized.value = true;
+    window.dispatchEvent(new CustomEvent("rdp:overlay-push"));
   }
 }
 
 function onClose() {
   if (isMaximized.value) {
-    isMaximized.value = false
-    sidebarWidth.value = preMaxWidth.value
-    window.dispatchEvent(new CustomEvent('rdp:overlay-pop'))
+    isMaximized.value = false;
+    sidebarWidth.value = preMaxWidth.value;
+    window.dispatchEvent(new CustomEvent("rdp:overlay-pop"));
   }
-  aiStore.toggle()
+  aiStore.toggle();
 }
-const sidebarEl = ref<HTMLDivElement>()
-const aiMenuVisible = ref(false)
-const aiMenuStyle = ref({ left: '0px', top: '0px' })
-const isAtBottom = ref(true)
-let editableObserver: MutationObserver | null = null
-let messagesObserver: MutationObserver | null = null
+const sidebarEl = ref<HTMLDivElement>();
+const aiMenuVisible = ref(false);
+const aiMenuStyle = ref({ left: "0px", top: "0px" });
+const isAtBottom = ref(true);
+let editableObserver: MutationObserver | null = null;
+let messagesObserver: MutationObserver | null = null;
 
 const modeLabel = computed(() => {
   switch (aiStore.mode) {
-    case 'bypass': return t('ai.bypass')
-    case 'confirm_dangerous': return t('ai.confirmDangerous')
-    case 'confirm_write': return t('ai.confirmWrite')
-    case 'confirm_all': return t('ai.confirmAll')
-    default: return t('ai.confirmDangerous')
+    case "bypass":
+      return t("ai.bypass");
+    case "confirm_dangerous":
+      return t("ai.confirmDangerous");
+    case "confirm_write":
+      return t("ai.confirmWrite");
+    case "confirm_all":
+      return t("ai.confirmAll");
+    default:
+      return t("ai.confirmDangerous");
   }
-})
+});
 
 const currentModelName = computed(() => {
-  const m = settingsStore.settings.ai.models.find(m => m.id === settingsStore.settings.ai.activeModelId)
-  return m?.name || 'Model'
-})
+  const m = settingsStore.settings.ai.models.find(
+    (m) => m.id === settingsStore.settings.ai.activeModelId,
+  );
+  return m?.name || "Model";
+});
 
-const busy = computed(() => aiStore.isRunning || !!aiStore.pendingCommand || !!aiStore.pendingQuestion)
+const busy = computed(
+  () =>
+    aiStore.isRunning || !!aiStore.pendingCommand || !!aiStore.pendingQuestion,
+);
 
 // Panel tags
-const lockedPanels = computed(() => [...tabStore.aiLockedPanelIds])
+const lockedPanels = computed(() => [...tabStore.aiLockedPanelIds]);
 
 const currentIsTerminal = computed(() => {
-  const tab = tabStore.activeTab
-  if (tab?.type === 'terminal') return true
-  if (tab?.type === 'workspace') {
-    const pid = (tab as any).activePanelId
-    return !!(pid && panelStore.getPanel(pid))
+  const tab = tabStore.activeTab;
+  if (tab?.type === "terminal") return true;
+  if (tab?.type === "workspace") {
+    const pid = (tab as any).activePanelId;
+    return !!(pid && panelStore.getPanel(pid));
   }
-  return false
-})
+  return false;
+});
 
 const currentTerminalLabel = computed(() => {
-  const tab = tabStore.activeTab
-  if (!tab) return t('ai.currentTerminal')
-  let panelId: string | undefined
-  if (tab.type === 'terminal') {
-    panelId = (tab as any).panelId
-  } else if (tab.type === 'workspace') {
-    panelId = (tab as any).activePanelId
+  const tab = tabStore.activeTab;
+  if (!tab) return t("ai.currentTerminal");
+  let panelId: string | undefined;
+  if (tab.type === "terminal") {
+    panelId = (tab as any).panelId;
+  } else if (tab.type === "workspace") {
+    panelId = (tab as any).activePanelId;
   }
-  if (!panelId) return t('ai.currentTerminal')
-  const panel = panelStore.getPanel(panelId)
-  return panel ? `${t('ai.currentTerminal')}: ${panel.title}` : t('ai.currentTerminal')
-})
+  if (!panelId) return t("ai.currentTerminal");
+  const panel = panelStore.getPanel(panelId);
+  return panel
+    ? `${t("ai.currentTerminal")}: ${panel.title}`
+    : t("ai.currentTerminal");
+});
 
 const availableTerminalPanels = computed(() => {
-  const result: Array<{ id: string; title: string; type: string; shellPath?: string; config?: any }> = []
-  const seen = new Set<string>()
+  const result: Array<{
+    id: string;
+    title: string;
+    type: string;
+    shellPath?: string;
+    config?: any;
+  }> = [];
+  const seen = new Set<string>();
   for (const tab of tabStore.tabs) {
-    if (tab.type === 'terminal' && (tab as any).panelId) {
-      const p = panelStore.getPanel((tab as any).panelId)
-      if (p && (p.type === 'ssh' || p.type === 'local') && !seen.has(p.id)) {
-        seen.add(p.id)
-        result.push({ id: p.id, title: p.title, type: p.type, shellPath: p.config?.shellPath, config: p.config })
+    if (tab.type === "terminal" && (tab as any).panelId) {
+      const p = panelStore.getPanel((tab as any).panelId);
+      if (p && (p.type === "ssh" || p.type === "local") && !seen.has(p.id)) {
+        seen.add(p.id);
+        result.push({
+          id: p.id,
+          title: p.title,
+          type: p.type,
+          shellPath: p.config?.shellPath,
+          config: p.config,
+        });
       }
     }
-    if (tab.type === 'workspace' && (tab as any).panelIds) {
+    if (tab.type === "workspace" && (tab as any).panelIds) {
       for (const pid of (tab as any).panelIds) {
-        const p = panelStore.getPanel(pid)
-        if (p && (p.type === 'ssh' || p.type === 'local') && !seen.has(p.id)) {
-          seen.add(p.id)
-          result.push({ id: p.id, title: p.title, type: p.type, shellPath: p.config?.shellPath, config: p.config })
+        const p = panelStore.getPanel(pid);
+        if (p && (p.type === "ssh" || p.type === "local") && !seen.has(p.id)) {
+          seen.add(p.id);
+          result.push({
+            id: p.id,
+            title: p.title,
+            type: p.type,
+            shellPath: p.config?.shellPath,
+            config: p.config,
+          });
         }
       }
     }
   }
-  return result
-})
+  return result;
+});
 
 function getPanelDisplayName(panelId: string): string {
-  const p = panelStore.getPanel(panelId)
-  if (!p) return panelId
-  const dup = availableTerminalPanels.value.filter(ap => ap.title === p.title)
-  return dup.length > 1 ? `${p.title} (id: ${p.id})` : p.title
+  const p = panelStore.getPanel(panelId);
+  if (!p) return panelId;
+  const dup = availableTerminalPanels.value.filter(
+    (ap) => ap.title === p.title,
+  );
+  return dup.length > 1 ? `${p.title} (id: ${p.id})` : p.title;
 }
 
 function getPanelShellHint(panelId: string): string {
-  const p = panelStore.getPanel(panelId)
-  if (!p) return ''
-  const shellPath = p.config?.shellPath
+  const p = panelStore.getPanel(panelId);
+  if (!p) return "";
+  const shellPath = p.config?.shellPath;
   if (shellPath) {
-    const lower = shellPath.toLowerCase()
-    if (lower.includes('bash') || lower.includes('sh')) return 'Bash'
-    if (lower.includes('powershell') || lower.includes('pwsh')) return 'PowerShell'
-    if (lower.includes('cmd')) return 'CMD'
-    if (lower.includes('zsh')) return 'Zsh'
-    return shellPath.split(/[\\/]/).pop() || 'Shell'
+    const lower = shellPath.toLowerCase();
+    if (lower.includes("bash") || lower.includes("sh")) return "Bash";
+    if (lower.includes("powershell") || lower.includes("pwsh"))
+      return "PowerShell";
+    if (lower.includes("cmd")) return "CMD";
+    if (lower.includes("zsh")) return "Zsh";
+    return shellPath.split(/[\\/]/).pop() || "Shell";
   }
-  if (p.type === 'ssh') return 'SSH'
-  return ''
+  if (p.type === "ssh") return "SSH";
+  return "";
 }
 
 function onRemovePanelTag(panelId: string) {
-  tabStore.removeAILockedPanel(panelId)
+  tabStore.removeAILockedPanel(panelId);
 }
 
 function onAddPanelTag(panelId: string) {
   if (tabStore.isPanelAILocked(panelId)) {
-    tabStore.removeAILockedPanel(panelId)
+    tabStore.removeAILockedPanel(panelId);
   } else {
-    tabStore.addAILockedPanel(panelId)
+    tabStore.addAILockedPanel(panelId);
   }
 }
 
 // # reference state
-const hashQuery = ref('')
-const hashDropdownVisible = ref(false)
-const hashHighlightIndex = ref(0)
+const hashQuery = ref("");
+const hashDropdownVisible = ref(false);
+const hashHighlightIndex = ref(0);
 
-const skillQuery = ref('')
-const skillDropdownVisible = ref(false)
-const skillHighlightIndex = ref(0)
-const activeSkillChip = ref<string | null>(null)
+const skillQuery = ref("");
+const skillDropdownVisible = ref(false);
+const skillHighlightIndex = ref(0);
+const activeSkillChip = ref<string | null>(null);
 
 const hashMatchingPanels = computed(() => {
-  const src = hashDropdownVisible.value && !hashQuery.value
-    ? availableTerminalPanels.value
-    : availableTerminalPanels.value
+  const src =
+    hashDropdownVisible.value && !hashQuery.value
+      ? availableTerminalPanels.value
+      : availableTerminalPanels.value;
   let list = hashQuery.value
-    ? src.filter(p => p.title.toLowerCase().includes(hashQuery.value.toLowerCase()))
-    : [...src]
+    ? src.filter((p) =>
+        p.title.toLowerCase().includes(hashQuery.value.toLowerCase()),
+      )
+    : [...src];
   // Sort: associated panels first
   list = [...list].sort((a, b) => {
-    const aLocked = lockedPanels.value.includes(a.id) ? 0 : 1
-    const bLocked = lockedPanels.value.includes(b.id) ? 0 : 1
-    return aLocked - bLocked
-  })
-  return list
-})
+    const aLocked = lockedPanels.value.includes(a.id) ? 0 : 1;
+    const bLocked = lockedPanels.value.includes(b.id) ? 0 : 1;
+    return aLocked - bLocked;
+  });
+  return list;
+});
 
 // `/` 补全的查询串可能带参数（如 `review 修复 bug`）：首段是名字用于匹配。
-const skillNameToken = computed(() => skillQuery.value.trimStart().split(/\s+/)[0] || '')
+const skillNameToken = computed(
+  () => skillQuery.value.trimStart().split(/\s+/)[0] || "",
+);
 
-type SlashItem = { kind: 'skill' | 'command'; name: string; description: string; argumentHint?: string }
+type SlashItem = {
+  kind: "skill" | "command";
+  name: string;
+  description: string;
+  argumentHint?: string;
+};
 
 const skillMatchingItems = computed<SlashItem[]>(() => {
-  const q = skillNameToken.value.toLowerCase()
-  const commands: SlashItem[] = commandStore.enabledCommands.map(c => ({ kind: 'command', name: c.name, description: c.description, argumentHint: c.argumentHint }))
-  const skills: SlashItem[] = skillStore.enabledSkills.map(s => ({ kind: 'skill', name: s.name, description: s.description }))
-  let list = [...commands, ...skills]
-  if (q) list = list.filter(i => i.name.toLowerCase().includes(q) || i.description.toLowerCase().includes(q))
-  return list.slice(0, 8)
-})
+  const q = skillNameToken.value.toLowerCase();
+  const commands: SlashItem[] = commandStore.enabledCommands.map((c) => ({
+    kind: "command",
+    name: c.name,
+    description: c.description,
+    argumentHint: c.argumentHint,
+  }));
+  const skills: SlashItem[] = skillStore.enabledSkills.map((s) => ({
+    kind: "skill",
+    name: s.name,
+    description: s.description,
+  }));
+  let list = [...commands, ...skills];
+  if (q)
+    list = list.filter(
+      (i) =>
+        i.name.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q),
+    );
+  return list.slice(0, 8);
+});
 
 function findLastSkillSlash(text: string): number {
   for (let i = text.length - 1; i >= 0; i--) {
-    if (text[i] === '/') {
+    if (text[i] === "/") {
       if (i === 0 || /[\s,;:.(\{\[]/.test(text[i - 1])) {
-        return i
+        return i;
       }
     }
   }
-  return -1
+  return -1;
 }
 
 function detectSlashQuery(): string | null {
-  const sel = window.getSelection()
-  const el = editableRef.value
-  if (!sel || !sel.rangeCount || !el) return null
-  const node = sel.anchorNode
-  if (!node || !el.contains(node)) return null
+  const sel = window.getSelection();
+  const el = editableRef.value;
+  if (!sel || !sel.rangeCount || !el) return null;
+  const node = sel.anchorNode;
+  if (!node || !el.contains(node)) return null;
   if (node.nodeType === Node.TEXT_NODE) {
-    const text = node.textContent?.slice(0, sel.anchorOffset) || ''
-    const idx = findLastSkillSlash(text)
+    const text = node.textContent?.slice(0, sel.anchorOffset) || "";
+    const idx = findLastSkillSlash(text);
     if (idx >= 0) {
-      return text.slice(idx + 1)
+      return text.slice(idx + 1);
     }
   }
-  return null
+  return null;
 }
 
 function refreshSkillDropdown() {
-  const query = detectSlashQuery()
+  const query = detectSlashQuery();
   if (query !== null) {
-    skillDropdownVisible.value = true
-    skillQuery.value = query
-    skillHighlightIndex.value = 0
+    skillDropdownVisible.value = true;
+    skillQuery.value = query;
+    skillHighlightIndex.value = 0;
   } else {
-    skillDropdownVisible.value = false
-    skillQuery.value = ''
+    skillDropdownVisible.value = false;
+    skillQuery.value = "";
   }
 }
 
 function onSelectSkill(name: string) {
-  const el = editableRef.value
+  const el = editableRef.value;
   // 删除输入框里正在输入的 /query 片段（无论从补全还是按钮触发），只留 chip
   if (el) {
-    const sel = window.getSelection()
-    let removed = false
+    const sel = window.getSelection();
+    let removed = false;
     if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-      const node = sel.anchorNode
+      const node = sel.anchorNode;
       if (node && node.nodeType === Node.TEXT_NODE) {
-        const tn = node as Text
-        const caretPos = sel.anchorOffset
-        const c = tn.textContent || ''
-        const hi = c.slice(0, caretPos).lastIndexOf('/')
+        const tn = node as Text;
+        const caretPos = sel.anchorOffset;
+        const c = tn.textContent || "";
+        const hi = c.slice(0, caretPos).lastIndexOf("/");
         if (hi >= 0) {
-          const delRange = document.createRange()
-          delRange.setStart(tn, hi)
-          delRange.setEnd(tn, caretPos)
-          delRange.deleteContents()
-          sel.removeAllRanges()
-          sel.addRange(delRange)
-          removed = true
+          const delRange = document.createRange();
+          delRange.setStart(tn, hi);
+          delRange.setEnd(tn, caretPos);
+          delRange.deleteContents();
+          sel.removeAllRanges();
+          sel.addRange(delRange);
+          removed = true;
         }
       }
     }
     // 兜底：若光标不在输入框（如按钮触发），按文本删掉末尾的 /query
     if (!removed) {
-      const text = getEditableText()
-      const idx = findLastSkillSlash(text)
+      const text = getEditableText();
+      const idx = findLastSkillSlash(text);
       if (idx >= 0) {
-        el.textContent = text.slice(0, idx) + text.slice(idx).replace(/^\/\S*/, '')
+        el.textContent =
+          text.slice(0, idx) + text.slice(idx).replace(/^\/\S*/, "");
       }
     }
   }
   // 移除已有的 skill tag（只允许一个），再在光标处插入新的
   if (el) {
-    el.querySelectorAll('.skill-tag').forEach(n => n.remove())
-    const tagSpan = createSkillTagSpan(name)
-    const sel = window.getSelection()
+    el.querySelectorAll(".skill-tag").forEach((n) => n.remove());
+    const tagSpan = createSkillTagSpan(name);
+    const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-      const range = sel.getRangeAt(0)
-      range.collapse(false)
-      range.insertNode(tagSpan)
-      const trailing = document.createTextNode(' ')
-      tagSpan.after(trailing)
-      range.setStart(trailing, 1)
-      range.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(range)
+      const range = sel.getRangeAt(0);
+      range.collapse(false);
+      range.insertNode(tagSpan);
+      const trailing = document.createTextNode(" ");
+      tagSpan.after(trailing);
+      range.setStart(trailing, 1);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
     } else {
       // 光标不在输入框（按钮触发）：插到开头
-      el.insertBefore(tagSpan, el.firstChild)
-      el.insertBefore(document.createTextNode(' '), tagSpan.nextSibling)
+      el.insertBefore(tagSpan, el.firstChild);
+      el.insertBefore(document.createTextNode(" "), tagSpan.nextSibling);
     }
   }
-  skillDropdownVisible.value = false
-  skillQuery.value = ''
-  syncInputText()
+  skillDropdownVisible.value = false;
+  skillQuery.value = "";
+  syncInputText();
 }
 
 // 占位符替换：先 $1..$9 按空格分词逐个替换，再处理 $ARGUMENTS；无占位符时把参数追加到末尾。
 function applyArguments(body: string, args: string): string {
-  let out = body
-  const words = args.trim() === '' ? [] : args.trim().split(/\s+/)
+  let out = body;
+  const words = args.trim() === "" ? [] : args.trim().split(/\s+/);
   for (let i = 1; i <= 9; i++) {
-    out = out.split(`$${i}`).join(words[i - 1] ?? '')
+    out = out.split(`$${i}`).join(words[i - 1] ?? "");
   }
-  if (out.includes('$ARGUMENTS')) {
-    out = out.split('$ARGUMENTS').join(args)
-  } else if (args.trim() !== '') {
-    out = out.trimEnd() + '\n\n' + args
+  if (out.includes("$ARGUMENTS")) {
+    out = out.split("$ARGUMENTS").join(args);
+  } else if (args.trim() !== "") {
+    out = out.trimEnd() + "\n\n" + args;
   }
-  return out
+  return out;
 }
 
 function onSelectCommand(name: string) {
-  const el = editableRef.value
+  const el = editableRef.value;
   // 删除输入框里正在输入的 /query 片段（无论从补全还是按钮触发），只留 chip
   if (el) {
-    const sel = window.getSelection()
-    let removed = false
+    const sel = window.getSelection();
+    let removed = false;
     if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-      const node = sel.anchorNode
+      const node = sel.anchorNode;
       if (node && node.nodeType === Node.TEXT_NODE) {
-        const tn = node as Text
-        const caretPos = sel.anchorOffset
-        const c = tn.textContent || ''
-        const hi = c.slice(0, caretPos).lastIndexOf('/')
+        const tn = node as Text;
+        const caretPos = sel.anchorOffset;
+        const c = tn.textContent || "";
+        const hi = c.slice(0, caretPos).lastIndexOf("/");
         if (hi >= 0) {
-          const delRange = document.createRange()
-          delRange.setStart(tn, hi)
-          delRange.setEnd(tn, caretPos)
-          delRange.deleteContents()
-          sel.removeAllRanges()
-          sel.addRange(delRange)
-          removed = true
+          const delRange = document.createRange();
+          delRange.setStart(tn, hi);
+          delRange.setEnd(tn, caretPos);
+          delRange.deleteContents();
+          sel.removeAllRanges();
+          sel.addRange(delRange);
+          removed = true;
         }
       }
     }
     // 兜底：若光标不在输入框（如按钮触发），按文本删掉末尾的 /query
     if (!removed) {
-      const text = getEditableText()
-      const idx = findLastSkillSlash(text)
+      const text = getEditableText();
+      const idx = findLastSkillSlash(text);
       if (idx >= 0) {
-        el.textContent = text.slice(0, idx) + text.slice(idx).replace(/^\/\S*/, '')
+        el.textContent =
+          text.slice(0, idx) + text.slice(idx).replace(/^\/\S*/, "");
       }
     }
   }
   // 移除已有的 command tag（只允许一个），再在光标处插入新的
   if (el) {
-    el.querySelectorAll('.command-tag').forEach(n => n.remove())
-    const tagSpan = createCommandTagSpan(name)
-    const sel = window.getSelection()
+    el.querySelectorAll(".command-tag").forEach((n) => n.remove());
+    const tagSpan = createCommandTagSpan(name);
+    const sel = window.getSelection();
     if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-      const range = sel.getRangeAt(0)
-      range.collapse(false)
-      range.insertNode(tagSpan)
-      const trailing = document.createTextNode(' ')
-      tagSpan.after(trailing)
-      range.setStart(trailing, 1)
-      range.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(range)
+      const range = sel.getRangeAt(0);
+      range.collapse(false);
+      range.insertNode(tagSpan);
+      const trailing = document.createTextNode(" ");
+      tagSpan.after(trailing);
+      range.setStart(trailing, 1);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
     } else {
       // 光标不在输入框（按钮触发）：插到开头
-      el.insertBefore(tagSpan, el.firstChild)
-      el.insertBefore(document.createTextNode(' '), tagSpan.nextSibling)
+      el.insertBefore(tagSpan, el.firstChild);
+      el.insertBefore(document.createTextNode(" "), tagSpan.nextSibling);
     }
   }
-  skillDropdownVisible.value = false
-  skillQuery.value = ''
-  syncInputText()
+  skillDropdownVisible.value = false;
+  skillQuery.value = "";
+  syncInputText();
 }
 
 // `/` 下拉选中：skill/command 都走插 tag（正文后台组装，不在输入框展开）。
 function onSelectItem(item: SlashItem) {
-  if (item.kind === 'skill') {
-    onSelectSkill(item.name)
-    return
+  if (item.kind === "skill") {
+    onSelectSkill(item.name);
+    return;
   }
-  onSelectCommand(item.name)
+  onSelectCommand(item.name);
 }
 
 function findLastHashIndex(text: string): number {
   for (let i = text.length - 1; i >= 0; i--) {
-    if (text[i] === '#') {
+    if (text[i] === "#") {
       if (i === 0 || /[\s,;:.(\{\[]/.test(text[i - 1])) {
-        return i
+        return i;
       }
     }
   }
-  return -1
+  return -1;
 }
 
 // Detect an active #query at the caret. Works on the DOM text node the caret
 // sits in, so an adjacent hash-tag span never interferes with the check.
 function detectHashQuery(): string | null {
-  const sel = window.getSelection()
-  const el = editableRef.value
-  if (!sel || !sel.rangeCount || !el) return null
-  const node = sel.anchorNode
-  if (!node || node.nodeType !== Node.TEXT_NODE || !el.contains(node)) return null
-  const caret = sel.anchorOffset
-  const before = (node.textContent || '').slice(0, caret)
+  const sel = window.getSelection();
+  const el = editableRef.value;
+  if (!sel || !sel.rangeCount || !el) return null;
+  const node = sel.anchorNode;
+  if (!node || node.nodeType !== Node.TEXT_NODE || !el.contains(node))
+    return null;
+  const caret = sel.anchorOffset;
+  const before = (node.textContent || "").slice(0, caret);
   // Find last # in this text node before the caret
-  const hashIdx = before.lastIndexOf('#')
-  if (hashIdx < 0) return null
-  const query = before.slice(hashIdx + 1)
+  const hashIdx = before.lastIndexOf("#");
+  if (hashIdx < 0) return null;
+  const query = before.slice(hashIdx + 1);
   // query must not contain whitespace
-  if (/\s/.test(query)) return null
+  if (/\s/.test(query)) return null;
   // char before # (within this node) must be empty or a separator
-  if (hashIdx > 0 && !/[\s,;:.(\{\[]/.test(before[hashIdx - 1])) return null
-  return query
+  if (hashIdx > 0 && !/[\s,;:.(\{\[]/.test(before[hashIdx - 1])) return null;
+  return query;
 }
 
 function refreshHashDropdown() {
-  const query = detectHashQuery()
+  const query = detectHashQuery();
   if (query !== null) {
-    hashDropdownVisible.value = true
-    hashQuery.value = query
-    hashHighlightIndex.value = 0
+    hashDropdownVisible.value = true;
+    hashQuery.value = query;
+    hashHighlightIndex.value = 0;
   } else {
-    hashDropdownVisible.value = false
-    hashQuery.value = ''
+    hashDropdownVisible.value = false;
+    hashQuery.value = "";
   }
 }
 
 function onSelectHashPanel(panelTitle: string) {
-  const el = editableRef.value
-  if (!el) return
+  const el = editableRef.value;
+  if (!el) return;
 
-  const text = getEditableText()
-  const lastHashIdx = -1
+  const text = getEditableText();
+  const lastHashIdx = -1;
 
   if (lastHashIdx >= 0) {
     // Text-triggered: replace #query with tag span
-    const before = text.slice(0, lastHashIdx)
-    const after = text.slice(lastHashIdx + 1)
-    const spaceIdx = after.indexOf(' ')
-    const rest = spaceIdx >= 0 ? after.slice(spaceIdx) : ' '
+    const before = text.slice(0, lastHashIdx);
+    const after = text.slice(lastHashIdx + 1);
+    const spaceIdx = after.indexOf(" ");
+    const rest = spaceIdx >= 0 ? after.slice(spaceIdx) : " ";
 
-    const tagSpan = createHashTagSpan(panelTitle)
+    const tagSpan = createHashTagSpan(panelTitle);
 
     // Rebuild content
-    el.innerHTML = ''
-    if (before) el.appendChild(document.createTextNode(before))
-    el.appendChild(tagSpan)
-    if (rest) el.appendChild(document.createTextNode(rest))
+    el.innerHTML = "";
+    if (before) el.appendChild(document.createTextNode(before));
+    el.appendChild(tagSpan);
+    if (rest) el.appendChild(document.createTextNode(rest));
     // Place cursor after tag, delay to let DOM settle
     nextTick(() => {
-      const sel2 = window.getSelection()
+      const sel2 = window.getSelection();
       if (sel2) {
-        const range = document.createRange()
-        range.setStartAfter(tagSpan)
-        range.collapse(true)
-        sel2.removeAllRanges()
-        sel2.addRange(range)
+        const range = document.createRange();
+        range.setStartAfter(tagSpan);
+        range.collapse(true);
+        sel2.removeAllRanges();
+        sel2.addRange(range);
       }
-    })
+    });
   } else {
     // Button-triggered: append tag span at cursor position
-    const sel = window.getSelection()
+    const sel = window.getSelection();
     // Remove the typed #query first (caret text node), then insert the tag
-    if (sel && sel.rangeCount > 0 && sel.anchorNode && sel.anchorNode.nodeType === Node.TEXT_NODE && el.contains(sel.anchorNode)) {
-      const tn = sel.anchorNode as Text
-      const caretPos = sel.anchorOffset
-      const c = tn.textContent || ''
-      const hi = c.slice(0, caretPos).lastIndexOf('#')
+    if (
+      sel &&
+      sel.rangeCount > 0 &&
+      sel.anchorNode &&
+      sel.anchorNode.nodeType === Node.TEXT_NODE &&
+      el.contains(sel.anchorNode)
+    ) {
+      const tn = sel.anchorNode as Text;
+      const caretPos = sel.anchorOffset;
+      const c = tn.textContent || "";
+      const hi = c.slice(0, caretPos).lastIndexOf("#");
       if (hi >= 0) {
-        const delRange = document.createRange()
-        delRange.setStart(tn, hi)
-        delRange.setEnd(tn, caretPos)
-        delRange.deleteContents()
-        sel.removeAllRanges()
-        sel.addRange(delRange)
+        const delRange = document.createRange();
+        delRange.setStart(tn, hi);
+        delRange.setEnd(tn, caretPos);
+        delRange.deleteContents();
+        sel.removeAllRanges();
+        sel.addRange(delRange);
       }
     }
     if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-      const range = sel.getRangeAt(0)
-      range.collapse(false) // collapse to end
+      const range = sel.getRangeAt(0);
+      range.collapse(false); // collapse to end
 
-      const tagSpan = createHashTagSpan(panelTitle)
+      const tagSpan = createHashTagSpan(panelTitle);
 
-      range.insertNode(tagSpan)
-      const trailingBtn = document.createTextNode(' ')
-      tagSpan.after(trailingBtn)
-      range.setStart(trailingBtn, 0)
-      range.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(range)
+      range.insertNode(tagSpan);
+      const trailingBtn = document.createTextNode(" ");
+      tagSpan.after(trailingBtn);
+      range.setStart(trailingBtn, 0);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
     } else {
       // Fallback: append at end
-      const tagSpan = createHashTagSpan(panelTitle)
-      el.appendChild(tagSpan)
-      el.appendChild(document.createTextNode(' '))
+      const tagSpan = createHashTagSpan(panelTitle);
+      el.appendChild(tagSpan);
+      el.appendChild(document.createTextNode(" "));
     }
   }
 
-  syncInputText(); refreshHashDropdown()
-  hashDropdownVisible.value = false
-  hashQuery.value = ''
-  hashHighlightIndex.value = 0
+  syncInputText();
+  refreshHashDropdown();
+  hashDropdownVisible.value = false;
+  hashQuery.value = "";
+  hashHighlightIndex.value = 0;
 
   // Auto-add to locked panels
-  const panel = availableTerminalPanels.value.find(p => p.title === panelTitle)
+  const panel = availableTerminalPanels.value.find(
+    (p) => p.title === panelTitle,
+  );
   if (panel && !tabStore.isPanelAILocked(panel.id)) {
-    tabStore.addAILockedPanel(panel.id)
+    tabStore.addAILockedPanel(panel.id);
   }
 }
 
 function onHashButtonClick() {
-  const el = editableRef.value
-  if (!el) return
-  el.focus()
+  const el = editableRef.value;
+  if (!el) return;
+  el.focus();
 
-  const sel = window.getSelection()
+  const sel = window.getSelection();
   if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-    const range = sel.getRangeAt(0)
-    range.deleteContents()
-    const textNode = document.createTextNode('#')
-    range.insertNode(textNode)
-    range.setStart(textNode, 1)
-    range.collapse(true)
-    sel.removeAllRanges()
-    sel.addRange(range)
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode("#");
+    range.insertNode(textNode);
+    range.setStart(textNode, 1);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
   } else {
-    const textNode = document.createTextNode('#')
-    el.appendChild(textNode)
-    const range = document.createRange()
-    range.setStart(textNode, 1)
-    range.collapse(true)
-    sel.removeAllRanges()
-    sel.addRange(range)
+    const textNode = document.createTextNode("#");
+    el.appendChild(textNode);
+    const range = document.createRange();
+    range.setStart(textNode, 1);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
-  syncInputText(); refreshHashDropdown()
+  syncInputText();
+  refreshHashDropdown();
 }
 
 function onSlashButtonClick() {
-  const el = editableRef.value
-  if (!el) return
-  el.focus()
+  const el = editableRef.value;
+  if (!el) return;
+  el.focus();
 
-  const sel = window.getSelection()
+  const sel = window.getSelection();
   if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-    const range = sel.getRangeAt(0)
-    range.deleteContents()
-    const textNode = document.createTextNode('/')
-    range.insertNode(textNode)
-    range.setStart(textNode, 1)
-    range.collapse(true)
-    sel.removeAllRanges()
-    sel.addRange(range)
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode("/");
+    range.insertNode(textNode);
+    range.setStart(textNode, 1);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
   } else {
-    const textNode = document.createTextNode('/')
-    el.appendChild(textNode)
-    const range = document.createRange()
-    range.setStart(textNode, 1)
-    range.collapse(true)
-    sel.removeAllRanges()
-    sel.addRange(range)
+    const textNode = document.createTextNode("/");
+    el.appendChild(textNode);
+    const range = document.createRange();
+    range.setStart(textNode, 1);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
   }
-  syncInputText(); refreshSkillDropdown()
+  syncInputText();
+  refreshSkillDropdown();
 }
 
 function onEscHashDropdown() {
-  hashDropdownVisible.value = false
-  hashQuery.value = ''
+  hashDropdownVisible.value = false;
+  hashQuery.value = "";
 }
 
 function onModeChange(mode: string) {
-  aiStore.mode = mode as ExecutionMode
+  aiStore.mode = mode as ExecutionMode;
 }
 
 const emit = defineEmits<{
-  'open-settings': []
-}>()
+  "open-settings": [];
+}>();
 
 function onModelChange(modelId: string) {
-  if (modelId === '__add_model__') {
-    emit('open-settings')
+  if (modelId === "__add_model__") {
+    emit("open-settings");
     nextTick(() => {
-      settingsStore.openCategory = 'ai'
-    })
-    return
+      settingsStore.openCategory = "ai";
+    });
+    return;
   }
-  settingsStore.setActiveModel(modelId)
-  const model = settingsStore.settings.ai.models.find(m => m.id === modelId)
+  settingsStore.setActiveModel(modelId);
+  const model = settingsStore.settings.ai.models.find((m) => m.id === modelId);
   if (model) {
     aiStore.setConfig({
       apiKey: model.apiKey,
       baseURL: model.baseURL,
       model: model.model,
-    })
+    });
   }
 }
 
 function formatRelativeTime(timestamp: number): string {
-  const diff = Date.now() - timestamp
-  const seconds = Math.floor(diff / 1000)
-  if (seconds < 60) return t('ai.justNow')
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return t('ai.minutesAgo', { n: minutes })
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return t('ai.hoursAgo', { n: hours })
-  const days = Math.floor(hours / 24)
-  if (days < 30) return t('ai.daysAgo', { n: days })
-  const months = Math.floor(days / 30)
-  if (months < 12) return t('ai.monthsAgo', { n: months })
-  const years = Math.floor(months / 12)
-  return t('ai.yearsAgo', { n: years })
+  const diff = Date.now() - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return t("ai.justNow");
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return t("ai.minutesAgo", { n: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return t("ai.hoursAgo", { n: hours });
+  const days = Math.floor(hours / 24);
+  if (days < 30) return t("ai.daysAgo", { n: days });
+  const months = Math.floor(days / 30);
+  if (months < 12) return t("ai.monthsAgo", { n: months });
+  const years = Math.floor(months / 12);
+  return t("ai.yearsAgo", { n: years });
 }
 
 function scrollToBottom() {
   nextTick(() => {
     if (messagesRef.value) {
-      messagesRef.value.scrollTop = messagesRef.value.scrollHeight
-      isAtBottom.value = true
+      messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
+      isAtBottom.value = true;
     }
-  })
+  });
 }
 
 function onMessagesScroll() {
-  if (!messagesRef.value) return
-  const el = messagesRef.value
-  isAtBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 30
+  if (!messagesRef.value) return;
+  const el = messagesRef.value;
+  isAtBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
 }
 
 function autoScrollToBottom() {
   if (isAtBottom.value && messagesRef.value) {
-    messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+    messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
   }
 }
 
 function closeAIMenu() {
-  aiMenuVisible.value = false
+  aiMenuVisible.value = false;
 }
 
 function onAIContextMenu(e: MouseEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  window.dispatchEvent(new CustomEvent('global:close-context-menus'))
-  aiMenuStyle.value = fitMenuPosition(e.clientX, e.clientY, 120, 76)
-  aiMenuVisible.value = true
+  e.preventDefault();
+  e.stopPropagation();
+  window.dispatchEvent(new CustomEvent("global:close-context-menus"));
+  aiMenuStyle.value = fitMenuPosition(e.clientX, e.clientY, 120, 76);
+  aiMenuVisible.value = true;
 }
 
 function fitMenuPosition(x: number, y: number, menuW: number, menuH: number) {
-  let left = x
-  let top = y
-  if (x + menuW > window.innerWidth) left = x - menuW
-  if (y + menuH > window.innerHeight) top = y - menuH
-  return { left: left + 'px', top: top + 'px' }
+  let left = x;
+  let top = y;
+  if (x + menuW > window.innerWidth) left = x - menuW;
+  if (y + menuH > window.innerHeight) top = y - menuH;
+  return { left: left + "px", top: top + "px" };
 }
 
 function aiCopySelection() {
-  const selection = window.getSelection()
+  const selection = window.getSelection();
   if (selection && selection.toString()) {
-    navigator.clipboard.writeText(selection.toString())
+    navigator.clipboard.writeText(selection.toString());
   }
-  closeAIMenu()
+  closeAIMenu();
 }
 
 function aiAskSelection() {
-  const selection = window.getSelection()
+  const selection = window.getSelection();
   if (selection && selection.toString()) {
-    const el = editableRef.value
-    if (el) el.textContent = selection.toString()
-    syncInputText(); refreshHashDropdown()
+    const el = editableRef.value;
+    if (el) el.textContent = selection.toString();
+    syncInputText();
+    refreshHashDropdown();
     if (!aiStore.visible) {
-      aiStore.visible = true
+      aiStore.visible = true;
     }
   }
-  closeAIMenu()
+  closeAIMenu();
 }
 
 function onNewSession() {
-  aiStore.createSession()
+  aiStore.createSession();
 }
 
 function onSessionCommand(sessionId: string) {
-  aiStore.switchSession(sessionId)
+  aiStore.switchSession(sessionId);
 }
 
-watch(() => aiStore.currentSessionId, () => {
-  isAtBottom.value = true
-  scrollToBottom()
-})
+watch(
+  () => aiStore.currentSessionId,
+  () => {
+    isAtBottom.value = true;
+    scrollToBottom();
+  },
+);
 
-watch(() => aiStore.visible, (visible) => {
-  if (visible) {
-    nextTick(() => editableRef.value?.focus())
-  }
-  if (!visible && isMaximized.value) {
-    isMaximized.value = false
-    sidebarWidth.value = preMaxWidth.value
-    window.dispatchEvent(new CustomEvent('rdp:overlay-pop'))
-  }
-})
+watch(
+  () => aiStore.visible,
+  (visible) => {
+    if (visible) {
+      nextTick(() => editableRef.value?.focus());
+    }
+    if (!visible && isMaximized.value) {
+      isMaximized.value = false;
+      sidebarWidth.value = preMaxWidth.value;
+      window.dispatchEvent(new CustomEvent("rdp:overlay-pop"));
+    }
+  },
+);
 
 function onKeydown(e: KeyboardEvent) {
   // Hash dropdown navigation
   if (hashDropdownVisible.value) {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      onEscHashDropdown()
-      return
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onEscHashDropdown();
+      return;
     }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      hashHighlightIndex.value = Math.min(hashHighlightIndex.value + 1, hashMatchingPanels.value.length - 1)
-      return
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      hashHighlightIndex.value = Math.min(
+        hashHighlightIndex.value + 1,
+        hashMatchingPanels.value.length - 1,
+      );
+      return;
     }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      hashHighlightIndex.value = Math.max(hashHighlightIndex.value - 1, 0)
-      return
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      hashHighlightIndex.value = Math.max(hashHighlightIndex.value - 1, 0);
+      return;
     }
-    if (e.key === 'Enter') {
-      e.preventDefault()
+    if (e.key === "Enter") {
+      e.preventDefault();
       if (hashMatchingPanels.value.length > 0) {
-        onSelectHashPanel(hashMatchingPanels.value[hashHighlightIndex.value].title)
+        onSelectHashPanel(
+          hashMatchingPanels.value[hashHighlightIndex.value].title,
+        );
       }
-      return
+      return;
     }
   }
 
   // Skill dropdown navigation
   if (skillDropdownVisible.value) {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      skillDropdownVisible.value = false
-      return
+    if (e.key === "Escape") {
+      e.preventDefault();
+      skillDropdownVisible.value = false;
+      return;
     }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      skillHighlightIndex.value = Math.min(skillHighlightIndex.value + 1, skillMatchingItems.value.length - 1)
-      return
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      skillHighlightIndex.value = Math.min(
+        skillHighlightIndex.value + 1,
+        skillMatchingItems.value.length - 1,
+      );
+      return;
     }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      skillHighlightIndex.value = Math.max(skillHighlightIndex.value - 1, 0)
-      return
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      skillHighlightIndex.value = Math.max(skillHighlightIndex.value - 1, 0);
+      return;
     }
-    if (e.key === 'Enter') {
-      e.preventDefault()
+    if (e.key === "Enter") {
+      e.preventDefault();
       if (skillMatchingItems.value.length > 0) {
-        onSelectItem(skillMatchingItems.value[skillHighlightIndex.value])
+        onSelectItem(skillMatchingItems.value[skillHighlightIndex.value]);
       }
-      return
+      return;
     }
   }
 
   // Cmd/Ctrl+V: paste via Wails clipboard (DOM paste unreliable in WKWebView)
-  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V')) {
-    e.preventDefault()
-    ClipboardGetText().then(text => { if (text) insertTextAtCursor(text) }).catch(() => {})
-    return
+  if (
+    (e.metaKey || e.ctrlKey) &&
+    !e.shiftKey &&
+    !e.altKey &&
+    (e.key === "v" || e.key === "V")
+  ) {
+    e.preventDefault();
+    ClipboardGetText()
+      .then((text) => {
+        if (text) insertTextAtCursor(text);
+      })
+      .catch(() => {});
+    return;
   }
 
   // Normal Enter to send
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    onSend()
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    onSend();
   }
 }
 
 function onPaste(e: ClipboardEvent) {
-  e.preventDefault()
-  ClipboardGetText().then(text => { if (text) insertTextAtCursor(text) }).catch(() => {})
+  e.preventDefault();
+  ClipboardGetText()
+    .then((text) => {
+      if (text) insertTextAtCursor(text);
+    })
+    .catch(() => {});
 }
 
 function insertTextAtCursor(text: string) {
-  const el = editableRef.value
-  if (!el) return
-  el.focus()
-  const sel = window.getSelection()
+  const el = editableRef.value;
+  if (!el) return;
+  el.focus();
+  const sel = window.getSelection();
   if (sel && sel.rangeCount > 0) {
-    const range = sel.getRangeAt(0)
-    range.deleteContents()
-    range.insertNode(document.createTextNode(text))
-    range.collapse(false)
-    sel.removeAllRanges()
-    sel.addRange(range)
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(document.createTextNode(text));
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
   } else {
-    el.textContent += text
+    el.textContent += text;
   }
-  syncInputText()
-  refreshHashDropdown()
+  syncInputText();
+  refreshHashDropdown();
 }
 
 function clearInput() {
-  const el = editableRef.value
-  if (el) el.innerHTML = ''
-  syncInputText(); refreshHashDropdown()
+  const el = editableRef.value;
+  if (el) el.innerHTML = "";
+  syncInputText();
+  refreshHashDropdown();
 }
 
 async function onSend() {
-  const text = getEditableText().trim()
+  const text = getEditableText().trim();
 
   // F6: command tag —— 取 tag 后参数,后台组装正文作为 user 消息
-  const cmd = extractCommandFromInput()
+  const cmd = extractCommandFromInput();
   // F5: 显式调用 skill —— 输入框里挂了 skill tag 则注入其 L2 正文
-  const skillName = extractSkillFromInput()
-  if (!text && !skillName && !cmd) return
-  let skillBody = ''
+  const skillName = extractSkillFromInput();
+  if (!text && !skillName && !cmd) return;
+  let skillBody = "";
   if (skillName) {
     try {
-      skillBody = await skillStore.getBody(skillName)
+      skillBody = await skillStore.getBody(skillName);
     } catch (e) {
-      console.error('Failed to get skill body:', e)
+      console.error("Failed to get skill body:", e);
     }
   }
 
-  let final = text
+  let final = text;
   if (cmd) {
-    let body = ''
+    let body = "";
     try {
-      body = await commandStore.getBody(cmd.name)
+      body = await commandStore.getBody(cmd.name);
     } catch (e) {
-      console.error('Failed to get command body:', e)
+      console.error("Failed to get command body:", e);
     }
-    final = body ? applyArguments(body, cmd.args) : cmd.args
+    final = body ? applyArguments(body, cmd.args) : cmd.args;
   }
 
   // 正文拉取失败时不要静默跑空 user turn，直接提示并终止
   if (cmd && !final.trim()) {
-    ElMessage.error(t('ai.commandLoadFailed', { name: cmd.name }))
-    return
+    ElMessage.error(t("ai.commandLoadFailed", { name: cmd.name }));
+    return;
   }
   if (!cmd && skillName && !text && !skillBody) {
-    ElMessage.error(t('ai.skillLoadFailed', { name: skillName }))
-    return
+    ElMessage.error(t("ai.skillLoadFailed", { name: skillName }));
+    return;
   }
 
   if (busy.value) {
-    if (cmd) aiStore.addCommandCard(cmd.name, cmd.args)
-    aiStore.enqueueMessage(cmd ? '' : final, skillName || undefined, skillBody || undefined, cmd ? final : undefined)
-    clearInput()
-    return
+    if (cmd) aiStore.addCommandCard(cmd.name, cmd.args);
+    aiStore.enqueueMessage(
+      cmd ? "" : final,
+      skillName || undefined,
+      skillBody || undefined,
+      cmd ? final : undefined,
+    );
+    clearInput();
+    return;
   }
-  clearInput()
-  scrollToBottom()
-  if (cmd) aiStore.addCommandCard(cmd.name, cmd.args)
-  await runAgent(cmd ? '' : final, skillName, skillBody, cmd ? final : undefined)
-  scrollToBottom()
+  clearInput();
+  scrollToBottom();
+  if (cmd) aiStore.addCommandCard(cmd.name, cmd.args);
+  await runAgent(
+    cmd ? "" : final,
+    skillName,
+    skillBody,
+    cmd ? final : undefined,
+  );
+  scrollToBottom();
 }
 
 function onStop() {
   if (aiStore.pendingCommand) {
-    const cmd = aiStore.pendingCommand
-    aiStore.clearPendingCommand()
+    const cmd = aiStore.pendingCommand;
+    aiStore.clearPendingCommand();
     aiStore.addMessage({
       id: `msg-${Date.now()}`,
-      role: 'tool',
-      content: 'User cancelled this command.',
-      tool_call_id: cmd.toolId
-    })
-    aiStore.clearQueue()
-    return
+      role: "tool",
+      content: "User cancelled this command.",
+      tool_call_id: cmd.toolId,
+    });
+    aiStore.clearQueue();
+    return;
   }
   if (aiStore.pendingQuestion) {
-    dismissQuestion()
-    aiStore.clearQueue()
-    return
+    dismissQuestion();
+    aiStore.clearQueue();
+    return;
   }
-  CancelChatStream().catch(() => { /* ignore */ })
-  aiStore.stop()
+  CancelChatStream().catch(() => {
+    /* ignore */
+  });
+  aiStore.stop();
 }
 
 async function onApprove(messageId: string) {
-  await approveTool(messageId)
-  scrollToBottom()
+  await approveTool(messageId);
+  scrollToBottom();
 }
 
 function onReject(messageId: string) {
-  rejectTool(messageId)
-  scrollToBottom()
+  rejectTool(messageId);
+  scrollToBottom();
 }
 
 function onAnswer(selectedLabels: string[], customText?: string) {
-  answerQuestion(selectedLabels, customText)
-  scrollToBottom()
+  answerQuestion(selectedLabels, customText);
+  scrollToBottom();
 }
 
 function onDismiss() {
-  dismissQuestion()
-  scrollToBottom()
+  dismissQuestion();
+  scrollToBottom();
 }
 
 async function onContinue() {
-  await continueAgent()
-  scrollToBottom()
+  await continueAgent();
+  scrollToBottom();
 }
 
 function onResizeStart(e: MouseEvent) {
-  isResizing.value = true
-  const el = sidebarEl.value
-  if (!el) return
-  const startX = e.clientX
-  const startWidth = el.offsetWidth
+  isResizing.value = true;
+  const el = sidebarEl.value;
+  if (!el) return;
+  const startX = e.clientX;
+  const startWidth = el.offsetWidth;
 
-  window.dispatchEvent(new CustomEvent('split:resize-start'))
+  window.dispatchEvent(new CustomEvent("split:resize-start"));
 
   function onMouseMove(ev: MouseEvent) {
-    if (!isResizing.value) return
-    const delta = startX - ev.clientX
-    const newWidth = Math.min(Math.max(startWidth + delta, 300), 800)
-    if (el) el.style.width = newWidth + 'px'
+    if (!isResizing.value) return;
+    const delta = startX - ev.clientX;
+    const newWidth = Math.min(Math.max(startWidth + delta, 300), 800);
+    if (el) el.style.width = newWidth + "px";
   }
 
   function onMouseUp() {
-    isResizing.value = false
-    sidebarWidth.value = el.offsetWidth
-    document.removeEventListener('mousemove', onMouseMove)
-    document.removeEventListener('mouseup', onMouseUp)
-    window.dispatchEvent(new CustomEvent('split:resize-end'))
+    isResizing.value = false;
+    sidebarWidth.value = el.offsetWidth;
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+    window.dispatchEvent(new CustomEvent("split:resize-end"));
   }
 
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', onMouseUp)
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
 }
 
 function onAskAI(e: Event) {
-  const text = (e as CustomEvent).detail as string
+  const text = (e as CustomEvent).detail as string;
   if (text) {
-    const el = editableRef.value
-    if (el) el.textContent = text
-    syncInputText(); refreshHashDropdown()
+    const el = editableRef.value;
+    if (el) el.textContent = text;
+    syncInputText();
+    refreshHashDropdown();
     if (!aiStore.visible) {
-      aiStore.visible = true
+      aiStore.visible = true;
     }
   }
 }
 
 onMounted(() => {
-  window.addEventListener('ai:ask', onAskAI)
-  window.addEventListener('global:close-context-menus', closeAIMenu)
-  document.addEventListener('click', closeAIMenu)
-  skillStore.load()
-  commandStore.load()
+  window.addEventListener("ai:ask", onAskAI);
+  window.addEventListener("global:close-context-menus", closeAIMenu);
+  document.addEventListener("click", closeAIMenu);
+  skillStore.load();
+  commandStore.load();
 
   if (messagesRef.value) {
-    messagesRef.value.addEventListener('scroll', onMessagesScroll)
+    messagesRef.value.addEventListener("scroll", onMessagesScroll);
     messagesObserver = new MutationObserver(() => {
       if (isAtBottom.value) {
-        autoScrollToBottom()
+        autoScrollToBottom();
       }
-    })
-    messagesObserver.observe(messagesRef.value, { childList: true, subtree: true })
+    });
+    messagesObserver.observe(messagesRef.value, {
+      childList: true,
+      subtree: true,
+    });
   }
-  scrollToBottom()
-})
+  scrollToBottom();
+});
 
 onUnmounted(() => {
-  window.removeEventListener('ai:ask', onAskAI)
-  window.removeEventListener('global:close-context-menus', closeAIMenu)
-  document.removeEventListener('click', closeAIMenu)
+  window.removeEventListener("ai:ask", onAskAI);
+  window.removeEventListener("global:close-context-menus", closeAIMenu);
+  document.removeEventListener("click", closeAIMenu);
 
   if (messagesRef.value) {
-    messagesRef.value.removeEventListener('scroll', onMessagesScroll)
+    messagesRef.value.removeEventListener("scroll", onMessagesScroll);
   }
-  editableObserver?.disconnect()
-  messagesObserver?.disconnect()
-})
+  editableObserver?.disconnect();
+  messagesObserver?.disconnect();
+});
 
-defineExpose({ focusInput })
+defineExpose({ focusInput });
 </script>
 
 <style scoped>
@@ -1466,7 +1765,7 @@ defineExpose({ focusInput })
 }
 
 .resize-handle::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   bottom: 0;
@@ -1484,7 +1783,7 @@ defineExpose({ focusInput })
 }
 
 .resize-handle:hover::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   bottom: 0;
@@ -1681,8 +1980,13 @@ defineExpose({ focusInput })
 }
 
 @keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 .ai-input {
   padding: 10px 16px;
@@ -1771,7 +2075,9 @@ defineExpose({ focusInput })
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
 }
 .ghost-btn:hover {
   background: var(--bg-hover);
@@ -1802,7 +2108,9 @@ defineExpose({ focusInput })
   background: var(--accent);
   color: var(--on-accent);
   cursor: pointer;
-  transition: background 0.12s ease, opacity 0.12s ease;
+  transition:
+    background 0.12s ease,
+    opacity 0.12s ease;
 }
 .send-btn:hover:not(:disabled) {
   background: var(--accent);
@@ -1924,7 +2232,9 @@ defineExpose({ focusInput })
   font-size: 13px;
   line-height: 1;
   padding: 0;
-  transition: border-color 0.15s, color 0.15s;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
 }
 .panel-tag-add-btn:hover {
   border-color: var(--accent);

@@ -2,6 +2,7 @@ package container
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -13,6 +14,52 @@ func withNS(rt Runtime, ns string, argv ...string) []string {
 		out = append(out, "--namespace", ns)
 	}
 	return append(out, argv...)
+}
+
+// sanitizeVolumeSpec guards against path-traversal in volume bind-mounts.
+// The host-side path must be absolute, must NOT contain any ".." segment
+// after clean, and the separator must be ":".
+//
+// Accepts both "<abs-host>:<abs-container>" (bind mount) and
+// "<name>:<abs-container>" (named volume, host side has no leading "/").
+// Anything else — relative host paths, traversal segments, embedded
+// whitespace for argv smuggling — is rejected.
+func sanitizeVolumeSpec(v string) (string, error) {
+	if v == "" {
+		return "", fmt.Errorf("empty volume spec")
+	}
+	// Split on the first ":"; the host side has no scheme so this is safe.
+	idx := strings.Index(v, ":")
+	if idx < 0 {
+		return "", fmt.Errorf("volume spec %q missing host:container separator", v)
+	}
+	host := v[:idx]
+	container := v[idx+1:]
+	if container == "" {
+		return "", fmt.Errorf("volume spec %q missing container path", v)
+	}
+	// Host path can be either absolute (/foo or C:\foo) OR a named volume
+	// ("myvolume") — named volumes have no path separators and no leading
+	// slash. Reject anything that looks like a path with traversal.
+	if strings.ContainsAny(host, `\/`) {
+		cleaned := filepath.Clean(host)
+		if !filepath.IsAbs(cleaned) {
+			return "", fmt.Errorf("volume host path must be absolute: %q", host)
+		}
+		// filepath.Clean collapses ".."; if any segment was ".." the
+		// cleaned form would either drop or shrink the path — check for
+		// the raw literal too as defense in depth.
+		if strings.Contains(host, "..") {
+			return "", fmt.Errorf("volume host path contains traversal segment: %q", host)
+		}
+		if cleaned != host {
+			return "", fmt.Errorf("volume host path must be cleaned: %q", host)
+		}
+	}
+	if strings.ContainsAny(container, " \t\n\r") {
+		return "", fmt.Errorf("volume container path contains whitespace: %q", container)
+	}
+	return host + ":" + container, nil
 }
 
 const jsonFormat = "{{json .}}"
@@ -69,7 +116,7 @@ func removeImageArgs(rt Runtime, ns, imageID string) []string {
 	return withNS(rt, ns, "rmi", imageID)
 }
 
-func createArgs(rt Runtime, ns string, o CreateOptions) []string {
+func createArgs(rt Runtime, ns string, o CreateOptions) ([]string, error) {
 	argv := []string{"run", "-d"}
 	if o.Name != "" {
 		argv = append(argv, "--name", o.Name)
@@ -85,7 +132,11 @@ func createArgs(rt Runtime, ns string, o CreateOptions) []string {
 		argv = append(argv, "-p", v)
 	}
 	for _, v := range o.Volumes {
-		argv = append(argv, "-v", v)
+		sanitized, err := sanitizeVolumeSpec(v)
+		if err != nil {
+			return nil, err
+		}
+		argv = append(argv, "-v", sanitized)
 	}
 	for _, e := range o.Env {
 		argv = append(argv, "-e", e)
@@ -94,7 +145,7 @@ func createArgs(rt Runtime, ns string, o CreateOptions) []string {
 		argv = append(argv, "--restart", o.Restart)
 	}
 	argv = append(argv, o.Image)
-	return withNS(rt, ns, append(argv, o.Command...)...)
+	return withNS(rt, ns, append(argv, o.Command...)...), nil
 }
 
 // detectArgs: command -v 走 shell，两 runner 均支持（见各 runner 的特例处理）。

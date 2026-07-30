@@ -32,6 +32,7 @@ func (s *SPICESession) Connect(config ConnectionConfig) error {
 	}
 
 	s.title = fmt.Sprintf("%s (SPICE)", config.Host)
+	s.LogConnect(host, port)
 	s.wsURL = fmt.Sprintf("ws://%s:%d/", host, port)
 
 	s.setStatus(StatusConnected)
@@ -39,6 +40,7 @@ func (s *SPICESession) Connect(config ConnectionConfig) error {
 }
 
 func (s *SPICESession) Disconnect() error {
+	s.LogDisconnect("user")
 	s.setStatus(StatusDisconnected)
 	return nil
 }

@@ -28,13 +28,13 @@ type Manager struct {
 	logs    map[string]*logHandle
 	// emit is set once in startup via SetEventEmitter and never changes,
 	// so we store it in atomic.Value to let StartWatch/StartLogStream
-	// capture it without grabbing the manager mutex (F-413).
+	// capture it without grabbing the manager mutex.
 	emit atomic.Value // EventEmitter
 
 	// kubeconfigCache memoizes ParseBytes results keyed on sha256 of the
 	// raw YAML bytes — kubeconfigs are re-parsed on every tab open, and
 	// a 20-context config pays a full yaml.Unmarshal + per-cluster base64
-	// decode + per-user X509KeyPair parse each time (F-405).
+	// decode + per-user X509KeyPair parse each time.
 	kubeconfigCache sync.Map // map[string]*Kubeconfig (sha256 hex → *Kubeconfig)
 }
 
@@ -42,9 +42,9 @@ type connection struct {
 	id           string
 	client       *http.Client
 	base         string
-	token        string      // exec 等 WebSocket 场景复用的 bearer token
-	tlsConfig    *tls.Config // 复用 REST client 的 TLS 配置
-	dialOverride DialFunc    // 可选的 dial 劫持（SSH 隧道）
+	token        string              // exec 等 WebSocket 场景复用的 bearer token
+	tlsConfig    *tls.Config         // 复用 REST client 的 TLS 配置
+	dialOverride DialFunc            // 可选的 dial 劫持（SSH 隧道）
 	watches      map[string]struct{} // 属于本 conn 的 watchID 集合，Disconnect 时统一停
 	onClose      func()              // Disconnect 时触发（例如拆 SSH 隧道）；只调一次
 }
@@ -55,7 +55,7 @@ type watchHandle struct {
 	// done is closed by runWatchLoop when the goroutine exits (terminal
 	// onEnd). The sweeper uses this to prune handles whose backing
 	// goroutine has exited without anyone calling StopWatch / Disconnect
-	// (e.g. Wails frontend HMR reload leaks — F-413).
+	// (e.g. Wails frontend HMR reload leaks).
 	done chan struct{}
 }
 
@@ -80,7 +80,7 @@ func NewManager() *Manager {
 // goroutine has exited but were never explicitly stopped (e.g. Wails
 // frontend HMR reload in dev left the handles behind). Each handle's
 // `done` channel is closed by runWatchLoop / runLogLoop when the
-// goroutine returns; we use that as the exit signal (F-413).
+// goroutine returns; we use that as the exit signal.
 func (m *Manager) sweepLoop() {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
@@ -117,7 +117,7 @@ func (m *Manager) SetEventEmitter(e EventEmitter) {
 
 // cachedParseBytes returns a cached *Kubeconfig for the given raw YAML,
 // or parses it on miss. Cache key is the sha256 of the raw bytes so
-// identical kubeconfigs share a parse result (F-405).
+// identical kubeconfigs share a parse result.
 func (m *Manager) cachedParseBytes(raw []byte) (*Kubeconfig, error) {
 	key := sha256Hex(raw)
 	if v, ok := m.kubeconfigCache.Load(key); ok {
@@ -159,10 +159,12 @@ func (m *Manager) Connect(_ context.Context, kubeconfigYAML []byte, contextName 
 //   - PresetID: 若非空则用作 connID，方便上层把 K8s 连接和外部资源（例如 SSH 隧道）
 //     用同一个 key 关联；为空则内部生成 UUID。
 //   - DialOverride: 透传给 BuildClientWithDial 的 dial 劫持。
+//   - InsecureTLS: 覆盖 kubeconfig 的 insecure-skip-tls-verify。
 //   - OnClose: Disconnect 时触发一次，用于拆隧道等外部资源清理。
 type ConnectOptions struct {
 	PresetID     string
 	DialOverride DialFunc
+	InsecureTLS  bool
 	OnClose      func()
 }
 
@@ -175,7 +177,10 @@ func (m *Manager) ConnectWith(kubeconfigYAML []byte, contextName string, opts Co
 	if contextName == "" {
 		contextName = kc.CurrentContext
 	}
-	client, base, token, tlsCfg, err := BuildClientWithDial(kc, contextName, opts.DialOverride)
+	client, base, token, tlsCfg, err := BuildClientWithOptions(kc, contextName, BuildOptions{
+		DialOverride: opts.DialOverride,
+		InsecureTLS:  opts.InsecureTLS,
+	})
 	if err != nil {
 		return "", fmt.Errorf("build client: %w", err)
 	}
@@ -209,27 +214,43 @@ func (m *Manager) Disconnect(connID string) {
 		m.mu.Unlock()
 		return
 	}
-	// 停掉所有属于本 conn 的 watch
-	toStop := make([]string, 0, len(conn.watches))
-	for wid := range conn.watches {
-		toStop = append(toStop, wid)
+	// 停掉所有属于本 conn 的 watch：直接拿到 cancel 而不必等 StopWatch 再去
+	// 走 map 查找，避免 onEnd 抢先删除 m.watches 之后 StopWatch no-op
+	// 导致 cancel 漏调。
+	type watchCancel struct {
+		wid    string
+		cancel context.CancelFunc
 	}
-	// 停掉所有属于本 conn 的 log stream
-	var logsToStop []string
+	watchCancels := make([]watchCancel, 0, len(conn.watches))
+	for wid := range conn.watches {
+		if wh, ok := m.watches[wid]; ok && wh != nil {
+			watchCancels = append(watchCancels, watchCancel{wid: wid, cancel: wh.cancel})
+			delete(m.watches, wid)
+		}
+		delete(conn.watches, wid)
+	}
+	// 停掉所有属于本 conn 的 log stream：同样在锁内拿 cancel
+	type logCancel struct {
+		sid    string
+		cancel context.CancelFunc
+	}
+	var logCancels []logCancel
 	for sid, lh := range m.logs {
 		if lh.connID == connID {
-			logsToStop = append(logsToStop, sid)
+			logCancels = append(logCancels, logCancel{sid: sid, cancel: lh.cancel})
+			delete(m.logs, sid)
 		}
 	}
 	onClose := conn.onClose
 	delete(m.conns, connID)
 	m.mu.Unlock()
 
-	for _, wid := range toStop {
-		m.StopWatch(wid)
+	// 锁外 cancel，避免在持锁时等远程 goroutine 反应
+	for _, w := range watchCancels {
+		w.cancel()
 	}
-	for _, sid := range logsToStop {
-		m.StopLogStream(sid)
+	for _, l := range logCancels {
+		l.cancel()
 	}
 	if onClose != nil {
 		onClose()
@@ -281,13 +302,24 @@ func (m *Manager) StartWatch(connID, path string) (string, error) {
 	m.mu.Unlock()
 
 	// emit is set once at startup and never changes; load via atomic
-	// instead of grabbing the manager mutex (F-413).
+	// instead of grabbing the manager mutex.
 	emit := m.emit.Load().(EventEmitter)
 
+	// Batch events in 50ms windows so a flood of watch events costs one
+	// IPC per 50ms instead of one per event. The aggregated payload is
+	// an array of WatchEvent; the frontend unwraps it. The batcher's
+	// run goroutine is shut down via onEnd's stop() so any buffered
+	// events emit before the handle is dropped.
+	batcher := newWatchBatcher(emit, eventName)
+	batcherStop := make(chan struct{})
+	go batcher.run(batcherStop)
+
 	err := startWatchStream(ctx, client, base, path,
-		func(ev WatchEvent) { emit(eventName, ev) },
+		batcher.onEvent,
 		func(err error) {
-			// 终端结束（ctx 取消 / 干净 EOF）才走这里：emit 终态事件并清 map。
+			// 终端结束（ctx 取消 / 干净 EOF）才走这里：flush 剩余批次、emit 终态事件、清 map。
+			batcher.stop()
+			<-batcherStop // wait for batcher's final flush
 			payload := map[string]any{"error": ""}
 			if err != nil {
 				payload["error"] = err.Error()
@@ -302,7 +334,7 @@ func (m *Manager) StartWatch(connID, path string) (string, error) {
 		},
 		func(err error) {
 			// 重连退避前仅发轻量 reconnecting 事件，不动 maps — 防止 apiserver 抖动时
-			// 每 1s/2s/4s/… 都抢 mutex + EventsEmit (F-404)。
+			// 每 1s/2s/4s/… 都抢 mutex + EventsEmit。
 			emit(reconnectingName, map[string]any{"error": err.Error()})
 		},
 		done,
@@ -355,13 +387,22 @@ func (m *Manager) StartLogStream(connID, ns, pod, container string, tailLines in
 	m.mu.Unlock()
 
 	// emit is set once at startup and never changes; load via atomic
-	// instead of grabbing the manager mutex (F-413).
+	// instead of grabbing the manager mutex.
 	emit := m.emit.Load().(EventEmitter)
+
+	// Batch log lines in 50ms windows with a 512-line cap. Chatty pods
+	// now cost one IPC per 50ms instead of one per line. Backend emits an
+	// array; frontend unwraps.
+	batcher := newLogBatcher(emit, eventName)
+	batcherStop := make(chan struct{})
+	go batcher.run(batcherStop)
 
 	path := buildLogPath(ns, pod, container, tailLines, timestamps, previous)
 	err := startLogStream(ctx, client, base, path,
-		func(line string) { emit(eventName, line) },
+		batcher.onLine,
 		func(err error) {
+			batcher.stop()
+			<-batcherStop // wait for final flush
 			payload := map[string]any{"error": ""}
 			if err != nil {
 				payload["error"] = err.Error()

@@ -1,6 +1,5 @@
 package database
 
-
 // ── Shared types ──
 
 type TableInfo struct {

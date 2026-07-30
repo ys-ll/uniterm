@@ -73,11 +73,11 @@ type skillPrefsData struct {
 type SkillsStore struct {
 	configDir string
 
-	// listCache holds the merged result of the most recent List call. F-107:
-	// re-scanning the whole skills tree (every SKILL.md + references/ +
+	// listCache holds the merged result of the most recent List call.
+	// Re-scanning the whole skills tree (every SKILL.md + references/ +
 	// scripts/ probe) per call is wasteful when the frontend polls.
-	listMu      sync.Mutex
-	listCache   []SkillMeta
+	listMu       sync.Mutex
+	listCache    []SkillMeta
 	listCachedAt time.Time
 }
 
@@ -196,7 +196,7 @@ func (s *SkillsStore) savePrefs(data skillPrefsData) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.prefsPath(), bytes, 0600)
+	return atomicWriteFile(s.prefsPath(), bytes, 0600)
 }
 
 // ---- 目录扫描（B1，内容/存在性以目录为真相源）----
@@ -374,10 +374,6 @@ func (s *SkillsStore) SetEnabled(name string, enabled bool) error {
 
 func (s *SkillsStore) SetLocked(name string, locked bool) error {
 	return s.setPref(name, func(p *skillPref) { p.Locked = locked })
-}
-
-func (s *SkillsStore) SetSortOrder(name string, order int) error {
-	return s.setPref(name, func(p *skillPref) { p.SortOrder = order })
 }
 
 func (s *SkillsStore) SetOrigin(name string, origin string) error {
@@ -764,7 +760,7 @@ func (s *SkillsStore) CreateSkill(name, description, body string) error {
 	}
 	mdPath := filepath.Join(skillDir, skillEntryFile)
 	content := assembleSkillMD(name, description, body)
-	if err := os.WriteFile(mdPath, []byte(content), 0644); err != nil {
+	if err := atomicWriteFile(mdPath, []byte(content), 0644); err != nil {
 		return err
 	}
 	prefs, err := s.loadPrefs()
@@ -825,7 +821,7 @@ func (s *SkillsStore) SaveSkill(name, description, body string) error {
 	skillDir := filepath.Join(s.skillsRoot(), meta.Dir)
 	mdPath := filepath.Join(skillDir, skillEntryFile)
 	content := assembleSkillMD(name, description, body)
-	if err := os.WriteFile(mdPath, []byte(content), 0644); err != nil {
+	if err := atomicWriteFile(mdPath, []byte(content), 0644); err != nil {
 		return err
 	}
 	return s.setPref(name, func(p *skillPref) {

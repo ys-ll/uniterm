@@ -57,7 +57,7 @@ const (
 	WS_POPUP           = 0x80000000
 	WS_CLIPSIBLINGS    = 0x04000000
 	PM_REMOVE          = 0x0001
-	GWLP_HWNDPARENT    = ^uintptr(7) // -8 represented as uintptr for syscall compatibility
+	GWLP_HWNDPARENT    = ^uintptr(7)  // -8 represented as uintptr for syscall compatibility
 	GWL_EXSTYLE        = ^uintptr(19) // -20: extended window style
 	SW_HIDE            = 0
 	SW_SHOWNOACTIVATE  = 4
@@ -69,7 +69,7 @@ const (
 	SM_CYSCREEN        = 1
 )
 
-type RDPSession struct {
+type RdpSession struct {
 	baseSession
 	parentHwnd uintptr
 	hwnd       uintptr
@@ -92,14 +92,14 @@ type RDPSession struct {
 
 // SetOnFullScreenExit registers a callback fired when the user exits the
 // ActiveX full screen via its built-in connection bar.
-func (s *RDPSession) SetOnFullScreenExit(cb func()) {
+func (s *RdpSession) SetOnFullScreenExit(cb func()) {
 	s.mu.Lock()
 	s.onFsExit = cb
 	s.mu.Unlock()
 }
 
-func NewRDPSession(id string) *RDPSession {
-	return &RDPSession{
+func NewRdpSession(id string) *RdpSession {
+	return &RdpSession{
 		baseSession: baseSession{
 			id:          id,
 			sessionType: "rdp",
@@ -110,7 +110,7 @@ func NewRDPSession(id string) *RDPSession {
 
 // ClientAreaScreenRect returns the main window's client area in screen coordinates
 // (physical pixels). Used by the frontend to position the RDP overlay precisely.
-func (s *RDPSession) ClientAreaScreenRect() (x, y, w, h int) {
+func (s *RdpSession) ClientAreaScreenRect() (x, y, w, h int) {
 	if s.parentHwnd == 0 {
 		return
 	}
@@ -127,13 +127,13 @@ func (s *RDPSession) ClientAreaScreenRect() (x, y, w, h int) {
 	return int(origin.X), int(origin.Y), int(cr.Right), int(cr.Bottom)
 }
 
-func (s *RDPSession) SetParentHwnd(hwnd uintptr) {
+func (s *RdpSession) SetParentHwnd(hwnd uintptr) {
 	s.parentHwnd = hwnd
 }
 
 // autoDismissSecurityDialogs polls for RDP security warning dialogs (e.g.
 // cert prompts or "do you want to connect" dialogs) and dismisses them.
-func (s *RDPSession) autoDismissSecurityDialogs(stop <-chan struct{}) {
+func (s *RdpSession) autoDismissSecurityDialogs(stop <-chan struct{}) {
 	dialogTitles := []string{
 		"远程桌面连接",
 		"远程桌面连接安全警告",
@@ -204,7 +204,7 @@ func (s *RDPSession) autoDismissSecurityDialogs(stop <-chan struct{}) {
 	}
 }
 
-func (s *RDPSession) Connect(config ConnectionConfig) error {
+func (s *RdpSession) Connect(config ConnectionConfig) error {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Writef("[RDP] PANIC in Connect: %v", r)
@@ -488,7 +488,7 @@ type msg struct {
 	Pt      struct{ X, Y int32 }
 }
 
-func (s *RDPSession) runMessagePump() {
+func (s *RdpSession) runMessagePump() {
 	var m msg
 	noMsgCount := 0
 	disconnectLogged := false
@@ -604,7 +604,7 @@ func (s *RDPSession) runMessagePump() {
 	}
 }
 
-func (s *RDPSession) findRdpProgID() string {
+func (s *RdpSession) findRdpProgID() string {
 	candidates := []string{
 		"MsRdpClient12NotSafeForScripting",
 		"MsRdpClient11NotSafeForScripting",
@@ -762,7 +762,7 @@ func elevateRegWrite() {
 	}
 }
 
-func (s *RDPSession) configureNonScriptable(password string) {
+func (s *RdpSession) configureNonScriptable(password string) {
 	if s.rdp == nil {
 		return
 	}
@@ -795,7 +795,7 @@ func (s *RDPSession) configureNonScriptable(password string) {
 type point struct{ X, Y int32 }
 
 // positionFromMainWindow calculates the RDP window position and initializes tracking.
-func (s *RDPSession) positionFromMainWindow(width, height int) {
+func (s *RdpSession) positionFromMainWindow(width, height int) {
 	if s.parentHwnd == 0 || s.hwnd == 0 {
 		return
 	}
@@ -840,7 +840,7 @@ func (s *RDPSession) positionFromMainWindow(width, height int) {
 	s.trackY = y
 }
 
-func (s *RDPSession) SetPosition(x, y, w, h int) {
+func (s *RdpSession) SetPosition(x, y, w, h int) {
 	s.mu.Lock()
 	hwnd := s.hwnd
 	if hwnd == 0 {
@@ -866,14 +866,14 @@ func (s *RDPSession) SetPosition(x, y, w, h int) {
 // The actual COM PutProperty runs on the message-pump (STA) thread — see
 // runMessagePump — because STA COM objects must be called on their owning
 // thread; calling from the Wails binding thread deadlocks.
-func (s *RDPSession) SetFullScreen(full bool) {
+func (s *RdpSession) SetFullScreen(full bool) {
 	s.mu.Lock()
 	s.fsRequested = true
 	s.fsValue = full
 	s.mu.Unlock()
 }
 
-func (s *RDPSession) Show() {
+func (s *RdpSession) Show() {
 	s.mu.Lock()
 	if s.shown {
 		s.mu.Unlock()
@@ -893,7 +893,7 @@ func (s *RDPSession) Show() {
 	}
 }
 
-func (s *RDPSession) Hide() {
+func (s *RdpSession) Hide() {
 	s.mu.Lock()
 	if !s.shown {
 		s.mu.Unlock()
@@ -909,7 +909,7 @@ func (s *RDPSession) Hide() {
 	}
 }
 
-func (s *RDPSession) Disconnect() error {
+func (s *RdpSession) Disconnect() error {
 	// Post WM_QUIT to the COM STA message pump so it exits cleanly.
 	// Do NOT zero s.hwnd here — the defer in Connect() needs it
 	// to call DestroyWindow for proper cleanup.
@@ -924,7 +924,7 @@ func (s *RDPSession) Disconnect() error {
 	return nil
 }
 
-func (s *RDPSession) Resize(cols, rows int) error {
+func (s *RdpSession) Resize(cols, rows int) error {
 	s.mu.Lock()
 	if s.rdp != nil {
 		s.rdp.PutProperty("DesktopWidth", cols)
@@ -934,10 +934,10 @@ func (s *RDPSession) Resize(cols, rows int) error {
 	return nil
 }
 
-func (s *RDPSession) Write(_ []byte) error {
+func (s *RdpSession) Write(_ []byte) error {
 	return nil
 }
 
-func (s *RDPSession) IsConnected() bool {
+func (s *RdpSession) IsConnected() bool {
 	return s.Status() == StatusConnected
 }

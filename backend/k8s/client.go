@@ -15,10 +15,19 @@ import (
 // TCP 拨号劫持到本地回环端口（例如 SSH 隧道的本地转发口）。
 type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
+// BuildOptions controls optional BuildClient overrides. Zero values preserve
+// the legacy behavior (kubeconfig-only).
+type BuildOptions struct {
+	DialOverride DialFunc // non-nil → hijack TCP dial (e.g. SSH tunnel)
+	// InsecureTLS overrides the cluster's InsecureSkipTLSVerify. Set true to
+	// force-skip cert verification regardless of kubeconfig.
+	InsecureTLS bool
+}
+
 // BuildClient 根据 kubeconfig + context 名构造 *http.Client 和 base URL。
 // 认证信息（token / client cert）通过 transport 层的自定义 RoundTripper 注入。
 func BuildClient(kc *Kubeconfig, ctxName string) (*http.Client, string, error) {
-	client, base, _, _, err := BuildClientWithDial(kc, ctxName, nil)
+	client, base, _, _, err := BuildClientWithOptions(kc, ctxName, BuildOptions{})
 	return client, base, err
 }
 
@@ -27,6 +36,13 @@ func BuildClient(kc *Kubeconfig, ctxName string) (*http.Client, string, error) {
 // kubeconfig 里的 hostname 走，只是底层 TCP 拨到别处。
 // 额外返回 token 与 *tls.Config，供 exec 等 WebSocket 场景复用同一套认证/TLS。
 func BuildClientWithDial(kc *Kubeconfig, ctxName string, dialOverride DialFunc) (*http.Client, string, string, *tls.Config, error) {
+	return BuildClientWithOptions(kc, ctxName, BuildOptions{DialOverride: dialOverride})
+}
+
+// BuildClientWithOptions is the canonical builder; tests / callers that only
+// need dial override use BuildClientWithDial, callers that need TLS override
+// use this directly.
+func BuildClientWithOptions(kc *Kubeconfig, ctxName string, opts BuildOptions) (*http.Client, string, string, *tls.Config, error) {
 	if kc == nil {
 		return nil, "", "", nil, fmt.Errorf("kubeconfig nil")
 	}
@@ -43,7 +59,7 @@ func BuildClientWithDial(kc *Kubeconfig, ctxName string, dialOverride DialFunc) 
 		return nil, "", "", nil, fmt.Errorf("user %q not found", ctx.User)
 	}
 
-	tlsCfg, err := buildTLSConfig(cluster, user)
+	tlsCfg, err := buildTLSConfig(cluster, user, opts.InsecureTLS)
 	if err != nil {
 		return nil, "", "", nil, err
 	}
@@ -57,8 +73,8 @@ func BuildClientWithDial(kc *Kubeconfig, ctxName string, dialOverride DialFunc) 
 		ResponseHeaderTimeout: 30 * time.Second,
 		ExpectContinueTimeout: 2 * time.Second,
 	}
-	if dialOverride != nil {
-		base.DialContext = dialOverride
+	if opts.DialOverride != nil {
+		base.DialContext = opts.DialOverride
 	}
 	client := &http.Client{
 		Transport: &authRoundTripper{base: base, token: user.Token},
@@ -67,11 +83,11 @@ func BuildClientWithDial(kc *Kubeconfig, ctxName string, dialOverride DialFunc) 
 	return client, cluster.Server, user.Token, tlsCfg, nil
 }
 
-func buildTLSConfig(cluster clusterEntry, user userEntry) (*tls.Config, error) {
-	cfg := &tls.Config{InsecureSkipVerify: cluster.InsecureSkipTLSVerify}
+func buildTLSConfig(cluster clusterEntry, user userEntry, insecureTLSOverride bool) (*tls.Config, error) {
+	cfg := &tls.Config{InsecureSkipVerify: cluster.InsecureSkipTLSVerify || insecureTLSOverride}
 
 	// CA: 只有真正装载了 CA 才覆盖系统信任库，否则退回系统根证书。
-	if !cluster.InsecureSkipTLSVerify {
+	if !cfg.InsecureSkipVerify {
 		pool := x509.NewCertPool()
 		hasCA := false
 		if len(cluster.CertificateAuthorityData) > 0 {
@@ -139,9 +155,9 @@ func resolveClientCert(user userEntry) ([]byte, []byte, error) {
 // a 401 response must surface to a single retry with a refreshed token
 // (K8S-01 / K8S-09).
 type authRoundTripper struct {
-	base        http.RoundTripper
-	token       string
-	refreshTok  func() (string, error) // optional; called on 401 to fetch a new token
+	base       http.RoundTripper
+	token      string
+	refreshTok func() (string, error) // optional; called on 401 to fetch a new token
 }
 
 func (a *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {

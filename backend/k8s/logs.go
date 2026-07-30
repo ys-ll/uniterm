@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ys-ll/uniterm/backend/log"
 )
 
 // startLogStream 建立 Pod 日志流并在后台 goroutine 里逐行读取，
@@ -15,8 +17,7 @@ import (
 // Same reconnect-with-backoff shape as startWatchStream so a pod
 // restart or apiserver bounce does not silently kill the log stream
 // (K8S-02). onReconnect is fired on transient transport failures so the
-// manager can emit a light reconnecting event without churning its maps
-// (F-404).
+// manager can emit a light reconnecting event without churning its maps.
 func startLogStream(ctx context.Context, client *http.Client, base, path string,
 	cb func(string), onEnd func(error), onReconnect func(error), done chan struct{}) error {
 
@@ -29,9 +30,9 @@ func startLogStream(ctx context.Context, client *http.Client, base, path string,
 
 func runLogLoop(ctx context.Context, client *http.Client, base, path string,
 	cb func(string), onEnd func(error), onReconnect func(error), done chan struct{}) {
+	defer log.Recover("k8s.runLogLoop")
 	defer close(done)
-	backoff := time.Second
-	const maxBackoff = 30 * time.Second
+	bo := newBackoff(time.Second, 30*time.Second)
 	for {
 		err := runOneLogStream(ctx, client, base, path, cb)
 		if ctx.Err() != nil {
@@ -46,20 +47,12 @@ func runLogLoop(ctx context.Context, client *http.Client, base, path string,
 		// Transport / scanner error — likely apiserver bounce. Surface
 		// a transient reconnect signal (if wired) and back off; onEnd is
 		// reserved for the terminal case so the manager doesn't drop the
-		// handle from its map on every reconnect attempt (F-404).
+		// handle from its map on every reconnect attempt.
 		if onReconnect != nil {
 			onReconnect(err)
 		}
-		select {
-		case <-ctx.Done():
+		if bo.sleep(ctx) != nil {
 			return
-		case <-time.After(backoff):
-		}
-		if backoff < maxBackoff {
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
 		}
 	}
 }
@@ -82,9 +75,9 @@ func runOneLogStream(ctx context.Context, client *http.Client, base, path string
 	}
 	defer resp.Body.Close()
 	scanner := bufio.NewScanner(resp.Body)
-	// F-412: log lines are typically < 1 KiB; start small and let
-	// bufio.Scanner grow on demand. Caps at 4 MiB which is enough for
-	// even multi-KiB stack traces from panic'd pods.
+	// Log lines are typically < 1 KiB; start small and let bufio.Scanner
+	// grow on demand. Caps at 4 MiB which is enough for even multi-KiB
+	// stack traces from panic'd pods.
 	scanner.Buffer(make([]byte, 0, 4*1024), 4*1024*1024)
 	for scanner.Scan() {
 		cb(scanner.Text())

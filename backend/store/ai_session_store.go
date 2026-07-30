@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/ys-ll/uniterm/backend/log"
 )
 
 const (
@@ -14,26 +17,26 @@ const (
 )
 
 type AISessionData struct {
-	Sessions        []AISessionEntry `json:"sessions"`
-	CurrentSessionID string          `json:"currentSessionId"`
+	Sessions         []AISessionEntry `json:"sessions"`
+	CurrentSessionID string           `json:"currentSessionId"`
 }
 
 type AISessionEntry struct {
-	ID        string              `json:"id"`
-	Name      string              `json:"name"`
-	CreatedAt int64               `json:"createdAt"`
-	UpdatedAt int64               `json:"updatedAt"`
-	Messages  []AIMessageEntry    `json:"messages"`
+	ID        string           `json:"id"`
+	Name      string           `json:"name"`
+	CreatedAt int64            `json:"createdAt"`
+	UpdatedAt int64            `json:"updatedAt"`
+	Messages  []AIMessageEntry `json:"messages"`
 }
 
 type AIMessageEntry struct {
-	ID          string           `json:"id"`
-	Role        string           `json:"role"`
-	Content     string           `json:"content"`
-	ToolCallID  string           `json:"tool_call_id,omitempty"`
-	ToolCalls   []interface{}    `json:"tool_calls,omitempty"`
-	PendingTools []interface{}   `json:"pendingTools,omitempty"`
-	RawAPIMsg   string           `json:"_rawApiMsg,omitempty"`
+	ID           string        `json:"id"`
+	Role         string        `json:"role"`
+	Content      string        `json:"content"`
+	ToolCallID   string        `json:"tool_call_id,omitempty"`
+	ToolCalls    []interface{} `json:"tool_calls,omitempty"`
+	PendingTools []interface{} `json:"pendingTools,omitempty"`
+	RawAPIMsg    string        `json:"_rawApiMsg,omitempty"`
 }
 
 type AISessionStore struct {
@@ -60,17 +63,28 @@ func (s *AISessionStore) shardDir() string {
 	return filepath.Join(s.configDir, aiSessionDirName)
 }
 
-// shardPath returns the per-session shard file path. Falls back to a hash
-// subdir if id contains path-traversal chars (defensive — ids are normally
-// app-generated UUIDs).
-func (s *AISessionStore) shardPath(id string) string {
-	return filepath.Join(s.shardDir(), filepath.Base(id)+".json")
+// shardPath returns the per-session shard file path. The id is reduced
+// to its base name and additionally rejected if it contains any path
+// separator or traversal segment after cleaning, so a malformed id
+// cannot escape the per-session shard directory.
+func (s *AISessionStore) shardPath(id string) (string, error) {
+	if id == "" {
+		return "", fmt.Errorf("shard id is empty")
+	}
+	base := filepath.Base(id)
+	if base == "." || base == "/" || base == ".." {
+		return "", fmt.Errorf("invalid shard id %q", id)
+	}
+	if strings.ContainsAny(base, `/\`) {
+		return "", fmt.Errorf("shard id contains path separator: %q", id)
+	}
+	return filepath.Join(s.shardDir(), base+".json"), nil
 }
 
 // Save writes each session as its own shard under ai-sessions/<id>.json.
-// Removing the full-file marshal eliminates the O(total-size) memory spike
-// from F-103. Orphan shards (sessions no longer in data) are removed.
-// F-103.
+// Per-shard writes eliminate the O(total-size) memory spike from a single
+// full-file marshal. Orphan shards (sessions no longer in data) are
+// removed.
 func (s *AISessionStore) Save(data AISessionData) error {
 	if err := os.MkdirAll(s.shardDir(), 0755); err != nil {
 		return err
@@ -82,11 +96,15 @@ func (s *AISessionStore) Save(data AISessionData) error {
 		if sess.ID == "" {
 			continue
 		}
+		path, err := s.shardPath(sess.ID)
+		if err != nil {
+			return fmt.Errorf("shard path %s: %w", sess.ID, err)
+		}
 		payload, err := json.Marshal(sess)
 		if err != nil {
 			return fmt.Errorf("marshal session %s: %w", sess.ID, err)
 		}
-		if err := atomicWriteFile(s.shardPath(sess.ID), payload, 0600); err != nil {
+		if err := atomicWriteFile(path, payload, 0600); err != nil {
 			return fmt.Errorf("write shard %s: %w", sess.ID, err)
 		}
 		wanted[sess.ID] = struct{}{}
@@ -111,7 +129,9 @@ func (s *AISessionStore) Save(data AISessionData) error {
 		if _, keep := wanted[id]; keep {
 			continue
 		}
-		_ = os.Remove(filepath.Join(s.shardDir(), name))
+		if rmErr := os.Remove(filepath.Join(s.shardDir(), name)); rmErr != nil && !os.IsNotExist(rmErr) {
+			log.Writef("ai_session: stale shard remove failed: %v", rmErr)
+		}
 	}
 
 	return nil
@@ -119,12 +139,12 @@ func (s *AISessionStore) Save(data AISessionData) error {
 
 // Load reads every shard in ai-sessions/ and decodes them. Runs the
 // one-time migration from the legacy ai-sessions.json file if present.
-// F-103.
 func (s *AISessionStore) Load() (AISessionData, error) {
 	if err := s.migrateLegacy(); err != nil {
-		// Migration failures must not block load — log via returned error
-		// only if caller cares; otherwise fall through to shard scan.
-		_ = err
+		// Migration failures must not block load — log so the user can
+		// diagnose a corrupted legacy file, but always fall through to
+		// the shard scan so they keep their session history.
+		log.Writef("ai_session_store: legacy migration failed, continuing with shard scan: %v", err)
 	}
 
 	out := AISessionData{Sessions: []AISessionEntry{}, CurrentSessionID: ""}

@@ -13,7 +13,7 @@ import (
 
 // commandsListCacheTTL 是 List() 的内存缓存有效期。失效由两类信号触发：
 // 1) TTL 到期（兜底，保证跨进程编辑也能被看见）
-// 2) 任何写操作（CreateCommand/SaveCommand/Delete/SetEnabled/SetLocked/SetSortOrder）显式失效
+// 2) 任何写操作（CreateCommand/SaveCommand/Delete/SetEnabled/SetLocked）显式失效
 const commandsListCacheTTL = 2 * time.Second
 
 // commands 采用「单文件式」存储：每个 command 是 commands/<name>.md（frontmatter 存 description，正文是 prompt 模板）。
@@ -29,16 +29,16 @@ const (
 
 // CommandMeta 是一个 command 暴露给前端的完整视图（文件扫描 + 偏好合并后的结果）。
 type CommandMeta struct {
-	Name        string `json:"name"`        // = 文件名（去 .md），唯一键（源:文件）
-	Description string `json:"description"` // frontmatter.description，可空（源:文件）
+	Name         string `json:"name"`         // = 文件名（去 .md），唯一键（源:文件）
+	Description  string `json:"description"`  // frontmatter.description，可空（源:文件）
 	ArgumentHint string `json:"argumentHint"` // frontmatter.argument-hint，可空（源:文件）
-	Origin      string `json:"origin"`      // created | imported（源:prefs）
-	Locked      bool   `json:"locked"`      // 锁定态（源:prefs）
-	Enabled     bool   `json:"enabled"`     // 是否进 / 补全（源:prefs）
-	SortOrder   int    `json:"sortOrder"`   // 列表排序（源:prefs）
-	Path        string `json:"path"`        // .md 文件绝对路径（源:文件）
-	CreatedAt   string `json:"createdAt"`   // RFC3339（源:prefs）
-	Version     int    `json:"version"`     // 版本号（源:prefs）
+	Origin       string `json:"origin"`       // created | imported（源:prefs）
+	Locked       bool   `json:"locked"`       // 锁定态（源:prefs）
+	Enabled      bool   `json:"enabled"`      // 是否进 / 补全（源:prefs）
+	SortOrder    int    `json:"sortOrder"`    // 列表排序（源:prefs）
+	Path         string `json:"path"`         // .md 文件绝对路径（源:文件）
+	CreatedAt    string `json:"createdAt"`    // RFC3339（源:prefs）
+	Version      int    `json:"version"`      // 版本号（源:prefs）
 }
 
 // commandPref 是 commands.json 里每个 command 的用户偏好条目（按 name 关联）。
@@ -277,10 +277,6 @@ func (s *CommandsStore) SetEnabled(name string, enabled bool) error {
 
 func (s *CommandsStore) SetLocked(name string, locked bool) error {
 	return s.setPref(name, func(p *commandPref) { p.Locked = locked })
-}
-
-func (s *CommandsStore) SetSortOrder(name string, order int) error {
-	return s.setPref(name, func(p *commandPref) { p.SortOrder = order })
 }
 
 // GetBody 读取指定 command 的 .md 正文（不含 frontmatter），即 prompt 模板。

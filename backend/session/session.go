@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ys-ll/uniterm/backend/log"
 )
 
 type SessionStatus string
@@ -47,7 +49,7 @@ type ConnectionConfig struct {
 	RdpFixedWidth  int  `json:"rdpFixedWidth,omitempty"`
 	RdpFixedHeight int  `json:"rdpFixedHeight,omitempty"`
 	RdpSmartSizing bool `json:"rdpSmartSizing"`
-	RdpEnableNLA  bool `json:"rdpEnableNLA"`
+	RdpEnableNLA   bool `json:"rdpEnableNLA"`
 	// Local terminal shell path
 	ShellPath string `json:"shellPath,omitempty"`
 	// Working directory for local terminal (defaults to user home directory if empty)
@@ -122,6 +124,15 @@ type ConnectionConfig struct {
 	K8sContext      string `json:"k8sContext,omitempty"`      // 选中的 context 名，为空则用 current-context
 	K8sNamespace    string `json:"k8sNamespace,omitempty"`    // 默认 namespace，"" = all
 	K8sInsecureTls  bool   `json:"k8sInsecureTls,omitempty"`  // 覆盖 kubeconfig 中的 insecure-skip-tls-verify
+	// SSH host key verification:
+	//   KnownHostsPath        — path to known_hosts file (default ~/.ssh/known_hosts)
+	//   StrictHostKeyChecking — if true, refuse unknown / changed keys; no prompt
+	//   AcceptNewHostKey      — if true, append first-seen keys to known_hosts
+	// Defaults (both false) preserve prior behavior: verify against known_hosts
+	// when present, fall back to insecure-accept with a one-shot warning.
+	KnownHostsPath        string `json:"knownHostsPath,omitempty"`
+	StrictHostKeyChecking bool   `json:"strictHostKeyChecking,omitempty"`
+	AcceptNewHostKey      bool   `json:"acceptNewHostKey,omitempty"`
 	// Container-specific fields
 	ContainerTransport string `json:"containerTransport,omitempty"` // "ssh" | "local"
 	ContainerSSHConnID string `json:"containerSSHConnId,omitempty"` // 引用的 SSH 连接（transport=ssh）
@@ -194,7 +205,7 @@ type baseSession struct {
 	logOnConnect bool
 	// idleSignal is sent-to (non-blocking) every time RecordReadActivity
 	// runs. waitIdle subscribes to this channel to avoid the busy-loop
-	// that previously woke every 50ms; see F-017. idleSignalOnce makes
+	// that previously woke every 50ms. idleSignalOnce makes
 	// the channel lazy-allocated so we don't have to touch every
 	// baseSession constructor.
 	idleSignal     chan struct{}
@@ -218,6 +229,8 @@ func (s *baseSession) SetOnStatusChangeCallback(cb func(SessionStatus)) {
 	s.onStatusCallback = cb
 }
 
+// setStatus updates the session status and fires the registered
+// onStatusChangeCallback (if any). Callers must hold no lock.
 func (s *baseSession) setStatus(st SessionStatus) {
 	s.mu.Lock()
 	s.status = st
@@ -226,6 +239,29 @@ func (s *baseSession) setStatus(st SessionStatus) {
 	if cb != nil {
 		cb(st)
 	}
+}
+
+// LogConnect writes a structured "<type> connect attempt" line.
+// Implementations should call this near the start of Connect so the log
+// shows every attempt even if it later fails.
+func (s *baseSession) LogConnect(host string, port int) {
+	log.Writef("%s connect: id=%s host=%s port=%d", s.sessionType, s.id, host, port)
+}
+
+// LogDisconnect writes a structured "<type> disconnect" line. Callers
+// pass the reason (e.g. "user", "EOF", "error: ...").
+func (s *baseSession) LogDisconnect(reason string) {
+	log.Writef("%s disconnect: id=%s reason=%s", s.sessionType, s.id, reason)
+}
+
+// LogError writes a structured "<type> error" line. Implementations
+// call this when wrapping an error that aborts Connect / Disconnect /
+// Read so the underlying cause shows up in uniterm.log.
+func (s *baseSession) LogError(op string, err error) {
+	if err == nil {
+		return
+	}
+	log.Writef("%s error: id=%s op=%s err=%v", s.sessionType, s.id, op, err)
 }
 
 func (s *baseSession) emitData(data []byte) {
@@ -364,7 +400,7 @@ func (s *baseSession) idleSince() time.Duration {
 // duration, or the overall timeout expires. It returns true on idle detection.
 // Implemented with a 1-slot signal channel + idle timer instead of a 50ms
 // busy loop; RecordReadActivity pushes to the channel so we only wake when
-// there is something to check (F-017).
+// there is something to check.
 func (s *baseSession) waitIdle(timeout, idle time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	ch, _ := s.idleSignalCh()

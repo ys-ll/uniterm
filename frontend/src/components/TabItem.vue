@@ -14,24 +14,34 @@
       v-if="hovered && !tab.locked"
       class="tab-close"
       @click.stop="$emit('close', tab.id)"
-    ><X /></button>
-    <span
-      v-else
-      class="tab-icon-wrapper"
     >
-      <component
-        :is="tab.locked ? Lock : tabIcon"
-        class="tab-type-icon"
-      />
+      <X />
+    </button>
+    <span v-else class="tab-icon-wrapper">
+      <component :is="tab.locked ? Lock : tabIcon" class="tab-type-icon" />
       <span
         v-if="isOutputLogOn"
         class="tab-log-dot"
         :title="t('session.recording', { path: outputLogPath })"
       />
-      <span v-else-if="!isActive && hasNotification && !tab.locked" class="tab-notification-dot" />
+      <span
+        v-else-if="!isActive && hasNotification && !tab.locked"
+        class="tab-notification-dot"
+      />
     </span>
-    <span v-if="!editing" class="tab-name" :class="{ 'tab-disconnected': isDisconnected }" :title="tab.name" @dblclick.stop="startEdit">
-      <ArrowDownUp v-if="hasActiveTransfers" class="transfer-indicator" :size="14" title="Transferring..." />
+    <span
+      v-if="!editing"
+      class="tab-name"
+      :class="{ 'tab-disconnected': isDisconnected }"
+      :title="tab.name"
+      @dblclick.stop="startEdit"
+    >
+      <ArrowDownUp
+        v-if="hasActiveTransfers"
+        class="transfer-indicator"
+        :size="14"
+        title="Transferring..."
+      />
       <span class="tab-name-text">{{ tab.name }}</span>
     </span>
     <input
@@ -48,6 +58,7 @@
       class="tab-more"
       @click.stop="onMoreClick"
       :title="t('terminal.more')"
+      :aria-label="t('terminal.more')"
     >
       <MoreHorizontal :size="14" />
     </button>
@@ -60,45 +71,124 @@
         :style="contextMenuStyle"
         @click.stop
       >
-        <div v-if="canDuplicate" class="menu-item" @click="duplicateTab">{{ t('tab.duplicate') }}</div>
+        <div v-if="canDuplicate" class="menu-item" @click="duplicateTab">
+          {{ t("tab.duplicate") }}
+        </div>
         <div v-if="tab.type === 'k8s'" class="menu-divider" />
-        <div v-if="tab.type === 'rdp'" class="menu-item" @click="enterRdpFullScreen">{{ t('rdp.fullscreen') }}</div>
-        <div v-if="tab.type === 'terminal'" class="menu-item" @click="toggleAiLock">
-          {{ isAILocked ? t('terminal.aiLocked') : t('terminal.lockAI') }}
+        <div
+          v-if="tab.type === 'rdp'"
+          class="menu-item"
+          @click="enterRdpFullScreen"
+        >
+          {{ t("rdp.fullscreen") }}
         </div>
-        <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="openSftp">{{ t('sidebar.connectSftp') }}</div>
-        <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="uploadFileRz">{{ t('terminal.uploadFileRz') }}</div>
-        <div v-if="tab.type === 'terminal' && panelStore.getPanel(tab.panelId)?.type === 'ssh'" class="menu-item" @click="openMonitor">{{ t('sidebar.connectMonitor') }}</div>
-        <div v-if="supportsOutputLog" class="menu-item" @click="toggleOutputLog">
-          {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
+        <div
+          v-if="tab.type === 'terminal'"
+          class="menu-item"
+          @click="toggleAiLock"
+        >
+          {{ isAILocked ? t("terminal.aiLocked") : t("terminal.lockAI") }}
         </div>
-        <div v-if="supportsOutputLog && isOutputLogOn" class="menu-item" @click="openLogDir">
-          {{ t('session.openLogDir') }}
+        <div
+          v-if="
+            tab.type === 'terminal' &&
+            panelStore.getPanel(tab.panelId)?.type === 'ssh'
+          "
+          class="menu-item"
+          @click="openSftp"
+        >
+          {{ t("sidebar.connectSftp") }}
         </div>
-        <div v-if="tab.type === 'terminal'" class="menu-item" @click="triggerSearch">{{ t('terminal.searchText') }}</div>
-        <div v-if="tab.type === 'terminal'" class="menu-item" @click="triggerExport">{{ t('terminal.export') }}</div>
-        <div v-if="tab.type === 'terminal'" class="menu-item" @click="startEdit">{{ t('tab.rename') }}</div>
+        <div
+          v-if="
+            tab.type === 'terminal' &&
+            panelStore.getPanel(tab.panelId)?.type === 'ssh'
+          "
+          class="menu-item"
+          @click="uploadFileRz"
+        >
+          {{ t("terminal.uploadFileRz") }}
+        </div>
+        <div
+          v-if="
+            tab.type === 'terminal' &&
+            panelStore.getPanel(tab.panelId)?.type === 'ssh'
+          "
+          class="menu-item"
+          @click="openMonitor"
+        >
+          {{ t("sidebar.connectMonitor") }}
+        </div>
+        <div
+          v-if="supportsOutputLog"
+          class="menu-item"
+          @click="toggleOutputLog"
+        >
+          {{ isOutputLogOn ? t("session.stopLog") : t("session.startLog") }}
+        </div>
+        <div
+          v-if="supportsOutputLog && isOutputLogOn"
+          class="menu-item"
+          @click="openLogDir"
+        >
+          {{ t("session.openLogDir") }}
+        </div>
+        <div
+          v-if="tab.type === 'terminal'"
+          class="menu-item"
+          @click="triggerSearch"
+        >
+          {{ t("terminal.searchText") }}
+        </div>
+        <div
+          v-if="tab.type === 'terminal'"
+          class="menu-item"
+          @click="triggerExport"
+        >
+          {{ t("terminal.export") }}
+        </div>
+        <div
+          v-if="tab.type === 'terminal'"
+          class="menu-item"
+          @click="startEdit"
+        >
+          {{ t("tab.rename") }}
+        </div>
         <div v-if="tab.type === 'terminal'" class="menu-divider" />
-        <div v-if="tab.type !== 'start' && tab.type !== 'settings'" class="menu-item" @click="toggleLock">
-          {{ tab.locked ? t('tab.unlock') : t('tab.lock') }}
+        <div
+          v-if="tab.type !== 'start' && tab.type !== 'settings'"
+          class="menu-item"
+          @click="toggleLock"
+        >
+          {{ tab.locked ? t("tab.unlock") : t("tab.lock") }}
         </div>
-        <div class="menu-item" :class="{ 'menu-item-disabled': tab.locked }" @click="tab.locked ? null : closeTab()">{{ t('tab.close') }}</div>
-        <div class="menu-item" @click="closeOther">{{ t('tab.closeOther') }}</div>
-        <div class="menu-item" @click="closeRight">{{ t('tab.closeRight') }}</div>
-        <div class="menu-item" @click="closeLeft">{{ t('tab.closeLeft') }}</div>
+        <div
+          class="menu-item"
+          :class="{ 'menu-item-disabled': tab.locked }"
+          @click="tab.locked ? null : closeTab()"
+        >
+          {{ t("tab.close") }}
+        </div>
+        <div class="menu-item" @click="closeOther">
+          {{ t("tab.closeOther") }}
+        </div>
+        <div class="menu-item" @click="closeRight">
+          {{ t("tab.closeRight") }}
+        </div>
+        <div class="menu-item" @click="closeLeft">{{ t("tab.closeLeft") }}</div>
       </div>
     </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { useTabStore } from '../stores/tabStore'
-import { usePanelStore } from '../stores/panelStore'
-import { useSessionStore } from '../stores/sessionStore'
-import { useK8sStore } from '../stores/k8sStore'
-import { useContainerStore } from '../stores/containerStore'
-import { useI18n } from '../i18n'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { useTabStore } from "../stores/tabStore";
+import { usePanelStore } from "../stores/panelStore";
+import { useSessionStore } from "../stores/sessionStore";
+import { useK8sStore } from "../stores/k8sStore";
+import { useContainerStore } from "../stores/containerStore";
+import { useI18n } from "../i18n";
 import {
   CreateSession,
   CloseSession,
@@ -110,348 +200,441 @@ import {
   OpenPathInExplorer,
   RDPSetFullScreen,
   SessionStart,
-} from '../../wailsjs/go/main/App'
-import { msg } from '../services/message'
-import type { TerminalTab, SettingsTab, SFTPTab, RDPTab, VNCTab, SPICETab, DBTab, MonitorTab, WorkspaceTab } from '../types/workspace'
-import type { ConnectionConfig } from '../types/session'
-import { waitForTerminalSize } from '../services/terminalManager'
-import { SquareTerminal, Laptop, FolderUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Settings, Database, DatabaseZap, Layers, Activity, Terminal, Zap, X, ArrowDownUp, LayoutDashboard, Cable, SquarePlus, Lock, MoreHorizontal, ShipWheel, Box, Boxes } from '@lucide/vue'
+} from "../../wailsjs/go/main/App";
+import { msg } from "../services/message";
+import type {
+  TerminalTab,
+  SettingsTab,
+  SFTPTab,
+  RDPTab,
+  VNCTab,
+  SPICETab,
+  DBTab,
+  MonitorTab,
+  WorkspaceTab,
+} from "../types/workspace";
+import type { ConnectionConfig } from "../types/session";
+import { waitForTerminalSize } from "../services/terminalManager";
+import {
+  SquareTerminal,
+  Laptop,
+  FolderUp,
+  HardDrive,
+  Cloud,
+  Globe,
+  Monitor,
+  MonitorCloud,
+  MonitorSmartphone,
+  Settings,
+  Database,
+  DatabaseZap,
+  Layers,
+  Activity,
+  Terminal,
+  Zap,
+  X,
+  ArrowDownUp,
+  LayoutDashboard,
+  Cable,
+  SquarePlus,
+  Lock,
+  MoreHorizontal,
+  ShipWheel,
+  Box,
+  Boxes,
+} from "@lucide/vue";
 
 const props = defineProps<{
-  tab: TerminalTab | SettingsTab | SFTPTab | RDPTab | VNCTab | SPICETab | DBTab | MonitorTab | WorkspaceTab
-  isActive: boolean
-  hasNotification?: boolean
-  showClose?: boolean
-}>()
+  tab:
+    | TerminalTab
+    | SettingsTab
+    | SFTPTab
+    | RDPTab
+    | VNCTab
+    | SPICETab
+    | DBTab
+    | MonitorTab
+    | WorkspaceTab;
+  isActive: boolean;
+  hasNotification?: boolean;
+  showClose?: boolean;
+}>();
 
 const emit = defineEmits<{
-  activate: [id: string]
-  close: [id: string]
-  closeBatch: [ids: string[]]
-  toggleAiLock: [panelId: string]
-}>()
+  activate: [id: string];
+  close: [id: string];
+  closeBatch: [ids: string[]];
+  toggleAiLock: [panelId: string];
+}>();
 
-const tabStore = useTabStore()
-const panelStore = usePanelStore()
-const sessionStore = useSessionStore()
-const k8sStore = useK8sStore()
-const containerStore = useContainerStore()
-const { t } = useI18n()
+const tabStore = useTabStore();
+const panelStore = usePanelStore();
+const sessionStore = useSessionStore();
+const k8sStore = useK8sStore();
+const containerStore = useContainerStore();
+const { t } = useI18n();
 
-const hovered = ref(false)
-const contextMenuVisible = ref(false)
-const contextMenuStyle = ref({ left: '0px', top: '0px' })
+const hovered = ref(false);
+const contextMenuVisible = ref(false);
+const contextMenuStyle = ref({ left: "0px", top: "0px" });
 
-const editing = ref(false)
-const editName = ref('')
-const editInputRef = ref<HTMLInputElement>()
+const editing = ref(false);
+const editName = ref("");
+const editInputRef = ref<HTMLInputElement>();
 
 const tabIcon = computed(() => {
-  const t = props.tab
-  if (t.type === 'settings') return Settings
-  if (t.type === 'sftp') {
-    const panel = panelStore.getPanel(t.panelId)
-    if (panel?.config?.type === 'smb') return HardDrive
-    if (panel?.config?.type === 's3') return Cloud
-    if (panel?.config?.type === 'webdav') return Globe
-    return FolderUp
+  const t = props.tab;
+  if (t.type === "settings") return Settings;
+  if (t.type === "sftp") {
+    const panel = panelStore.getPanel(t.panelId);
+    if (panel?.config?.type === "smb") return HardDrive;
+    if (panel?.config?.type === "s3") return Cloud;
+    if (panel?.config?.type === "webdav") return Globe;
+    return FolderUp;
   }
-  if (t.type === 'rdp') return Monitor
-  if (t.type === 'vnc') return MonitorSmartphone
-  if (t.type === 'spice') return MonitorCloud
-  if (t.type === 'database' || t.type === 'mongodb') {
-    const panel = panelStore.getPanel(t.panelId)
-    if (panel?.config?.dbType === 'redis') return DatabaseZap
-    if (panel?.config?.dbType === 'mongodb') return Layers
-    return Database
+  if (t.type === "rdp") return Monitor;
+  if (t.type === "vnc") return MonitorSmartphone;
+  if (t.type === "spice") return MonitorCloud;
+  if (t.type === "database" || t.type === "mongodb") {
+    const panel = panelStore.getPanel(t.panelId);
+    if (panel?.config?.dbType === "redis") return DatabaseZap;
+    if (panel?.config?.dbType === "mongodb") return Layers;
+    return Database;
   }
-  if (t.type === 'monitor') return Activity
-  if (t.type === 'k8s') return ShipWheel
-  if (t.type === 'container') return Boxes
-  if (t.type === 'workspace') return LayoutDashboard
-  if (t.type === 'terminal') {
-    const panel = panelStore.getPanel(t.panelId)
-    if (panel?.type === 'k8s-exec' || panel?.type === 'container-exec') return Box
-    if (panel?.type === 'local') return Laptop
-    if (panel?.type === 'serial') return Cable
-    if (panel?.type === 'telnet') return Terminal
-    if (panel?.type === 'mosh') return Zap
-    return SquareTerminal
+  if (t.type === "monitor") return Activity;
+  if (t.type === "k8s") return ShipWheel;
+  if (t.type === "container") return Boxes;
+  if (t.type === "workspace") return LayoutDashboard;
+  if (t.type === "terminal") {
+    const panel = panelStore.getPanel(t.panelId);
+    if (panel?.type === "k8s-exec" || panel?.type === "container-exec")
+      return Box;
+    if (panel?.type === "local") return Laptop;
+    if (panel?.type === "serial") return Cable;
+    if (panel?.type === "telnet") return Terminal;
+    if (panel?.type === "mosh") return Zap;
+    return SquareTerminal;
   }
-  if (t.type === 'start') return SquarePlus
-  return null
-})
+  if (t.type === "start") return SquarePlus;
+  return null;
+});
 
 const isAILocked = computed(() => {
-  if (props.tab.type === 'workspace') {
-    if (tabStore.aiLockedPanelIds.size === 0) return false
-    return props.tab.panelIds.some(id => tabStore.isPanelAILocked(id))
+  if (props.tab.type === "workspace") {
+    if (tabStore.aiLockedPanelIds.size === 0) return false;
+    return props.tab.panelIds.some((id) => tabStore.isPanelAILocked(id));
   }
-  if (props.tab.type !== 'terminal') return false
-  return tabStore.isPanelAILocked(props.tab.panelId)
-})
-
+  if (props.tab.type !== "terminal") return false;
+  return tabStore.isPanelAILocked(props.tab.panelId);
+});
 
 const hasActiveTransfers = computed(() => {
-  if (props.tab.type === 'workspace') return false
-  const tasks = panelStore.getTransferTasks(props.tab.panelId)
-  return tasks.some(t => t.status === 'running' || t.status === 'paused')
-})
+  if (props.tab.type === "workspace") return false;
+  const tasks = panelStore.getTransferTasks(props.tab.panelId);
+  return tasks.some((t) => t.status === "running" || t.status === "paused");
+});
 
 const isDisconnected = computed(() => {
-  if (props.tab.type === 'start' || props.tab.type === 'settings') return false
+  if (props.tab.type === "start" || props.tab.type === "settings") return false;
   // k8s main tab has no session; its connect status comes from the k8s store
   // (grey while connecting / on error).
-  if (props.tab.type === 'k8s') {
-    const s = k8sStore.getConnStatus((props.tab as any).connectionId)
-    return s === 'connecting' || s === 'error'
+  if (props.tab.type === "k8s") {
+    const s = k8sStore.getConnStatus((props.tab as any).connectionId);
+    return s === "connecting" || s === "error";
   }
   // container tab likewise has no panel session; its status lives in containerStore
-  if (props.tab.type === 'container') {
-    const s = containerStore.sessions[(props.tab as any).id]
-    return !s || s.loading || !!s.error
+  if (props.tab.type === "container") {
+    const s = containerStore.sessions[(props.tab as any).id];
+    return !s || s.loading || !!s.error;
   }
-  const panelIds: string[] = props.tab.type === 'workspace' ? props.tab.panelIds : 'panelId' in props.tab ? [props.tab.panelId] : []
-  if (panelIds.length === 0) return false
-  return panelIds.every(pid => {
-    const p = panelStore.getPanel(pid)
-    if (!p?.sessionId) return true
-    const s = sessionStore.getStatus(p.sessionId)
-    return s === 'disconnected' || s === 'error'
-  })
-})
+  const panelIds: string[] =
+    props.tab.type === "workspace"
+      ? props.tab.panelIds
+      : "panelId" in props.tab
+        ? [props.tab.panelId]
+        : [];
+  if (panelIds.length === 0) return false;
+  return panelIds.every((pid) => {
+    const p = panelStore.getPanel(pid);
+    if (!p?.sessionId) return true;
+    const s = sessionStore.getStatus(p.sessionId);
+    return s === "disconnected" || s === "error";
+  });
+});
 
 // Session output log state. Refreshed lazily when the right-click menu
 // opens; also written after enable/disable so the REC badge stays in
 // sync without an extra round-trip.
-const isOutputLogOn = ref(false)
-const outputLogPath = ref('')
+const isOutputLogOn = ref(false);
+const outputLogPath = ref("");
 const supportsOutputLog = computed(() => {
-  if (props.tab.type !== 'terminal') return false
-  const p = panelStore.getPanel((props.tab as TerminalTab).panelId)
-  return !!p && ['ssh', 'telnet', 'serial', 'mosh', 'local'].includes(p.type)
-})
+  if (props.tab.type !== "terminal") return false;
+  const p = panelStore.getPanel((props.tab as TerminalTab).panelId);
+  return !!p && ["ssh", "telnet", "serial", "mosh", "local"].includes(p.type);
+});
 
 // Duplicate is supported for tabs backed by a reproducible connection:
 // terminals, file transfer, database (incl. mongodb/redis variants), and k8s.
 const canDuplicate = computed(() => {
-  const type = props.tab.type
-  return type === 'terminal' || type === 'sftp' || type === 'database' || type === 'mongodb' || type === 'redis' || type === 'k8s'
-})
+  const type = props.tab.type;
+  return (
+    type === "terminal" ||
+    type === "sftp" ||
+    type === "database" ||
+    type === "mongodb" ||
+    type === "redis" ||
+    type === "k8s"
+  );
+});
 
 function onDragStart(e: DragEvent) {
-  e.dataTransfer?.setData('application/tab-id', props.tab.id)
-  e.dataTransfer?.setData('application/tab-type', props.tab.type)
+  e.dataTransfer?.setData("application/tab-id", props.tab.id);
+  e.dataTransfer?.setData("application/tab-type", props.tab.type);
   if (props.isActive) {
-    e.dataTransfer?.setData('application/is-active-tab', '1')
+    e.dataTransfer?.setData("application/is-active-tab", "1");
   }
-  e.dataTransfer!.effectAllowed = 'move'
+  e.dataTransfer!.effectAllowed = "move";
 
   // If dragging the active terminal tab, switch to adjacent tab first
   // so the dragged tab becomes "background" and can be merged into it
-  if (props.isActive && props.tab.type === 'terminal') {
-    const tabs = tabStore.tabs
-    const fromIdx = tabs.findIndex(t => t.id === props.tab.id)
-    const adjacentTab = tabs[fromIdx - 1] || tabs[fromIdx + 1]
+  if (props.isActive && props.tab.type === "terminal") {
+    const tabs = tabStore.tabs;
+    const fromIdx = tabs.findIndex((t) => t.id === props.tab.id);
+    const adjacentTab = tabs[fromIdx - 1] || tabs[fromIdx + 1];
     if (adjacentTab) {
-      tabStore.setActiveTab(adjacentTab.id)
+      tabStore.setActiveTab(adjacentTab.id);
     }
   }
 }
 
 function onContextMenu(e: MouseEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  window.dispatchEvent(new CustomEvent('global:close-context-menus'))
-  contextMenuStyle.value = { left: e.clientX + 'px', top: e.clientY + 'px' }
-  contextMenuVisible.value = true
+  e.preventDefault();
+  e.stopPropagation();
+  window.dispatchEvent(new CustomEvent("global:close-context-menus"));
+  contextMenuStyle.value = { left: e.clientX + "px", top: e.clientY + "px" };
+  contextMenuVisible.value = true;
   if (supportsOutputLog.value) {
-    refreshOutputLogState()
+    refreshOutputLogState();
   }
 }
 
 function onMoreClick(e: MouseEvent) {
-  e.stopPropagation()
-  const btn = e.currentTarget as HTMLElement
-  const rect = btn.getBoundingClientRect()
-  window.dispatchEvent(new CustomEvent('global:close-context-menus'))
-  contextMenuStyle.value = { left: rect.left + 'px', top: rect.bottom + 4 + 'px' }
-  contextMenuVisible.value = true
+  e.stopPropagation();
+  const btn = e.currentTarget as HTMLElement;
+  const rect = btn.getBoundingClientRect();
+  window.dispatchEvent(new CustomEvent("global:close-context-menus"));
+  contextMenuStyle.value = {
+    left: rect.left + "px",
+    top: rect.bottom + 4 + "px",
+  };
+  contextMenuVisible.value = true;
   if (supportsOutputLog.value) {
-    refreshOutputLogState()
+    refreshOutputLogState();
   }
 }
 
 async function refreshOutputLogState() {
-  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
+  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId);
   if (!panel) {
-    isOutputLogOn.value = false
-    outputLogPath.value = ''
-    return
+    isOutputLogOn.value = false;
+    outputLogPath.value = "";
+    return;
   }
   try {
-    const info = await GetSessionOutputLogInfo(panel.id)
-    isOutputLogOn.value = !!info.enabled
-    outputLogPath.value = info.path || ''
-    panelStore.setOutputLog(panel.id, { enabled: isOutputLogOn.value, path: outputLogPath.value })
+    const info = await GetSessionOutputLogInfo(panel.id);
+    isOutputLogOn.value = !!info.enabled;
+    outputLogPath.value = info.path || "";
+    panelStore.setOutputLog(panel.id, {
+      enabled: isOutputLogOn.value,
+      path: outputLogPath.value,
+    });
   } catch {
-    isOutputLogOn.value = false
-    outputLogPath.value = ''
+    isOutputLogOn.value = false;
+    outputLogPath.value = "";
   }
 }
 
 function closeContextMenu() {
-  contextMenuVisible.value = false
+  contextMenuVisible.value = false;
 }
 
 watch(contextMenuVisible, (val) => {
-  window.dispatchEvent(new CustomEvent(val ? 'rdp:overlay-push' : 'rdp:overlay-pop'))
-})
+  window.dispatchEvent(
+    new CustomEvent(val ? "rdp:overlay-push" : "rdp:overlay-pop"),
+  );
+});
 
 function startEdit() {
-  closeContextMenu()
-  editName.value = props.tab.name
-  editing.value = true
+  closeContextMenu();
+  editName.value = props.tab.name;
+  editing.value = true;
   nextTick(() => {
-    editInputRef.value?.focus()
-    editInputRef.value?.select()
-  })
+    editInputRef.value?.focus();
+    editInputRef.value?.select();
+  });
 }
 
 function confirmEdit() {
-  if (!editing.value) return
-  editing.value = false
-  const newName = editName.value.trim()
+  if (!editing.value) return;
+  editing.value = false;
+  const newName = editName.value.trim();
   if (newName && newName !== props.tab.name) {
-    tabStore.renameTab(props.tab.id, newName)
+    tabStore.renameTab(props.tab.id, newName);
   }
 }
 
 function cancelEdit() {
-  editing.value = false
+  editing.value = false;
 }
 
 function toggleLock() {
-  tabStore.toggleTabLock(props.tab.id)
-  closeContextMenu()
+  tabStore.toggleTabLock(props.tab.id);
+  closeContextMenu();
 }
 
 function toggleAiLock() {
-  if (props.tab.type === 'terminal') {
-    emit('toggleAiLock', props.tab.panelId)
+  if (props.tab.type === "terminal") {
+    emit("toggleAiLock", props.tab.panelId);
   }
-  closeContextMenu()
+  closeContextMenu();
 }
 
 function closeTab() {
-  emit('close', props.tab.id)
-  closeContextMenu()
+  emit("close", props.tab.id);
+  closeContextMenu();
 }
 
 function closeOther() {
-  const allTabs = tabStore.tabs
-  const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  const ids = allTabs.filter((t, i) => i !== currentIdx && !t.locked).map(t => t.id)
-  if (ids.length) emit('closeBatch', ids)
-  closeContextMenu()
+  const allTabs = tabStore.tabs;
+  const currentIdx = allTabs.findIndex((t) => t.id === props.tab.id);
+  const ids = allTabs
+    .filter((t, i) => i !== currentIdx && !t.locked)
+    .map((t) => t.id);
+  if (ids.length) emit("closeBatch", ids);
+  closeContextMenu();
 }
 
 function closeRight() {
-  const allTabs = tabStore.tabs
-  const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  const ids = allTabs.slice(currentIdx + 1).filter(t => !t.locked).map(t => t.id)
-  if (ids.length) emit('closeBatch', ids)
-  closeContextMenu()
+  const allTabs = tabStore.tabs;
+  const currentIdx = allTabs.findIndex((t) => t.id === props.tab.id);
+  const ids = allTabs
+    .slice(currentIdx + 1)
+    .filter((t) => !t.locked)
+    .map((t) => t.id);
+  if (ids.length) emit("closeBatch", ids);
+  closeContextMenu();
 }
 
 function closeLeft() {
-  const allTabs = tabStore.tabs
-  const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
-  const ids = allTabs.slice(0, currentIdx).filter(t => !t.locked).map(t => t.id)
-  if (ids.length) emit('closeBatch', ids)
-  closeContextMenu()
+  const allTabs = tabStore.tabs;
+  const currentIdx = allTabs.findIndex((t) => t.id === props.tab.id);
+  const ids = allTabs
+    .slice(0, currentIdx)
+    .filter((t) => !t.locked)
+    .map((t) => t.id);
+  if (ids.length) emit("closeBatch", ids);
+  closeContextMenu();
 }
 
 async function duplicateTab() {
-  closeContextMenu()
-  const tab = props.tab
-  if (!('panelId' in tab)) return
-  const panel = panelStore.getPanel(tab.panelId)
-  if (!panel) return
+  closeContextMenu();
+  const tab = props.tab;
+  if (!("panelId" in tab)) return;
+  const panel = panelStore.getPanel(tab.panelId);
+  if (!panel) return;
 
   // k8s tab has no backend session; it connects itself on mount from
   // connectionId + namespace. Duplicate = a fresh panel + K8s tab reusing the
   // same connection (a new independent session), matching other tab types.
-  if (tab.type === 'k8s') {
-    const newPanel = panelStore.createPanel(panel.config, 'k8s')
-    panelStore.updateTitle(newPanel.id, panel.title)
-    const k8sTab = tab as any
-    const newTab = tabStore.createK8sTab(newPanel.title, newPanel.id, k8sTab.connectionId, k8sTab.namespace || '')
-    panelStore.movePanelToTab(newPanel.id, newTab.id)
-    return
+  if (tab.type === "k8s") {
+    const newPanel = panelStore.createPanel(panel.config, "k8s");
+    panelStore.updateTitle(newPanel.id, panel.title);
+    const k8sTab = tab as any;
+    const newTab = tabStore.createK8sTab(
+      newPanel.title,
+      newPanel.id,
+      k8sTab.connectionId,
+      k8sTab.namespace || "",
+    );
+    panelStore.movePanelToTab(newPanel.id, newTab.id);
+    return;
   }
 
-  const newPanel = panelStore.createPanel(panel.config, panel.type)
-  panelStore.updateTitle(newPanel.id, panel.title)
+  const newPanel = panelStore.createPanel(panel.config, panel.type);
+  panelStore.updateTitle(newPanel.id, panel.title);
 
   // Create + bind the session BEFORE mounting the tab, so the terminal has a
   // sessionId on first mount. Mounting first (empty sessionId) leaves the
   // shared terminal keyed by '' and bindSession's later id change can't
   // transfer it (the watch skips when oldId is falsy), so server output is
   // dropped until an incidental resize rebuilds the reference.
-  let info
+  let info;
   if (panel.config) {
     try {
-      if (panel.type === 'k8s-exec' || panel.type === 'container-exec') {
+      if (panel.type === "k8s-exec" || panel.type === "container-exec") {
         // Exec panels can't be rebuilt via CreateSession (no such type); re-dial the exec stream.
-        const c = panel.config
-        info = panel.type === 'k8s-exec'
-          ? await K8sExecSession(c.k8sExecConnId, c.k8sNamespace || '', c.k8sExecPod, c.k8sExecContainer)
-          : await ContainerExecSession(c.containerExecConnId, c.containerExecContainerId, c.containerExecShell || 'sh')
-        panelStore.bindSession(newPanel.id, info.id)
-        sessionStore.initSession(info.id)
-        sessionStore.updateStatus(info.id, 'connected')
+        const c = panel.config;
+        info =
+          panel.type === "k8s-exec"
+            ? await K8sExecSession(
+                c.k8sExecConnId,
+                c.k8sNamespace || "",
+                c.k8sExecPod,
+                c.k8sExecContainer,
+              )
+            : await ContainerExecSession(
+                c.containerExecConnId,
+                c.containerExecContainerId,
+                c.containerExecShell || "sh",
+              );
+        panelStore.bindSession(newPanel.id, info.id);
+        sessionStore.initSession(info.id);
+        sessionStore.updateStatus(info.id, "connected");
       } else {
-        const sessionType = resolveSessionType(tab.type, panel.config)
+        const sessionType = resolveSessionType(tab.type, panel.config);
         const config: ConnectionConfig = {
           ...panel.config,
           deferConnect: true,
           initialCols: 0,
           initialRows: 0,
-        }
-        info = await CreateSession(sessionType, config)
-        panelStore.bindSession(newPanel.id, info.id)
-        sessionStore.initSession(info.id)
-        if (tab.type === 'terminal') {
-          const size = await waitForTerminalSize(info.id)
+        };
+        info = await CreateSession(sessionType, config);
+        panelStore.bindSession(newPanel.id, info.id);
+        sessionStore.initSession(info.id);
+        if (tab.type === "terminal") {
+          const size = await waitForTerminalSize(info.id);
           if (size.cols > 0 && size.rows > 0) {
-            config.initialCols = size.cols
-            config.initialRows = size.rows
+            config.initialCols = size.cols;
+            config.initialRows = size.rows;
           }
           await SessionStart(info.id, config).catch((e) => {
-            console.error('Failed to start duplicated session:', e)
-            CloseSession(info.id).catch(() => {})
-          })
+            console.error("Failed to start duplicated session:", e);
+            CloseSession(info.id).catch(() => {});
+          });
         }
       }
     } catch (e) {
-      console.error('Failed to duplicate session:', e)
-      return
+      console.error("Failed to duplicate session:", e);
+      return;
     }
   }
 
-  let newTab
-  if (tab.type === 'terminal') {
-    newTab = tabStore.createTerminalTab(newPanel.title, newPanel.id)
-  } else if (tab.type === 'sftp') {
-    newTab = tabStore.createFtpTab(newPanel.title, newPanel.id)
-  } else if (tab.type === 'database' || tab.type === 'mongodb' || tab.type === 'redis') {
-    newTab = tabStore.createDBTab(newPanel.title, newPanel.id)
-    newTab.type = tab.type
+  let newTab;
+  if (tab.type === "terminal") {
+    newTab = tabStore.createTerminalTab(newPanel.title, newPanel.id);
+  } else if (tab.type === "sftp") {
+    newTab = tabStore.createFtpTab(newPanel.title, newPanel.id);
+  } else if (
+    tab.type === "database" ||
+    tab.type === "mongodb" ||
+    tab.type === "redis"
+  ) {
+    newTab = tabStore.createDBTab(newPanel.title, newPanel.id);
+    newTab.type = tab.type;
   } else {
-    return
+    return;
   }
-  panelStore.movePanelToTab(newPanel.id, newTab.id)
+  panelStore.movePanelToTab(newPanel.id, newTab.id);
 }
 
 // The session-type argument to CreateSession isn't always panel.config.type:
@@ -460,107 +643,127 @@ async function duplicateTab() {
 //   is 'ssh' but the session must be created as 'sftp' (ftp/smb/webdav/s3
 //   already carry a matching config.type).
 function resolveSessionType(tabType: string, config: any): string {
-  if (tabType === 'database' || tabType === 'mongodb' || tabType === 'redis') {
-    if (config?.dbType === 'redis') return 'redis'
-    if (config?.dbType === 'mongodb') return 'mongodb'
-    return 'database'
+  if (tabType === "database" || tabType === "mongodb" || tabType === "redis") {
+    if (config?.dbType === "redis") return "redis";
+    if (config?.dbType === "mongodb") return "mongodb";
+    return "database";
   }
-  if (tabType === 'sftp') {
-    return config?.type === 'ssh' ? 'sftp' : config?.type
+  if (tabType === "sftp") {
+    return config?.type === "ssh" ? "sftp" : config?.type;
   }
-  return config?.type
+  return config?.type;
 }
 
 function openSftp() {
-  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
+  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId);
   if (panel) {
-    window.dispatchEvent(new CustomEvent('app:connect-sftp', { detail: panel }))
+    window.dispatchEvent(
+      new CustomEvent("app:connect-sftp", { detail: panel }),
+    );
   }
-  closeContextMenu()
+  closeContextMenu();
 }
 
 function uploadFileRz() {
-  window.dispatchEvent(new CustomEvent('terminal:send-rz', { detail: { panelId: (props.tab as TerminalTab).panelId } }))
-  closeContextMenu()
+  window.dispatchEvent(
+    new CustomEvent("terminal:send-rz", {
+      detail: { panelId: (props.tab as TerminalTab).panelId },
+    }),
+  );
+  closeContextMenu();
 }
 
 function openMonitor() {
-  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
+  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId);
   if (panel) {
-    window.dispatchEvent(new CustomEvent('app:connect-monitor', { detail: panel }))
+    window.dispatchEvent(
+      new CustomEvent("app:connect-monitor", { detail: panel }),
+    );
   }
-  closeContextMenu()
+  closeContextMenu();
 }
 
 async function enterRdpFullScreen() {
-  closeContextMenu()
-  const panel = panelStore.getPanel((props.tab as RDPTab).panelId)
-  const sid = panel?.sessionId
-  if (!sid) return
-  window.dispatchEvent(new CustomEvent('rdp:fullscreen-enter'))
-  try { await RDPSetFullScreen(sid, true) } catch (e) { console.error('RDP fullscreen error:', e) }
+  closeContextMenu();
+  const panel = panelStore.getPanel((props.tab as RDPTab).panelId);
+  const sid = panel?.sessionId;
+  if (!sid) return;
+  window.dispatchEvent(new CustomEvent("rdp:fullscreen-enter"));
+  try {
+    await RDPSetFullScreen(sid, true);
+  } catch (e) {
+    console.error("RDP fullscreen error:", e);
+  }
 }
 
 async function toggleOutputLog() {
-  closeContextMenu()
-  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
-  if (!panel) return
+  closeContextMenu();
+  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId);
+  if (!panel) return;
   try {
     if (isOutputLogOn.value) {
-      await DisableSessionOutputLog(panel.id)
-      isOutputLogOn.value = false
-      const prev = outputLogPath.value
-      outputLogPath.value = ''
-      panelStore.setOutputLog(panel.id, { enabled: false, path: '' })
-      msg.copyable(t('session.logStopped', { path: prev }), 'info')
-      return
+      await DisableSessionOutputLog(panel.id);
+      isOutputLogOn.value = false;
+      const prev = outputLogPath.value;
+      outputLogPath.value = "";
+      panelStore.setOutputLog(panel.id, { enabled: false, path: "" });
+      msg.copyable(t("session.logStopped", { path: prev }), "info");
+      return;
     }
-    const path = await EnableSessionOutputLog(panel.id, '')
+    const path = await EnableSessionOutputLog(panel.id, "");
     if (!path) {
-      msg.error(t('session.logFailed', { error: 'unknown' }))
-      return
+      msg.error(t("session.logFailed", { error: "unknown" }));
+      return;
     }
-    isOutputLogOn.value = true
-    outputLogPath.value = path
-    panelStore.setOutputLog(panel.id, { enabled: true, path })
-    msg.copyable(t('session.logStarted', { path }), 'success')
+    isOutputLogOn.value = true;
+    outputLogPath.value = path;
+    panelStore.setOutputLog(panel.id, { enabled: true, path });
+    msg.copyable(t("session.logStarted", { path }), "success");
   } catch (e: any) {
-    msg.error(t('session.logFailed', { error: String(e?.message ?? e) }))
+    msg.error(t("session.logFailed", { error: String(e?.message ?? e) }));
   }
 }
 
 async function openLogDir() {
-  closeContextMenu()
-  if (!outputLogPath.value) return
+  closeContextMenu();
+  if (!outputLogPath.value) return;
   try {
-    await OpenPathInExplorer(outputLogPath.value)
+    await OpenPathInExplorer(outputLogPath.value);
   } catch (e: any) {
-    msg.error(String(e?.message ?? e))
+    msg.error(String(e?.message ?? e));
   }
 }
 
 function triggerSearch() {
-  window.dispatchEvent(new CustomEvent('terminal:open-search', { detail: { panelId: (props.tab as TerminalTab).panelId } }))
-  closeContextMenu()
+  window.dispatchEvent(
+    new CustomEvent("terminal:open-search", {
+      detail: { panelId: (props.tab as TerminalTab).panelId },
+    }),
+  );
+  closeContextMenu();
 }
 
 function triggerExport() {
-  window.dispatchEvent(new CustomEvent('terminal:export', { detail: { panelId: (props.tab as TerminalTab).panelId } }))
-  closeContextMenu()
+  window.dispatchEvent(
+    new CustomEvent("terminal:export", {
+      detail: { panelId: (props.tab as TerminalTab).panelId },
+    }),
+  );
+  closeContextMenu();
 }
 
 onMounted(async () => {
-  window.addEventListener('global:close-context-menus', closeContextMenu)
-  document.addEventListener('click', closeContextMenu)
+  window.addEventListener("global:close-context-menus", closeContextMenu);
+  document.addEventListener("click", closeContextMenu);
   if (supportsOutputLog.value) {
-    await refreshOutputLogState()
+    await refreshOutputLogState();
   }
-})
+});
 
 onUnmounted(() => {
-  window.removeEventListener('global:close-context-menus', closeContextMenu)
-  document.removeEventListener('click', closeContextMenu)
-})
+  window.removeEventListener("global:close-context-menus", closeContextMenu);
+  document.removeEventListener("click", closeContextMenu);
+});
 </script>
 
 <style scoped>
@@ -578,7 +781,9 @@ onUnmounted(() => {
   position: relative;
   color: var(--text-secondary);
   font-size: 12px;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
   flex-shrink: 0;
   --wails-draggable: no-drag;
 }
@@ -592,12 +797,17 @@ onUnmounted(() => {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 .tab-item.ai-locked {
-  box-shadow: inset 2px 0 0 var(--warning), inset 0 0 12px var(--warning-subtle);
+  box-shadow:
+    inset 2px 0 0 var(--warning),
+    inset 0 0 12px var(--warning-subtle);
 }
 .tab-item.active.ai-locked {
   background: var(--bg-hover);
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--accent), inset 2px 0 0 var(--warning), inset 0 0 12px var(--warning-subtle);
+  box-shadow:
+    inset 0 0 0 1px var(--accent),
+    inset 2px 0 0 var(--warning),
+    inset 0 0 12px var(--warning-subtle);
 }
 .tab-name {
   font-size: 12px;

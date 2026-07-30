@@ -15,34 +15,49 @@
 
     <div class="settings-panel">
       <!-- 基础设置 -->
-      <div v-if="settingsStore.activeCategory === 'basic'" class="settings-section">
-        <h2 class="section-title">{{ t('settings.basic') }}</h2>
+      <div
+        v-if="settingsStore.activeCategory === 'basic'"
+        class="settings-section"
+      >
+        <h2 class="section-title">{{ t("settings.basic") }}</h2>
 
         <div class="settings-group">
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.theme') }}</div>
-              <div class="setting-desc">{{ t('settings.themeDesc') }}</div>
+              <div class="setting-title">{{ t("settings.theme") }}</div>
+              <div class="setting-desc">{{ t("settings.themeDesc") }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.theme" @change="settingsStore.save()">
+              <el-select
+                v-model="settingsStore.settings.theme"
+                @change="settingsStore.save()"
+              >
                 <el-option :label="t('settings.themeDark')" value="dark" />
-                <el-option :label="t('settings.themeDeepBlue')" value="deep-blue" />
+                <el-option
+                  :label="t('settings.themeDeepBlue')"
+                  value="deep-blue"
+                />
                 <el-option :label="t('settings.themeLight')" value="light" />
                 <el-option :label="t('settings.themeSystem')" value="system" />
                 <el-option :label="t('settings.themeWin11')" value="win11" />
-                <el-option :label="t('settings.themeMacOS26')" value="macos26" />
+                <el-option
+                  :label="t('settings.themeMacOS26')"
+                  value="macos26"
+                />
               </el-select>
             </div>
           </div>
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.language') }}</div>
-              <div class="setting-desc">{{ t('settings.languageDesc') }}</div>
+              <div class="setting-title">{{ t("settings.language") }}</div>
+              <div class="setting-desc">{{ t("settings.languageDesc") }}</div>
             </div>
             <div class="setting-control">
-              <el-select :model-value="settingsStore.settings.language" @change="settingsStore.updateLanguage">
+              <el-select
+                :model-value="settingsStore.settings.language"
+                @change="settingsStore.updateLanguage"
+              >
                 <el-option
                   v-for="lang in LANGUAGE_OPTIONS"
                   :key="lang.value"
@@ -56,26 +71,40 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.closeTabPrompt') }}</div>
+              <div class="setting-title">
+                {{ t("settings.closeTabPrompt") }}
+              </div>
             </div>
             <div class="setting-control">
-              <el-switch v-model="settingsStore.settings.closeTabPrompt" @change="settingsStore.save()" />
+              <el-switch
+                v-model="settingsStore.settings.closeTabPrompt"
+                @change="settingsStore.save()"
+              />
             </div>
           </div>
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.closeAppPrompt') }}</div>
+              <div class="setting-title">
+                {{ t("settings.closeAppPrompt") }}
+              </div>
             </div>
             <div class="setting-control">
-              <el-switch v-model="settingsStore.settings.closeAppPrompt" @change="settingsStore.save()" />
+              <el-switch
+                v-model="settingsStore.settings.closeAppPrompt"
+                @change="settingsStore.save()"
+              />
             </div>
           </div>
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.systemTitleBar') }}</div>
-              <div class="setting-desc">{{ t('settings.systemTitleBarDesc') }}</div>
+              <div class="setting-title">
+                {{ t("settings.systemTitleBar") }}
+              </div>
+              <div class="setting-desc">
+                {{ t("settings.systemTitleBarDesc") }}
+              </div>
             </div>
             <div class="setting-control">
               <el-switch
@@ -87,13 +116,16 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.bgEnable') }}</div>
-              <div class="setting-desc">{{ t('settings.bgEnableDesc') }}</div>
+              <div class="setting-title">{{ t("settings.bgEnable") }}</div>
+              <div class="setting-desc">{{ t("settings.bgEnableDesc") }}</div>
             </div>
             <div class="setting-control">
               <el-switch
                 :model-value="localStateStore.state.backgroundEnabled"
-                @update:model-value="(v: boolean) => localStateStore.update({ backgroundEnabled: v })"
+                @update:model-value="
+                  (v: boolean) =>
+                    localStateStore.update({ backgroundEnabled: v })
+                "
               />
             </div>
           </div>
@@ -101,7 +133,7 @@
           <template v-if="localStateStore.state.backgroundEnabled">
             <div class="setting-card">
               <div class="setting-info">
-                <div class="setting-title">{{ t('settings.bgImage') }}</div>
+                <div class="setting-title">{{ t("settings.bgImage") }}</div>
               </div>
               <div class="setting-control">
                 <div class="bg-image-row">
@@ -110,54 +142,73 @@
                     class="bg-thumb"
                     :style="{ backgroundImage: `url('${bgPreview}')` }"
                   ></div>
-                  <el-button size="small" @click="chooseBackground">{{ t('settings.bgChoose') }}</el-button>
+                  <el-button size="small" @click="chooseBackground">{{
+                    t("settings.bgChoose")
+                  }}</el-button>
                   <el-button
                     v-if="localStateStore.state.backgroundImage"
                     size="small"
                     @click="clearBackground"
-                  >{{ t('settings.bgClear') }}</el-button>
+                    >{{ t("settings.bgClear") }}</el-button
+                  >
                 </div>
               </div>
             </div>
 
             <div class="setting-card">
               <div class="setting-info">
-                <div class="setting-title">{{ t('settings.bgOpacity') }}</div>
+                <div class="setting-title">{{ t("settings.bgOpacity") }}</div>
               </div>
               <div class="setting-control">
                 <el-slider
                   :model-value="localStateStore.state.backgroundOpacity"
-                  :min="0" :max="100"
-                  @update:model-value="(v: number) => localStateStore.update({ backgroundOpacity: v as number })"
+                  :min="0"
+                  :max="100"
+                  @update:model-value="
+                    (v: number) =>
+                      localStateStore.update({ backgroundOpacity: v as number })
+                  "
                 />
               </div>
             </div>
 
             <div class="setting-card">
               <div class="setting-info">
-                <div class="setting-title">{{ t('settings.bgBlur') }}</div>
+                <div class="setting-title">{{ t("settings.bgBlur") }}</div>
               </div>
               <div class="setting-control">
                 <el-slider
                   :model-value="localStateStore.state.backgroundBlur"
-                  :min="0" :max="20"
-                  @update:model-value="(v: number) => localStateStore.update({ backgroundBlur: v as number })"
+                  :min="0"
+                  :max="20"
+                  @update:model-value="
+                    (v: number) =>
+                      localStateStore.update({ backgroundBlur: v as number })
+                  "
                 />
               </div>
             </div>
 
             <div class="setting-card">
               <div class="setting-info">
-                <div class="setting-title">{{ t('settings.bgFit') }}</div>
+                <div class="setting-title">{{ t("settings.bgFit") }}</div>
               </div>
               <div class="setting-control">
                 <el-select
                   :model-value="localStateStore.state.backgroundFit"
-                  @update:model-value="(v: string) => localStateStore.update({ backgroundFit: v })"
+                  @update:model-value="
+                    (v: string) => localStateStore.update({ backgroundFit: v })
+                  "
                 >
                   <el-option :label="t('settings.bgFitCover')" value="cover" />
-                  <el-option :label="t('settings.bgFitContain')" value="contain" />
-                  <el-option :label="t('settings.bgFitCenter')" value="center" />
+                  <el-option
+                    :label="t('settings.bgFitContain')"
+                    value="contain"
+                  />
+                  <el-option
+                    :label="t('settings.bgFitCenter')"
+                    value="center"
+                  />
                   <el-option :label="t('settings.bgFitTile')" value="tile" />
                 </el-select>
               </div>
@@ -167,18 +218,27 @@
       </div>
 
       <!-- 终端配置 -->
-      <div v-if="settingsStore.activeCategory === 'terminal'" class="settings-section">
-        <h2 class="section-title">{{ t('settings.terminal') }}</h2>
+      <div
+        v-if="settingsStore.activeCategory === 'terminal'"
+        class="settings-section"
+      >
+        <h2 class="section-title">{{ t("settings.terminal") }}</h2>
 
         <div class="settings-group">
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.colorScheme') }}</div>
-              <div class="setting-desc">{{ t('settings.colorSchemeDesc') }}</div>
+              <div class="setting-title">{{ t("settings.colorScheme") }}</div>
+              <div class="setting-desc">
+                {{ t("settings.colorSchemeDesc") }}
+              </div>
             </div>
             <div class="setting-control">
               <div class="theme-select-row">
-                <el-select v-model="settingsStore.settings.terminal.theme" @change="settingsStore.save()" popper-class="theme-select-popper">
+                <el-select
+                  v-model="settingsStore.settings.terminal.theme"
+                  @change="settingsStore.save()"
+                  popper-class="theme-select-popper"
+                >
                   <el-option-group
                     v-for="group in terminalThemeGroups"
                     :key="group.label"
@@ -192,14 +252,22 @@
                     />
                   </el-option-group>
                 </el-select>
-                <button class="btn btn-ghost btn-icon btn-sm" :title="t('theme.newTitle')" @click="openThemeEditor()">
+                <button
+                  class="btn btn-ghost btn-icon btn-sm"
+                  :title="t('theme.newTitle')"
+                  :aria-label="t('theme.newTitle')"
+                  @click="openThemeEditor()"
+                >
                   <Plus :size="14" />
                 </button>
                 <button
                   v-if="isCustomTheme(settingsStore.settings.terminal.theme)"
                   class="btn btn-ghost btn-icon btn-sm"
                   :title="t('theme.editTitle')"
-                  @click="openThemeEditor(settingsStore.settings.terminal.theme)"
+                  :aria-label="t('theme.editTitle')"
+                  @click="
+                    openThemeEditor(settingsStore.settings.terminal.theme)
+                  "
                 >
                   <Pencil :size="14" />
                 </button>
@@ -209,11 +277,14 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.font') }}</div>
-              <div class="setting-desc">{{ t('settings.fontDesc') }}</div>
+              <div class="setting-title">{{ t("settings.font") }}</div>
+              <div class="setting-desc">{{ t("settings.fontDesc") }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.fontFamily" @change="settingsStore.save()">
+              <el-select
+                v-model="settingsStore.settings.terminal.fontFamily"
+                @change="settingsStore.save()"
+              >
                 <el-option
                   v-for="f in fontOptions"
                   :key="f.value"
@@ -227,15 +298,14 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.fontSize') }}</div>
-              <div class="setting-desc">{{ t('settings.fontSizeDesc') }}</div>
+              <div class="setting-title">{{ t("settings.fontSize") }}</div>
+              <div class="setting-desc">{{ t("settings.fontSizeDesc") }}</div>
             </div>
             <div class="setting-control">
               <el-input-number
                 v-model="settingsStore.settings.terminal.fontSize"
                 :min="8"
                 :max="32"
-               
                 @change="settingsStore.save()"
               />
             </div>
@@ -243,11 +313,18 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.defaultLocalShell') }}</div>
-              <div class="setting-desc">{{ t('settings.defaultLocalShellDesc') }}</div>
+              <div class="setting-title">
+                {{ t("settings.defaultLocalShell") }}
+              </div>
+              <div class="setting-desc">
+                {{ t("settings.defaultLocalShellDesc") }}
+              </div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.defaultLocalShell" @change="settingsStore.save()">
+              <el-select
+                v-model="settingsStore.settings.defaultLocalShell"
+                @change="settingsStore.save()"
+              >
                 <el-option
                   v-for="sh in settingsStore.availableShells"
                   :key="sh"
@@ -260,11 +337,18 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.selectionAction') }}</div>
-              <div class="setting-desc">{{ t('settings.selectionActionDesc') }}</div>
+              <div class="setting-title">
+                {{ t("settings.selectionAction") }}
+              </div>
+              <div class="setting-desc">
+                {{ t("settings.selectionActionDesc") }}
+              </div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.selectionAction" @change="settingsStore.save()">
+              <el-select
+                v-model="settingsStore.settings.terminal.selectionAction"
+                @change="settingsStore.save()"
+              >
                 <el-option :label="t('settings.selectionNone')" value="none" />
                 <el-option :label="t('settings.selectionCopy')" value="copy" />
               </el-select>
@@ -273,34 +357,51 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.rightClick') }}</div>
-              <div class="setting-desc">{{ t('settings.rightClickDesc') }}</div>
+              <div class="setting-title">{{ t("settings.rightClick") }}</div>
+              <div class="setting-desc">{{ t("settings.rightClickDesc") }}</div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.rightClickAction" @change="settingsStore.save()">
+              <el-select
+                v-model="settingsStore.settings.terminal.rightClickAction"
+                @change="settingsStore.save()"
+              >
                 <el-option :label="t('settings.rightClickMenu')" value="menu" />
-                <el-option :label="t('settings.rightClickPaste')" value="paste" />
+                <el-option
+                  :label="t('settings.rightClickPaste')"
+                  value="paste"
+                />
               </el-select>
             </div>
           </div>
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.middleClick') }}</div>
-              <div class="setting-desc">{{ t('settings.middleClickDesc') }}</div>
+              <div class="setting-title">{{ t("settings.middleClick") }}</div>
+              <div class="setting-desc">
+                {{ t("settings.middleClickDesc") }}
+              </div>
             </div>
             <div class="setting-control">
-              <el-select v-model="settingsStore.settings.terminal.middleClickAction" @change="settingsStore.save()">
-                <el-option :label="t('settings.middleClickNone')" value="none" />
-                <el-option :label="t('settings.middleClickPaste')" value="paste" />
+              <el-select
+                v-model="settingsStore.settings.terminal.middleClickAction"
+                @change="settingsStore.save()"
+              >
+                <el-option
+                  :label="t('settings.middleClickNone')"
+                  value="none"
+                />
+                <el-option
+                  :label="t('settings.middleClickPaste')"
+                  value="paste"
+                />
               </el-select>
             </div>
           </div>
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.maxHistory') }}</div>
-              <div class="setting-desc">{{ t('settings.maxHistoryDesc') }}</div>
+              <div class="setting-title">{{ t("settings.maxHistory") }}</div>
+              <div class="setting-desc">{{ t("settings.maxHistoryDesc") }}</div>
             </div>
             <div class="setting-control">
               <el-input-number
@@ -308,7 +409,6 @@
                 :min="100"
                 :max="50000"
                 :step="100"
-               
                 @change="settingsStore.save()"
               />
             </div>
@@ -316,49 +416,69 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.smartCompletion') }}</div>
-              <div class="setting-desc">{{ t('settings.smartCompletionDesc') }}</div>
+              <div class="setting-title">
+                {{ t("settings.smartCompletion") }}
+              </div>
+              <div class="setting-desc">
+                {{ t("settings.smartCompletionDesc") }}
+              </div>
             </div>
             <div class="setting-control">
-              <el-switch v-model="settingsStore.settings.terminal.smartCompletion" @change="settingsStore.save()" />
+              <el-switch
+                v-model="settingsStore.settings.terminal.smartCompletion"
+                @change="settingsStore.save()"
+              />
             </div>
           </div>
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.highlight') }}</div>
-              <div class="setting-desc">{{ t('settings.highlightDesc') }}</div>
+              <div class="setting-title">{{ t("settings.highlight") }}</div>
+              <div class="setting-desc">{{ t("settings.highlightDesc") }}</div>
             </div>
             <div class="setting-control">
-              <el-switch :model-value="settingsStore.settings.terminal.highlightEnabled ?? true" @update:model-value="(v: boolean) => { settingsStore.settings.terminal.highlightEnabled = v; settingsStore.save() }" />
+              <el-switch
+                :model-value="
+                  settingsStore.settings.terminal.highlightEnabled ?? true
+                "
+                @update:model-value="
+                  (v: boolean) => {
+                    settingsStore.settings.terminal.highlightEnabled = v;
+                    settingsStore.save();
+                  }
+                "
+              />
             </div>
           </div>
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.cursorBlink') }}</div>
-              <div class="setting-desc">{{ t('settings.cursorBlinkDesc') }}</div>
+              <div class="setting-title">{{ t("settings.cursorBlink") }}</div>
+              <div class="setting-desc">
+                {{ t("settings.cursorBlinkDesc") }}
+              </div>
             </div>
             <div class="setting-control">
-              <el-switch :model-value="settingsStore.settings.terminal.cursorBlink ?? true" @update:model-value="(v: boolean) => { settingsStore.settings.terminal.cursorBlink = v; settingsStore.save() }" />
+              <el-switch
+                :model-value="
+                  settingsStore.settings.terminal.cursorBlink ?? true
+                "
+                @update:model-value="
+                  (v: boolean) => {
+                    settingsStore.settings.terminal.cursorBlink = v;
+                    settingsStore.save();
+                  }
+                "
+              />
             </div>
           </div>
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.swallowWheelInAltScreen') }}</div>
-              <div class="setting-desc">{{ t('settings.swallowWheelInAltScreenDesc') }}</div>
-            </div>
-            <div class="setting-control">
-              <el-switch :model-value="settingsStore.settings.terminal.swallowWheelInAltScreen ?? true"
-                @update:model-value="(v: boolean) => { settingsStore.settings.terminal.swallowWheelInAltScreen = v; settingsStore.save() }" />
-            </div>
-          </div>
-
-          <div class="setting-card">
-            <div class="setting-info">
-              <div class="setting-title">{{ t('settings.sessionLogDir') }}</div>
-              <div class="setting-desc">{{ t('settings.sessionLogDirDesc') }}</div>
+              <div class="setting-title">{{ t("settings.sessionLogDir") }}</div>
+              <div class="setting-desc">
+                {{ t("settings.sessionLogDirDesc") }}
+              </div>
             </div>
             <div class="setting-control setting-control-wide">
               <el-input
@@ -367,40 +487,44 @@
                 @change="settingsStore.save()"
                 clearable
               />
-              <el-button @click="pickLogDir">{{ t('settings.browse') }}</el-button>
+              <el-button @click="pickLogDir">{{
+                t("settings.browse")
+              }}</el-button>
             </div>
           </div>
-
         </div>
       </div>
 
       <!-- Skills & Commands -->
-      <div v-if="settingsStore.activeCategory === 'skills'" class="settings-section">
-        <h2 class="section-title">{{ t('settings.skills') }}</h2>
-        <p class="section-desc">{{ t('settings.skillsDesc') }}</p>
+      <div
+        v-if="settingsStore.activeCategory === 'skills'"
+        class="settings-section"
+      >
+        <h2 class="section-title">{{ t("settings.skills") }}</h2>
+        <p class="section-desc">{{ t("settings.skillsDesc") }}</p>
         <SkillsManager />
-        <h2 class="section-title" style="margin-top: 28px">{{ t('settings.commands') }}</h2>
-        <p class="section-desc">{{ t('settings.commandsDesc') }}</p>
+        <h2 class="section-title" style="margin-top: 28px">
+          {{ t("settings.commands") }}
+        </h2>
+        <p class="section-desc">{{ t("settings.commandsDesc") }}</p>
         <CommandsManager />
       </div>
 
-      <!-- Diagnostics -->
-      <div v-if="settingsStore.activeCategory === 'diagnostics'" class="settings-section">
-        <DiagnosticsTab />
-      </div>
-
       <!-- Sync settings -->
-      <div v-if="settingsStore.activeCategory === 'sync'" class="settings-section sync-settings">
-        <h2 class="section-title">{{ t('settings.sync') }}</h2>
-        <p class="section-desc">{{ t('settings.syncDesc') }}</p>
+      <div
+        v-if="settingsStore.activeCategory === 'sync'"
+        class="settings-section sync-settings"
+      >
+        <h2 class="section-title">{{ t("settings.sync") }}</h2>
+        <p class="section-desc">{{ t("settings.syncDesc") }}</p>
 
         <!-- Empty state: no repo configured -->
         <div v-if="!syncStore.config.repoUrl" class="sync-card">
-          <div class="sync-card-header">{{ t('settings.syncRepoCard') }}</div>
+          <div class="sync-card-header">{{ t("settings.syncRepoCard") }}</div>
           <div class="sync-card-body empty-state">
-            <p class="empty-text">{{ t('settings.syncEmptyDesc') }}</p>
+            <p class="empty-text">{{ t("settings.syncEmptyDesc") }}</p>
             <el-button type="primary" @click="syncStore.showAddRepo = true">
-              {{ t('settings.syncAddRepo') }}
+              {{ t("settings.syncAddRepo") }}
             </el-button>
           </div>
         </div>
@@ -410,41 +534,78 @@
           <!-- Repo config card -->
           <div class="sync-card">
             <div class="sync-card-header">
-              <span>{{ t('settings.syncRepoCard') }}</span>
-              <el-button v-if="!syncStore.config.local" text @click="openEditRepo">{{ t('settings.syncEdit') }}</el-button>
+              <span>{{ t("settings.syncRepoCard") }}</span>
+              <el-button
+                v-if="!syncStore.config.local"
+                text
+                @click="openEditRepo"
+                >{{ t("settings.syncEdit") }}</el-button
+              >
             </div>
             <div class="sync-card-body">
               <div class="repo-info">
                 <div class="repo-info-row">
-                  <span class="repo-label">{{ syncStore.config.local ? t('settings.syncLocalPath') : t('settings.syncRepoUrl') }}</span>
+                  <span class="repo-label">{{
+                    syncStore.config.local
+                      ? t("settings.syncLocalPath")
+                      : t("settings.syncRepoUrl")
+                  }}</span>
                   <span class="repo-value">{{ syncStore.config.repoUrl }}</span>
                 </div>
                 <div v-if="!syncStore.config.local" class="repo-info-row">
-                  <span class="repo-label">{{ t('settings.syncUsername') }}</span>
-                  <span class="repo-value">{{ syncStore.config.username }}</span>
+                  <span class="repo-label">{{
+                    t("settings.syncUsername")
+                  }}</span>
+                  <span class="repo-value">{{
+                    syncStore.config.username
+                  }}</span>
                 </div>
               </div>
               <div class="repo-actions">
-                <el-button @click="syncStore.showChangePassword = true">{{ t('settings.syncChangePassword') }}</el-button>
-                <el-button @click="syncStore.showDeleteRepo = true">{{ t('settings.syncDeleteRepo') }}</el-button>
+                <el-button @click="syncStore.showChangePassword = true">{{
+                  t("settings.syncChangePassword")
+                }}</el-button>
+                <el-button @click="syncStore.showDeleteRepo = true">{{
+                  t("settings.syncDeleteRepo")
+                }}</el-button>
               </div>
             </div>
           </div>
 
           <!-- Sync card -->
           <div class="sync-card">
-            <div class="sync-card-header">{{ t('settings.syncSyncCard') }}</div>
+            <div class="sync-card-header">{{ t("settings.syncSyncCard") }}</div>
             <div class="sync-card-body">
               <div class="sync-status">
                 <div class="sync-status-row">
-                  <span class="sync-label">{{ t('settings.syncLastSync') }}</span>
-                  <span class="sync-value">{{ syncStore.formatSyncTime() }}</span>
-                  <span v-if="syncStore.config.lastSyncStatus === 'success'" class="sync-tag success">{{ t('settings.syncStatusSuccess') }}</span>
-                  <span v-else-if="syncStore.config.lastSyncStatus === 'failed'" class="sync-tag failed">{{ t('settings.syncStatusFailed') }}</span>
+                  <span class="sync-label">{{
+                    t("settings.syncLastSync")
+                  }}</span>
+                  <span class="sync-value">{{
+                    syncStore.formatSyncTime()
+                  }}</span>
+                  <span
+                    v-if="syncStore.config.lastSyncStatus === 'success'"
+                    class="sync-tag success"
+                    >{{ t("settings.syncStatusSuccess") }}</span
+                  >
+                  <span
+                    v-else-if="syncStore.config.lastSyncStatus === 'failed'"
+                    class="sync-tag failed"
+                    >{{ t("settings.syncStatusFailed") }}</span
+                  >
                 </div>
-                <div v-if="syncStore.config.lastSyncStatus === 'failed' && syncStore.config.lastSyncError" class="sync-status-row sync-error">
-                  <span class="sync-label">{{ t('settings.syncReason') }}</span>
-                  <span class="sync-value error-text">{{ syncStore.config.lastSyncError }}</span>
+                <div
+                  v-if="
+                    syncStore.config.lastSyncStatus === 'failed' &&
+                    syncStore.config.lastSyncError
+                  "
+                  class="sync-status-row sync-error"
+                >
+                  <span class="sync-label">{{ t("settings.syncReason") }}</span>
+                  <span class="sync-value error-text">{{
+                    syncStore.config.lastSyncError
+                  }}</span>
                 </div>
               </div>
               <div class="sync-actions-row">
@@ -453,13 +614,20 @@
                   :loading="syncStore.syncing"
                   @click="handleSyncNow"
                 >
-                  {{ t('settings.syncNow') }}
+                  {{ t("settings.syncNow") }}
                 </el-button>
               </div>
               <div class="sync-auto-row">
-                <span class="sync-auto-label">{{ t('settings.syncAuto') }}</span>
-                <span class="sync-auto-desc">{{ t('settings.syncAutoDesc') }}</span>
-                <el-switch v-model="syncStore.config.autoSync" @change="handleAutoSyncToggle" />
+                <span class="sync-auto-label">{{
+                  t("settings.syncAuto")
+                }}</span>
+                <span class="sync-auto-desc">{{
+                  t("settings.syncAutoDesc")
+                }}</span>
+                <el-switch
+                  v-model="syncStore.config.autoSync"
+                  @change="handleAutoSyncToggle"
+                />
               </div>
             </div>
           </div>
@@ -467,99 +635,153 @@
       </div>
 
       <!-- 关于 -->
-      <div v-if="settingsStore.activeCategory === 'about'" class="settings-section">
-        <h2 class="section-title">{{ t('settings.about') }}</h2>
+      <div
+        v-if="settingsStore.activeCategory === 'about'"
+        class="settings-section"
+      >
+        <h2 class="section-title">{{ t("settings.about") }}</h2>
         <div class="about-content">
           <div class="about-appname">uniTerm</div>
-          <p class="about-desc">{{ t('settings.aboutDesc') }}</p>
+          <p class="about-desc">{{ t("settings.aboutDesc") }}</p>
           <div class="about-version">
-            {{ t('settings.version') }}: {{ updateCheck.updateInfo?.current || '...' }}
+            {{ t("settings.version") }}:
+            {{ updateCheck.updateInfo?.current || "..." }}
           </div>
           <div class="about-links">
-            <a href="#" class="about-link" @click.prevent="BrowserOpenURL('https://uniterm.net')">
+            <a
+              href="#"
+              class="about-link"
+              @click.prevent="BrowserOpenURL('https://uniterm.net')"
+            >
               <Globe :size="14" class="about-link-icon" />
-              {{ t('settings.homepage') }}
+              {{ t("settings.homepage") }}
             </a>
-            <a href="#" class="about-link" @click.prevent="BrowserOpenURL(locale === 'zh-CN' ? 'https://uniterm.net/guide/zh/introduction' : 'https://uniterm.net/guide/en/introduction')">
+            <a
+              href="#"
+              class="about-link"
+              @click.prevent="
+                BrowserOpenURL(
+                  locale === 'zh-CN'
+                    ? 'https://uniterm.net/guide/zh/introduction'
+                    : 'https://uniterm.net/guide/en/introduction',
+                )
+              "
+            >
               <BookOpen :size="14" class="about-link-icon" />
-              {{ t('settings.userManual') }}
+              {{ t("settings.userManual") }}
             </a>
-            <a href="#" class="about-link" @click.prevent="BrowserOpenURL('https://github.com/ys-ll/uniterm')">
-              <svg class="about-link-icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+            <a
+              href="#"
+              class="about-link"
+              @click.prevent="
+                BrowserOpenURL('https://github.com/ys-ll/uniterm')
+              "
+            >
+              <svg
+                class="about-link-icon"
+                viewBox="0 0 16 16"
+                width="14"
+                height="14"
+                fill="currentColor"
+              >
+                <path
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                />
+              </svg>
               GitHub
             </a>
-            <a href="#" class="about-link" @click.prevent="BrowserOpenURL('https://gitee.com/ys-l/uniterm')">
-              <svg class="about-link-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M11.984 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.016 0zm6.09 5.333c.328 0 .593.266.592.593v1.482a.594.594 0 0 1-.593.592H9.777c-.982 0-1.778.796-1.778 1.778v5.63c0 .327.266.592.593.592h5.63c.982 0 1.778-.796 1.778-1.778v-.296a.593.593 0 0 0-.592-.593h-4.15a.592.592 0 0 1-.592-.592v-1.482a.593.593 0 0 1 .593-.592h6.815c.327 0 .593.265.593.592v3.408a4 4 0 0 1-4 4H5.926a.593.593 0 0 1-.593-.593V9.778a4.444 4.444 0 0 1 4.445-4.444h8.296z"/></svg>
+            <a
+              href="#"
+              class="about-link"
+              @click.prevent="BrowserOpenURL('https://gitee.com/ys-l/uniterm')"
+            >
+              <svg
+                class="about-link-icon"
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="currentColor"
+              >
+                <path
+                  d="M11.984 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.016 0zm6.09 5.333c.328 0 .593.266.592.593v1.482a.594.594 0 0 1-.593.592H9.777c-.982 0-1.778.796-1.778 1.778v5.63c0 .327.266.592.593.592h5.63c.982 0 1.778-.796 1.778-1.778v-.296a.593.593 0 0 0-.592-.593h-4.15a.592.592 0 0 1-.592-.592v-1.482a.593.593 0 0 1 .593-.592h6.815c.327 0 .593.265.593.592v3.408a4 4 0 0 1-4 4H5.926a.593.593 0 0 1-.593-.593V9.778a4.444 4.444 0 0 1 4.445-4.444h8.296z"
+                />
+              </svg>
               Gitee
             </a>
           </div>
           <div class="about-update-actions">
             <el-button
-             
               :loading="updateCheck.checking"
               @click="handleCheckUpdate"
             >
-              {{ updateCheck.checking ? t('settings.checking') : t('settings.checkUpdate') }}
+              {{
+                updateCheck.checking
+                  ? t("settings.checking")
+                  : t("settings.checkUpdate")
+              }}
             </el-button>
           </div>
           <div class="about-auto-check">
-            <el-checkbox
-              v-model="updateCheck.autoCheck"
-            >
-              {{ t('settings.autoCheckUpdate') }}
+            <el-checkbox v-model="updateCheck.autoCheck">
+              {{ t("settings.autoCheckUpdate") }}
             </el-checkbox>
           </div>
         </div>
       </div>
 
       <!-- 快捷键设置 -->
-      <div v-if="settingsStore.activeCategory === 'keyboard'" class="settings-section">
-        <h2 class="section-title">{{ t('shortcut.title') }}</h2>
+      <div
+        v-if="settingsStore.activeCategory === 'keyboard'"
+        class="settings-section"
+      >
+        <h2 class="section-title">{{ t("shortcut.title") }}</h2>
         <table class="kb-table">
           <thead>
             <tr>
-              <th>{{ t('shortcut.colFunction') }}</th>
-              <th>{{ t('shortcut.colBinding') }}</th>
-              <th style="width:190px;">{{ t('shortcut.colActions') }}</th>
+              <th>{{ t("shortcut.colFunction") }}</th>
+              <th>{{ t("shortcut.colBinding") }}</th>
+              <th style="width: 190px">{{ t("shortcut.colActions") }}</th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="action in (Object.keys(SHORTCUT_LABELS) as ShortcutAction[])"
+              v-for="action in Object.keys(SHORTCUT_LABELS) as ShortcutAction[]"
               :key="action"
             >
               <td>{{ t(SHORTCUT_LABELS[action] || action) }}</td>
-              <td><kbd class="kb-key">{{ bindingDisplay(action) }}</kbd></td>
+              <td>
+                <kbd class="kb-key">{{ bindingDisplay(action) }}</kbd>
+              </td>
               <td class="kb-actions">
                 <el-button
-                 
                   :type="rebindingAction === action ? 'warning' : 'default'"
                   @click="startRebind(action)"
                 >
-                  {{ rebindingAction === action ? t('shortcut.pressKey') : t('shortcut.edit') }}
+                  {{
+                    rebindingAction === action
+                      ? t("shortcut.pressKey")
+                      : t("shortcut.edit")
+                  }}
                 </el-button>
                 <el-button
                   v-if="rebindingAction === action"
-                 
                   @click="stopRebind()"
                 >
-                  {{ t('shortcut.cancel') }}
+                  {{ t("shortcut.cancel") }}
                 </el-button>
                 <el-button
                   v-if="rebindingAction === action"
-                 
                   type="danger"
                   @click="clearBinding(action)"
                 >
-                  {{ t('shortcut.clear') }}
+                  {{ t("shortcut.clear") }}
                 </el-button>
                 <el-button
                   v-if="!isDefaultBinding(action) && rebindingAction !== action"
-                 
                   type="danger"
                   @click="resetBinding(action)"
                 >
-                  {{ t('shortcut.reset') }}
+                  {{ t("shortcut.reset") }}
                 </el-button>
               </td>
             </tr>
@@ -568,14 +790,17 @@
       </div>
 
       <!-- AI助理设置 -->
-      <div v-if="settingsStore.activeCategory === 'ai'" class="settings-section">
-        <h2 class="section-title">{{ t('settings.ai') }}</h2>
+      <div
+        v-if="settingsStore.activeCategory === 'ai'"
+        class="settings-section"
+      >
+        <h2 class="section-title">{{ t("settings.ai") }}</h2>
 
         <div class="settings-group">
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.maxTurns') }}</div>
-              <div class="setting-desc">{{ t('settings.maxTurnsDesc') }}</div>
+              <div class="setting-title">{{ t("settings.maxTurns") }}</div>
+              <div class="setting-desc">{{ t("settings.maxTurnsDesc") }}</div>
             </div>
             <div class="setting-control">
               <el-input-number
@@ -589,11 +814,13 @@
 
           <div class="setting-card">
             <div class="setting-info">
-              <div class="setting-title">{{ t('settings.modelList') }}</div>
-              <div class="setting-desc">{{ t('settings.modelListDesc') }}</div>
+              <div class="setting-title">{{ t("settings.modelList") }}</div>
+              <div class="setting-desc">{{ t("settings.modelListDesc") }}</div>
             </div>
             <div class="setting-control">
-              <el-button @click="openNewModelForm"><Plus :size="14" /> {{ t('settings.addModel') }}</el-button>
+              <el-button @click="openNewModelForm"
+                ><Plus :size="14" /> {{ t("settings.addModel") }}</el-button
+              >
             </div>
           </div>
 
@@ -601,7 +828,9 @@
             v-for="model in settingsStore.settings.ai.models"
             :key="model.id"
             class="model-card"
-            :class="{ active: model.id === settingsStore.settings.ai.activeModelId }"
+            :class="{
+              active: model.id === settingsStore.settings.ai.activeModelId,
+            }"
           >
             <div class="model-main">
               <el-radio
@@ -611,13 +840,19 @@
               >
                 <span class="model-name">{{ model.name }}</span>
               </el-radio>
-              <span class="model-detail">{{ model.model }} @ {{ model.baseURL }}</span>
+              <span class="model-detail"
+                >{{ model.model }} @ {{ model.baseURL }}</span
+              >
             </div>
             <div class="model-actions">
               <el-button link @click="editModel(model)">
                 <el-icon><Pencil :size="14" /></el-icon>
               </el-button>
-              <el-button link type="danger" @click="settingsStore.removeModel(model.id)">
+              <el-button
+                link
+                type="danger"
+                @click="settingsStore.removeModel(model.id)"
+              >
                 <el-icon><Trash2 :size="14" /></el-icon>
               </el-button>
             </div>
@@ -627,7 +862,12 @@
     </div>
 
     <!-- Model Form Dialog -->
-    <el-dialog append-to-body v-model="showModelForm" :title="editingModel ? t('settings.editModel') : t('settings.newModel')" width="400px">
+    <el-dialog
+      append-to-body
+      v-model="showModelForm"
+      :title="editingModel ? t('settings.editModel') : t('settings.newModel')"
+      width="400px"
+    >
       <el-form label-width="80px">
         <el-form-item :label="t('settings.modelName')">
           <el-input v-model="modelForm.name" />
@@ -636,21 +876,26 @@
           <el-select v-model="modelForm.protocol" style="width: 100%">
             <el-option label="Anthropic Messages API" value="anthropic" />
             <el-option label="OpenAI Chat Completions API" value="openai" />
-            <el-option label="OpenAI-compatible (DeepSeek / Qwen / Kimi / OneAPI / Ollama / …)" value="openai-compatible" />
             <el-option label="OpenAI Responses API" value="responses" />
-            <el-option label="Zhipu GLM (native path)" value="glm-native" />
-            <el-option label="Custom (full URL)" value="custom" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('settings.modelBaseURL')">
-          <el-input v-model="modelForm.baseURL" :placeholder="placeholderFor(modelForm.protocol)" />
-          <div v-if="detectedProtocol && detectedProtocol !== modelForm.protocol" class="protocol-hint">
-            <span>{{ t('settings.detectedProtocolHint', { protocol: PROTOCOL_LABEL[detectedProtocol] }) }}</span>
-            <el-button link type="primary" @click="applyDetectedProtocol">{{ t('settings.apply') }}</el-button>
-          </div>
+          <el-input
+            v-model="modelForm.baseURL"
+            :placeholder="
+              modelForm.protocol === 'anthropic'
+                ? 'https://api.anthropic.com'
+                : 'https://api.openai.com/v1'
+            "
+          />
         </el-form-item>
         <el-form-item :label="t('settings.modelUserAgent')">
-          <el-select v-model="modelForm.userAgent" style="width: 100%" filterable allow-create>
+          <el-select
+            v-model="modelForm.userAgent"
+            style="width: 100%"
+            filterable
+            allow-create
+          >
             <el-option
               v-for="ua in USER_AGENT_PRESETS"
               :key="ua.value"
@@ -681,23 +926,42 @@
               />
             </el-select>
             <el-button :loading="modelFetching" @click="fetchModelList">
-              {{ t('settings.fetchModels') }}
+              {{ t("settings.fetchModels") }}
             </el-button>
           </div>
         </el-form-item>
         <el-form-item>
           <el-button :loading="testingConnection" @click="testConnection">
-            {{ t('settings.testConnection') }}
+            {{ t("settings.testConnection") }}
           </el-button>
-          <span v-if="testResult != null" :class="testResult ? 'test-ok' : 'test-fail'" style="margin-left: 8px; font-size: 13px;">
-            {{ testResult ? t('settings.testSuccess') : t('settings.testFailed') }}
+          <span
+            v-if="testResult != null"
+            :class="testResult ? 'test-ok' : 'test-fail'"
+            style="margin-left: 8px; font-size: 13px"
+          >
+            {{
+              testResult ? t("settings.testSuccess") : t("settings.testFailed")
+            }}
           </span>
-          <span v-if="testError" style="margin-left: 8px; font-size: 12px; color: var(--error); word-break: break-all;">{{ testError }}</span>
+          <span
+            v-if="testError"
+            style="
+              margin-left: 8px;
+              font-size: 12px;
+              color: var(--error);
+              word-break: break-all;
+            "
+            >{{ testError }}</span
+          >
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showModelForm = false">{{ t('settings.cancel') }}</el-button>
-        <el-button type="primary" @click="saveModel">{{ t('settings.save') }}</el-button>
+        <el-button @click="showModelForm = false">{{
+          t("settings.cancel")
+        }}</el-button>
+        <el-button type="primary" @click="saveModel">{{
+          t("settings.save")
+        }}</el-button>
       </template>
     </el-dialog>
 
@@ -706,215 +970,273 @@
     <EditRepoDialog />
     <ChangePasswordDialog />
     <DeleteRepoDialog />
-    <CustomThemeEditor v-model="themeEditorVisible" :source-theme-id="themeEditorSourceId" />
+    <CustomThemeEditor
+      v-model="themeEditorVisible"
+      :source-theme-id="themeEditorSourceId"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted } from 'vue'
-import { Settings, Monitor, MessageCircleMore, Info, RefreshCw, Pencil, Trash2, Globe, Keyboard, Plus, BookOpen, Wrench, Activity } from '@lucide/vue'
-import { msg } from '../services/message'
-import { FetchModels, ChatCompletion, GetPlatform, GetSystemFonts, GetDefaultSessionLogDir, OpenDirectoryDialog, OpenFileDialogFiltered, SetBackgroundImage, ClearBackgroundImage, GetBackgroundImage } from '../../wailsjs/go/main/App'
-import { useSettingsStore } from '../stores/settingsStore'
-import { useSyncStore } from '../stores/syncStore'
-import { useLocalStateStore } from '../stores/localStateStore'
-import { useUpdateCheck } from '../composables/useUpdateCheck'
-import { useI18n, locale } from '../i18n'
-import { BrowserOpenURL } from '../../wailsjs/runtime'
-import { Quit } from '../../wailsjs/runtime'
-import { ElMessageBox } from 'element-plus'
-import { FONT_OPTIONS, LANGUAGE_OPTIONS, DEFAULT_KEYBOARD, SHORTCUT_LABELS, USER_AGENT_PRESETS } from '../types/settings'
-import { formatFontFamily } from '../utils/formatFontFamily'
-import { detectProtocol, PROTOCOL_LABEL } from '../utils/providerDetect'
-import SkillsManager from './SkillsManager.vue'
-import CommandsManager from './CommandsManager.vue'
-import DiagnosticsTab from './DiagnosticsTab.vue'
-import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings } from '../types/settings'
-import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
-import { uninstallGlobalListener, installGlobalListener } from '../composables/useKeyboardShortcuts'
-import AddRepoDialog from './AddRepoDialog.vue'
-import EditRepoDialog from './EditRepoDialog.vue'
-import ChangePasswordDialog from './ChangePasswordDialog.vue'
-import DeleteRepoDialog from './DeleteRepoDialog.vue'
-import CustomThemeEditor from './CustomThemeEditor.vue'
+import { ref, reactive, watch, computed, onMounted } from "vue";
+import {
+  Settings,
+  Monitor,
+  MessageCircleMore,
+  Info,
+  RefreshCw,
+  Pencil,
+  Trash2,
+  Globe,
+  Keyboard,
+  Plus,
+  BookOpen,
+  Wrench,
+} from "@lucide/vue";
+import { msg } from "../services/message";
+import {
+  FetchModels,
+  ChatCompletion,
+  GetPlatform,
+  GetSystemFonts,
+  GetDefaultSessionLogDir,
+  OpenDirectoryDialog,
+  OpenFileDialogFiltered,
+  SetBackgroundImage,
+  ClearBackgroundImage,
+  GetBackgroundImage,
+} from "../../wailsjs/go/main/App";
+import { useSettingsStore } from "../stores/settingsStore";
+import { useSyncStore } from "../stores/syncStore";
+import { useLocalStateStore } from "../stores/localStateStore";
+import { useUpdateCheck } from "../composables/useUpdateCheck";
+import { useI18n, locale } from "../i18n";
+import { BrowserOpenURL } from "../../wailsjs/runtime";
+import { Quit } from "../../wailsjs/runtime";
+import { ElMessageBox } from "element-plus";
+import {
+  FONT_OPTIONS,
+  LANGUAGE_OPTIONS,
+  DEFAULT_KEYBOARD,
+  SHORTCUT_LABELS,
+  USER_AGENT_PRESETS,
+} from "../types/settings";
+import { formatFontFamily } from "../utils/formatFontFamily";
+import SkillsManager from "./SkillsManager.vue";
+import CommandsManager from "./CommandsManager.vue";
+import type {
+  AIModelConfig,
+  ShortcutAction,
+  KeyBinding,
+  KeyboardSettings,
+} from "../types/settings";
+import { useTerminalThemeOptions } from "../composables/useTerminalThemeOptions";
+import {
+  uninstallGlobalListener,
+  installGlobalListener,
+} from "../composables/useKeyboardShortcuts";
+import AddRepoDialog from "./AddRepoDialog.vue";
+import EditRepoDialog from "./EditRepoDialog.vue";
+import ChangePasswordDialog from "./ChangePasswordDialog.vue";
+import DeleteRepoDialog from "./DeleteRepoDialog.vue";
+import CustomThemeEditor from "./CustomThemeEditor.vue";
 
-const settingsStore = useSettingsStore()
-const syncStore = useSyncStore()
-const updateCheck = useUpdateCheck()
-const localStateStore = useLocalStateStore()
-const { t } = useI18n()
-const platform = ref('')
-const isMac = computed(() => platform.value === 'darwin')
+const settingsStore = useSettingsStore();
+const syncStore = useSyncStore();
+const updateCheck = useUpdateCheck();
+const localStateStore = useLocalStateStore();
+const { t } = useI18n();
+const platform = ref("");
+const isMac = computed(() => platform.value === "darwin");
 
 function openEditRepo() {
-  syncStore.showEditRepo = true
+  syncStore.showEditRepo = true;
 }
 
 async function handleSyncNow() {
-  const result = await syncStore.doSync()
+  const result = await syncStore.doSync();
   if (!result) {
-    msg.error(syncStore.lastResult || t('settings.syncFailed'))
-    return
+    msg.error(syncStore.lastResult || t("settings.syncFailed"));
+    return;
   }
   if (result.direction === 3) {
-    return  // conflict — handled by SyncConflictDialog
+    return; // conflict — handled by SyncConflictDialog
   }
-  msg.success(result.message || t('settings.syncSuccess'))
+  msg.success(result.message || t("settings.syncSuccess"));
 }
 
 async function handleAutoSyncToggle() {
   try {
-    await syncStore.saveConfig()
+    await syncStore.saveConfig();
   } catch (e) {
-    console.error('Failed to save auto sync toggle:', e)
+    console.error("Failed to save auto sync toggle:", e);
   }
 }
 
 async function handleCheckUpdate() {
-  await updateCheck.checkForUpdate(true)
+  await updateCheck.checkForUpdate(true);
 }
 
-syncStore.loadConfig()
+syncStore.loadConfig();
 
 // ── System fonts ──
-const systemFonts = ref<{ label: string; value: string }[]>([])
+const systemFonts = ref<{ label: string; value: string }[]>([]);
 const fontOptions = computed(() => {
   if (systemFonts.value.length > 0) {
-    return systemFonts.value
+    return systemFonts.value;
   }
-  return FONT_OPTIONS
-})
+  return FONT_OPTIONS;
+});
 
-const { terminalThemeGroups, isCustomTheme } = useTerminalThemeOptions()
+const { terminalThemeGroups, isCustomTheme } = useTerminalThemeOptions();
 
-const themeEditorVisible = ref(false)
-const themeEditorSourceId = ref<string | undefined>(undefined)
+const themeEditorVisible = ref(false);
+const themeEditorSourceId = ref<string | undefined>(undefined);
 function openThemeEditor(sourceThemeId?: string) {
-  themeEditorSourceId.value = sourceThemeId
-  themeEditorVisible.value = true
+  themeEditorSourceId.value = sourceThemeId;
+  themeEditorVisible.value = true;
 }
 
 onMounted(async () => {
   try {
-    platform.value = await GetPlatform()
+    platform.value = await GetPlatform();
   } catch {
-    platform.value = ''
+    platform.value = "";
   }
   try {
-    const fonts = await GetSystemFonts()
+    const fonts = await GetSystemFonts();
     if (fonts && fonts.length > 0) {
-      systemFonts.value = fonts.map(f => ({ label: f, value: formatFontFamily(f) }))
+      systemFonts.value = fonts.map((f) => ({
+        label: f,
+        value: formatFontFamily(f),
+      }));
     }
   } catch {
     // Fall back to FONT_OPTIONS
   }
   try {
-    defaultLogDir.value = await GetDefaultSessionLogDir()
+    defaultLogDir.value = await GetDefaultSessionLogDir();
   } catch {
-    defaultLogDir.value = ''
+    defaultLogDir.value = "";
   }
   try {
-    await refreshBgPreview()
+    await refreshBgPreview();
   } catch {
     // Ignore preview errors
   }
-})
+});
 
 // Session log directory: shown as placeholder when the setting is
 // empty. Value comes from backend on mount and reflects the OS
 // default plus any current override (so if the user cleared their
 // override, the placeholder shows the fallback path).
-const defaultLogDir = ref('')
+const defaultLogDir = ref("");
 
 async function pickLogDir() {
   try {
-    const chosen = await OpenDirectoryDialog()
+    const chosen = await OpenDirectoryDialog();
     if (chosen) {
-      settingsStore.settings.terminal.sessionLogDir = chosen
-      await settingsStore.save()
+      settingsStore.settings.terminal.sessionLogDir = chosen;
+      await settingsStore.save();
     }
   } catch (e: any) {
-    msg.error(String(e?.message ?? e))
+    msg.error(String(e?.message ?? e));
   }
 }
 
-watch(() => settingsStore.openCategory, (cat) => {
-  if (cat && (cat === 'basic' || cat === 'terminal' || cat === 'ai' || cat === 'sync' || cat === 'about' || cat === 'keyboard' || cat === 'diagnostics')) {
-    settingsStore.activeCategory = cat
-    settingsStore.openCategory = null
-  }
-})
+watch(
+  () => settingsStore.openCategory,
+  (cat) => {
+    if (
+      cat &&
+      (cat === "basic" ||
+        cat === "terminal" ||
+        cat === "ai" ||
+        cat === "sync" ||
+        cat === "about" ||
+        cat === "keyboard")
+    ) {
+      settingsStore.activeCategory = cat;
+      settingsStore.openCategory = null;
+    }
+  },
+);
 
 // ── Keyboard rebinding ──
-const rebindingAction = ref<ShortcutAction | null>(null)
+const rebindingAction = ref<ShortcutAction | null>(null);
 
 function bindingDisplay(action: ShortcutAction): string {
-  const b = settingsStore.settings.keyboard[action]
-  if (!b) return ''
-  const parts: string[] = []
-  if (b.ctrl) parts.push('Ctrl')
-  if (b.meta) parts.push(isMac.value ? 'Cmd' : 'Meta')
-  if (b.shift) parts.push('Shift')
-  if (b.alt) parts.push('Alt')
-  parts.push(b.key)
-  return parts.join('+')
+  const b = settingsStore.settings.keyboard[action];
+  if (!b) return "";
+  const parts: string[] = [];
+  if (b.ctrl) parts.push("Ctrl");
+  if (b.meta) parts.push(isMac.value ? "Cmd" : "Meta");
+  if (b.shift) parts.push("Shift");
+  if (b.alt) parts.push("Alt");
+  parts.push(b.key);
+  return parts.join("+");
 }
 
 function isDefaultBinding(action: ShortcutAction): boolean {
-  const current = settingsStore.settings.keyboard[action]
-  const def = DEFAULT_KEYBOARD[action]
-  if (!current || !def) return true
-  return current.ctrl === def.ctrl && current.shift === def.shift
-    && (current.meta || false) === (def.meta || false)
-    && current.alt === def.alt && current.key === def.key
+  const current = settingsStore.settings.keyboard[action];
+  const def = DEFAULT_KEYBOARD[action];
+  if (!current || !def) return true;
+  return (
+    current.ctrl === def.ctrl &&
+    current.shift === def.shift &&
+    (current.meta || false) === (def.meta || false) &&
+    current.alt === def.alt &&
+    current.key === def.key
+  );
 }
 
 function resetBinding(action: ShortcutAction) {
   settingsStore.settings.keyboard = {
     ...settingsStore.settings.keyboard,
-    [action]: { ...DEFAULT_KEYBOARD[action] }
-  }
-  settingsStore.save()
+    [action]: { ...DEFAULT_KEYBOARD[action] },
+  };
+  settingsStore.save();
 }
 
-let rebindListenerActive = false
+let rebindListenerActive = false;
 
 function startRebind(action: ShortcutAction) {
-  rebindingAction.value = action
-  uninstallGlobalListener()
+  rebindingAction.value = action;
+  uninstallGlobalListener();
   if (!rebindListenerActive) {
-    rebindListenerActive = true
-    document.addEventListener('keydown', onRebindKeydown, true)
-    window.addEventListener('blur', onRebindBlur)
+    rebindListenerActive = true;
+    document.addEventListener("keydown", onRebindKeydown, true);
+    window.addEventListener("blur", onRebindBlur);
   }
 }
 
 function stopRebind() {
   if (rebindListenerActive) {
-    rebindListenerActive = false
-    document.removeEventListener('keydown', onRebindKeydown, true)
-    window.removeEventListener('blur', onRebindBlur)
+    rebindListenerActive = false;
+    document.removeEventListener("keydown", onRebindKeydown, true);
+    window.removeEventListener("blur", onRebindBlur);
   }
-  rebindingAction.value = null
-  installGlobalListener()
+  rebindingAction.value = null;
+  installGlobalListener();
 }
 
 function clearBinding(action: ShortcutAction) {
   settingsStore.settings.keyboard = {
     ...settingsStore.settings.keyboard,
-    [action]: { ctrl: false, meta: false, shift: false, alt: false, key: '' }
-  }
-  settingsStore.save()
-  stopRebind()
+    [action]: { ctrl: false, meta: false, shift: false, alt: false, key: "" },
+  };
+  settingsStore.save();
+  stopRebind();
 }
 
 function onRebindKeydown(e: KeyboardEvent) {
-  if (!rebindingAction.value) return stopRebind()
-  e.preventDefault()
-  e.stopPropagation()
-  const key = e.key
-  if (key === 'Escape') return stopRebind()
-  if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') return
+  if (!rebindingAction.value) return stopRebind();
+  e.preventDefault();
+  e.stopPropagation();
+  const key = e.key;
+  if (key === "Escape") return stopRebind();
+  if (key === "Control" || key === "Shift" || key === "Alt" || key === "Meta")
+    return;
 
   const binding: KeyBinding = {
     ctrl: e.ctrlKey,
@@ -922,269 +1244,259 @@ function onRebindKeydown(e: KeyboardEvent) {
     shift: e.shiftKey,
     alt: e.altKey,
     key: key.toLowerCase(),
-  }
+  };
 
   // Check for conflicts and clear them
-  const conflictAction = findConflict(binding)
-  const kb = { ...settingsStore.settings.keyboard }
-  kb[rebindingAction.value] = binding
+  const conflictAction = findConflict(binding);
+  const kb = { ...settingsStore.settings.keyboard };
+  kb[rebindingAction.value] = binding;
   if (conflictAction) {
-    kb[conflictAction] = { ctrl: false, shift: false, alt: false, key: '' }
+    kb[conflictAction] = { ctrl: false, shift: false, alt: false, key: "" };
   }
-  settingsStore.settings.keyboard = kb as KeyboardSettings
-  settingsStore.save()
-  stopRebind()
+  settingsStore.settings.keyboard = kb as KeyboardSettings;
+  settingsStore.save();
+  stopRebind();
 }
 
 function findConflict(binding: KeyBinding): ShortcutAction | null {
-  const targetKey = bindingKey(binding)
-  const kb = settingsStore.settings.keyboard
-  for (const [action, b] of Object.entries(kb) as [ShortcutAction, KeyBinding][]) {
-    if (action === rebindingAction.value) continue
-    if (!b.key) continue
-    if (bindingKey(b) === targetKey) return action
+  const targetKey = bindingKey(binding);
+  const kb = settingsStore.settings.keyboard;
+  for (const [action, b] of Object.entries(kb) as [
+    ShortcutAction,
+    KeyBinding,
+  ][]) {
+    if (action === rebindingAction.value) continue;
+    if (!b.key) continue;
+    if (bindingKey(b) === targetKey) return action;
   }
-  return null
+  return null;
 }
 
 function bindingKey(binding: KeyBinding): string {
-  return `${binding.ctrl ? 'ctrl+' : ''}${binding.meta ? 'meta+' : ''}${binding.shift ? 'shift+' : ''}${binding.alt ? 'alt+' : ''}${binding.key.toLowerCase()}`
+  return `${binding.ctrl ? "ctrl+" : ""}${binding.meta ? "meta+" : ""}${binding.shift ? "shift+" : ""}${binding.alt ? "alt+" : ""}${binding.key.toLowerCase()}`;
 }
 
 function onRebindBlur() {
-  stopRebind()
+  stopRebind();
 }
 
 const categories = computed(() => {
   // Explicitly read language to ensure reactivity tracking
-  void settingsStore.settings.language
+  void settingsStore.settings.language;
   const cats = [
-    { key: 'basic', label: t('settings.basic'), icon: Settings },
-    { key: 'terminal', label: t('settings.terminal'), icon: Monitor },
-    { key: 'keyboard', label: t('shortcut.title'), icon: Keyboard },
-    { key: 'ai', label: t('settings.ai'), icon: MessageCircleMore },
-    { key: 'skills', label: t('settings.skillsAndCommands'), icon: Wrench },
-    { key: 'diagnostics', label: t('diag.title'), icon: Activity },
-    { key: 'sync', label: t('settings.sync'), icon: RefreshCw },
-    { key: 'about', label: t('settings.about'), icon: Info },
-  ]
-  return cats
-})
+    { key: "basic", label: t("settings.basic"), icon: Settings },
+    { key: "terminal", label: t("settings.terminal"), icon: Monitor },
+    { key: "keyboard", label: t("shortcut.title"), icon: Keyboard },
+    { key: "ai", label: t("settings.ai"), icon: MessageCircleMore },
+    { key: "skills", label: t("settings.skillsAndCommands"), icon: Wrench },
+    { key: "sync", label: t("settings.sync"), icon: RefreshCw },
+    { key: "about", label: t("settings.about"), icon: Info },
+  ];
+  return cats;
+});
 
-const showModelForm = ref(false)
-const modelSuggestions = ref<Array<{ value: string }>>([])
+const showModelForm = ref(false);
+const modelSuggestions = ref<Array<{ value: string }>>([]);
 // Always surface the currently-set model as an option so el-select renders it
 // when editing an existing model (before any fetch) — el-select won't display a
 // bound value that has no matching option, and allow-create only creates
 // options for values typed during the session, not a pre-set v-model.
 const modelSelectOptions = computed(() => {
-  const opts = modelSuggestions.value.slice()
-  const cur = modelForm.model?.trim()
-  if (cur && !opts.some(o => o.value === cur)) {
-    opts.unshift({ value: cur })
+  const opts = modelSuggestions.value.slice();
+  const cur = modelForm.model?.trim();
+  if (cur && !opts.some((o) => o.value === cur)) {
+    opts.unshift({ value: cur });
   }
-  return opts
-})
-const modelFetching = ref(false)
-const testingConnection = ref(false)
-const testResult = ref<boolean | null>(null)
-const testError = ref('')
-const editingModel = ref<AIModelConfig | null>(null)
-type ModelProtocol = 'anthropic' | 'openai' | 'openai-compatible' | 'responses' | 'glm-native' | 'custom'
+  return opts;
+});
+const modelFetching = ref(false);
+const testingConnection = ref(false);
+const testResult = ref<boolean | null>(null);
+const testError = ref("");
+const editingModel = ref<AIModelConfig | null>(null);
 const modelForm = reactive({
-  id: '',
-  name: '',
-  baseURL: '',
-  model: '',
-  apiKey: '',
-  protocol: 'anthropic' as ModelProtocol,
-  userAgent: 'uniTerm' as string,
-})
-
-// Auto-detect protocol from baseURL hostname. Recomputes whenever baseURL
-// changes; shows a hint chip when the detected protocol differs from the
-// user's current selection. The chip disappears once they apply or switch.
-const detectedProtocol = ref<ModelProtocol | null>(null)
-watch(
-  () => modelForm.baseURL,
-  (url) => {
-    if (!url) { detectedProtocol.value = null; return }
-    const p = detectProtocol(url) as ModelProtocol
-    detectedProtocol.value = p === modelForm.protocol ? null : p
-  }
-)
-function applyDetectedProtocol() {
-  if (detectedProtocol.value) modelForm.protocol = detectedProtocol.value
-}
-function placeholderFor(p: ModelProtocol): string {
-  switch (p) {
-    case 'anthropic': return 'https://api.anthropic.com'
-    case 'openai': return 'https://api.openai.com/v1'
-    case 'openai-compatible': return 'https://api.deepseek.com/v1'
-    case 'responses': return 'https://api.openai.com/v1'
-    case 'glm-native': return 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
-    case 'custom': return 'https://your-proxy.example.com/v1/messages'
-  }
-}
+  id: "",
+  name: "",
+  baseURL: "",
+  model: "",
+  apiKey: "",
+  protocol: "anthropic" as "anthropic" | "openai" | "responses",
+  userAgent: "uniTerm" as string,
+});
 
 function openNewModelForm() {
-  editingModel.value = null
-  resetModelForm()
-  testResult.value = null
-  testError.value = ''
-  showModelForm.value = true
+  editingModel.value = null;
+  resetModelForm();
+  testResult.value = null;
+  testError.value = "";
+  showModelForm.value = true;
 }
 
 function editModel(model: AIModelConfig) {
-  editingModel.value = model
-  modelSuggestions.value = []
-  testResult.value = null
-  testError.value = ''
-  Object.assign(modelForm, { ...model })
-  showModelForm.value = true
+  editingModel.value = model;
+  modelSuggestions.value = [];
+  testResult.value = null;
+  testError.value = "";
+  Object.assign(modelForm, { ...model });
+  showModelForm.value = true;
 }
 
 function saveModel() {
   if (editingModel.value) {
-    settingsStore.updateModel(editingModel.value.id, { ...modelForm })
+    settingsStore.updateModel(editingModel.value.id, { ...modelForm });
   } else {
     settingsStore.addModel({
       id: `model-${Date.now()}`,
-      name: modelForm.name || 'Unnamed',
+      name: modelForm.name || "Unnamed",
       baseURL: modelForm.baseURL,
       model: modelForm.model,
       apiKey: modelForm.apiKey,
       protocol: modelForm.protocol,
-      userAgent: modelForm.userAgent || undefined
-    })
+      userAgent: modelForm.userAgent || undefined,
+    });
   }
-  showModelForm.value = false
-  editingModel.value = null
-  resetModelForm()
+  showModelForm.value = false;
+  editingModel.value = null;
+  resetModelForm();
 }
 
 function resetModelForm() {
-  modelForm.id = ''
-  modelForm.name = ''
-  modelForm.baseURL = ''
-  modelForm.model = ''
-  modelForm.apiKey = ''
-  modelForm.protocol = 'anthropic'
-  modelForm.userAgent = 'uniTerm'
-  modelSuggestions.value = []
+  modelForm.id = "";
+  modelForm.name = "";
+  modelForm.baseURL = "";
+  modelForm.model = "";
+  modelForm.apiKey = "";
+  modelForm.protocol = "anthropic";
+  modelForm.userAgent = "uniTerm";
+  modelSuggestions.value = [];
 }
 
 async function fetchModelList() {
   if (!modelForm.apiKey || !modelForm.baseURL) {
-    msg.warning(t('settings.fetchModelsHint'))
-    return
+    msg.warning(t("settings.fetchModelsHint"));
+    return;
   }
-  modelFetching.value = true
-  modelSuggestions.value = []
+  modelFetching.value = true;
+  modelSuggestions.value = [];
   try {
-    const models = await FetchModels(modelForm.apiKey, modelForm.baseURL, modelForm.protocol)
-    modelSuggestions.value = (models || []).map(m => ({
-      value: m.display_name || m.id
-    }))
-    msg.success(t('settings.fetchModelsSuccess', { count: modelSuggestions.value.length }))
+    const models = await FetchModels(
+      modelForm.apiKey,
+      modelForm.baseURL,
+      modelForm.protocol,
+    );
+    modelSuggestions.value = (models || []).map((m) => ({
+      value: m.display_name || m.id,
+    }));
+    msg.success(
+      t("settings.fetchModelsSuccess", {
+        count: modelSuggestions.value.length,
+      }),
+    );
   } catch (e: any) {
-    msg.error(t('settings.fetchModelsFailed'))
+    msg.error(t("settings.fetchModelsFailed"));
   } finally {
-    modelFetching.value = false
+    modelFetching.value = false;
   }
 }
 
 async function testConnection() {
   if (!modelForm.apiKey || !modelForm.baseURL || !modelForm.model) {
-    msg.warning(t('settings.testConnectionHint'))
-    return
+    msg.warning(t("settings.testConnectionHint"));
+    return;
   }
-  testingConnection.value = true
-  testResult.value = null
-  testError.value = ''
+  testingConnection.value = true;
+  testResult.value = null;
+  testError.value = "";
   try {
     const testMsg = JSON.stringify({
       model: modelForm.model,
       max_tokens: 10,
-      system: 'Reply with exactly the word: ok',
-      messages: [{ role: 'user', content: 'Say ok' }]
-    })
+      system: "Reply with exactly the word: ok",
+      messages: [{ role: "user", content: "Say ok" }],
+    });
     await ChatCompletion(
       modelForm.apiKey,
       modelForm.baseURL,
       modelForm.model,
       testMsg,
       modelForm.protocol,
-      modelForm.userAgent || ''
-    )
-    testResult.value = true
-    msg.success(t('settings.testSuccess'))
+      modelForm.userAgent || "",
+    );
+    testResult.value = true;
+    msg.success(t("settings.testSuccess"));
   } catch (e: any) {
-    testResult.value = false
-    testError.value = e?.message || String(e)
-    msg.error(t('settings.testFailed'))
+    testResult.value = false;
+    testError.value = e?.message || String(e);
+    msg.error(t("settings.testFailed"));
   } finally {
-    testingConnection.value = false
+    testingConnection.value = false;
   }
 }
 
 function getShellLabel(path: string): string {
-  if (!path) return 'Local'
-  const lower = path.toLowerCase()
-  if (lower.startsWith('wsl://')) {
-    const distro = path.slice(6)
-    return distro ? `WSL - ${distro}` : 'WSL'
+  if (!path) return "Local";
+  const lower = path.toLowerCase();
+  if (lower.startsWith("wsl://")) {
+    const distro = path.slice(6);
+    return distro ? `WSL - ${distro}` : "WSL";
   }
-  if (lower.includes('pwsh')) return 'PowerShell'
-  if (lower.includes('powershell')) return 'Windows PowerShell'
-  if (lower.includes('bash')) return 'Git Bash'
-  if (lower.includes('cmd')) return 'Command Prompt'
-  return path.split(/[\\/]/).pop() || path
+  if (lower.includes("pwsh")) return "PowerShell";
+  if (lower.includes("powershell")) return "Windows PowerShell";
+  if (lower.includes("bash")) return "Git Bash";
+  if (lower.includes("cmd")) return "Command Prompt";
+  return path.split(/[\\/]/).pop() || path;
 }
 
-const bgPreview = ref('')
+const bgPreview = ref("");
 
 async function refreshBgPreview() {
-  const name = localStateStore.state.backgroundImage
-  bgPreview.value = name ? await GetBackgroundImage(name).catch(() => '') : ''
+  const name = localStateStore.state.backgroundImage;
+  bgPreview.value = name ? await GetBackgroundImage(name).catch(() => "") : "";
 }
 
 async function chooseBackground() {
   const path = await OpenFileDialogFiltered(
-    t('settings.bgChoose'),
-    'Images',
-    '*.png;*.jpg;*.jpeg;*.webp'
-  )
-  if (!path) return
+    t("settings.bgChoose"),
+    "Images",
+    "*.png;*.jpg;*.jpeg;*.webp",
+  );
+  if (!path) return;
   try {
-    const name = await SetBackgroundImage(path)
-    await localStateStore.update({ backgroundImage: name, backgroundEnabled: true })
-    await refreshBgPreview()
+    const name = await SetBackgroundImage(path);
+    await localStateStore.update({
+      backgroundImage: name,
+      backgroundEnabled: true,
+    });
+    await refreshBgPreview();
   } catch {
-    msg.error(t('settings.bgUnsupported'))
+    msg.error(t("settings.bgUnsupported"));
   }
 }
 
 async function clearBackground() {
-  await ClearBackgroundImage()
-  await localStateStore.update({ backgroundImage: '' })
-  bgPreview.value = ''
+  await ClearBackgroundImage();
+  await localStateStore.update({ backgroundImage: "" });
+  bgPreview.value = "";
 }
 
 // The window frame is fixed at startup (Wails limitation) — changing it needs
 // a restart. Persist the choice, then offer to quit so the user can reopen.
 async function onToggleSystemTitleBar(v: boolean) {
-  await localStateStore.update({ systemTitleBar: v })
+  await localStateStore.update({ systemTitleBar: v });
   try {
     await ElMessageBox.confirm(
-      t('settings.titleBarRestartMsg'),
-      t('settings.titleBarRestartTitle'),
-      { confirmButtonText: t('settings.restartNow'), cancelButtonText: t('conn.cancel'), type: 'warning' }
-    )
+      t("settings.titleBarRestartMsg"),
+      t("settings.titleBarRestartTitle"),
+      {
+        confirmButtonText: t("settings.restartNow"),
+        cancelButtonText: t("conn.cancel"),
+        type: "warning",
+      },
+    );
   } catch {
-    return
+    return;
   }
-  Quit()
+  Quit();
 }
 </script>
 
@@ -1610,18 +1922,6 @@ async function onToggleSystemTitleBar(v: boolean) {
   flex: 1;
 }
 
-.protocol-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: var(--accent-subtle, rgba(64, 158, 255, 0.08));
-  padding: 4px 10px;
-  border-radius: 4px;
-}
-
 .about-update-actions {
   margin-top: 20px;
 }
@@ -1648,7 +1948,8 @@ async function onToggleSystemTitleBar(v: boolean) {
   font-size: 13px;
 }
 
-.kb-table th, .kb-table td {
+.kb-table th,
+.kb-table td {
   padding: 10px 12px;
   text-align: left;
   border-bottom: 1px solid var(--border-subtle);
@@ -1670,10 +1971,17 @@ async function onToggleSystemTitleBar(v: boolean) {
   gap: 6px;
 }
 
-.bg-image-row { display: flex; align-items: center; gap: 8px; }
+.bg-image-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .bg-thumb {
-  width: 64px; height: 40px; border-radius: 4px;
-  background-size: cover; background-position: center;
+  width: 64px;
+  height: 40px;
+  border-radius: 4px;
+  background-size: cover;
+  background-position: center;
   border: 1px solid var(--border-subtle);
 }
 </style>

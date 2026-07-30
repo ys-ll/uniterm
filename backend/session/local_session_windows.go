@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/UserExistsError/conpty"
+	"github.com/ys-ll/uniterm/backend/log"
+	"github.com/ys-ll/uniterm/backend/platform"
 	"golang.org/x/sys/windows"
 )
 
@@ -96,6 +98,9 @@ var (
 // updateMouseTrackingState scans data for mouse tracking enable/disable
 // sequences and updates the session's tracking flag accordingly.
 func (s *LocalSession) updateMouseTrackingState(data []byte) {
+	if bytes.IndexByte(data, 0x1b) < 0 {
+		return
+	}
 	for _, seq := range mouseTrackingEnableSeqs {
 		if bytes.Contains(data, seq) {
 			s.mouseTrackingEnabled.Store(true)
@@ -109,6 +114,7 @@ func (s *LocalSession) updateMouseTrackingState(data []byte) {
 		}
 	}
 }
+
 type LocalSession struct {
 	baseSession
 	cpty                 *conpty.ConPty
@@ -200,6 +206,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 				go forceUTF8ConsoleCodePage(c.Pid())
 			}
 			go func() {
+				defer log.Recover("local_session.conpty.wait")
 				_, _ = s.cpty.Wait(context.Background())
 				s.Disconnect()
 			}()
@@ -234,6 +241,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 	s.cmd = cmd
 
 	go func() {
+		defer log.Recover("local_session.cmd.wait")
 		_ = s.cmd.Wait()
 		s.Disconnect()
 	}()
@@ -415,27 +423,4 @@ func (s *LocalSession) runPostLoginScript(script string) {
 	s.baseSession.RunPostLoginScript(ctx, script, send, s.IsConnected)
 }
 
-func defaultShell() string {
-	if _, err := exec.LookPath("pwsh.exe"); err == nil {
-		return "pwsh.exe"
-	}
-	if _, err := exec.LookPath("powershell.exe"); err == nil {
-		return "powershell.exe"
-	}
-	// Prefer Git Bash over WSL bash to avoid WSL relay errors.
-	gitBashPaths := []string{
-		`C:\Program Files\Git\bin\bash.exe`,
-		`C:\Program Files (x86)\Git\bin\bash.exe`,
-		filepath.Join(os.Getenv("ProgramFiles"), "Git", "bin", "bash.exe"),
-		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Git", "bin", "bash.exe"),
-	}
-	for _, p := range gitBashPaths {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	if _, err := exec.LookPath("bash.exe"); err == nil {
-		return "bash.exe"
-	}
-	return "cmd.exe"
-}
+func defaultShell() string { return platform.DefaultShell() }

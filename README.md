@@ -27,6 +27,7 @@ English &nbsp;|&nbsp; <a href="README_zh-CN.md">简体中文</a>
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 - [Features](#features)
 - [Supported Protocols](#supported-protocols)
 - [Screenshots](#screenshots)
@@ -36,9 +37,36 @@ English &nbsp;|&nbsp; <a href="README_zh-CN.md">简体中文</a>
 - [Build from Source](#build-from-source)
 - [Project Structure](#project-structure)
 - [Roadmap](#roadmap)
+- [FAQ](#faq)
 - [Star this Project](#star-this-project)
 - [Feedback & Contributing](#feedback--contributing)
 - [License](#license)
+
+## Quick Start
+
+Already have uniterm installed? Open it once, then connect to your first SSH server:
+
+```bash
+# 1. Install (pick your OS)
+brew install --cask ys-ll/uniterm/uniterm          # macOS
+scoop install uniterm                              # Windows
+sudo dpkg -i uniterm-linux-amd64-latest.deb        # Linux (deb)
+
+# 2. Launch
+open -a uniterm                                    # macOS
+# (double-click the icon on Windows / Linux)
+
+# 3. In the UI: click "+ New Connection" → SSH → fill host/port/auth → Connect
+```
+
+Or build from source:
+
+```bash
+git clone https://github.com/ys-ll/uniterm.git && cd uniterm
+npm --prefix frontend install
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+wails build          # binary at build/bin/uniterm
+```
 
 ## Features
 
@@ -249,6 +277,40 @@ uniTerm/
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the current protocol / feature status and what's planned next. For per-release history, see [CHANGELOG.md](CHANGELOG.md).
+
+## FAQ
+
+### SSH public-key authentication
+
+uniterm reads `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`, and `~/.ssh/id_ecdsa` automatically. You can also paste a private key in the connection form's **Authentication → Private Key** field. Passphrases are honored.
+
+### Fonts look wrong / characters render as tofu
+
+The terminal uses [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) by default. For CJK, the terminal falls back to the platform's best monospace font. If a particular glyph renders as `□`, install a font that covers that range (e.g. `Noto Sans Mono CJK`) and pick it in **Settings → Appearance → Terminal Font**.
+
+### Port forwarding / jump hosts
+
+Open the **Tunnels** panel from the left sidebar, click **+ New Tunnel**, and pick a saved SSH connection as the entry point. uniterm opens a local SOCKS / port-forward on top of the SSH transport; any tool on your machine can then route through it.
+
+### My connection works but the AI Agent can't execute commands
+
+The AI Agent runs commands directly in your active terminal tab. Make sure (1) an SSH or local terminal tab is open and active, (2) **Settings → AI** has a provider + model configured, and (3) your execution mode allows the action — switch from "Confirm all" to "Bypass" or "Confirm dangerous only" if you want fewer interruptions.
+
+### Where are my connections stored?
+
+In the OS application-data directory: `~/Library/Application Support/uniterm` on macOS, `%APPDATA%\uniterm` on Windows, `~/.local/share/uniterm` on Linux. The same folder holds AI settings, skills, and quick commands. To migrate to a new machine, copy that folder or set up **Cloud Sync** in Settings to push it to a private GitHub / GitLab / Gitee repo.
+
+### Linux: `libgtk-3-0` / `libwebkit2gtk-4.1-0` missing
+
+```
+sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0   # Debian / Ubuntu
+sudo dnf install gtk3 webkit2gtk4.1                # Fedora / RHEL
+sudo pacman -S gtk3 webkit2gtk-4.1                 # Arch
+```
+
+### How do I report a bug or request a feature?
+
+Open an issue at <https://github.com/ys-ll/uniterm/issues>. For security issues, follow [SECURITY.md](SECURITY.md) — do **not** file a public issue.
 
 ## Star this Project
 

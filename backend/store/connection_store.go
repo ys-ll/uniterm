@@ -30,9 +30,9 @@ type ConnectionStore struct {
 	configDir     string
 	passwordStore PasswordStore // nil = passwords kept in JSON (backward compat)
 	mu            sync.Mutex    // serializes Save + populatePasswords writes (STORE-05/06).
-	pwdMu         sync.RWMutex  // guards pwdCache for F-110 async keychain fill.
+	pwdMu         sync.RWMutex  // guards pwdCache for async keychain fill.
 	pwdCache      map[string]string
-	lastSavedHash string // F-105: skip no-op rewrites keyed by canonical content hash.
+	lastSavedHash string // skip no-op rewrites keyed by canonical content hash.
 }
 
 func NewConnectionStore() (*ConnectionStore, error) {
@@ -97,10 +97,10 @@ func (s *ConnectionStore) Save(data session.ConnectionStoreData) error {
 }
 
 // writeJSONLocked serializes data to the connections file atomically.
-// F-105: uses json.NewEncoder to stream directly to the temp file (no
-// intermediate buffer the size of the output), and skips the temp+sync+rename
-// cycle when the canonical content hash matches the last successful save.
-// Caller must hold s.mu.
+// Uses json.NewEncoder to stream directly to the temp file (no intermediate
+// buffer the size of the output), and skips the temp+sync+rename cycle when
+// the canonical content hash matches the last successful save. Caller must
+// hold s.mu.
 func (s *ConnectionStore) writeJSONLocked(data session.ConnectionStoreData) error {
 	preview, err := json.Marshal(data)
 	if err != nil {
@@ -215,8 +215,8 @@ func (s *ConnectionStore) populatePasswords(data *session.ConnectionStoreData) e
 			}
 		}
 
-		// F-110: serve from cache when available, otherwise schedule an
-		// async keychain fill so Load() does not block on per-connection IPC.
+		// Serve from cache when available, otherwise schedule an async
+		// keychain fill so Load() does not block on per-connection IPC.
 		s.pwdMu.RLock()
 		pw, cached := s.pwdCache[conn.ID]
 		s.pwdMu.RUnlock()

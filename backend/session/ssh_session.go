@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,32 +29,50 @@ const (
 	// connection. Dead-connection detection is NOT done here — see readLoop
 	// (EOF) and the OS-level TCP keepalive set in Connect.
 	sshKeepAliveInterval = 90 * time.Second
+
+	// sshReadBufSize is the per-Read buffer passed to ssh.stdout. Reused
+	// across iterations via the sshReadBufPool so a long-lived SSH
+	// connection doesn't allocate a fresh 16 KiB slice every few
+	// milliseconds on a busy remote shell.
+	sshReadBufSize = 16 * 1024
 )
+
+// sshReadBufPool hands out reusable 16 KiB read buffers for SSH stdout.
+// Each readLoop borrows a buffer, hands buf[:n] off to consumers that
+// either copy or take ownership, and returns the buffer when the next
+// read arrives. GC-eligible only when the per-connection read loop exits,
+// so steady-state connections have zero per-read allocations.
+var sshReadBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, sshReadBufSize)
+		return &b
+	},
+}
 
 type SSHSession struct {
 	baseSession
-	client       *ssh.Client
-	session      *ssh.Session
-	stdin        io.WriteCloser
-	stdout       io.Reader
-	stderr       io.Reader
-	quit         chan struct{}
+	client  *ssh.Client
+	session *ssh.Session
+	stdin   io.WriteCloser
+	stdout  io.Reader
+	stderr  io.Reader
+	quit    chan struct{}
 	// quitMu guards quit and quitClosed so Disconnect can run safely even
 	// when called concurrently from multiple goroutines (session.Wait,
 	// readLoop EOF, keepalive tick, user close) without permanently
 	// consuming the SSHSession — close(s.quit) fires at most once per
 	// Connect, and Connect resets the channel and flag for the next use.
-	quitMu      sync.Mutex
-	quitClosed  bool
+	quitMu       sync.Mutex
+	quitClosed   bool
 	authAnswerCh chan []byte
 	expectOutput *postLoginOutputBuffer
 
-	enc            encoding.Encoding // input(write) codec; nil = utf-8 passthrough
-	encoder        transform.Transformer // cached encoder; nil = utf-8 passthrough (F-003)
-	decoder        *encoding.Decoder // persistent streaming decoder for output(read)
-	decodeLeftover []byte            // trailing partial multibyte bytes between reads
-	decodeScratch  []byte            // reusable src buffer for decodeOutput (F-002)
-	encScratch     []byte            // reusable dst buffer for encodeInput (F-003)
+	enc            encoding.Encoding     // input(write) codec; nil = utf-8 passthrough
+	encoder        transform.Transformer // cached encoder; nil = utf-8 passthrough
+	decoder        *encoding.Decoder     // persistent streaming decoder for output(read)
+	decodeLeftover []byte                // trailing partial multibyte bytes between reads
+	decodeScratch  []byte                // reusable src buffer for decodeOutput
+	encScratch     []byte                // reusable dst buffer for encodeInput
 
 	// Disconnect diagnostics (see readLoop / disconnect logs).
 	lastRecv atomic.Value // []byte: tail of most recent server output (diagnostics)
@@ -119,7 +138,11 @@ func (s *SSHSession) Connect(config ConnectionConfig) (err error) {
 	// keyboard-interactive support (the kbCallback fallback below).
 	if shouldPromptForSSHPassword(config) {
 		s.emitData([]byte("\r\nPassword: "))
-		var answer string
+		// Accumulate the typed password in a []byte and convert to string
+		// once at the end. The previous `answer += string(b)` was O(N²)
+		// on every keystroke; a byte slice + append is O(1) amortised and
+		// produces one string allocation, not N.
+		var answer []byte
 	promptLoop:
 		for {
 			select {
@@ -136,9 +159,9 @@ func (s *SSHSession) Connect(config ConnectionConfig) (err error) {
 							answer = answer[:len(answer)-1]
 						}
 					case '\x15': // Ctrl+U
-						answer = ""
+						answer = answer[:0]
 					default:
-						answer += string(b)
+						answer = append(answer, b)
 					}
 				}
 			case <-time.After(120 * time.Second):
@@ -147,14 +170,16 @@ func (s *SSHSession) Connect(config ConnectionConfig) (err error) {
 			}
 		}
 		s.emitData([]byte("\r\n"))
-		config.Password = answer
+		config.Password = string(answer)
 	}
 
 	kbCallback := func(user, instruction string, questions []string, echos []bool) ([]string, error) {
 		answers := make([]string, len(questions))
 		for i, q := range questions {
 			s.emitData([]byte("\r\n" + q + " "))
-			var answer string
+			// Byte-slice accumulation (same rationale as the password-prompt
+			// loop above — avoid `answer += string(b)`).
+			var answer []byte
 		loop:
 			for {
 				select {
@@ -174,9 +199,9 @@ func (s *SSHSession) Connect(config ConnectionConfig) (err error) {
 								}
 							}
 						case '\x15': // Ctrl+U
-							answer = ""
+							answer = answer[:0]
 						default:
-							answer += string(b)
+							answer = append(answer, b)
 							if echos[i] {
 								s.emitData([]byte{b})
 							}
@@ -188,18 +213,23 @@ func (s *SSHSession) Connect(config ConnectionConfig) (err error) {
 				}
 			}
 			s.emitData([]byte("\r\n"))
-			answers[i] = answer
+			answers[i] = string(answer)
 		}
 		return answers, nil
 	}
 
 	authMethods := makeSSHAuthMethods(config, kbCallback)
-	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
+	hostKeyCB, err := sshHostKeyCallback(config)
+	if err != nil {
+		s.setStatus(StatusError)
+		return fmt.Errorf("host key config: %w", err)
+	}
 	clientConfig := &ssh.ClientConfig{
 		User:            config.User,
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCB,
 		Config: ssh.Config{
 			KeyExchanges: sshKeyExchanges(),
 		},
@@ -322,13 +352,20 @@ func (s *SSHSession) readStderr() {
 }
 
 func (s *SSHSession) readLoop() {
-	// 16K read buffer (F-001) reused across iterations. Each consumer either
+	// 16 KiB read buffer reused across iterations. Backing storage comes
+	// from sshReadBufPool so the per-read allocation disappears after the
+	// first few iterations on a steady connection. Each consumer either
 	// copies into its own storage (decodeOutput, offerExpectOutput's string
 	// conversion) or passes the slice to a callback that owns the data
-	// lifecycle (emitData / emitBinary), so reusing the backing array is safe.
-	// F-004: lastRecv is only read on the disconnect path below, so we defer
+	// lifecycle (emitData / emitBinary), so reusing the backing array is
+	// safe. lastRecv is only read on the disconnect path below, so we defer
 	// its copy to that point to avoid one allocation per chunk.
-	buf := make([]byte, 16*1024)
+	bufPtr := sshReadBufPool.Get().(*[]byte)
+	buf := *bufPtr
+	defer func() {
+		*bufPtr = buf
+		sshReadBufPool.Put(bufPtr)
+	}()
 	var lastData []byte
 	for {
 		n, err := s.stdout.Read(buf)
@@ -483,12 +520,21 @@ func (s *SSHSession) startKeepAlive() {
 
 func (s *SSHSession) Write(data []byte) error {
 	// During keyboard-interactive auth, route input to the auth callback.
+	// Use a non-blocking send so a flood of pre-auth data can't wedge the
+	// terminal: if the auth loop is slow or has already exited and the
+	// buffer is full, drop the overflow rather than block the caller.
 	s.mu.RLock()
 	ch := s.authAnswerCh
 	s.mu.RUnlock()
 	if ch != nil {
-		ch <- data
-		return nil
+		select {
+		case ch <- data:
+			return nil
+		default:
+			// Auth buffer full — silently drop. Better than blocking the
+			// terminal input loop while the user is typing the password.
+			return nil
+		}
 	}
 	if s.stdin == nil {
 		return fmt.Errorf("not connected")

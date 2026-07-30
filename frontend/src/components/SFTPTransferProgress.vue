@@ -1,13 +1,27 @@
 <template>
   <div v-if="tasks.length > 0" class="transfer-progress-bar">
     <div v-for="task in tasks" :key="task.id" class="transfer-task">
-      <span class="task-type"><ArrowUp v-if="task.type === 'upload'" :size="12" /><ArrowDown v-else :size="12" /></span>
+      <span class="task-type"
+        ><ArrowUp v-if="task.type === 'upload'" :size="12" /><ArrowDown
+          v-else
+          :size="12"
+      /></span>
       <span class="task-name">{{ task.name }}</span>
       <span class="task-eta" v-if="task.eta">{{ task.eta }}</span>
-      <span class="task-speed" v-if="task.status === 'running' || task.status === 'paused'">{{ task.speed || '--' }}</span>
+      <span
+        class="task-speed"
+        v-if="task.status === 'running' || task.status === 'paused'"
+        >{{ task.speed || "--" }}</span
+      >
       <el-progress
         :percentage="task.percentage"
-        :status="task.status === 'error' ? 'exception' : task.status === 'cancelled' ? 'warning' : undefined"
+        :status="
+          task.status === 'error'
+            ? 'exception'
+            : task.status === 'cancelled'
+              ? 'warning'
+              : undefined
+        "
         :stroke-width="4"
         style="flex: 1"
       />
@@ -16,53 +30,71 @@
           v-if="task.status === 'running'"
           class="btn btn-ghost btn-icon btn-sm"
           :title="t('sftp.pauseTransfer')"
+          :aria-label="t('sftp.pauseTransfer')"
           @click="emit('pause', task.id)"
-        ><Pause :size="14" /></button>
+        >
+          <Pause :size="14" />
+        </button>
         <button
           v-else-if="task.status === 'paused'"
           class="btn btn-ghost btn-icon btn-sm"
           :title="t('sftp.resumeTransfer')"
+          :aria-label="t('sftp.resumeTransfer')"
           @click="emit('resume', task.id)"
-        ><Play :size="14" /></button>
+        >
+          <Play :size="14" />
+        </button>
         <button
           v-if="task.status === 'running' || task.status === 'paused'"
           class="btn btn-ghost btn-icon btn-sm danger"
           :title="t('sftp.cancelTransfer')"
+          :aria-label="t('sftp.cancelTransfer')"
           @click="emit('cancel', task.id)"
-        ><X :size="14" /></button>
-        <span v-else-if="task.status === 'cancelled'" class="status-text">{{ t('sftp.cancelled') }}</span>
-        <span v-else-if="task.status === 'done'" class="status-text done" :title="t('sftp.done')"><Check :size="14" /></span>
-        <span v-else-if="task.status === 'error'" class="status-text error">{{ t('sftp.error') }}</span>
+        >
+          <X :size="14" />
+        </button>
+        <span v-else-if="task.status === 'cancelled'" class="status-text">{{
+          t("sftp.cancelled")
+        }}</span>
+        <span
+          v-else-if="task.status === 'done'"
+          class="status-text done"
+          :title="t('sftp.done')"
+          ><Check :size="14"
+        /></span>
+        <span v-else-if="task.status === 'error'" class="status-text error">{{
+          t("sftp.error")
+        }}</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { X, Pause, Play, ArrowUp, ArrowDown, Check } from '@lucide/vue'
-import { useI18n } from '../i18n'
+import { X, Pause, Play, ArrowUp, ArrowDown, Check } from "@lucide/vue";
+import { useI18n } from "../i18n";
 
 interface TransferTaskUI {
-  id: string
-  type: 'upload' | 'download'
-  name: string
-  percentage: number
-  speed: string
-  eta: string
-  status: 'running' | 'paused' | 'done' | 'error' | 'cancelled'
+  id: string;
+  type: "upload" | "download";
+  name: string;
+  percentage: number;
+  speed: string;
+  eta: string;
+  status: "running" | "paused" | "done" | "error" | "cancelled";
 }
 
 defineProps<{
-  tasks: TransferTaskUI[]
-}>()
+  tasks: TransferTaskUI[];
+}>();
 
 const emit = defineEmits<{
-  cancel: [taskId: string]
-  pause: [taskId: string]
-  resume: [taskId: string]
-}>()
+  cancel: [taskId: string];
+  pause: [taskId: string];
+  resume: [taskId: string];
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 </script>
 
 <style scoped>

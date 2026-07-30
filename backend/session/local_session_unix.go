@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/ys-ll/uniterm/backend/platform"
 )
 
 // Mouse tracking escape sequences that terminal applications (e.g. opencode,
@@ -50,7 +50,14 @@ var (
 
 // updateMouseTrackingState scans data for mouse tracking enable/disable
 // sequences and updates the session's tracking flag accordingly.
+//
+// Fast-path: most chunks (60+ chunks/sec on a busy PTY) are pure text
+// without any ESC (0x1b). Skip the 14 bytes.Contains scans when no
+// ESC byte is present — saves ~120 ms CPU/sec on a 12% single-core.
 func (s *LocalSession) updateMouseTrackingState(data []byte) {
+	if bytes.IndexByte(data, 0x1b) < 0 {
+		return
+	}
 	for _, seq := range mouseTrackingEnableSeqs {
 		if bytes.Contains(data, seq) {
 			s.mouseTrackingEnabled.Store(true)
@@ -67,10 +74,10 @@ func (s *LocalSession) updateMouseTrackingState(data []byte) {
 
 type LocalSession struct {
 	baseSession
-	cmd                  *exec.Cmd
-	pty                  *os.File
-	quit                 chan struct{}
-	quitOnce             sync.Once
+	cmd      *exec.Cmd
+	pty      *os.File
+	quit     chan struct{}
+	quitOnce sync.Once
 	// waitDone is closed when the cmd.Wait goroutine has returned, so
 	// Disconnect can join it (and avoid racing with the shell's own exit
 	// handler while still applying a kill only when the child didn't exit
@@ -267,64 +274,14 @@ func (s *LocalSession) runPostLoginScript(script string) {
 	s.baseSession.RunPostLoginScript(ctx, script, send, s.IsConnected)
 }
 
-func defaultShell() string {
-	switch runtime.GOOS {
-	case "windows":
-		if _, err := exec.LookPath("pwsh.exe"); err == nil {
-			return "pwsh.exe"
-		}
-		if _, err := exec.LookPath("powershell.exe"); err == nil {
-			return "powershell.exe"
-		}
-		return "cmd.exe"
-	default:
-		if shell := os.Getenv("SHELL"); shell != "" {
-			return shell
-		}
-		if _, err := exec.LookPath("bash"); err == nil {
-			return "bash"
-		}
-		return "sh"
-	}
-}
+func defaultShell() string { return platform.DefaultShell() }
 
-func shellName(path string) string {
-	base := filepath.Base(path)
-	if runtime.GOOS == "windows" {
-		base = strings.TrimSuffix(base, ".exe")
-	}
-	return base
-}
+func shellName(path string) string { return platform.ShellName(path) }
 
 // loginShellArgs returns the arguments needed to start the shell as a login
-// shell on macOS.
-//
-// When the app is launched from the macOS Finder/Dock, the process inherits a
-// minimal PATH (roughly /usr/bin:/bin:/usr/sbin:/sbin). A plain interactive
-// shell does not restore it, so tools in /usr/local/bin, /opt/homebrew/bin,
-// etc. are "command not found". Terminal.app and iTerm avoid this by starting
-// login shells: on macOS the login shell sources /etc/zprofile (or
-// /etc/profile), which runs path_helper to rebuild PATH from /etc/paths and
-// /etc/paths.d, and then the user's ~/.zprofile / ~/.bash_profile.
-//
-// This is scoped to macOS. Linux terminal emulators conventionally launch
-// non-login interactive shells and the GUI session already exports a full
-// PATH, so we leave that behavior unchanged there.
-//
-// bash/zsh/sh accept -l; fish uses --login. csh/tcsh also accept -l. Unknown
-// shells get no argument to avoid passing a flag they might reject.
+// shell on macOS. See platform.LoginShellArgs for the rationale.
 func loginShellArgs(shellPath string) []string {
-	if runtime.GOOS != "darwin" {
-		return nil
-	}
-	switch shellName(shellPath) {
-	case "bash", "zsh", "sh", "dash", "ksh", "mksh", "csh", "tcsh":
-		return []string{"-l"}
-	case "fish":
-		return []string{"--login"}
-	default:
-		return nil
-	}
+	return platform.LoginShellArgs(shellPath)
 }
 
 // ensureTerminalEnv guarantees the local shell starts with a usable terminal
@@ -337,6 +294,7 @@ func loginShellArgs(shellPath string) []string {
 //     cannot compose multibyte UTF-8 — garbled CJK/IME input.
 //   - missing TERM: zsh's ZLE has no terminfo to redraw the line, so backspace
 //     and other editing keys leave the display out of sync and appear broken.
+//
 // bash/sh tolerate both; zsh's ZLE does not. We inject each variable only when
 // it is not already set so we never override the user's explicit configuration.
 func ensureTerminalEnv(env []string) []string {

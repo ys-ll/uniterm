@@ -47,6 +47,7 @@ func (s *S3Session) Connect(config ConnectionConfig) error {
 	} else {
 		s.title = config.Host
 	}
+	s.LogConnect(config.Host, config.Port)
 
 	s3Client := simples3.New(config.S3Region, config.User, config.Password)
 	s3Client.Endpoint = strings.TrimSuffix(config.Host, "/")
@@ -58,10 +59,11 @@ func (s *S3Session) Connect(config ConnectionConfig) error {
 	return nil
 }
 
-func (s *S3Session) Write(data []byte) error  { return nil }
+func (s *S3Session) Write(data []byte) error     { return nil }
 func (s *S3Session) Resize(cols, rows int) error { return nil }
 
 func (s *S3Session) Disconnect() error {
+	s.LogDisconnect("user")
 	s.s3 = nil
 	s.bucket = ""
 	s.setStatus(StatusDisconnected)
@@ -401,9 +403,9 @@ func (s *S3Session) Rename(oldName, newName string) error {
 		prefix += "/"
 	}
 	input := simples3.ListInput{
-		Bucket:    s.bucket,
-		Prefix:    prefix,
-		MaxKeys:   1,
+		Bucket:  s.bucket,
+		Prefix:  prefix,
+		MaxKeys: 1,
 	}
 	resp, err := s.s3.List(input)
 	if err != nil {
@@ -494,9 +496,9 @@ func (s *S3Session) Copy(oldPath, newPath string) error {
 		prefix += "/"
 	}
 	input := simples3.ListInput{
-		Bucket:    s.bucket,
-		Prefix:    prefix,
-		MaxKeys:   1,
+		Bucket:  s.bucket,
+		Prefix:  prefix,
+		MaxKeys: 1,
 	}
 	resp, err := s.s3.List(input)
 	if err != nil {

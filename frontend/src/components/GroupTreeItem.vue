@@ -4,10 +4,14 @@
     class="group-header"
     :class="{
       'drag-over': dragOverId === node.group.id,
-      'drop-before': dropIndicator?.id === node.group.id && dropIndicator?.position === 'before',
-      'drop-after': dropIndicator?.id === node.group.id && dropIndicator?.position === 'after',
+      'drop-before':
+        dropIndicator?.id === node.group.id &&
+        dropIndicator?.position === 'before',
+      'drop-after':
+        dropIndicator?.id === node.group.id &&
+        dropIndicator?.position === 'after',
     }"
-    :style="{ paddingLeft: (6 + depth * 16) + 'px' }"
+    :style="{ paddingLeft: 6 + depth * 16 + 'px' }"
     draggable="true"
     @click="onToggle"
     @contextmenu.prevent="onCtxMenu"
@@ -17,7 +21,9 @@
     @drop.prevent="onGrpDrop"
   >
     <span class="group-arrow">
-      <el-icon v-if="expanded.has(node.group.id)"><ChevronDown :size="14" /></el-icon>
+      <el-icon v-if="expanded.has(node.group.id)"
+        ><ChevronDown :size="14"
+      /></el-icon>
       <el-icon v-else><ChevronRight :size="14" /></el-icon>
     </span>
     <span class="group-name">{{ node.group.name }}</span>
@@ -41,10 +47,12 @@
       class="connection-item indented"
       :class="{
         active: selected.has(conn.id),
-        'drop-before': dropIndicator?.id === conn.id && dropIndicator?.position === 'before',
-        'drop-after': dropIndicator?.id === conn.id && dropIndicator?.position === 'after',
+        'drop-before':
+          dropIndicator?.id === conn.id && dropIndicator?.position === 'before',
+        'drop-after':
+          dropIndicator?.id === conn.id && dropIndicator?.position === 'after',
       }"
-      :style="{ paddingLeft: (24 + depth * 16) + 'px' }"
+      :style="{ paddingLeft: 24 + depth * 16 + 'px' }"
       draggable="true"
       @dragstart="onConnDragStart($event, conn)"
       @dragend="onConnDragEnd"
@@ -54,14 +62,21 @@
       @dblclick="onItemDblClick(conn)"
       @contextmenu.prevent="onConnCtxMenu($event, conn)"
     >
-      <span class="conn-icon"><component :is="connIcon(conn)" :size="14" /></span>
+      <span class="conn-icon"
+        ><component :is="connIcon(conn)" :size="14"
+      /></span>
       <div class="conn-details">
         <span class="name">{{ conn.name }}</span>
         <span class="conn-meta">
           <span class="host">{{ getSubtitle(conn) }}</span>
         </span>
       </div>
-      <button class="conn-more-btn" @click.stop="onMoreClick($event, conn)" :title="t('terminal.more')">
+      <button
+        class="conn-more-btn"
+        @click.stop="onMoreClick($event, conn)"
+        :title="t('terminal.more')"
+        :aria-label="t('terminal.more')"
+      >
         <MoreHorizontal :size="14" />
       </button>
     </div>
@@ -69,90 +84,97 @@
 </template>
 
 <script setup lang="ts">
-import { inject, computed } from 'vue'
-import { ChevronDown, ChevronRight, MoreHorizontal } from '@lucide/vue'
-import type { GroupTreeNode, ConnectionConfig, ConnectionGroup } from '../types/session'
+import { inject, computed } from "vue";
+import { ChevronDown, ChevronRight, MoreHorizontal } from "@lucide/vue";
+import type {
+  GroupTreeNode,
+  ConnectionConfig,
+  ConnectionGroup,
+} from "../types/session";
 
 const props = defineProps<{
-  node: GroupTreeNode
-  depth: number
-}>()
+  node: GroupTreeNode;
+  depth: number;
+}>();
 
 // Recursive count of all connections in this subtree
 const totalCount = computed(() => {
   function count(node: GroupTreeNode): number {
-    let n = node.connections.length
-    for (const child of node.children) n += count(child)
-    return n
+    let n = node.connections.length;
+    for (const child of node.children) n += count(child);
+    return n;
   }
-  return count(props.node)
-})
+  return count(props.node);
+});
 
 // Injected from Sidebar
-const expanded = inject<Set<string>>('expandedGroups')!
-const selected = inject<Set<string>>('selectedIds')!
-const dragOverId = inject<any>('dragOverGroupId')!
-const dropIndicator = inject<any>('dropIndicator')!
-const handlers = inject<any>('groupHandlers')!
-const utils = inject<any>('utils')!
+const expanded = inject<Set<string>>("expandedGroups")!;
+const selected = inject<Set<string>>("selectedIds")!;
+const dragOverId = inject<any>("dragOverGroupId")!;
+const dropIndicator = inject<any>("dropIndicator")!;
+const handlers = inject<any>("groupHandlers")!;
+const utils = inject<any>("utils")!;
 
-const { connIcon, getSubtitle, t } = utils
+const { connIcon, getSubtitle, t } = utils;
 
 function onToggle() {
-  handlers.onToggleGroup(props.node.group.id)
+  handlers.onToggleGroup(props.node.group.id);
 }
 
 function onCtxMenu(e: MouseEvent) {
-  handlers.onGroupContextMenu(e, props.node.group)
+  handlers.onGroupContextMenu(e, props.node.group);
 }
 
 function onGrpDragStart(e: DragEvent) {
-  e.dataTransfer!.setData('text/plain', JSON.stringify({ type: 'group', id: props.node.group.id }))
-  e.dataTransfer!.effectAllowed = 'move'
+  e.dataTransfer!.setData(
+    "text/plain",
+    JSON.stringify({ type: "group", id: props.node.group.id }),
+  );
+  e.dataTransfer!.effectAllowed = "move";
 }
 
 function onGrpDragOver(e: DragEvent) {
-  handlers.onGroupDragOver(props.node.group.id, e)
+  handlers.onGroupDragOver(props.node.group.id, e);
 }
 
 function onGrpDragLeave() {
-  handlers.onGroupDragLeave(props.node.group.id)
+  handlers.onGroupDragLeave(props.node.group.id);
 }
 
 function onGrpDrop(e: DragEvent) {
-  handlers.onGroupDrop(props.node.group.id, e)
+  handlers.onGroupDrop(props.node.group.id, e);
 }
 
 function onConnDragStart(e: DragEvent, conn: ConnectionConfig) {
-  handlers.onDragStart(e, conn)
+  handlers.onDragStart(e, conn);
 }
 
 function onConnDragEnd() {
-  handlers.onDragEnd()
+  handlers.onDragEnd();
 }
 
 function onConnDragOver(e: DragEvent, conn: ConnectionConfig) {
-  handlers.onConnDragOver(e, conn)
+  handlers.onConnDragOver(e, conn);
 }
 
 function onConnDrop(e: DragEvent, conn: ConnectionConfig) {
-  handlers.onConnDrop(e, conn)
+  handlers.onConnDrop(e, conn);
 }
 
 function onItemClick(e: MouseEvent, conn: ConnectionConfig) {
-  handlers.onItemClick(e, conn)
+  handlers.onItemClick(e, conn);
 }
 
 function onItemDblClick(conn: ConnectionConfig) {
-  handlers.onItemDblClick(conn)
+  handlers.onItemDblClick(conn);
 }
 
 function onConnCtxMenu(e: MouseEvent, conn: ConnectionConfig) {
-  handlers.onContextMenu(e, conn)
+  handlers.onContextMenu(e, conn);
 }
 
 function onMoreClick(e: MouseEvent, conn: ConnectionConfig) {
-  handlers.onConnMoreClick(e, conn)
+  handlers.onConnMoreClick(e, conn);
 }
 </script>
 
@@ -186,7 +208,7 @@ function onMoreClick(e: MouseEvent, conn: ConnectionConfig) {
 .connection-item.drop-before::before,
 .group-header.drop-after::after,
 .connection-item.drop-after::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 6px;
   right: 6px;

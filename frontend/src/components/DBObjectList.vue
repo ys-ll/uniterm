@@ -6,7 +6,9 @@
         class="object-search"
         :placeholder="t('db.searchTables')"
       />
-      <button class="btn btn-primary" @click="openNewTable">{{ t('db.newTable') }}</button>
+      <button class="btn btn-primary" @click="openNewTable">
+        {{ t("db.newTable") }}
+      </button>
     </div>
     <el-table
       :data="filtered"
@@ -18,14 +20,23 @@
       <el-table-column :label="t('db.colName')" prop="name" sortable>
         <template #default="{ row }">
           <span class="object-name" @click="onRowClick(row)">
-            <component :is="row.type === 'view' ? Eye : Table2" :size="14" class="object-icon" />
+            <component
+              :is="row.type === 'view' ? Eye : Table2"
+              :size="14"
+              class="object-icon"
+            />
             {{ row.name }}
           </span>
         </template>
       </el-table-column>
-      <el-table-column :label="t('db.colType')" prop="type" sortable width="100">
+      <el-table-column
+        :label="t('db.colType')"
+        prop="type"
+        sortable
+        width="100"
+      >
         <template #default="{ row }">
-          {{ row.type === 'view' ? t('db.typeView') : t('db.typeTable') }}
+          {{ row.type === "view" ? t("db.typeView") : t("db.typeTable") }}
         </template>
       </el-table-column>
       <el-table-column :label="t('db.actions')" width="110" align="right">
@@ -34,15 +45,26 @@
             v-if="row.type === 'view'"
             class="btn btn-ghost btn-icon btn-sm danger"
             :title="t('db.dropView')"
+            :aria-label="t('db.dropView')"
             @click.stop="askDropView(row)"
           >
             <Trash2 :size="14" />
           </button>
           <template v-else>
-            <button class="btn btn-ghost btn-icon btn-sm" :title="t('db.truncateTable')" @click.stop="askTruncate(row)">
+            <button
+              class="btn btn-ghost btn-icon btn-sm"
+              :title="t('db.truncateTable')"
+              :aria-label="t('db.truncateTable')"
+              @click.stop="askTruncate(row)"
+            >
               <Eraser :size="14" />
             </button>
-            <button class="btn btn-ghost btn-icon btn-sm danger" :title="t('db.dropTable')" @click.stop="askDrop(row)">
+            <button
+              class="btn btn-ghost btn-icon btn-sm danger"
+              :title="t('db.dropTable')"
+              :aria-label="t('db.dropTable')"
+              @click.stop="askDrop(row)"
+            >
               <Trash2 :size="14" />
             </button>
           </template>
@@ -51,31 +73,55 @@
     </el-table>
 
     <!-- Confirm dialog (type-to-confirm), mirrors the tree context menu -->
-    <el-dialog append-to-body v-model="confirmVisible" :title="confirmTitle" width="420px">
+    <el-dialog
+      append-to-body
+      v-model="confirmVisible"
+      :title="confirmTitle"
+      width="420px"
+    >
       <div class="confirm-body">
         <p class="confirm-text">{{ confirmText }}</p>
-        <p class="confirm-hint">{{ t('db.typeToConfirm', { name: confirmName }) }}</p>
+        <p class="confirm-hint">
+          {{ t("db.typeToConfirm", { name: confirmName }) }}
+        </p>
         <el-input v-model="confirmInput" :placeholder="confirmName" />
       </div>
       <template #footer>
-        <el-button @click="confirmVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="danger" :disabled="confirmInput !== confirmName" @click="onConfirm">
-          {{ t('common.confirm') }}
+        <el-button @click="confirmVisible = false">{{
+          t("common.cancel")
+        }}</el-button>
+        <el-button
+          type="danger"
+          :disabled="confirmInput !== confirmName"
+          @click="onConfirm"
+        >
+          {{ t("common.confirm") }}
         </el-button>
       </template>
     </el-dialog>
 
     <!-- New Table dialog -->
-    <el-dialog append-to-body v-model="newTableVisible" :title="t('db.newTable')" width="380px">
+    <el-dialog
+      append-to-body
+      v-model="newTableVisible"
+      :title="t('db.newTable')"
+      width="380px"
+    >
       <el-form label-width="80px">
         <el-form-item :label="t('db.tableName')">
           <el-input v-model="newTableName" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="newTableVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :disabled="!newTableName.trim()" @click="onCreateTable">
-          {{ t('common.save') }}
+        <el-button @click="newTableVisible = false">{{
+          t("common.cancel")
+        }}</el-button>
+        <el-button
+          type="primary"
+          :disabled="!newTableName.trim()"
+          @click="onCreateTable"
+        >
+          {{ t("common.save") }}
         </el-button>
       </template>
     </el-dialog>
@@ -83,138 +129,151 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { Table2, Eye, Eraser, Trash2 } from '@lucide/vue'
-import { useI18n } from '../i18n'
-import { GetTables, CreateTable, DropTable, DropView, TruncateTable } from '../../wailsjs/go/main/App'
-import { msg } from '../services/message'
-import type { TableInfo } from '../types/database'
+import { ref, computed, watch } from "vue";
+import { Table2, Eye, Eraser, Trash2 } from "@lucide/vue";
+import { useI18n } from "../i18n";
+import {
+  GetTables,
+  CreateTable,
+  DropTable,
+  DropView,
+  TruncateTable,
+} from "../../wailsjs/go/main/App";
+import { msg } from "../services/message";
+import type { TableInfo } from "../types/database";
 
-defineOptions({ name: 'DBObjectList' })
+defineOptions({ name: "DBObjectList" });
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 const props = defineProps<{
-  sessionId: string
-  dbName: string
-}>()
+  sessionId: string;
+  dbName: string;
+}>();
 
 const emit = defineEmits<{
-  open: [dbName: string, tableName: string, isView?: boolean]
-  changed: [dbName: string]
-}>()
+  open: [dbName: string, tableName: string, isView?: boolean];
+  changed: [dbName: string];
+}>();
 
-const objects = ref<TableInfo[]>([])
-const search = ref('')
-const loading = ref(false)
+const objects = ref<TableInfo[]>([]);
+const search = ref("");
+const loading = ref(false);
 
 async function load() {
-  if (!props.sessionId || !props.dbName) return
-  loading.value = true
+  if (!props.sessionId || !props.dbName) return;
+  loading.value = true;
   try {
-    objects.value = await GetTables(props.sessionId, props.dbName)
+    objects.value = await GetTables(props.sessionId, props.dbName);
   } catch {
-    objects.value = []
+    objects.value = [];
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
-watch(() => [props.sessionId, props.dbName], load, { immediate: true })
+watch(() => [props.sessionId, props.dbName], load, { immediate: true });
 
 const filtered = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return objects.value
-  return objects.value.filter(o => o.name.toLowerCase().includes(q))
-})
+  const q = search.value.trim().toLowerCase();
+  if (!q) return objects.value;
+  return objects.value.filter((o) => o.name.toLowerCase().includes(q));
+});
 
 function onRowClick(row: TableInfo) {
-  emit('open', props.dbName, row.name, row.type === 'view')
+  emit("open", props.dbName, row.name, row.type === "view");
 }
 
 // ── Confirm dialog (type-to-confirm) ──
 
-const confirmVisible = ref(false)
-const confirmTitle = ref('')
-const confirmText = ref('')
-const confirmName = ref('')
-const confirmInput = ref('')
-let confirmAction: (() => Promise<void>) | null = null
+const confirmVisible = ref(false);
+const confirmTitle = ref("");
+const confirmText = ref("");
+const confirmName = ref("");
+const confirmInput = ref("");
+let confirmAction: (() => Promise<void>) | null = null;
 
-function showConfirm(title: string, text: string, name: string, action: () => Promise<void>) {
-  confirmTitle.value = title
-  confirmText.value = text
-  confirmName.value = name
-  confirmInput.value = ''
-  confirmAction = action
-  confirmVisible.value = true
+function showConfirm(
+  title: string,
+  text: string,
+  name: string,
+  action: () => Promise<void>,
+) {
+  confirmTitle.value = title;
+  confirmText.value = text;
+  confirmName.value = name;
+  confirmInput.value = "";
+  confirmAction = action;
+  confirmVisible.value = true;
 }
 
 async function onConfirm() {
   if (confirmAction) {
     try {
-      await confirmAction()
+      await confirmAction();
     } catch (e: any) {
-      msg.error(e?.message || String(e))
+      msg.error(e?.message || String(e));
     }
   }
-  confirmVisible.value = false
+  confirmVisible.value = false;
 }
 
 function askTruncate(row: TableInfo) {
   showConfirm(
-    t('db.truncateTable'),
-    t('db.truncateTableConfirm', { name: row.name }),
+    t("db.truncateTable"),
+    t("db.truncateTableConfirm", { name: row.name }),
     row.name,
-    async () => { await TruncateTable(props.sessionId, props.dbName, row.name) }
-  )
+    async () => {
+      await TruncateTable(props.sessionId, props.dbName, row.name);
+    },
+  );
 }
 
 function askDrop(row: TableInfo) {
   showConfirm(
-    t('db.dropTable'),
-    t('db.dropTableConfirm', { name: row.name }),
+    t("db.dropTable"),
+    t("db.dropTableConfirm", { name: row.name }),
     row.name,
     async () => {
-      await DropTable(props.sessionId, props.dbName, row.name)
-      await load()
-      emit('changed', props.dbName)
-    }
-  )
+      await DropTable(props.sessionId, props.dbName, row.name);
+      await load();
+      emit("changed", props.dbName);
+    },
+  );
 }
 
 function askDropView(row: TableInfo) {
   showConfirm(
-    t('db.dropView'),
-    t('db.dropViewConfirm', { name: row.name }),
+    t("db.dropView"),
+    t("db.dropViewConfirm", { name: row.name }),
     row.name,
     async () => {
-      await DropView(props.sessionId, props.dbName, row.name)
-      await load()
-      emit('changed', props.dbName)
-    }
-  )
+      await DropView(props.sessionId, props.dbName, row.name);
+      await load();
+      emit("changed", props.dbName);
+    },
+  );
 }
 
 // ── New Table dialog ──
 
-const newTableVisible = ref(false)
-const newTableName = ref('')
+const newTableVisible = ref(false);
+const newTableName = ref("");
 
 function openNewTable() {
-  newTableName.value = ''
-  newTableVisible.value = true
+  newTableName.value = "";
+  newTableVisible.value = true;
 }
 
 async function onCreateTable() {
-  if (!newTableName.value.trim()) return
+  if (!newTableName.value.trim()) return;
   try {
-    await CreateTable(props.sessionId, props.dbName, newTableName.value.trim())
-    newTableVisible.value = false
-    await load()
-    emit('changed', props.dbName)
+    await CreateTable(props.sessionId, props.dbName, newTableName.value.trim());
+    newTableVisible.value = false;
+    await load();
+    emit("changed", props.dbName);
   } catch (e: any) {
-    msg.error(e?.message || String(e))
+    msg.error(e?.message || String(e));
   }
 }
 </script>

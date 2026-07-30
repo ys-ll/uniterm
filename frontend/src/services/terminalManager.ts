@@ -37,9 +37,9 @@ export interface ManagedTerminal {
 
 const terminals = new Map<string, ManagedTerminal>()
 
-// F-027: scrollback limit applied while the terminal sits in the hidden
-// holding container (between detach and re-attach). Restored on re-attach
-// so users keep their full scrollback when they revisit the tab.
+// Scrollback limit applied while the terminal sits in the hidden
+// holding container (between detach and re-attach). Restored on
+// re-attach so users keep their full scrollback when they revisit the tab.
 const INACTIVE_SCROLLBACK = 500
 
 // Hidden holding containers to keep terminal elements alive when no
@@ -79,12 +79,12 @@ export function acquireTerminal(
       ls.state.backgroundEnabled,
       ls.state.backgroundImage
     )
-    // F-034: 1.15 line height gives italic glyph descenders enough vertical
-    // room to render without clipping against the cell boundary. xterm
-    // defaults to 1.0, which is tight enough that the ⏺/⏵ spinner glyphs
-    // and italic thinking-block text from Claude Code visibly cut off.
+    // 1.15 line height gives italic glyph descenders enough vertical room
+    // to render without clipping against the cell boundary. xterm defaults
+    // to 1.0, which is tight enough that the ⏺/⏵ spinner glyphs and italic
+    // thinking-block text from Claude Code visibly cut off.
     //
-    // F-039: keep windowsMode off so xterm treats alt-screen (DECSET 1049)
+    // Keep windowsMode off so xterm treats alt-screen (DECSET 1049)
     // transitions the same as it does on macOS/Linux: the saved scrollback
     // buffer is restored on return. windowsMode forces winpty/conpty-style
     // line wrapping + reflow disabled, which is wrong on every backend
@@ -123,14 +123,14 @@ export function acquireTerminal(
     // misalignment users see. Must come AFTER loadAddon since the unicode
     // property is provided by the addon itself.
     //
-    // F-035: xterm.js v5.5 does not expose a charSizeCompat option, and
-    // ITheme has no codeBlockBackground field — both suggested by the
-    // finding's fix sketch. The Unicode 11 activeVersion here is the
-    // best available WC-width alignment in this xterm major; downstream
-    // the backend PTY uses the same Unicode 11 tables so column counts
-    // match. Upgrading to xterm.js v6 would unlock the extended-theme
-    // codeBlockBackground support needed for Claude Code's 256-color code
-    // blocks to stand out from prose — tracked as a v6 dependency bump.
+    // xterm.js v5.5 does not expose a charSizeCompat option, and ITheme has
+    // no codeBlockBackground field — both suggested by the finding's fix
+    // sketch. The Unicode 11 activeVersion here is the best available
+    // WC-width alignment in this xterm major; downstream the backend PTY
+    // uses the same Unicode 11 tables so column counts match. Upgrading
+    // to xterm.js v6 would unlock the extended-theme codeBlockBackground
+    // support needed for Claude Code's 256-color code blocks to stand out
+    // from prose — tracked as a v6 dependency bump.
     terminal.unicode.activeVersion = '11'
 
     managed = {
@@ -195,8 +195,8 @@ export function attachTerminal(sessionId: string, container: HTMLElement): void 
 
   managed.container = container
 
-  // F-027: restore the user-configured scrollback that detachTerminal
-  // shrank while the terminal sat in the holding container. Without this
+  // Restore the user-configured scrollback that detachTerminal shrank
+  // while the terminal sat in the holding container. Without this
   // re-attach, users would see only the last 500 lines after every
   // drag-out / re-merge cycle even though the full history is still
   // replayable from sessionStore on a fresh mount.
@@ -230,12 +230,12 @@ export function attachTerminal(sessionId: string, container: HTMLElement): void 
 export function detachTerminal(sessionId: string, container: HTMLElement): void {
   const managed = terminals.get(sessionId)
   if (!managed) return
-  // F-027: shrink xterm's pixel buffer while in the hidden holding
-  // container. detach → attach within the disposeTimer window still
-  // restores the original scrollback so users see their full history on
-  // re-attach. Without this the canvas + row objects for the trimmed
-  // rows stay pinned in the holding container's offscreen DOM and
-  // accumulate over the session.
+  // Shrink xterm's pixel buffer while in the hidden holding container.
+  // detach → attach within the disposeTimer window still restores the
+  // original scrollback so users see their full history on re-attach.
+  // Without this the canvas + row objects for the trimmed rows stay
+  // pinned in the holding container's offscreen DOM and accumulate
+  // over the session.
   if (managed.terminal.options.scrollback != null &&
       managed.terminal.options.scrollback > INACTIVE_SCROLLBACK) {
     managed.terminal.options.scrollback = INACTIVE_SCROLLBACK

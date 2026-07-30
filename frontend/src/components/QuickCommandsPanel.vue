@@ -6,18 +6,26 @@
         v-model="searchQuery"
         :placeholder="t('quickCommands.searchPlaceholder')"
         clearable
-       
         class="qc-search-input"
         @keydown="onListKeydown"
       />
       <el-dropdown trigger="click" placement="bottom-end" :teleported="false">
-        <button class="qc-icon-btn" :title="t('quickCommands.addCommand')" @click.stop>
+        <button
+          class="qc-icon-btn"
+          :title="t('quickCommands.addCommand')"
+          :aria-label="t('quickCommands.addCommand')"
+          @click.stop
+        >
           <Plus :size="15" />
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item @click="addCommand()">{{ t('quickCommands.addCommand') }}</el-dropdown-item>
-            <el-dropdown-item @click="addGroup">{{ t('quickCommands.addGroup') }}</el-dropdown-item>
+            <el-dropdown-item @click="addCommand()">{{
+              t("quickCommands.addCommand")
+            }}</el-dropdown-item>
+            <el-dropdown-item @click="addGroup">{{
+              t("quickCommands.addGroup")
+            }}</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -36,16 +44,19 @@
           @drop.prevent="onGroupDrop(group.id, $event)"
         >
           <span class="qc-group-arrow">
-            <el-icon v-if="expandedGroups.has(group.id)"><ChevronDown :size="14" /></el-icon>
+            <el-icon v-if="expandedGroups.has(group.id)"
+              ><ChevronDown :size="14"
+            /></el-icon>
             <el-icon v-else><ChevronRight :size="14" /></el-icon>
           </span>
           <span class="qc-group-name">{{ group.name }}</span>
-
         </div>
 
         <template v-if="expandedGroups.has(group.id)">
           <div
-            v-for="cmd in store.getCommandsByGroup(group.id).filter(matchesSearch)"
+            v-for="cmd in store
+              .getCommandsByGroup(group.id)
+              .filter(matchesSearch)"
             :key="cmd.id"
             class="qc-item indented"
             :class="{ active: selectedId === cmd.id }"
@@ -59,16 +70,39 @@
           >
             <div class="qc-item-content">
               <div v-if="cmd.name" class="qc-item-name">{{ cmd.name }}</div>
-              <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
+              <div
+                class="qc-item-cmd"
+                :class="{ 'qc-item-cmd-only': !cmd.name }"
+              >
+                {{ cmd.command }}
+              </div>
             </div>
-            <div v-if="selectedId === cmd.id || hoveredId === cmd.id" class="qc-item-actions">
-              <button class="btn btn-ghost btn-icon btn-sm run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
+            <div
+              v-if="selectedId === cmd.id || hoveredId === cmd.id"
+              class="qc-item-actions"
+            >
+              <button
+                class="btn btn-ghost btn-icon btn-sm run"
+                @click.stop="runCommand(cmd)"
+                :title="t('quickCommands.run')"
+                :aria-label="t('quickCommands.run')"
+              >
                 <Play :size="14" />
               </button>
-              <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
+              <button
+                class="btn btn-ghost btn-icon btn-sm paste"
+                @click.stop="pasteCommand(cmd)"
+                :title="t('quickCommands.paste')"
+                :aria-label="t('quickCommands.paste')"
+              >
                 <Clipboard :size="14" />
               </button>
-              <button class="btn btn-ghost btn-icon btn-sm" @click.stop="copyCommand(cmd)" :title="t('quickCommands.copy')">
+              <button
+                class="btn btn-ghost btn-icon btn-sm"
+                @click.stop="copyCommand(cmd)"
+                :title="t('quickCommands.copy')"
+                :aria-label="t('quickCommands.copy')"
+              >
                 <Copy :size="14" />
               </button>
             </div>
@@ -79,7 +113,9 @@
       <!-- Flat ungrouped commands (only when no real groups exist) -->
       <template v-if="store.groups.length === 0">
         <div
-          v-for="cmd in store.getCommandsByGroup(undefined).filter(matchesSearch)"
+          v-for="cmd in store
+            .getCommandsByGroup(undefined)
+            .filter(matchesSearch)"
           :key="cmd.id"
           class="qc-item"
           :class="{ active: selectedId === cmd.id }"
@@ -93,16 +129,36 @@
         >
           <div class="qc-item-content">
             <div v-if="cmd.name" class="qc-item-name">{{ cmd.name }}</div>
-            <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
+            <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">
+              {{ cmd.command }}
+            </div>
           </div>
-          <div v-if="selectedId === cmd.id || hoveredId === cmd.id" class="qc-item-actions">
-            <button class="btn btn-ghost btn-icon btn-sm run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
+          <div
+            v-if="selectedId === cmd.id || hoveredId === cmd.id"
+            class="qc-item-actions"
+          >
+            <button
+              class="btn btn-ghost btn-icon btn-sm run"
+              @click.stop="runCommand(cmd)"
+              :title="t('quickCommands.run')"
+              :aria-label="t('quickCommands.run')"
+            >
               <Play :size="14" />
             </button>
-            <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
+            <button
+              class="btn btn-ghost btn-icon btn-sm paste"
+              @click.stop="pasteCommand(cmd)"
+              :title="t('quickCommands.paste')"
+              :aria-label="t('quickCommands.paste')"
+            >
               <Clipboard :size="14" />
             </button>
-            <button class="btn btn-ghost btn-icon btn-sm" @click.stop="copyCommand(cmd)" :title="t('quickCommands.copy')">
+            <button
+              class="btn btn-ghost btn-icon btn-sm"
+              @click.stop="copyCommand(cmd)"
+              :title="t('quickCommands.copy')"
+              :aria-label="t('quickCommands.copy')"
+            >
               <Copy :size="14" />
             </button>
           </div>
@@ -110,7 +166,12 @@
       </template>
 
       <!-- Virtual (No Group) group - only when real groups exist -->
-      <template v-if="store.groups.length > 0 && store.getCommandsByGroup(undefined).filter(matchesSearch).length > 0">
+      <template
+        v-if="
+          store.groups.length > 0 &&
+          store.getCommandsByGroup(undefined).filter(matchesSearch).length > 0
+        "
+      >
         <div
           class="qc-group-header"
           :class="{ 'drag-over': dragOverGroupId === '__ungrouped__' }"
@@ -120,14 +181,18 @@
           @drop.prevent="onGroupDrop('__ungrouped__', $event)"
         >
           <span class="qc-group-arrow">
-            <el-icon v-if="expandedGroups.has('__ungrouped__')"><ChevronDown :size="14" /></el-icon>
+            <el-icon v-if="expandedGroups.has('__ungrouped__')"
+              ><ChevronDown :size="14"
+            /></el-icon>
             <el-icon v-else><ChevronRight :size="14" /></el-icon>
           </span>
-          <span class="qc-group-name">{{ t('quickCommands.noGroup') }}</span>
+          <span class="qc-group-name">{{ t("quickCommands.noGroup") }}</span>
         </div>
         <template v-if="expandedGroups.has('__ungrouped__')">
           <div
-            v-for="cmd in store.getCommandsByGroup(undefined).filter(matchesSearch)"
+            v-for="cmd in store
+              .getCommandsByGroup(undefined)
+              .filter(matchesSearch)"
             :key="cmd.id"
             class="qc-item indented"
             :class="{ active: selectedId === cmd.id }"
@@ -141,16 +206,39 @@
           >
             <div class="qc-item-content">
               <div v-if="cmd.name" class="qc-item-name">{{ cmd.name }}</div>
-              <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
+              <div
+                class="qc-item-cmd"
+                :class="{ 'qc-item-cmd-only': !cmd.name }"
+              >
+                {{ cmd.command }}
+              </div>
             </div>
-            <div v-if="selectedId === cmd.id || hoveredId === cmd.id" class="qc-item-actions">
-              <button class="btn btn-ghost btn-icon btn-sm run" @click.stop="runCommand(cmd)" :title="t('quickCommands.run')">
+            <div
+              v-if="selectedId === cmd.id || hoveredId === cmd.id"
+              class="qc-item-actions"
+            >
+              <button
+                class="btn btn-ghost btn-icon btn-sm run"
+                @click.stop="runCommand(cmd)"
+                :title="t('quickCommands.run')"
+                :aria-label="t('quickCommands.run')"
+              >
                 <Play :size="14" />
               </button>
-              <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(cmd)" :title="t('quickCommands.paste')">
+              <button
+                class="btn btn-ghost btn-icon btn-sm paste"
+                @click.stop="pasteCommand(cmd)"
+                :title="t('quickCommands.paste')"
+                :aria-label="t('quickCommands.paste')"
+              >
                 <Clipboard :size="14" />
               </button>
-              <button class="btn btn-ghost btn-icon btn-sm" @click.stop="copyCommand(cmd)" :title="t('quickCommands.copy')">
+              <button
+                class="btn btn-ghost btn-icon btn-sm"
+                @click.stop="copyCommand(cmd)"
+                :title="t('quickCommands.copy')"
+                :aria-label="t('quickCommands.copy')"
+              >
                 <Copy :size="14" />
               </button>
             </div>
@@ -160,7 +248,7 @@
 
       <!-- Empty state -->
       <div v-if="store.commands.length === 0" class="qc-empty">
-        {{ t('quickCommands.empty') }}
+        {{ t("quickCommands.empty") }}
       </div>
     </div>
 
@@ -173,48 +261,106 @@
     >
       <!-- Command menu items -->
       <template v-if="selectedCmd">
-        <div class="menu-item" @click="runCommand(selectedCmd!); closeMenu()">{{ t('quickCommands.run') }}</div>
-        <div class="menu-item" @click="pasteCommand(selectedCmd!); closeMenu()">{{ t('quickCommands.paste') }}</div>
-        <div class="menu-item" @click="copyCommand(selectedCmd!); closeMenu()">{{ t('quickCommands.copy') }}</div>
+        <div
+          class="menu-item"
+          @click="
+            runCommand(selectedCmd!);
+            closeMenu();
+          "
+        >
+          {{ t("quickCommands.run") }}
+        </div>
+        <div
+          class="menu-item"
+          @click="
+            pasteCommand(selectedCmd!);
+            closeMenu();
+          "
+        >
+          {{ t("quickCommands.paste") }}
+        </div>
+        <div
+          class="menu-item"
+          @click="
+            copyCommand(selectedCmd!);
+            closeMenu();
+          "
+        >
+          {{ t("quickCommands.copy") }}
+        </div>
         <div class="menu-divider" />
-        <div class="menu-item" @click="editCommand(selectedCmd!)">{{ t('quickCommands.editCommand') }}</div>
-        <div class="menu-item danger" @click="deleteCommand(selectedCmd!)">{{ t('quickCommands.deleteCommand') }}</div>
+        <div class="menu-item" @click="editCommand(selectedCmd!)">
+          {{ t("quickCommands.editCommand") }}
+        </div>
+        <div class="menu-item danger" @click="deleteCommand(selectedCmd!)">
+          {{ t("quickCommands.deleteCommand") }}
+        </div>
       </template>
 
       <!-- Group menu items -->
       <template v-if="selectedGroup">
-        <div class="menu-item" @click="addCommand(selectedGroup!.id)">{{ t('quickCommands.addCommand') }}</div>
-        <div class="menu-item" @click="renameGroup(selectedGroup!)">{{ t('quickCommands.renameGroup') }}</div>
-        <div class="menu-item danger" @click="deleteGroupDialog(selectedGroup!)">{{ t('quickCommands.deleteGroup') }}</div>
+        <div class="menu-item" @click="addCommand(selectedGroup!.id)">
+          {{ t("quickCommands.addCommand") }}
+        </div>
+        <div class="menu-item" @click="renameGroup(selectedGroup!)">
+          {{ t("quickCommands.renameGroup") }}
+        </div>
+        <div
+          class="menu-item danger"
+          @click="deleteGroupDialog(selectedGroup!)"
+        >
+          {{ t("quickCommands.deleteGroup") }}
+        </div>
       </template>
     </div>
 
     <!-- Delete group dialog -->
-    <el-dialog append-to-body
+    <el-dialog
+      append-to-body
       v-model="deleteGroupDialogVisible"
       :title="t('quickCommands.deleteGroupTitle')"
       width="400px"
       :close-on-click-modal="false"
     >
-      <p>{{ t('quickCommands.deleteGroupDesc') }}</p>
+      <p>{{ t("quickCommands.deleteGroupDesc") }}</p>
       <div class="delete-group-actions">
-        <el-button @click="doDeleteGroup(false)">{{ t('quickCommands.moveToUngrouped') }}</el-button>
-        <el-button type="danger" @click="doDeleteGroup(true)">{{ t('quickCommands.deleteCommands') }}</el-button>
+        <el-button @click="doDeleteGroup(false)">{{
+          t("quickCommands.moveToUngrouped")
+        }}</el-button>
+        <el-button type="danger" @click="doDeleteGroup(true)">{{
+          t("quickCommands.deleteCommands")
+        }}</el-button>
       </div>
     </el-dialog>
 
     <!-- Group name dialog (add + rename) -->
-    <el-dialog append-to-body
+    <el-dialog
+      append-to-body
       v-model="groupNameDialogVisible"
-      :title="renamingGroup ? t('quickCommands.renameGroup') : t('quickCommands.addGroup')"
+      :title="
+        renamingGroup
+          ? t('quickCommands.renameGroup')
+          : t('quickCommands.addGroup')
+      "
       width="360px"
       :close-on-click-modal="false"
     >
-      <el-input v-model="groupNameInput" :placeholder="t('quickCommands.groupName')" maxlength="30" @keyup.enter="doSaveGroupName" />
+      <el-input
+        v-model="groupNameInput"
+        :placeholder="t('quickCommands.groupName')"
+        maxlength="30"
+        @keyup.enter="doSaveGroupName"
+      />
       <template #footer>
-        <el-button @click="groupNameDialogVisible = false">{{ t('quickCommands.cancel') }}</el-button>
-        <el-button type="primary" :disabled="!groupNameInput.trim()" @click="doSaveGroupName">
-          {{ t('quickCommands.save') }}
+        <el-button @click="groupNameDialogVisible = false">{{
+          t("quickCommands.cancel")
+        }}</el-button>
+        <el-button
+          type="primary"
+          :disabled="!groupNameInput.trim()"
+          @click="doSaveGroupName"
+        >
+          {{ t("quickCommands.save") }}
         </el-button>
       </template>
     </el-dialog>
@@ -231,334 +377,354 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from "vue";
 import {
-  Plus, Play, Clipboard, Copy,
-  ChevronDown, ChevronRight
-} from '@lucide/vue'
-import { useQuickCommandStore, type QuickCommand, type QuickCommandGroup } from '../stores/quickCommandStore'
-import { useTabStore } from '../stores/tabStore'
-import { usePanelStore } from '../stores/panelStore'
-import { SessionWrite } from '../../wailsjs/go/main/App'
-import { useI18n } from '../i18n'
-import { msg } from '../services/message'
-import { focusActivePanelTerminal } from '../composables/useFocusTerminal'
-import QuickCommandEditDialog from './QuickCommandEditDialog.vue'
+  Plus,
+  Play,
+  Clipboard,
+  Copy,
+  ChevronDown,
+  ChevronRight,
+} from "@lucide/vue";
+import {
+  useQuickCommandStore,
+  type QuickCommand,
+  type QuickCommandGroup,
+} from "../stores/quickCommandStore";
+import { useTabStore } from "../stores/tabStore";
+import { usePanelStore } from "../stores/panelStore";
+import { SessionWrite } from "../../wailsjs/go/main/App";
+import { useI18n } from "../i18n";
+import { msg } from "../services/message";
+import { focusActivePanelTerminal } from "../composables/useFocusTerminal";
+import QuickCommandEditDialog from "./QuickCommandEditDialog.vue";
 
-const { t } = useI18n()
-const store = useQuickCommandStore()
-const tabStore = useTabStore()
-const panelStore = usePanelStore()
+const { t } = useI18n();
+const store = useQuickCommandStore();
+const tabStore = useTabStore();
+const panelStore = usePanelStore();
 
-const selectedId = ref<string | null>(null)
-const focusedId = ref<string | null>(null)
-const listRef = ref<HTMLDivElement | null>(null)
-const hoveredId = ref<string | null>(null)
-const searchQuery = ref('')
-const expandedGroups = ref<Set<string>>(new Set())
+const selectedId = ref<string | null>(null);
+const focusedId = ref<string | null>(null);
+const listRef = ref<HTMLDivElement | null>(null);
+const hoveredId = ref<string | null>(null);
+const searchQuery = ref("");
+const expandedGroups = ref<Set<string>>(new Set());
 
-const dragOverGroupId = ref<string | null>(null)
+const dragOverGroupId = ref<string | null>(null);
 
-const menuVisible = ref(false)
-const menuStyle = ref({ left: '0px', top: '0px' })
-const selectedCmd = ref<QuickCommand | null>(null)
-const selectedGroup = ref<QuickCommandGroup | null>(null)
+const menuVisible = ref(false);
+const menuStyle = ref({ left: "0px", top: "0px" });
+const selectedCmd = ref<QuickCommand | null>(null);
+const selectedGroup = ref<QuickCommandGroup | null>(null);
 
-const deleteGroupDialogVisible = ref(false)
-const deletingGroup = ref<QuickCommandGroup | null>(null)
+const deleteGroupDialogVisible = ref(false);
+const deletingGroup = ref<QuickCommandGroup | null>(null);
 
-const groupNameDialogVisible = ref(false)
-const groupNameInput = ref('')
-const renamingGroup = ref<QuickCommandGroup | null>(null)
+const groupNameDialogVisible = ref(false);
+const groupNameInput = ref("");
+const renamingGroup = ref<QuickCommandGroup | null>(null);
 
-const editDialogVisible = ref(false)
-const editingCmdId = ref<string | undefined>(undefined)
-const editingCmdName = ref<string | undefined>(undefined)
-const editingCmdCommand = ref('')
-const editingCmdGroupId = ref<string | undefined>(undefined)
+const editDialogVisible = ref(false);
+const editingCmdId = ref<string | undefined>(undefined);
+const editingCmdName = ref<string | undefined>(undefined);
+const editingCmdCommand = ref("");
+const editingCmdGroupId = ref<string | undefined>(undefined);
 
 onMounted(async () => {
-  await store.load()
-  store.groups.forEach(g => expandedGroups.value.add(g.id))
-  expandedGroups.value.add('__ungrouped__')
-  document.addEventListener('click', closeMenu)
-  window.addEventListener('global:close-context-menus', closeMenu)
-})
+  await store.load();
+  store.groups.forEach((g) => expandedGroups.value.add(g.id));
+  expandedGroups.value.add("__ungrouped__");
+  document.addEventListener("click", closeMenu);
+  window.addEventListener("global:close-context-menus", closeMenu);
+});
 
 onUnmounted(() => {
-  document.removeEventListener('click', closeMenu)
-  window.removeEventListener('global:close-context-menus', closeMenu)
-})
+  document.removeEventListener("click", closeMenu);
+  window.removeEventListener("global:close-context-menus", closeMenu);
+});
 
 function closeMenu() {
-  menuVisible.value = false
+  menuVisible.value = false;
 }
 
 function clampMenuPosition(x: number, y: number) {
-  const menuWidth = 160
-  const menuHeight = 80
-  const mx = Math.min(x, window.innerWidth - menuWidth)
-  const my = Math.min(y, window.innerHeight - menuHeight)
-  return { left: mx + 'px', top: my + 'px' }
+  const menuWidth = 160;
+  const menuHeight = 80;
+  const mx = Math.min(x, window.innerWidth - menuWidth);
+  const my = Math.min(y, window.innerHeight - menuHeight);
+  return { left: mx + "px", top: my + "px" };
 }
 
 function toggleGroup(id: string) {
-  if (expandedGroups.value.has(id)) expandedGroups.value.delete(id)
-  else expandedGroups.value.add(id)
+  if (expandedGroups.value.has(id)) expandedGroups.value.delete(id);
+  else expandedGroups.value.add(id);
 }
 
 function matchesSearch(cmd: QuickCommand): boolean {
-  if (!searchQuery.value.trim()) return true
-  const q = searchQuery.value.toLowerCase()
-  if (cmd.name && cmd.name.toLowerCase().includes(q)) return true
-  if (cmd.command.toLowerCase().includes(q)) return true
-  return false
+  if (!searchQuery.value.trim()) return true;
+  const q = searchQuery.value.toLowerCase();
+  if (cmd.name && cmd.name.toLowerCase().includes(q)) return true;
+  if (cmd.command.toLowerCase().includes(q)) return true;
+  return false;
 }
 
 function getAllVisibleIds(): string[] {
-  const ids: string[] = []
+  const ids: string[] = [];
   for (const g of store.groups) {
     if (expandedGroups.value.has(g.id)) {
       for (const c of store.getCommandsByGroup(g.id).filter(matchesSearch)) {
-        ids.push(c.id)
+        ids.push(c.id);
       }
     }
   }
   // ungrouped
   if (store.groups.length > 0) {
-    if (expandedGroups.value.has('__ungrouped__')) {
-      for (const c of store.getCommandsByGroup(undefined).filter(matchesSearch)) {
-        ids.push(c.id)
+    if (expandedGroups.value.has("__ungrouped__")) {
+      for (const c of store
+        .getCommandsByGroup(undefined)
+        .filter(matchesSearch)) {
+        ids.push(c.id);
       }
     }
   } else {
     for (const c of store.getCommandsByGroup(undefined).filter(matchesSearch)) {
-      ids.push(c.id)
+      ids.push(c.id);
     }
   }
-  return ids
+  return ids;
 }
 
 function onListKeydown(e: KeyboardEvent) {
-  const ids = getAllVisibleIds()
-  if (ids.length === 0) return
-  const idx = ids.indexOf(focusedId.value || '')
+  const ids = getAllVisibleIds();
+  if (ids.length === 0) return;
+  const idx = ids.indexOf(focusedId.value || "");
 
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    const nextIdx = idx >= 0 && idx < ids.length - 1 ? idx + 1 : 0
-    focusedId.value = ids[nextIdx]
-    selectedId.value = ids[nextIdx]
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    const prevIdx = idx > 0 ? idx - 1 : ids.length - 1
-    focusedId.value = ids[prevIdx]
-    selectedId.value = ids[prevIdx]
-  } else if (e.key === 'Enter') {
-    e.preventDefault()
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    const nextIdx = idx >= 0 && idx < ids.length - 1 ? idx + 1 : 0;
+    focusedId.value = ids[nextIdx];
+    selectedId.value = ids[nextIdx];
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    const prevIdx = idx > 0 ? idx - 1 : ids.length - 1;
+    focusedId.value = ids[prevIdx];
+    selectedId.value = ids[prevIdx];
+  } else if (e.key === "Enter") {
+    e.preventDefault();
     if (focusedId.value) {
-      const cmd = store.commands.find(c => c.id === focusedId.value)
-      if (cmd) runCommand(cmd)
+      const cmd = store.commands.find((c) => c.id === focusedId.value);
+      if (cmd) runCommand(cmd);
     }
-  } else if (e.key === 'Delete') {
-    e.preventDefault()
+  } else if (e.key === "Delete") {
+    e.preventDefault();
     if (focusedId.value) {
-      const cmd = store.commands.find(c => c.id === focusedId.value)
-      if (cmd) deleteCommand(cmd)
+      const cmd = store.commands.find((c) => c.id === focusedId.value);
+      if (cmd) deleteCommand(cmd);
     }
   }
 }
 
 function selectCommand(id: string) {
-  selectedId.value = id
-  focusedId.value = id
+  selectedId.value = id;
+  focusedId.value = id;
 }
 
 function getTargetSessionIds(): string[] {
-  const activeTabId = tabStore.activeTabId
-  if (!activeTabId) return []
-  const tab = tabStore.tabs.find(t => t.id === activeTabId)
-  if (!tab) return []
+  const activeTabId = tabStore.activeTabId;
+  if (!activeTabId) return [];
+  const tab = tabStore.tabs.find((t) => t.id === activeTabId);
+  if (!tab) return [];
 
   // Broadcast mode: send to broadcasting SSH/local panels in the workspace
-  if (tab.type === 'workspace' && tabStore.isBroadcasting(tab.id)) {
-    const ids: string[] = []
+  if (tab.type === "workspace" && tabStore.isBroadcasting(tab.id)) {
+    const ids: string[] = [];
     for (const pid of tabStore.getBroadcastPanelIdsInWorkspace(tab.id)) {
-      const p = panelStore.getPanel(pid)
-      if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
-        ids.push(p.sessionId)
+      const p = panelStore.getPanel(pid);
+      if (p?.sessionId && (p.type === "ssh" || p.type === "local")) {
+        ids.push(p.sessionId);
       }
     }
-    return ids
+    return ids;
   }
 
   // Normal mode: send to active panel only
-  const activePanelId = tab.type === 'workspace' ? tab.activePanelId : (tab.type === 'terminal' ? tab.panelId : null)
-  if (!activePanelId) return []
-  const panel = panelStore.getPanel(activePanelId)
-  if (!panel?.sessionId) return []
-  return [panel.sessionId]
+  const activePanelId =
+    tab.type === "workspace"
+      ? tab.activePanelId
+      : tab.type === "terminal"
+        ? tab.panelId
+        : null;
+  if (!activePanelId) return [];
+  const panel = panelStore.getPanel(activePanelId);
+  if (!panel?.sessionId) return [];
+  return [panel.sessionId];
 }
 
-async function sendCommand(cmd: QuickCommand, mode: 'run' | 'paste') {
-  const sids = getTargetSessionIds()
-  if (sids.length === 0) return
+async function sendCommand(cmd: QuickCommand, mode: "run" | "paste") {
+  const sids = getTargetSessionIds();
+  if (sids.length === 0) return;
 
   for (const sid of sids) {
-    if (mode === 'paste') {
-      SessionWrite(sid, cmd.command)
-      continue
+    if (mode === "paste") {
+      SessionWrite(sid, cmd.command);
+      continue;
     }
-    const text = cmd.command.replace(/\r\n?/g, '\n')
-    const lines = text.split('\n').filter(l => l.length > 0)
+    const text = cmd.command.replace(/\r\n?/g, "\n");
+    const lines = text.split("\n").filter((l) => l.length > 0);
     for (let i = 0; i < lines.length; i++) {
-      SessionWrite(sid, lines[i] + '\r')
-      if (i < lines.length - 1) await new Promise(r => setTimeout(r, 100))
+      SessionWrite(sid, lines[i] + "\r");
+      if (i < lines.length - 1) await new Promise((r) => setTimeout(r, 100));
     }
   }
   // Return focus to the terminal so the user can press Enter/edit without
   // an extra mouse click (issue #285). In broadcast mode, focus the active
   // panel — the one the user is looking at.
-  focusActivePanelTerminal()
+  focusActivePanelTerminal();
 }
 
-function runCommand(cmd: QuickCommand) { sendCommand(cmd, 'run') }
-function pasteCommand(cmd: QuickCommand) { sendCommand(cmd, 'paste') }
+function runCommand(cmd: QuickCommand) {
+  sendCommand(cmd, "run");
+}
+function pasteCommand(cmd: QuickCommand) {
+  sendCommand(cmd, "paste");
+}
 
 async function copyCommand(cmd: QuickCommand) {
   try {
-    await navigator.clipboard.writeText(cmd.command)
-    msg.success(t('quickCommands.copied'))
+    await navigator.clipboard.writeText(cmd.command);
+    msg.success(t("quickCommands.copied"));
   } catch {
-    msg.error(t('quickCommands.copyFailed'))
+    msg.error(t("quickCommands.copyFailed"));
   }
 }
 
 function onCommandContextMenu(e: MouseEvent, cmd: QuickCommand) {
-  e.stopPropagation()
-  window.dispatchEvent(new CustomEvent('global:close-context-menus'))
-  selectedCmd.value = cmd
-  selectedGroup.value = null
-  selectCommand(cmd.id)
-  menuStyle.value = clampMenuPosition(e.clientX, e.clientY)
-  menuVisible.value = true
+  e.stopPropagation();
+  window.dispatchEvent(new CustomEvent("global:close-context-menus"));
+  selectedCmd.value = cmd;
+  selectedGroup.value = null;
+  selectCommand(cmd.id);
+  menuStyle.value = clampMenuPosition(e.clientX, e.clientY);
+  menuVisible.value = true;
 }
 function onGroupContextMenu(e: MouseEvent, group: QuickCommandGroup) {
-  e.stopPropagation()
-  window.dispatchEvent(new CustomEvent('global:close-context-menus'))
-  selectedGroup.value = group
-  selectedCmd.value = null
-  menuStyle.value = clampMenuPosition(e.clientX, e.clientY)
-  menuVisible.value = true
+  e.stopPropagation();
+  window.dispatchEvent(new CustomEvent("global:close-context-menus"));
+  selectedGroup.value = group;
+  selectedCmd.value = null;
+  menuStyle.value = clampMenuPosition(e.clientX, e.clientY);
+  menuVisible.value = true;
 }
 
 function editCommand(cmd: QuickCommand) {
-  editingCmdId.value = cmd.id
-  editingCmdName.value = cmd.name
-  editingCmdCommand.value = cmd.command
-  editingCmdGroupId.value = cmd.groupId
-  editDialogVisible.value = true
-  closeMenu()
+  editingCmdId.value = cmd.id;
+  editingCmdName.value = cmd.name;
+  editingCmdCommand.value = cmd.command;
+  editingCmdGroupId.value = cmd.groupId;
+  editDialogVisible.value = true;
+  closeMenu();
 }
 
 function deleteCommand(cmd: QuickCommand) {
-  store.deleteCommand(cmd.id)
-  if (selectedId.value === cmd.id) selectedId.value = null
-  if (focusedId.value === cmd.id) focusedId.value = null
-  closeMenu()
+  store.deleteCommand(cmd.id);
+  if (selectedId.value === cmd.id) selectedId.value = null;
+  if (focusedId.value === cmd.id) focusedId.value = null;
+  closeMenu();
 }
 
 function addCommand(groupId?: string) {
-  editingCmdId.value = undefined
-  editingCmdName.value = undefined
-  editingCmdCommand.value = ''
-  editingCmdGroupId.value = groupId
-  editDialogVisible.value = true
-  closeMenu()
+  editingCmdId.value = undefined;
+  editingCmdName.value = undefined;
+  editingCmdCommand.value = "";
+  editingCmdGroupId.value = groupId;
+  editDialogVisible.value = true;
+  closeMenu();
 }
 
 function addGroup() {
-  renamingGroup.value = null
-  groupNameInput.value = ''
-  groupNameDialogVisible.value = true
+  renamingGroup.value = null;
+  groupNameInput.value = "";
+  groupNameDialogVisible.value = true;
 }
 
 function renameGroup(group: QuickCommandGroup) {
-  renamingGroup.value = group
-  groupNameInput.value = group.name
-  groupNameDialogVisible.value = true
-  closeMenu()
+  renamingGroup.value = group;
+  groupNameInput.value = group.name;
+  groupNameDialogVisible.value = true;
+  closeMenu();
 }
 
 function doSaveGroupName() {
-  const name = groupNameInput.value.trim()
-  if (!name) return
-  if (renamingGroup.value) store.renameGroup(renamingGroup.value.id, name)
+  const name = groupNameInput.value.trim();
+  if (!name) return;
+  if (renamingGroup.value) store.renameGroup(renamingGroup.value.id, name);
   else {
-    const g = store.addGroup(name)
-    expandedGroups.value.add(g.id)
+    const g = store.addGroup(name);
+    expandedGroups.value.add(g.id);
   }
-  groupNameDialogVisible.value = false
+  groupNameDialogVisible.value = false;
 }
 
 function deleteGroupDialog(group: QuickCommandGroup) {
-  deletingGroup.value = group
-  deleteGroupDialogVisible.value = true
-  closeMenu()
+  deletingGroup.value = group;
+  deleteGroupDialogVisible.value = true;
+  closeMenu();
 }
 
 function doDeleteGroup(deleteCommands: boolean) {
-  if (deletingGroup.value) store.deleteGroup(deletingGroup.value.id, deleteCommands)
-  deleteGroupDialogVisible.value = false
-  deletingGroup.value = null
+  if (deletingGroup.value)
+    store.deleteGroup(deletingGroup.value.id, deleteCommands);
+  deleteGroupDialogVisible.value = false;
+  deletingGroup.value = null;
 }
 
 // Drag and drop
 function onCommandDragStart(e: DragEvent, cmd: QuickCommand) {
-  if (!e.dataTransfer) return
-  e.dataTransfer.setData('application/qc-id', cmd.id)
-  e.dataTransfer.effectAllowed = 'move'
+  if (!e.dataTransfer) return;
+  e.dataTransfer.setData("application/qc-id", cmd.id);
+  e.dataTransfer.effectAllowed = "move";
 }
 
 function onGroupDragOver(e: DragEvent, groupId: string) {
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  dragOverGroupId.value = groupId
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  dragOverGroupId.value = groupId;
 }
 
 function onGroupDragLeave(groupId: string) {
   if (dragOverGroupId.value === groupId) {
-    dragOverGroupId.value = null
+    dragOverGroupId.value = null;
   }
 }
 
 async function onGroupDrop(groupId: string, e: DragEvent) {
-  e.preventDefault()
-  dragOverGroupId.value = null
-  const cmdId = e.dataTransfer?.getData('application/qc-id')
-  if (!cmdId) return
-  const targetGroupId = groupId === '__ungrouped__' ? undefined : groupId
-  const cmd = store.commands.find(c => c.id === cmdId)
+  e.preventDefault();
+  dragOverGroupId.value = null;
+  const cmdId = e.dataTransfer?.getData("application/qc-id");
+  if (!cmdId) return;
+  const targetGroupId = groupId === "__ungrouped__" ? undefined : groupId;
+  const cmd = store.commands.find((c) => c.id === cmdId);
   if (cmd) {
-    store.updateCommand(cmd.id, cmd.name, cmd.command, targetGroupId)
+    store.updateCommand(cmd.id, cmd.name, cmd.command, targetGroupId);
   }
 }
 
 // Search: expand all groups and auto-select first match
 watch(searchQuery, (q) => {
   if (q.trim()) {
-    store.groups.forEach(g => expandedGroups.value.add(g.id))
-    expandedGroups.value.add('__ungrouped__')
+    store.groups.forEach((g) => expandedGroups.value.add(g.id));
+    expandedGroups.value.add("__ungrouped__");
   }
-  const ids = getAllVisibleIds()
+  const ids = getAllVisibleIds();
   if (ids.length > 0) {
-    focusedId.value = ids[0]
-    selectedId.value = ids[0]
+    focusedId.value = ids[0];
+    selectedId.value = ids[0];
   } else {
-    focusedId.value = null
-    selectedId.value = null
+    focusedId.value = null;
+    selectedId.value = null;
   }
-})
+});
 </script>
 
 <style scoped>
@@ -642,7 +808,6 @@ watch(searchQuery, (q) => {
   flex: 1;
 }
 
-
 .qc-item {
   display: flex;
   align-items: center;
@@ -690,7 +855,7 @@ watch(searchQuery, (q) => {
 .qc-item-cmd {
   font-size: 12px;
   color: var(--text-secondary);
-  font-family: var(--font-mono, 'Consolas', 'Courier New', monospace);
+  font-family: var(--font-mono, "Consolas", "Courier New", monospace);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

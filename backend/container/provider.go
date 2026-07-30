@@ -84,7 +84,11 @@ func (p *Provider) Create(ctx context.Context, o CreateOptions) error {
 	if strings.TrimSpace(o.Image) == "" {
 		return fmt.Errorf("image required")
 	}
-	_, err := p.runner.Run(ctx, createArgs(p.rt, p.ns, o))
+	args, err := createArgs(p.rt, p.ns, o)
+	if err != nil {
+		return err
+	}
+	_, err = p.runner.Run(ctx, args)
 	return err
 }
 

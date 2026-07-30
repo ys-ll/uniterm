@@ -43,10 +43,12 @@ func (s *WebDAVSession) Connect(config ConnectionConfig) error {
 
 	url := strings.TrimSuffix(config.Host, "/")
 	s.title = fmt.Sprintf("%s@%s", config.User, url)
+	s.LogConnect(url, 0)
 
 	client := gowebdav.NewClient(url, config.User, config.Password)
 	if err := client.Connect(); err != nil {
 		s.setStatus(StatusError)
+		s.LogError("webdav-connect", err)
 		return fmt.Errorf("webdav connect: %w", err)
 	}
 
@@ -56,10 +58,11 @@ func (s *WebDAVSession) Connect(config ConnectionConfig) error {
 	return nil
 }
 
-func (s *WebDAVSession) Write(data []byte) error  { return nil }
+func (s *WebDAVSession) Write(data []byte) error     { return nil }
 func (s *WebDAVSession) Resize(cols, rows int) error { return nil }
 
 func (s *WebDAVSession) Disconnect() error {
+	s.LogDisconnect("user")
 	s.client = nil
 	s.setStatus(StatusDisconnected)
 	return nil

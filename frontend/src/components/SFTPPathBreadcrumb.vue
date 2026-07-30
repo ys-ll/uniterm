@@ -1,15 +1,10 @@
 <template>
-  <div
-    ref="breadcrumbRef"
-    class="sftp-breadcrumb"
-    @click.self="startEdit"
-  >
+  <div ref="breadcrumbRef" class="sftp-breadcrumb" @click.self="startEdit">
     <template v-if="editing">
       <span v-if="label" class="breadcrumb-label">{{ label }}</span>
       <el-input
         ref="inputRef"
         v-model="pathInput"
-       
         class="path-input"
         @keyup.enter="commitEdit"
         @blur="commitEdit"
@@ -23,7 +18,8 @@
           v-if="item === '...'"
           class="breadcrumb-part breadcrumb-ellipsis"
           @click.stop="onEllipsisClick"
-        ><MoreHorizontal :size="14" /></span>
+          ><MoreHorizontal :size="14"
+        /></span>
         <span
           v-else-if="isWindowsPath && item === pathParts[0]"
           class="breadcrumb-part breadcrumb-drive"
@@ -32,23 +28,25 @@
           {{ item }}
           <span class="drive-arrow">&#9660;</span>
         </span>
-        <span
-          v-else
-          class="breadcrumb-part"
-          @click="onBreadcrumbClick(item)"
-        >
+        <span v-else class="breadcrumb-part" @click="onBreadcrumbClick(item)">
           {{ item }}
         </span>
-        <span v-if="idx < visibleParts.length - 1" class="separator" @click.stop>&gt;</span>
+        <span v-if="idx < visibleParts.length - 1" class="separator" @click.stop
+          >&gt;</span
+        >
       </template>
       <button
         v-if="bookmarkMode"
         ref="bookmarkBtnRef"
         class="bookmark-btn"
         :title="t('sftp.bookmark.title')"
+        :aria-label="t('sftp.bookmark.title')"
         @click.stop="toggleBookmarkMenu"
       >
-        <Bookmark :size="14" :class="{ 'bookmark-active': hasCurrentPathBookmarked }" />
+        <Bookmark
+          :size="14"
+          :class="{ 'bookmark-active': hasCurrentPathBookmarked }"
+        />
       </button>
     </template>
 
@@ -88,14 +86,11 @@
           @click="onSaveBookmark"
         >
           <BookmarkPlus :size="14" />
-          <span>{{ t('sftp.bookmark.saveCurrent') }}</span>
+          <span>{{ t("sftp.bookmark.saveCurrent") }}</span>
         </div>
-        <div
-          v-else
-          class="bookmark-item bookmark-saved-hint"
-        >
+        <div v-else class="bookmark-item bookmark-saved-hint">
           <BookmarkCheck :size="14" />
-          <span>{{ t('sftp.bookmark.saved') }}</span>
+          <span>{{ t("sftp.bookmark.saved") }}</span>
         </div>
         <div v-if="savedPaths.length > 0" class="bookmark-divider"></div>
         <div
@@ -107,12 +102,15 @@
           @mouseenter="hoveredBookmarkIdx = idx"
           @mouseleave="hoveredBookmarkIdx = -1"
         >
-          <span class="bookmark-path-text" :title="savedPath">{{ savedPath }}</span>
+          <span class="bookmark-path-text" :title="savedPath">{{
+            savedPath
+          }}</span>
           <button
             v-show="hoveredBookmarkIdx === idx"
             class="bookmark-remove-btn"
             @click.stop="onRemoveBookmark(savedPath)"
             :title="t('sftp.bookmark.remove')"
+            :aria-label="t('sftp.bookmark.remove')"
           >
             <Trash2 :size="12" />
           </button>
@@ -121,7 +119,7 @@
           v-if="savedPaths.length === 0"
           class="bookmark-item bookmark-empty"
         >
-          {{ t('sftp.bookmark.empty') }}
+          {{ t("sftp.bookmark.empty") }}
         </div>
       </div>
     </Teleport>
@@ -129,289 +127,303 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
-import { Bookmark, BookmarkPlus, BookmarkCheck, Trash2, MoreHorizontal } from '@lucide/vue'
-import { useI18n } from '../i18n'
+import { computed, ref, nextTick, watch, onMounted, onUnmounted } from "vue";
+import {
+  Bookmark,
+  BookmarkPlus,
+  BookmarkCheck,
+  Trash2,
+  MoreHorizontal,
+} from "@lucide/vue";
+import { useI18n } from "../i18n";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 const props = defineProps<{
-  path: string
-  label?: string
-  drives?: string[]
-  savedPaths?: string[]
-  bookmarkMode?: 'local' | 'remote'
-}>()
+  path: string;
+  label?: string;
+  drives?: string[];
+  savedPaths?: string[];
+  bookmarkMode?: "local" | "remote";
+}>();
 
 const emit = defineEmits<{
-  navigate: [path: string]
-  saveBookmark: [path: string]
-  removeBookmark: [path: string]
-}>()
+  navigate: [path: string];
+  saveBookmark: [path: string];
+  removeBookmark: [path: string];
+}>();
 
 const isWindowsPath = computed(() => {
-  return /^[A-Za-z]:[\\\/]/.test(props.path)
-})
+  return /^[A-Za-z]:[\\\/]/.test(props.path);
+});
 
 const currentDrive = computed(() => {
-  if (!isWindowsPath.value) return ''
-  const match = props.path.match(/^([A-Za-z]:)/)
-  return match ? match[1] + '\\' : ''
-})
+  if (!isWindowsPath.value) return "";
+  const match = props.path.match(/^([A-Za-z]:)/);
+  return match ? match[1] + "\\" : "";
+});
 
 const pathParts = computed(() => {
   if (isWindowsPath.value) {
-    const clean = props.path.replace(/\\/g, '/')
-    const parts = clean.split('/').filter(Boolean)
-    return parts
+    const clean = props.path.replace(/\\/g, "/");
+    const parts = clean.split("/").filter(Boolean);
+    return parts;
   }
 
-  const clean = props.path.replace(/\\/g, '/')
-  if (!clean || clean === '/') return ['/']
-  const parts = clean.split('/').filter(Boolean)
-  return ['/', ...parts]
-})
+  const clean = props.path.replace(/\\/g, "/");
+  if (!clean || clean === "/") return ["/"];
+  const parts = clean.split("/").filter(Boolean);
+  return ["/", ...parts];
+});
 
 // Overflow collapse
-const containerWidth = ref(0)
-const collapsedCount = ref(0)
-const breadcrumbRef = ref<HTMLElement>()
+const containerWidth = ref(0);
+const collapsedCount = ref(0);
+const breadcrumbRef = ref<HTMLElement>();
 
 const visibleParts = computed(() => {
-  const parts = pathParts.value
-  if (collapsedCount.value <= 0 || parts.length <= 2) return [...parts]
-  const hidden = Math.min(collapsedCount.value, parts.length - 2)
-  return [parts[0], '...', ...parts.slice(1 + hidden)]
-})
+  const parts = pathParts.value;
+  if (collapsedCount.value <= 0 || parts.length <= 2) return [...parts];
+  const hidden = Math.min(collapsedCount.value, parts.length - 2);
+  return [parts[0], "...", ...parts.slice(1 + hidden)];
+});
 
-let resizeObserver: ResizeObserver | null = null
+let resizeObserver: ResizeObserver | null = null;
 
 function recalcOverflow() {
   nextTick(() => {
-    const el = breadcrumbRef.value
-    if (!el) return
-    const maxCollapse = Math.max(0, pathParts.value.length - 2)
+    const el = breadcrumbRef.value;
+    if (!el) return;
+    const maxCollapse = Math.max(0, pathParts.value.length - 2);
     // Only ever collapse more within a layout pass. Expanding is handled by
     // resetting collapsedCount to 0 on path/size change. Mixing increment and
     // decrement here causes an infinite flip-flop when a path sits exactly at
     // the overflow boundary (e.g. a single very long segment), freezing the UI.
     if (el.scrollWidth > el.clientWidth && collapsedCount.value < maxCollapse) {
-      collapsedCount.value++
+      collapsedCount.value++;
     }
-  })
+  });
 }
 
-watch(() => props.path, () => {
-  collapsedCount.value = 0
-  recalcOverflow()
-})
+watch(
+  () => props.path,
+  () => {
+    collapsedCount.value = 0;
+    recalcOverflow();
+  },
+);
 
 watch(containerWidth, () => {
   // Recompute from scratch so a wider container can re-expand collapsed parts.
-  collapsedCount.value = 0
-  recalcOverflow()
-})
+  collapsedCount.value = 0;
+  recalcOverflow();
+});
 
 watch(collapsedCount, () => {
-  recalcOverflow()
-})
+  recalcOverflow();
+});
 
 onMounted(() => {
   if (breadcrumbRef.value) {
     resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        containerWidth.value = entry.contentRect.width
+        containerWidth.value = entry.contentRect.width;
       }
-    })
-    resizeObserver.observe(breadcrumbRef.value)
+    });
+    resizeObserver.observe(breadcrumbRef.value);
   }
-})
+});
 
 onUnmounted(() => {
-  resizeObserver?.disconnect()
-})
+  resizeObserver?.disconnect();
+});
 
 // Path edit mode
-const editing = ref(false)
-const pathInput = ref('')
-const inputRef = ref()
+const editing = ref(false);
+const pathInput = ref("");
+const inputRef = ref();
 
 function startEdit() {
   // Build current path string from parts
   if (isWindowsPath.value) {
-    pathInput.value = pathParts.value.join('\\')
-    if (pathParts.value.length === 1 && /^[A-Za-z]:$/.test(pathParts.value[0])) {
-      pathInput.value += '\\'
+    pathInput.value = pathParts.value.join("\\");
+    if (
+      pathParts.value.length === 1 &&
+      /^[A-Za-z]:$/.test(pathParts.value[0])
+    ) {
+      pathInput.value += "\\";
     }
   } else {
-    pathInput.value = '/' + pathParts.value.slice(1).join('/')
-    if (pathInput.value === '') pathInput.value = '/'
+    pathInput.value = "/" + pathParts.value.slice(1).join("/");
+    if (pathInput.value === "") pathInput.value = "/";
   }
-  editing.value = true
+  editing.value = true;
   nextTick(() => {
-    inputRef.value?.focus()
-  })
+    inputRef.value?.focus();
+  });
 }
 
 function commitEdit() {
-  if (!editing.value) return
-  editing.value = false
-  const val = pathInput.value.trim()
+  if (!editing.value) return;
+  editing.value = false;
+  const val = pathInput.value.trim();
   if (val && val !== props.path) {
-    emit('navigate', val)
+    emit("navigate", val);
   }
 }
 
 function cancelEdit() {
-  editing.value = false
+  editing.value = false;
 }
 
 // Drive menu
-const driveMenuVisible = ref(false)
-const driveMenuStyle = ref({ left: '0px', top: '0px' })
+const driveMenuVisible = ref(false);
+const driveMenuStyle = ref({ left: "0px", top: "0px" });
 
 function toggleDriveMenu(event?: MouseEvent) {
   if (driveMenuVisible.value) {
-    driveMenuVisible.value = false
-    return
+    driveMenuVisible.value = false;
+    return;
   }
   if (event) {
-    const rect = (event.target as HTMLElement).getBoundingClientRect()
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
     driveMenuStyle.value = {
-      left: rect.left + 'px',
-      top: (rect.bottom + 4) + 'px'
-    }
+      left: rect.left + "px",
+      top: rect.bottom + 4 + "px",
+    };
   }
-  closeDriveMenu()
-  driveMenuVisible.value = true
+  closeDriveMenu();
+  driveMenuVisible.value = true;
   nextTick(() => {
-    document.addEventListener('mousedown', closeDriveMenu, { once: true })
-  })
+    document.addEventListener("mousedown", closeDriveMenu, { once: true });
+  });
 }
 
 function closeDriveMenu() {
-  driveMenuVisible.value = false
+  driveMenuVisible.value = false;
 }
 
 function onGlobalContextMenu(e: MouseEvent) {
-  const target = e.target as HTMLElement
-  if (!target.closest('.sftp-breadcrumb')) {
-    closeDriveMenu()
+  const target = e.target as HTMLElement;
+  if (!target.closest(".sftp-breadcrumb")) {
+    closeDriveMenu();
   }
 }
 
 onMounted(() => {
-  document.addEventListener('contextmenu', onGlobalContextMenu)
-  document.addEventListener('contextmenu', onGlobalBookmarkContextMenu)
-})
+  document.addEventListener("contextmenu", onGlobalContextMenu);
+  document.addEventListener("contextmenu", onGlobalBookmarkContextMenu);
+});
 
 onUnmounted(() => {
-  document.removeEventListener('contextmenu', onGlobalContextMenu)
-  document.removeEventListener('contextmenu', onGlobalBookmarkContextMenu)
-  document.removeEventListener('mousedown', closeDriveMenu)
-  document.removeEventListener('mousedown', closeBookmarkMenu)
-})
+  document.removeEventListener("contextmenu", onGlobalContextMenu);
+  document.removeEventListener("contextmenu", onGlobalBookmarkContextMenu);
+  document.removeEventListener("mousedown", closeDriveMenu);
+  document.removeEventListener("mousedown", closeBookmarkMenu);
+});
 
 function onDriveSelect(drive: string) {
-  closeDriveMenu()
-  emit('navigate', drive)
+  closeDriveMenu();
+  emit("navigate", drive);
 }
 
 function onEllipsisClick() {
-  const parts = pathParts.value
-  const lastHidden = collapsedCount.value
-  const selected = parts.slice(0, lastHidden + 1)
+  const parts = pathParts.value;
+  const lastHidden = collapsedCount.value;
+  const selected = parts.slice(0, lastHidden + 1);
   if (isWindowsPath.value) {
-    let target = selected.join('\\')
-    emit('navigate', target)
+    let target = selected.join("\\");
+    emit("navigate", target);
   } else {
-    let target = selected.join('/').replace(/\/+/g, '/')
-    if (!target.startsWith('/')) target = '/' + target
-    emit('navigate', target)
+    let target = selected.join("/").replace(/\/+/g, "/");
+    if (!target.startsWith("/")) target = "/" + target;
+    emit("navigate", target);
   }
 }
 
 function onBreadcrumbClick(part: string) {
-  if (part === '...') return
-  const parts = pathParts.value
-  const index = parts.indexOf(part)
-  if (index < 0) return
-  if (isWindowsPath.value && index === 0) return // handled by dropdown
+  if (part === "...") return;
+  const parts = pathParts.value;
+  const index = parts.indexOf(part);
+  if (index < 0) return;
+  if (isWindowsPath.value && index === 0) return; // handled by dropdown
 
-  const selected = parts.slice(0, index + 1)
+  const selected = parts.slice(0, index + 1);
 
   if (isWindowsPath.value) {
-    let target = selected.join('\\')
+    let target = selected.join("\\");
     if (selected.length === 1 && /^[A-Za-z]:$/.test(selected[0])) {
-      target += '\\'
+      target += "\\";
     }
-    emit('navigate', target)
-    return
+    emit("navigate", target);
+    return;
   }
 
-  let target = selected.join('/').replace(/\/+/g, '/')
-  if (!target.startsWith('/')) target = '/' + target
-  emit('navigate', target)
+  let target = selected.join("/").replace(/\/+/g, "/");
+  if (!target.startsWith("/")) target = "/" + target;
+  emit("navigate", target);
 }
 
 // Bookmark menu
-const bookmarkMenuVisible = ref(false)
-const bookmarkMenuStyle = ref({ left: '0px', top: '0px' })
-const bookmarkBtnRef = ref<HTMLElement>()
-const hoveredBookmarkIdx = ref(-1)
+const bookmarkMenuVisible = ref(false);
+const bookmarkMenuStyle = ref({ left: "0px", top: "0px" });
+const bookmarkBtnRef = ref<HTMLElement>();
+const hoveredBookmarkIdx = ref(-1);
 
-const currentPath = computed(() => props.path)
+const currentPath = computed(() => props.path);
 const hasCurrentPathBookmarked = computed(() => {
-  return (props.savedPaths || []).includes(props.path)
-})
+  return (props.savedPaths || []).includes(props.path);
+});
 
 function toggleBookmarkMenu(event?: MouseEvent) {
   if (bookmarkMenuVisible.value) {
-    bookmarkMenuVisible.value = false
-    return
+    bookmarkMenuVisible.value = false;
+    return;
   }
   if (event) {
-    const rect = (event.target as HTMLElement).closest('.bookmark-btn')?.getBoundingClientRect()
+    const rect = (event.target as HTMLElement)
+      .closest(".bookmark-btn")
+      ?.getBoundingClientRect();
     if (rect) {
       bookmarkMenuStyle.value = {
-        left: 'auto',
-        right: (window.innerWidth - rect.right) + 'px',
-        top: (rect.bottom + 4) + 'px'
-      }
+        left: "auto",
+        right: window.innerWidth - rect.right + "px",
+        top: rect.bottom + 4 + "px",
+      };
     }
   }
-  closeBookmarkMenu()
-  bookmarkMenuVisible.value = true
+  closeBookmarkMenu();
+  bookmarkMenuVisible.value = true;
   nextTick(() => {
-    document.addEventListener('mousedown', closeBookmarkMenu, { once: true })
-  })
+    document.addEventListener("mousedown", closeBookmarkMenu, { once: true });
+  });
 }
 
 function closeBookmarkMenu() {
-  bookmarkMenuVisible.value = false
-  hoveredBookmarkIdx.value = -1
+  bookmarkMenuVisible.value = false;
+  hoveredBookmarkIdx.value = -1;
 }
 
 function onGlobalBookmarkContextMenu(e: MouseEvent) {
-  const target = e.target as HTMLElement
-  if (!target.closest('.sftp-breadcrumb')) {
-    closeBookmarkMenu()
+  const target = e.target as HTMLElement;
+  if (!target.closest(".sftp-breadcrumb")) {
+    closeBookmarkMenu();
   }
 }
 
 function onSaveBookmark() {
-  emit('saveBookmark', props.path)
-  bookmarkMenuVisible.value = false
+  emit("saveBookmark", props.path);
+  bookmarkMenuVisible.value = false;
 }
 
 function onRemoveBookmark(path: string) {
-  emit('removeBookmark', path)
+  emit("removeBookmark", path);
 }
 
 function onBookmarkClick(path: string) {
-  closeBookmarkMenu()
+  closeBookmarkMenu();
   if (path !== props.path) {
-    emit('navigate', path)
+    emit("navigate", path);
   }
 }
 </script>

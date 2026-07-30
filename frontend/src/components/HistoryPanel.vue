@@ -5,7 +5,6 @@
         v-model="searchQuery"
         :placeholder="t('settings.historySearchPlaceholder')"
         clearable
-       
         class="qc-search-input"
         @keydown="onListKeydown"
       />
@@ -20,25 +19,56 @@
         @click="onItemClick($event, entry)"
         @dblclick="runCommand(entry)"
         @contextmenu.prevent="onContextMenu($event, entry)"
-        @mouseenter="hoveredId = entry.id; showTooltip($event, entry.command)"
-        @mouseleave="hoveredId = null; hideTooltip()"
+        @mouseenter="
+          hoveredId = entry.id;
+          showTooltip($event, entry.command);
+        "
+        @mouseleave="
+          hoveredId = null;
+          hideTooltip();
+        "
       >
         <span class="history-command">{{ entry.command }}</span>
-        <div v-if="selectedIds.size <= 1 && (selectedIds.has(entry.id) || hoveredId === entry.id)" class="qc-item-actions">
-          <button class="btn btn-ghost btn-icon btn-sm run" @click.stop="runCommand(entry)" :title="t('quickCommands.run')">
+        <div
+          v-if="
+            selectedIds.size <= 1 &&
+            (selectedIds.has(entry.id) || hoveredId === entry.id)
+          "
+          class="qc-item-actions"
+        >
+          <button
+            class="btn btn-ghost btn-icon btn-sm run"
+            @click.stop="runCommand(entry)"
+            :title="t('quickCommands.run')"
+            :aria-label="t('quickCommands.run')"
+          >
             <Play :size="14" />
           </button>
-          <button class="btn btn-ghost btn-icon btn-sm paste" @click.stop="pasteCommand(entry)" :title="t('quickCommands.paste')">
+          <button
+            class="btn btn-ghost btn-icon btn-sm paste"
+            @click.stop="pasteCommand(entry)"
+            :title="t('quickCommands.paste')"
+            :aria-label="t('quickCommands.paste')"
+          >
             <Clipboard :size="14" />
           </button>
-          <button class="btn btn-ghost btn-icon btn-sm" @click.stop="copyCommand(entry)" :title="t('quickCommands.copy')">
+          <button
+            class="btn btn-ghost btn-icon btn-sm"
+            @click.stop="copyCommand(entry)"
+            :title="t('quickCommands.copy')"
+            :aria-label="t('quickCommands.copy')"
+          >
             <Copy :size="14" />
           </button>
         </div>
       </div>
 
       <div v-if="filteredEntries.length === 0" class="qc-empty">
-        {{ searchQuery ? t('sidebar.noSearchResults') : t('settings.historyEmpty') }}
+        {{
+          searchQuery
+            ? t("sidebar.noSearchResults")
+            : t("settings.historyEmpty")
+        }}
       </div>
     </div>
 
@@ -49,16 +79,53 @@
       :style="menuStyle"
       @click.stop
     >
-      <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && runCommand(menuTarget!)">{{ t('quickCommands.run') }}</div>
-      <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && pasteCommand(menuTarget!)">{{ t('quickCommands.paste') }}</div>
-      <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && copyCommand(menuTarget!); closeMenu()">{{ t('quickCommands.copy') }}</div>
-      <div class="menu-item" :class="{ disabled: selectedIds.size > 1 }" @click="selectedIds.size <= 1 && saveAsQuickCommand(menuTarget!)">{{ t('quickCommands.saveAs') }}</div>
+      <div
+        class="menu-item"
+        :class="{ disabled: selectedIds.size > 1 }"
+        @click="selectedIds.size <= 1 && runCommand(menuTarget!)"
+      >
+        {{ t("quickCommands.run") }}
+      </div>
+      <div
+        class="menu-item"
+        :class="{ disabled: selectedIds.size > 1 }"
+        @click="selectedIds.size <= 1 && pasteCommand(menuTarget!)"
+      >
+        {{ t("quickCommands.paste") }}
+      </div>
+      <div
+        class="menu-item"
+        :class="{ disabled: selectedIds.size > 1 }"
+        @click="
+          selectedIds.size <= 1 && copyCommand(menuTarget!);
+          closeMenu();
+        "
+      >
+        {{ t("quickCommands.copy") }}
+      </div>
+      <div
+        class="menu-item"
+        :class="{ disabled: selectedIds.size > 1 }"
+        @click="selectedIds.size <= 1 && saveAsQuickCommand(menuTarget!)"
+      >
+        {{ t("quickCommands.saveAs") }}
+      </div>
       <div class="menu-divider" />
-      <div class="menu-item danger" @click="deleteSelected(); closeMenu()">{{ t('sidebar.delete') }}</div>
+      <div
+        class="menu-item danger"
+        @click="
+          deleteSelected();
+          closeMenu();
+        "
+      >
+        {{ t("sidebar.delete") }}
+      </div>
     </div>
 
     <!-- Custom tooltip -->
-    <div v-show="tooltipVisible" class="qc-tooltip" :style="tooltipStyle">{{ tooltipText }}</div>
+    <div v-show="tooltipVisible" class="qc-tooltip" :style="tooltipStyle">
+      {{ tooltipText }}
+    </div>
 
     <!-- Quick command edit dialog -->
     <QuickCommandEditDialog
@@ -69,225 +136,240 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { Play, Clipboard, Copy } from '@lucide/vue'
-import { useSuggestions, type HistoryEntry } from '../composables/useSuggestions'
-import { useTabStore } from '../stores/tabStore'
-import { usePanelStore } from '../stores/panelStore'
-import { useQuickCommandStore } from '../stores/quickCommandStore'
-import { SessionWrite } from '../../wailsjs/go/main/App'
-import { useI18n } from '../i18n'
-import { msg } from '../services/message'
-import { focusActivePanelTerminal } from '../composables/useFocusTerminal'
-import QuickCommandEditDialog from './QuickCommandEditDialog.vue'
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { Play, Clipboard, Copy } from "@lucide/vue";
+import {
+  useSuggestions,
+  type HistoryEntry,
+} from "../composables/useSuggestions";
+import { useTabStore } from "../stores/tabStore";
+import { usePanelStore } from "../stores/panelStore";
+import { useQuickCommandStore } from "../stores/quickCommandStore";
+import { SessionWrite } from "../../wailsjs/go/main/App";
+import { useI18n } from "../i18n";
+import { msg } from "../services/message";
+import { focusActivePanelTerminal } from "../composables/useFocusTerminal";
+import QuickCommandEditDialog from "./QuickCommandEditDialog.vue";
 
-const { t } = useI18n()
-const suggestions = useSuggestions()
-const tabStore = useTabStore()
-const panelStore = usePanelStore()
-const qcStore = useQuickCommandStore()
+const { t } = useI18n();
+const suggestions = useSuggestions();
+const tabStore = useTabStore();
+const panelStore = usePanelStore();
+const qcStore = useQuickCommandStore();
 
-const searchQuery = ref('')
-const selectedIds = ref<Set<string>>(new Set())
-const focusedId = ref<string | null>(null)
-const hoveredId = ref<string | null>(null)
-const listRef = ref<HTMLDivElement | null>(null)
-const lastClickId = ref<string | null>(null)
+const searchQuery = ref("");
+const selectedIds = ref<Set<string>>(new Set());
+const focusedId = ref<string | null>(null);
+const hoveredId = ref<string | null>(null);
+const listRef = ref<HTMLDivElement | null>(null);
+const lastClickId = ref<string | null>(null);
 
-const menuVisible = ref(false)
-const menuStyle = ref({ left: '0px', top: '0px' })
-const menuTarget = ref<HistoryEntry | null>(null)
+const menuVisible = ref(false);
+const menuStyle = ref({ left: "0px", top: "0px" });
+const menuTarget = ref<HistoryEntry | null>(null);
 
-const editDialogVisible = ref(false)
-const editingCmdCommand = ref('')
+const editDialogVisible = ref(false);
+const editingCmdCommand = ref("");
 
-const tooltipVisible = ref(false)
-const tooltipText = ref('')
-const tooltipStyle = ref({ left: '0px', top: '0px' })
+const tooltipVisible = ref(false);
+const tooltipText = ref("");
+const tooltipStyle = ref({ left: "0px", top: "0px" });
 
 function showTooltip(e: MouseEvent, text: string) {
-  tooltipText.value = text
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  tooltipStyle.value = { left: rect.left + 'px', top: (rect.top - 8) + 'px' }
-  tooltipVisible.value = true
+  tooltipText.value = text;
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  tooltipStyle.value = { left: rect.left + "px", top: rect.top - 8 + "px" };
+  tooltipVisible.value = true;
 }
 
 function hideTooltip() {
-  tooltipVisible.value = false
+  tooltipVisible.value = false;
 }
-const entries = suggestions.historyEntries
+const entries = suggestions.historyEntries;
 
 onMounted(async () => {
-  await suggestions.loadHistory()
-  document.addEventListener('click', closeMenu)
-})
+  await suggestions.loadHistory();
+  document.addEventListener("click", closeMenu);
+});
 
 onUnmounted(() => {
-  document.removeEventListener('click', closeMenu)
-})
+  document.removeEventListener("click", closeMenu);
+});
 
 const filteredEntries = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return entries.value
-  return entries.value.filter(e => e.command.toLowerCase().includes(q))
-})
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return entries.value;
+  return entries.value.filter((e) => e.command.toLowerCase().includes(q));
+});
 
 function getAllVisibleIds(): string[] {
-  return filteredEntries.value.map(e => e.id)
+  return filteredEntries.value.map((e) => e.id);
 }
 
 function onListKeydown(e: KeyboardEvent) {
-  const ids = getAllVisibleIds()
-  if (ids.length === 0) return
-  const idx = ids.indexOf(focusedId.value || '')
+  const ids = getAllVisibleIds();
+  if (ids.length === 0) return;
+  const idx = ids.indexOf(focusedId.value || "");
 
-  if (e.key === 'ArrowDown') {
-    e.preventDefault()
-    const nextIdx = idx >= 0 && idx < ids.length - 1 ? idx + 1 : 0
-    focusedId.value = ids[nextIdx]
-    selectedIds.value = new Set([ids[nextIdx]])
-    lastClickId.value = ids[nextIdx]
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    const prevIdx = idx > 0 ? idx - 1 : ids.length - 1
-    focusedId.value = ids[prevIdx]
-    selectedIds.value = new Set([ids[prevIdx]])
-    lastClickId.value = ids[prevIdx]
-  } else if (e.key === 'Enter') {
-    e.preventDefault()
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    const nextIdx = idx >= 0 && idx < ids.length - 1 ? idx + 1 : 0;
+    focusedId.value = ids[nextIdx];
+    selectedIds.value = new Set([ids[nextIdx]]);
+    lastClickId.value = ids[nextIdx];
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    const prevIdx = idx > 0 ? idx - 1 : ids.length - 1;
+    focusedId.value = ids[prevIdx];
+    selectedIds.value = new Set([ids[prevIdx]]);
+    lastClickId.value = ids[prevIdx];
+  } else if (e.key === "Enter") {
+    e.preventDefault();
     if (selectedIds.value.size === 1 && focusedId.value) {
-      const entry = entries.value.find(e => e.id === focusedId.value)
-      if (entry) runCommand(entry)
+      const entry = entries.value.find((e) => e.id === focusedId.value);
+      if (entry) runCommand(entry);
     }
-  } else if (e.key === 'Delete') {
-    e.preventDefault()
-    deleteSelected()
+  } else if (e.key === "Delete") {
+    e.preventDefault();
+    deleteSelected();
   }
 }
 
 function onItemClick(e: MouseEvent, entry: HistoryEntry) {
   if (e.shiftKey && lastClickId.value) {
-    const ids = getAllVisibleIds()
-    const anchorIdx = ids.indexOf(lastClickId.value)
-    const currentIdx = ids.indexOf(entry.id)
+    const ids = getAllVisibleIds();
+    const anchorIdx = ids.indexOf(lastClickId.value);
+    const currentIdx = ids.indexOf(entry.id);
     if (anchorIdx >= 0 && currentIdx >= 0) {
-      const [start, end] = anchorIdx < currentIdx ? [anchorIdx, currentIdx] : [currentIdx, anchorIdx]
-      selectedIds.value = new Set(ids.slice(start, end + 1))
+      const [start, end] =
+        anchorIdx < currentIdx
+          ? [anchorIdx, currentIdx]
+          : [currentIdx, anchorIdx];
+      selectedIds.value = new Set(ids.slice(start, end + 1));
     }
   } else if (e.ctrlKey || e.metaKey) {
-    const next = new Set(selectedIds.value)
-    if (next.has(entry.id)) next.delete(entry.id)
-    else next.add(entry.id)
-    selectedIds.value = next
-    lastClickId.value = entry.id
-    focusedId.value = entry.id
+    const next = new Set(selectedIds.value);
+    if (next.has(entry.id)) next.delete(entry.id);
+    else next.add(entry.id);
+    selectedIds.value = next;
+    lastClickId.value = entry.id;
+    focusedId.value = entry.id;
   } else {
-    selectedIds.value = new Set([entry.id])
-    lastClickId.value = entry.id
-    focusedId.value = entry.id
+    selectedIds.value = new Set([entry.id]);
+    lastClickId.value = entry.id;
+    focusedId.value = entry.id;
   }
 }
 
 function getTargetSessionIds(): string[] {
-  const activeTabId = tabStore.activeTabId
-  if (!activeTabId) return []
-  const tab = tabStore.tabs.find(t => t.id === activeTabId)
-  if (!tab) return []
-  if (tab.type === 'workspace' && tabStore.isBroadcasting(tab.id)) {
-    const ids: string[] = []
+  const activeTabId = tabStore.activeTabId;
+  if (!activeTabId) return [];
+  const tab = tabStore.tabs.find((t) => t.id === activeTabId);
+  if (!tab) return [];
+  if (tab.type === "workspace" && tabStore.isBroadcasting(tab.id)) {
+    const ids: string[] = [];
     for (const pid of tabStore.getBroadcastPanelIdsInWorkspace(tab.id)) {
-      const p = panelStore.getPanel(pid)
-      if (p?.sessionId && (p.type === 'ssh' || p.type === 'local')) {
-        ids.push(p.sessionId)
+      const p = panelStore.getPanel(pid);
+      if (p?.sessionId && (p.type === "ssh" || p.type === "local")) {
+        ids.push(p.sessionId);
       }
     }
-    return ids
+    return ids;
   }
-  const activePanelId = tab.type === 'workspace' ? tab.activePanelId : (tab.type === 'terminal' ? tab.panelId : null)
-  if (!activePanelId) return []
-  const panel = panelStore.getPanel(activePanelId)
-  if (!panel?.sessionId) return []
-  return [panel.sessionId]
+  const activePanelId =
+    tab.type === "workspace"
+      ? tab.activePanelId
+      : tab.type === "terminal"
+        ? tab.panelId
+        : null;
+  if (!activePanelId) return [];
+  const panel = panelStore.getPanel(activePanelId);
+  if (!panel?.sessionId) return [];
+  return [panel.sessionId];
 }
 
 function runCommand(entry: HistoryEntry) {
-  const sids = getTargetSessionIds()
-  if (sids.length === 0) return
-  const text = entry.command.endsWith('\n') ? entry.command : entry.command + '\n'
+  const sids = getTargetSessionIds();
+  if (sids.length === 0) return;
+  const text = entry.command.endsWith("\n")
+    ? entry.command
+    : entry.command + "\n";
   for (const sid of sids) {
-    SessionWrite(sid, text)
+    SessionWrite(sid, text);
   }
   // Return focus to the terminal (issue #285).
-  focusActivePanelTerminal()
+  focusActivePanelTerminal();
 }
 
 function pasteCommand(entry: HistoryEntry) {
-  const sids = getTargetSessionIds()
-  if (sids.length === 0) return
+  const sids = getTargetSessionIds();
+  if (sids.length === 0) return;
   for (const sid of sids) {
-    SessionWrite(sid, entry.command)
+    SessionWrite(sid, entry.command);
   }
   // Return focus to the terminal (issue #285).
-  focusActivePanelTerminal()
+  focusActivePanelTerminal();
 }
 
 async function copyCommand(entry: HistoryEntry) {
   try {
-    await navigator.clipboard.writeText(entry.command)
-    msg.success(t('quickCommands.copied'))
+    await navigator.clipboard.writeText(entry.command);
+    msg.success(t("quickCommands.copied"));
   } catch {
-    msg.error(t('quickCommands.copyFailed'))
+    msg.error(t("quickCommands.copyFailed"));
   }
 }
 
 function saveAsQuickCommand(entry: HistoryEntry) {
-  editingCmdCommand.value = entry.command
-  editDialogVisible.value = true
-  closeMenu()
+  editingCmdCommand.value = entry.command;
+  editDialogVisible.value = true;
+  closeMenu();
 }
 
 function deleteEntries(ids: string[]) {
-  suggestions.removeHistoryCommandsById(ids)
-  selectedIds.value = new Set()
+  suggestions.removeHistoryCommandsById(ids);
+  selectedIds.value = new Set();
 }
 
 function deleteSelected() {
-  const ids = [...selectedIds.value]
-  if (ids.length === 0) return
-  deleteEntries(ids)
+  const ids = [...selectedIds.value];
+  if (ids.length === 0) return;
+  deleteEntries(ids);
 }
 
 function onContextMenu(e: MouseEvent, entry: HistoryEntry) {
-  e.stopPropagation()
-  window.dispatchEvent(new CustomEvent('global:close-context-menus'))
-  menuTarget.value = entry
+  e.stopPropagation();
+  window.dispatchEvent(new CustomEvent("global:close-context-menus"));
+  menuTarget.value = entry;
   if (!selectedIds.value.has(entry.id)) {
-    selectedIds.value = new Set([entry.id])
-    focusedId.value = entry.id
+    selectedIds.value = new Set([entry.id]);
+    focusedId.value = entry.id;
   }
-  menuStyle.value = clampMenuPosition(e.clientX, e.clientY)
-  menuVisible.value = true
+  menuStyle.value = clampMenuPosition(e.clientX, e.clientY);
+  menuVisible.value = true;
 }
 
-function closeMenu() { menuVisible.value = false }
+function closeMenu() {
+  menuVisible.value = false;
+}
 
 function clampMenuPosition(x: number, y: number) {
-  const mx = Math.min(x, window.innerWidth - 160)
-  const my = Math.min(y, window.innerHeight - 100)
-  return { left: mx + 'px', top: my + 'px' }
+  const mx = Math.min(x, window.innerWidth - 160);
+  const my = Math.min(y, window.innerHeight - 100);
+  return { left: mx + "px", top: my + "px" };
 }
 
 watch(searchQuery, () => {
-  const ids = getAllVisibleIds()
+  const ids = getAllVisibleIds();
   if (ids.length > 0) {
-    focusedId.value = ids[0]
-    selectedIds.value = new Set([ids[0]])
-    lastClickId.value = ids[0]
+    focusedId.value = ids[0];
+    selectedIds.value = new Set([ids[0]]);
+    lastClickId.value = ids[0];
   } else {
-    focusedId.value = null
-    selectedIds.value = new Set()
+    focusedId.value = null;
+    selectedIds.value = new Set();
   }
-})
+});
 </script>
 
 <style scoped>
@@ -303,7 +385,7 @@ watch(searchQuery, () => {
   z-index: 10000;
   max-width: 480px;
   padding: 6px 10px;
-  font-family: var(--font-mono, 'Consolas', 'Courier New', monospace);
+  font-family: var(--font-mono, "Consolas", "Courier New", monospace);
   font-size: 12px;
   color: var(--text-primary);
   background: var(--bg-overlay);
@@ -318,7 +400,7 @@ watch(searchQuery, () => {
 
 .history-command {
   flex: 1;
-  font-family: var(--font-mono, 'Consolas', 'Courier New', monospace);
+  font-family: var(--font-mono, "Consolas", "Courier New", monospace);
   font-size: 12px;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -334,7 +416,10 @@ watch(searchQuery, () => {
   flex-shrink: 0;
 }
 
-.qc-search-input { flex: 1; min-width: 0; }
+.qc-search-input {
+  flex: 1;
+  min-width: 0;
+}
 
 .qc-list {
   flex: 1;
@@ -355,14 +440,18 @@ watch(searchQuery, () => {
   user-select: none;
 }
 
-.qc-item:hover { background: var(--bg-hover); }
+.qc-item:hover {
+  background: var(--bg-hover);
+}
 
 .qc-item.active {
   background: var(--accent-subtle);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.qc-item.active .history-command { color: var(--accent); }
+.qc-item.active .history-command {
+  color: var(--accent);
+}
 
 .qc-item-actions {
   display: flex;
@@ -396,9 +485,16 @@ watch(searchQuery, () => {
   color: var(--text-primary);
 }
 
-.qc-context-menu .menu-item:hover { background: var(--bg-hover); }
-.qc-context-menu .menu-item.danger { color: var(--error); }
-.qc-context-menu .menu-item.disabled { color: var(--text-disabled); pointer-events: none; }
+.qc-context-menu .menu-item:hover {
+  background: var(--bg-hover);
+}
+.qc-context-menu .menu-item.danger {
+  color: var(--error);
+}
+.qc-context-menu .menu-item.disabled {
+  color: var(--text-disabled);
+  pointer-events: none;
+}
 
 .qc-context-menu .menu-divider {
   height: 1px;

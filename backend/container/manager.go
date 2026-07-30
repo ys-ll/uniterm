@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/session"
 	"golang.org/x/crypto/ssh"
 )
@@ -141,6 +142,7 @@ func (m *Manager) startStream(connID string, stream LineStream) string {
 	m.streams[sid] = &streamHandle{connID: connID, stream: stream}
 	m.mu.Unlock()
 	go func() {
+		defer log.Recover("container.Manager.startStream")
 		var err error
 		for line := range stream.Lines() {
 			m.emitEvent("container:stream:"+sid, map[string]any{"line": line})

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -58,12 +59,14 @@ func (s *TelnetSession) Connect(config ConnectionConfig) error {
 	} else {
 		s.title = fmt.Sprintf("%s:%d", config.Host, config.Port)
 	}
+	s.LogConnect(config.Host, config.Port)
 
-	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
 	dialer := net.Dialer{Timeout: 15 * time.Second}
 	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
 		s.setStatus(StatusError)
+		s.LogError("telnet-dial", err)
 		return fmt.Errorf("telnet dial: %w", err)
 	}
 
@@ -284,6 +287,7 @@ func (s *TelnetSession) Write(data []byte) error {
 
 func (s *TelnetSession) Disconnect() error {
 	s.quitOnce.Do(func() {
+		s.LogDisconnect("user")
 		close(s.quit)
 	})
 	if s.cancel != nil {

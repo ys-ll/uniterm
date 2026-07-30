@@ -11,8 +11,8 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gittransport "github.com/go-git/go-git/v5/plumbing/transport"
+	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
 type GitRepo struct {
@@ -23,11 +23,11 @@ type GitRepo struct {
 type SyncDirection int
 
 const (
-	SyncNone    SyncDirection = iota
+	SyncNone SyncDirection = iota
 	SyncPush
 	SyncPull
 	SyncConflict
-	SyncSkipped // F-203: returned when a sync is already in flight
+	SyncSkipped // returned when a sync is already in flight
 )
 
 // CloneOrOpen opens the repo at repoPath, or clones it from the given URL.
@@ -105,7 +105,6 @@ func OpenOrInitLocal(repoPath string) (*GitRepo, error) {
 	}
 	return &GitRepo{repo: repo, repoPath: repoPath}, nil
 }
-
 
 // StageAndCommit stages all files and creates a commit. Returns true if committed.
 func (g *GitRepo) StageAndCommit(msg string) (bool, error) {

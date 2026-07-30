@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
@@ -108,6 +109,7 @@ func (s *MonitorSession) Connect(config ConnectionConfig) error {
 	s.setStatus(StatusConnecting)
 	s.config = config
 	s.title = fmt.Sprintf("%s@%s", config.User, config.Host)
+	s.LogConnect(config.Host, config.Port)
 
 	authMethods := []ssh.AuthMethod{}
 	switch config.AuthType {
@@ -117,11 +119,13 @@ func (s *MonitorSession) Connect(config ConnectionConfig) error {
 		key, err := os.ReadFile(config.KeyPath)
 		if err != nil {
 			s.setStatus(StatusError)
+			s.LogError("read-key", err)
 			return fmt.Errorf("read key: %w", err)
 		}
 		signer, err := ssh.ParsePrivateKey(key)
 		if err != nil {
 			s.setStatus(StatusError)
+			s.LogError("parse-key", err)
 			return fmt.Errorf("parse key: %w", err)
 		}
 		authMethods = append(authMethods, ssh.PublicKeys(signer))
@@ -129,19 +133,25 @@ func (s *MonitorSession) Connect(config ConnectionConfig) error {
 		authMethods = append(authMethods, ssh.Password(config.Password))
 	}
 
+	hostKeyCB, err := sshHostKeyCallback(config)
+	if err != nil {
+		s.setStatus(StatusError)
+		return fmt.Errorf("host key config: %w", err)
+	}
 	clientConfig := &ssh.ClientConfig{
 		User:            config.User,
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCB,
 		Config: ssh.Config{
 			KeyExchanges: sshKeyExchanges(),
 		},
 	}
 
-	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port), clientConfig)
+	client, err := ssh.Dial("tcp", net.JoinHostPort(config.Host, strconv.Itoa(config.Port)), clientConfig)
 	if err != nil {
 		s.setStatus(StatusError)
+		s.LogError("ssh-dial", err)
 		return fmt.Errorf("ssh dial: %w", err)
 	}
 
@@ -911,7 +921,10 @@ mp=$(lsblk -n -o MOUNTPOINT 2>/dev/null | grep -v '^$' | sort -u | tr '\n' ' ')
 		dfOut = []byte(strings.TrimSpace(parts[1]))
 	}
 
-	mountUsage := map[string]struct{ Used, Total string; Usage int }{}
+	mountUsage := map[string]struct {
+		Used, Total string
+		Usage       int
+	}{}
 	for _, line := range strings.Split(string(dfOut), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "Filesystem") {
@@ -922,7 +935,10 @@ mp=$(lsblk -n -o MOUNTPOINT 2>/dev/null | grep -v '^$' | sort -u | tr '\n' ' ')
 			mount := fields[5]
 			usageStr := strings.TrimSuffix(fields[4], "%")
 			usage, _ := strconv.Atoi(usageStr)
-			mountUsage[mount] = struct{ Used, Total string; Usage int }{
+			mountUsage[mount] = struct {
+				Used, Total string
+				Usage       int
+			}{
 				Used:  fields[2],
 				Total: fields[1],
 				Usage: usage,
@@ -939,104 +955,104 @@ mp=$(lsblk -n -o MOUNTPOINT 2>/dev/null | grep -v '^$' | sort -u | tr '\n' ' ')
 	if err == nil && json.Unmarshal(jsonOut, &lsblkJSON) == nil {
 		var walk func(devs []map[string]interface{}, depth int)
 		walk = func(devs []map[string]interface{}, depth int) {
-				for _, dev := range devs {
-					name, _ := dev["name"].(string)
-					devType, _ := dev["type"].(string)
+			for _, dev := range devs {
+				name, _ := dev["name"].(string)
+				devType, _ := dev["type"].(string)
 
-					var sizeBytes uint64
-					switch s := dev["size"].(type) {
-					case float64:
-						sizeBytes = uint64(s)
-					case string:
-						sizeBytes, _ = strconv.ParseUint(s, 10, 64)
-					}
+				var sizeBytes uint64
+				switch s := dev["size"].(type) {
+				case float64:
+					sizeBytes = uint64(s)
+				case string:
+					sizeBytes, _ = strconv.ParseUint(s, 10, 64)
+				}
 
-					var mount string
-					switch mp := dev["mountpoint"].(type) {
-					case string:
-						if mp != "" {
-							mount = mp
-						}
-					}
-
-					var model string
-					switch m := dev["model"].(type) {
-					case string:
-						if m != "" {
-							model = m
-						}
-					}
-
-					media := "-"
-					if devType == "rom" {
-						media = "ROM"
-					} else {
-						switch r := dev["rota"].(type) {
-						case bool:
-							if r {
-								media = "HDD"
-							} else {
-								media = "SSD"
-							}
-						case string:
-							if r == "1" || r == "true" {
-								media = "HDD"
-							} else if r == "0" || r == "false" {
-								media = "SSD"
-							}
-						case float64:
-							if r != 0 {
-								media = "HDD"
-							} else {
-								media = "SSD"
-							}
-						}
-					}
-
-					var fsType, uuid, vendor string
-					if v, ok := dev["fstype"].(string); ok && v != "" {
-						fsType = v
-					}
-					if v, ok := dev["uuid"].(string); ok && v != "" {
-						uuid = v
-					}
-					if v, ok := dev["vendor"].(string); ok && v != "" {
-						vendor = v
-					}
-
-					usage := mountUsage[mount]
-					disk := DiskInfo{
-						Name:       strings.Repeat("  ", depth) + name,
-						Type:       devType,
-						Size:       formatBytes(sizeBytes),
-						MountPoint: mount,
-						Media:      media,
-						FSType:     fsType,
-						UUID:       uuid,
-						Vendor:     vendor,
-						Model:      model,
-					}
-					if mount != "" {
-						disk.Used = usage.Used
-						disk.Total = usage.Total
-						disk.Usage = usage.Usage
-					}
-					disks = append(disks, disk)
-
-					if children, ok := dev["children"].([]interface{}); ok {
-						childMaps := make([]map[string]interface{}, 0, len(children))
-						for _, c := range children {
-							if cm, ok := c.(map[string]interface{}); ok {
-								childMaps = append(childMaps, cm)
-							}
-						}
-						walk(childMaps, depth+1)
+				var mount string
+				switch mp := dev["mountpoint"].(type) {
+				case string:
+					if mp != "" {
+						mount = mp
 					}
 				}
+
+				var model string
+				switch m := dev["model"].(type) {
+				case string:
+					if m != "" {
+						model = m
+					}
+				}
+
+				media := "-"
+				if devType == "rom" {
+					media = "ROM"
+				} else {
+					switch r := dev["rota"].(type) {
+					case bool:
+						if r {
+							media = "HDD"
+						} else {
+							media = "SSD"
+						}
+					case string:
+						if r == "1" || r == "true" {
+							media = "HDD"
+						} else if r == "0" || r == "false" {
+							media = "SSD"
+						}
+					case float64:
+						if r != 0 {
+							media = "HDD"
+						} else {
+							media = "SSD"
+						}
+					}
+				}
+
+				var fsType, uuid, vendor string
+				if v, ok := dev["fstype"].(string); ok && v != "" {
+					fsType = v
+				}
+				if v, ok := dev["uuid"].(string); ok && v != "" {
+					uuid = v
+				}
+				if v, ok := dev["vendor"].(string); ok && v != "" {
+					vendor = v
+				}
+
+				usage := mountUsage[mount]
+				disk := DiskInfo{
+					Name:       strings.Repeat("  ", depth) + name,
+					Type:       devType,
+					Size:       formatBytes(sizeBytes),
+					MountPoint: mount,
+					Media:      media,
+					FSType:     fsType,
+					UUID:       uuid,
+					Vendor:     vendor,
+					Model:      model,
+				}
+				if mount != "" {
+					disk.Used = usage.Used
+					disk.Total = usage.Total
+					disk.Usage = usage.Usage
+				}
+				disks = append(disks, disk)
+
+				if children, ok := dev["children"].([]interface{}); ok {
+					childMaps := make([]map[string]interface{}, 0, len(children))
+					for _, c := range children {
+						if cm, ok := c.(map[string]interface{}); ok {
+							childMaps = append(childMaps, cm)
+						}
+					}
+					walk(childMaps, depth+1)
+				}
 			}
-			walk(lsblkJSON.BlockDevices, 0)
-			return disks, nil
 		}
+		walk(lsblkJSON.BlockDevices, 0)
+		return disks, nil
+	}
 
 	// Fallback to text parsing
 	session2, err := s.client.NewSession()
@@ -1397,6 +1413,7 @@ func (s *MonitorSession) Write(data []byte) error {
 
 func (s *MonitorSession) Disconnect() error {
 	s.quitOnce.Do(func() {
+		s.LogDisconnect("user")
 		close(s.quit)
 	})
 	if s.ticker != nil {

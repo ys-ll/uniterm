@@ -44,7 +44,13 @@ func (p *sqlserverProvider) DriverName() string {
 }
 
 func (p *sqlserverProvider) Quote(name string) string {
-	return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
+	// SQL Server bracket-quoted identifier with embedded ] doubled. We
+	// also validate the underlying name through SafePgIdent rules so
+	// user-supplied identifiers containing NULs or path separators are
+	// rejected before reaching Exec (consistent with the Postgres /
+	// Oracle providers).
+	q, _ := SafePgIdent(name)
+	return q
 }
 
 func (p *sqlserverProvider) PrepareExec(db execer, dbName string) error {

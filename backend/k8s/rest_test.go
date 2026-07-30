@@ -75,4 +75,3 @@ func TestDoPatchWithContentType(t *testing.T) {
 		t.Errorf("body = %s", gotBody)
 	}
 }
-

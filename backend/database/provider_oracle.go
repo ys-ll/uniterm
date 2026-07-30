@@ -43,7 +43,15 @@ func (p *oracleProvider) DriverName() string {
 }
 
 func (p *oracleProvider) Quote(name string) string {
-	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+	// Oracle identifier quoting follows the SQL standard: double quotes
+	// with embedded double quotes doubled. We additionally route through
+	// identValidate (via SafePgIdent — the rules for legal identifiers
+	// are identical across Oracle/Postgres/rqlite) so user-supplied
+	// names containing NULs or path separators are rejected before
+	// reaching Exec. Errors are silenced to keep Quote's string-return
+	// signature; the caller still sees a benignly quoted name.
+	q, _ := SafePgIdent(name)
+	return q
 }
 
 func (p *oracleProvider) PrepareExec(db execer, dbName string) error {

@@ -33,8 +33,7 @@ type cacheEntry struct {
 	Timestamp time.Time  `json:"timestamp"`
 	// ETag captured from the GitHub API response so a follow-up call
 	// inside the disk-cache TTL window can send If-None-Match and let
-	// GitHub return 304 Not Modified, skipping the body decode entirely
-	// (F-409).
+	// GitHub/Gitee return 304 Not Modified, skipping the body decode.
 	ETag string `json:"etag,omitempty"`
 }
 
@@ -146,7 +145,7 @@ const cacheTTL = 5 * time.Minute
 
 // sharedClient is a package-level *http.Client with keep-alive enabled.
 // Reusing it avoids the per-call TCP+TLS handshake to api.github.com /
-// gitee.com on every Check() (F-409).
+// gitee.com on every Check().
 var (
 	sharedClientOnce sync.Once
 	sharedClient     *http.Client
@@ -217,9 +216,9 @@ func Check(currentVersion, source string) (*UpdateInfo, error) {
 		apiURL = "https://gitee.com/api/v5/repos/ys-l/uniterm/releases/latest"
 	}
 
-	// F-409: reuse a package-level client with keep-alive; send the
-	// cached ETag on the second-and-subsequent within-TTL call so
-	// GitHub/Gitee can answer 304 without re-serializing the release.
+	// Reuse a package-level client with keep-alive; send the cached ETag
+	// on the second-and-subsequent within-TTL call so GitHub/Gitee can
+	// answer 304 without re-serializing the release.
 	client := sharedHTTPClient()
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {

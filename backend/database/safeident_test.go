@@ -78,3 +78,31 @@ func TestSafeDefaultLiteral(t *testing.T) {
 		})
 	}
 }
+
+// F-006 regression: all provider Quote() helpers must reject unsafe
+// identifiers before they reach Exec. We exercise Oracle and SQL Server
+// since those were the previously-unvalidated paths.
+func TestProviderQuoteValidatesUnsafeIdents(t *testing.T) {
+	unsafe := []string{
+		"",                       // empty
+		"foo\x00bar",             // NUL byte
+		"../etc/passwd",          // path separator
+		"foo/../bar",             // traversal
+		strings.Repeat("a", 200), // too long
+	}
+	for _, dbType := range []string{"oracle", "sqlserver"} {
+		p, err := NewProvider(dbType)
+		if err != nil {
+			t.Fatalf("NewProvider(%s): %v", dbType, err)
+		}
+		for _, in := range unsafe {
+			got := p.Quote(in)
+			// Both Oracle and SQL Server now route through SafePgIdent,
+			// which rejects unsafe inputs by returning an empty quoted
+			// string ("") rather than a constructed dangerous identifier.
+			if got != "" {
+				t.Errorf("%s.Quote(%q) = %q, want empty (rejected)", dbType, in, got)
+			}
+		}
+	}
+}

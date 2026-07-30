@@ -29,21 +29,22 @@ function estimateTokens(text: string): number {
   return Math.ceil(asciiChars / 3.5 + nonAsciiChars / 1.8)
 }
 
-// F-310: cache token estimates per message in a WeakMap so the per-token
-// `conversation` re-evaluation (shouldn't happen post-F-301, but guards
+// Cache token estimates per message in a WeakMap so the per-token
+// `conversation` re-evaluation (shouldn't happen post-rebuild, but guards
 // against any remaining hot reads) doesn't re-stringify _rawApiMsg.
 const tokenEstimateCache = new WeakMap<AIMessage, number>()
 
-// F-314: cache the serialized _rawApiMsg JSON per message so doSave doesn't
-// re-stringify on every save. The cache is keyed by the AIMessage object and
-// stores the object reference alongside the JSON so agent.ts can safely
-// replace _rawApiMsg (it assigns a new object) without invalidating reads.
+// Cache the serialized _rawApiMsg JSON per message so doSave doesn't
+// re-stringify on every save. The cache is keyed by the AIMessage object
+// and stores the object reference alongside the JSON so agent.ts can
+// safely replace _rawApiMsg (it assigns a new object) without invalidating
+// reads.
 const rawApiMsgJsonCache = new WeakMap<AIMessage, { obj: object; json: string }>()
 
 function getRawApiMsgJson(msg: AIMessage): string {
   if (!msg._rawApiMsg) return ''
-  // F-316: inactive sessions retain _rawApiMsg as a JSON string. The disk
-  // form is already the JSON we want to persist; double-stringifying would
+  // Inactive sessions retain _rawApiMsg as a JSON string. The disk form
+  // is already the JSON we want to persist; double-stringifying would
   // produce a quoted string. Use it verbatim.
   if (typeof msg._rawApiMsg === 'string') return msg._rawApiMsg
   const cached = rawApiMsgJsonCache.get(msg)
@@ -159,10 +160,10 @@ const DEFAULT_CONFIG: AIConfig = {
 async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], currentSessionId: string | null }> {
   try {
     const data = await LoadAISessions() as any
-    // F-316: keep _rawApiMsg as a JSON string in inactive sessions. Parse
-    // only when the session is opened (in init / switchSession). Inactive
-    // sessions retain the raw string form; the conversation computed refs
-    // parsed objects only for the active session.
+    // Keep _rawApiMsg as a JSON string in inactive sessions. Parse only when
+    // the session is opened (in init / switchSession). Inactive sessions
+    // retain the raw string form; the conversation computed refs parsed
+    // objects only for the active session.
     const sessions: AISession[] = (data.sessions || []).map((s: any) => ({
       id: s.id,
       name: s.name,
@@ -291,7 +292,7 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   function addMessage(msg: AIMessage): AIMessage {
-    // F-302: shallowReactive + markRaw _rawApiMsg. The raw API block is only
+    // shallowReactive + markRaw _rawApiMsg. The raw API block is only
     // mutated by the LLM, never read by UI components, so it doesn't need
     // deep reactive tracking. The shallow wrapper covers the message's
     // own fields (content, pendingTools) without descending into nested arrays.
@@ -391,9 +392,9 @@ export const useAIStore = defineStore('ai', () => {
     if (currentSessionId.value) {
       const s = sessions.value.find(s => s.id === currentSessionId.value)
       if (s) {
-        // F-316: parse _rawApiMsg in place so messages.value and s.messages
-        // share the same backing object — agent.ts mutations to the active
-        // message propagate to the stored session and survive a save.
+        // Parse _rawApiMsg in place so messages.value and s.messages share the
+        // same backing object — agent.ts mutations to the active message
+        // propagate to the stored session and survive a save.
         for (const m of s.messages) {
           if (typeof m._rawApiMsg === 'string' && m._rawApiMsg) {
             try {
@@ -447,9 +448,9 @@ export const useAIStore = defineStore('ai', () => {
     config.value = { ...config.value, ...updates }
   }
 
-  // F-314: serialize a session to the JSON shape persisted to disk.
-  // The session structure is rebuilt each save (cheap), but the heavy
-  // JSON.stringify of _rawApiMsg is cached per-message via getRawApiMsgJson.
+  // Serialize a session to the JSON shape persisted to disk. The session
+  // structure is rebuilt each save (cheap), but the heavy JSON.stringify
+  // of _rawApiMsg is cached per-message via getRawApiMsgJson.
   function serializeSession(s: AISession): Record<string, unknown> {
     return {
       id: s.id,
@@ -480,7 +481,7 @@ export const useAIStore = defineStore('ai', () => {
     }
   }
 
-  // F-304: debounce doSave by 500ms to coalesce bursts from addMessage and
+  // Debounce doSave by 500ms to coalesce bursts from addMessage and
   // multi-token streaming. saveNow() flushes immediately for explicit user
   // actions (deleteSession, renameSession, after-chat completion).
   let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -524,9 +525,9 @@ export const useAIStore = defineStore('ai', () => {
     const s = sessions.value.find(s => s.id === sessionId)
     if (!s) return
     currentSessionId.value = sessionId
-    // F-316: parse _rawApiMsg in place so messages.value and s.messages
-    // share the same backing object — agent.ts mutations to the active
-    // message propagate to the stored session and survive a save.
+    // Parse _rawApiMsg in place so messages.value and s.messages share the
+    // same backing object — agent.ts mutations to the active message
+    // propagate to the stored session and survive a save.
     for (const m of s.messages) {
       if (typeof m._rawApiMsg === 'string' && m._rawApiMsg) {
         try {
@@ -577,10 +578,10 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   // Build Anthropic-native message array (system is separate top-level field).
-  // F-301: conversation is rebuilt only when messagesVersion bumps (add/remove),
-  // not when per-token content mutates. Stored as a shallowRef; the computed
-  // wrapper preserves the existing public API.
-  const conversationValue = shallowRef<Array<Record<string, unknown>>>([])
+  // Conversation is rebuilt only when messagesVersion bumps (add/remove),
+// not when per-token content mutates. Stored as a shallowRef; the computed
+// wrapper preserves the existing public API.
+const conversationValue = shallowRef<Array<Record<string, unknown>>>([])
 
   function buildConversation() {
     // Token budget: 80% of Claude's 200K context window, minus headroom
@@ -612,7 +613,7 @@ export const useAIStore = defineStore('ai', () => {
     })()
     for (let i = keptStart; i < n; i++) kept.push(msgs[i])
 
-    // F-313: single forward pass that:
+    // Single forward pass that:
     //   - collects resolved tool_use IDs from tool_result messages,
     //   - filters dangling tool_use blocks (assistant raw / legacy),
     //   - merges consecutive user messages,
@@ -779,7 +780,7 @@ export const useAIStore = defineStore('ai', () => {
     conversationValue.value = result
   }
 
-  // F-301: rebuild conversation only when messages are added/removed.
+  // Rebuild conversation only when messages are added/removed.
   const messagesVersion = ref(0)
   watch(messagesVersion, () => buildConversation())
   buildConversation()

@@ -2,6 +2,8 @@ package session
 
 import (
 	"fmt"
+	"net"
+	"strconv"
 )
 
 type VNCSession struct {
@@ -23,20 +25,22 @@ func NewVNCSession(id string) *VNCSession {
 func (s *VNCSession) Connect(config ConnectionConfig) error {
 	s.setStatus(StatusConnecting)
 
-	target := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	target := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
 	if config.Port <= 0 {
-		target = fmt.Sprintf("%s:5900", config.Host)
+		target = net.JoinHostPort(config.Host, "5900")
 	} else if config.Port < 100 {
 		// libvirt display port format: :1 -> 5901, :23 -> 5923
-		target = fmt.Sprintf("%s:%d", config.Host, config.Port+5900)
+		target = net.JoinHostPort(config.Host, strconv.Itoa(config.Port+5900))
 	}
 
 	s.title = fmt.Sprintf("%s (VNC)", config.Host)
+	s.LogConnect(config.Host, config.Port)
 
 	proxy := NewVNCProxy(target)
 	addr, err := proxy.Start()
 	if err != nil {
 		s.setStatus(StatusError)
+		s.LogError("vnc-proxy", err)
 		return fmt.Errorf("vnc proxy start: %w", err)
 	}
 
@@ -52,6 +56,7 @@ func (s *VNCSession) Connect(config ConnectionConfig) error {
 }
 
 func (s *VNCSession) Disconnect() error {
+	s.LogDisconnect("user")
 	if s.proxy != nil {
 		s.proxy.Stop()
 		s.proxy = nil

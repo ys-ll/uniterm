@@ -45,7 +45,7 @@ func (s *QuickCommandsStore) Save(data QuickCommandData) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath(), bytes, 0600)
+	return atomicWriteFile(s.filePath(), bytes, 0600)
 }
 
 func (s *QuickCommandsStore) Load() (QuickCommandData, error) {
