@@ -207,6 +207,7 @@ func startPprofIfDev() {
 // to a *diag.DiagConfig. Falls back to defaults on any error.
 func diagConfigFromSettings() *diag.DiagConfig {
 	cfg := &diag.DiagConfig{
+		Enabled:     true,
 		FileSizeCap: 10 << 20,
 		DirSizeCap:  50 << 20,
 		KeepFiles:   5,
@@ -216,6 +217,7 @@ func diagConfigFromSettings() *diag.DiagConfig {
 		if s, err := store.NewSettingsStoreWithDir(filepath.Join(configDir, "uniTerm")); err == nil {
 			if settings, err := s.Load(); err == nil {
 				d := settings.Diag
+				cfg.Enabled = d.Enabled
 				if d.FileSizeCapMiB > 0 {
 					cfg.FileSizeCap = int64(d.FileSizeCapMiB) << 20
 				}

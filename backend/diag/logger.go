@@ -32,6 +32,7 @@ type Logger struct {
 // DiagConfig controls log rotation and minimum level. A nil value is
 // equivalent to the defaults used in production.
 type DiagConfig struct {
+	Enabled     bool
 	FileSizeCap int64
 	DirSizeCap  int64
 	KeepFiles   int
@@ -40,6 +41,7 @@ type DiagConfig struct {
 
 func defaultConfig() *DiagConfig {
 	return &DiagConfig{
+		Enabled:     true,
 		FileSizeCap: 10 << 20,
 		DirSizeCap:  50 << 20,
 		KeepFiles:   5,
@@ -55,6 +57,12 @@ func Init(dir string, cfg *DiagConfig) error {
 	}
 	if cfg == nil {
 		cfg = defaultConfig()
+	}
+	if !cfg.Enabled {
+		// Keep logsDir set so Query() returns an empty slice cleanly instead
+		// of erroring; the file logger itself stays nil so writes no-op.
+		logsDir = dir
+		return nil
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
