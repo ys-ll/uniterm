@@ -495,6 +495,129 @@
         </div>
       </div>
 
+      <!-- Diagnostics settings -->
+      <div
+        v-if="settingsStore.activeCategory === 'diagnostics'"
+        class="settings-section"
+      >
+        <h2 class="section-title">{{ t("settings.diag.title") }}</h2>
+
+        <div class="settings-group">
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">
+                {{ t("settings.diag.enabled") }}
+              </div>
+            </div>
+            <div class="setting-control">
+              <el-switch
+                v-model="settingsStore.settings.diag.enabled"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">
+                {{ t("settings.diag.level") }}
+              </div>
+            </div>
+            <div class="setting-control">
+              <el-select
+                v-model="settingsStore.settings.diag.level"
+                @change="settingsStore.save()"
+              >
+                <el-option label="DEBUG" value="DEBUG" />
+                <el-option label="INFO" value="INFO" />
+                <el-option label="WARN" value="WARN" />
+                <el-option label="ERROR" value="ERROR" />
+              </el-select>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">
+                {{ t("settings.diag.fileSizeCap") }}
+              </div>
+            </div>
+            <div class="setting-control">
+              <el-input-number
+                v-model="settingsStore.settings.diag.fileSizeCapMiB"
+                :min="1"
+                :max="1024"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">
+                {{ t("settings.diag.dirSizeCap") }}
+              </div>
+            </div>
+            <div class="setting-control">
+              <el-input-number
+                v-model="settingsStore.settings.diag.dirSizeCapMiB"
+                :min="1"
+                :max="10240"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">
+                {{ t("settings.diag.keepFiles") }}
+              </div>
+            </div>
+            <div class="setting-control">
+              <el-input-number
+                v-model="settingsStore.settings.diag.keepFiles"
+                :min="1"
+                :max="100"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">
+                {{ t("settings.diag.rateLimit") }}
+              </div>
+            </div>
+            <div class="setting-control">
+              <el-input-number
+                v-model="settingsStore.settings.diag.rateLimitPerSec"
+                :min="1"
+                :max="10000"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">
+                {{ t("settings.diag.dedupWindow") }}
+              </div>
+            </div>
+            <div class="setting-control">
+              <el-input-number
+                v-model="settingsStore.settings.diag.dedupWindowSec"
+                :min="0"
+                :max="3600"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Skills & Commands -->
       <div
         v-if="settingsStore.activeCategory === 'skills'"
@@ -987,6 +1110,7 @@ import {
   Plus,
   BookOpen,
   Wrench,
+  Activity,
 } from "@lucide/vue";
 import { msg } from "../services/message";
 import {
@@ -1289,6 +1413,7 @@ const categories = computed(() => {
     { key: "keyboard", label: t("shortcut.title"), icon: Keyboard },
     { key: "ai", label: t("settings.ai"), icon: MessageCircleMore },
     { key: "skills", label: t("settings.skillsAndCommands"), icon: Wrench },
+    { key: "diagnostics", label: t("settings.diag.title"), icon: Activity },
     { key: "sync", label: t("settings.sync"), icon: RefreshCw },
     { key: "about", label: t("settings.about"), icon: Info },
   ];
