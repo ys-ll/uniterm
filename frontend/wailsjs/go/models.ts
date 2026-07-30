@@ -525,15 +525,37 @@ export namespace main {
 	export class SessionLogInfo {
 	    enabled: boolean;
 	    path: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SessionLogInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
 	        this.path = source["path"];
+	    }
+	}
+	export class ChatRequest {
+	    apiKey: string;
+	    baseURL: string;
+	    model: string;
+	    requestJSON: string;
+	    protocol: string;
+	    userAgent: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ChatRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.apiKey = source["apiKey"];
+	        this.baseURL = source["baseURL"];
+	        this.model = source["model"];
+	        this.requestJSON = source["requestJSON"];
+	        this.protocol = source["protocol"];
+	        this.userAgent = source["userAgent"];
 	    }
 	}
 

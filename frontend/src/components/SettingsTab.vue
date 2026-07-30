@@ -636,11 +636,18 @@
           <el-select v-model="modelForm.protocol" style="width: 100%">
             <el-option label="Anthropic Messages API" value="anthropic" />
             <el-option label="OpenAI Chat Completions API" value="openai" />
+            <el-option label="OpenAI-compatible (DeepSeek / Qwen / Kimi / OneAPI / Ollama / …)" value="openai-compatible" />
             <el-option label="OpenAI Responses API" value="responses" />
+            <el-option label="Zhipu GLM (native path)" value="glm-native" />
+            <el-option label="Custom (full URL)" value="custom" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('settings.modelBaseURL')">
-          <el-input v-model="modelForm.baseURL" :placeholder="modelForm.protocol === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'" />
+          <el-input v-model="modelForm.baseURL" :placeholder="placeholderFor(modelForm.protocol)" />
+          <div v-if="detectedProtocol && detectedProtocol !== modelForm.protocol" class="protocol-hint">
+            <span>{{ t('settings.detectedProtocolHint', { protocol: PROTOCOL_LABEL[detectedProtocol] }) }}</span>
+            <el-button link type="primary" @click="applyDetectedProtocol">{{ t('settings.apply') }}</el-button>
+          </div>
         </el-form-item>
         <el-form-item :label="t('settings.modelUserAgent')">
           <el-select v-model="modelForm.userAgent" style="width: 100%" filterable allow-create>
@@ -718,6 +725,7 @@ import { Quit } from '../../wailsjs/runtime'
 import { ElMessageBox } from 'element-plus'
 import { FONT_OPTIONS, LANGUAGE_OPTIONS, DEFAULT_KEYBOARD, SHORTCUT_LABELS, USER_AGENT_PRESETS } from '../types/settings'
 import { formatFontFamily } from '../utils/formatFontFamily'
+import { detectProtocol, PROTOCOL_LABEL } from '../utils/providerDetect'
 import SkillsManager from './SkillsManager.vue'
 import CommandsManager from './CommandsManager.vue'
 import DiagnosticsTab from './DiagnosticsTab.vue'
@@ -982,15 +990,42 @@ const testingConnection = ref(false)
 const testResult = ref<boolean | null>(null)
 const testError = ref('')
 const editingModel = ref<AIModelConfig | null>(null)
+type ModelProtocol = 'anthropic' | 'openai' | 'openai-compatible' | 'responses' | 'glm-native' | 'custom'
 const modelForm = reactive({
   id: '',
   name: '',
   baseURL: '',
   model: '',
   apiKey: '',
-  protocol: 'anthropic' as 'anthropic' | 'openai' | 'responses',
+  protocol: 'anthropic' as ModelProtocol,
   userAgent: 'uniTerm' as string,
 })
+
+// Auto-detect protocol from baseURL hostname. Recomputes whenever baseURL
+// changes; shows a hint chip when the detected protocol differs from the
+// user's current selection. The chip disappears once they apply or switch.
+const detectedProtocol = ref<ModelProtocol | null>(null)
+watch(
+  () => modelForm.baseURL,
+  (url) => {
+    if (!url) { detectedProtocol.value = null; return }
+    const p = detectProtocol(url) as ModelProtocol
+    detectedProtocol.value = p === modelForm.protocol ? null : p
+  }
+)
+function applyDetectedProtocol() {
+  if (detectedProtocol.value) modelForm.protocol = detectedProtocol.value
+}
+function placeholderFor(p: ModelProtocol): string {
+  switch (p) {
+    case 'anthropic': return 'https://api.anthropic.com'
+    case 'openai': return 'https://api.openai.com/v1'
+    case 'openai-compatible': return 'https://api.deepseek.com/v1'
+    case 'responses': return 'https://api.openai.com/v1'
+    case 'glm-native': return 'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+    case 'custom': return 'https://your-proxy.example.com/v1/messages'
+  }
+}
 
 function openNewModelForm() {
   editingModel.value = null
@@ -1573,6 +1608,18 @@ async function onToggleSystemTitleBar(v: boolean) {
 }
 .model-autocomplete {
   flex: 1;
+}
+
+.protocol-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--accent-subtle, rgba(64, 158, 255, 0.08));
+  padding: 4px 10px;
+  border-radius: 4px;
 }
 
 .about-update-actions {

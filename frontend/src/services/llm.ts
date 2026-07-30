@@ -82,7 +82,9 @@ export async function chat(options: ChatOptions): Promise<void> {
 
   let responseText: string
   try {
-    responseText = await ChatCompletion(apiKey, baseURL, model, requestJSON, protocol, userAgent)
+    responseText = await ChatCompletion({
+      apiKey, baseURL, model, requestJSON, protocol, userAgent,
+    })
   } catch (e: any) {
     const raw = e?.message || String(e)
     if (isCancellationError(raw)) {

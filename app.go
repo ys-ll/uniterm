@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"go.bug.st/serial"
 	"io"
@@ -21,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	stdsync "sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -30,7 +28,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/ys-ll/uniterm/backend/container"
 	"github.com/ys-ll/uniterm/backend/database"
-	"github.com/ys-ll/uniterm/backend/diag"
 	"github.com/ys-ll/uniterm/backend/k8s"
 	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/platform"
@@ -62,45 +59,9 @@ type App struct {
 	wndProcCb            uintptr // keep alive to prevent GC
 	inSizeMove           bool
 	webviewDataPath      string
-	chatCancel           atomic.Pointer[context.CancelFunc] // F-308: active stream cancellation, per-call swap so overlap is safe
+	chatCancel           context.CancelFunc // active stream cancellation
+	chatCancelMu         stdsync.Mutex      // guards chatCancel
 	moveResizeCh         chan string        // defer EventsEmit from WndProc
-	// F-043: foreground flag — true while the window is visible and the
-	// user is interacting; background goroutines (keepalive, output_log
-	// flush, k8s watches, auto-sync) should consult IsForeground before
-	// burning CPU. Updated via SetAppVisibility (frontend bridge) and a
-	// low-frequency minimised poll as a fallback for paths that don't
-	// fire visibilitychange (e.g. app hidden via Cmd+H on macOS).
-	foreground   atomic.Bool
-	foregroundMu stdsync.RWMutex
-
-	// F-204: last-saved connection snapshot, used to compute delta
-	// emits so a SaveConnections burst doesn't ship the entire store
-	// across the bridge on every call. Guarded by lastConnSnapshotMu.
-	lastConnSnapshot   session.ConnectionStoreData
-	lastConnSnapshotMu stdsync.RWMutex
-
-	// F-207: triggerAutoSync coalescing. syncInFlight tracks whether
-	// a sync goroutine is currently running; syncPending records that
-	// a new trigger arrived during the run so we fire exactly one
-	// follow-up.
-	syncInFlight atomic.Bool
-	syncPending  atomic.Bool
-
-	// F-208: single shared http.Client for chatCompletion* /
-	// FetchModels calls. Built lazily once on first use so tests that
-	// don't hit the LLM path don't pay for the transport; subsequent
-	// calls reuse the keep-alive pool and skip the TCP+TLS handshake.
-	httpClient     *http.Client
-	httpClientOnce stdsync.Once
-
-	// F-213: ListSessions memoization. Frontend polls this and
-	// allocates a fresh []SessionInfo on every call; when the
-	// (id, status) set hasn't changed we return the cached slice
-	// and skip both the per-session SessionInfo copy inside the
-	// manager and the JSON-marshal pass on the Wails side.
-	listSessionsMu    stdsync.Mutex
-	listSessionsCache []session.SessionInfo
-	listSessionsHash  uint64
 
 	// Session output log state (issue #227). Logs are keyed by panelID so
 	// they survive reconnects — a single panel may cycle through many
@@ -111,7 +72,6 @@ type App struct {
 	// reconnects don't re-enable a log the user manually stopped.
 	panelLogs          map[string]*session.OutputLogger
 	sessionToPanel     map[string]string
-	panelToSession     map[string]string // F-212: inverse index, O(1) lookup
 	panelAutoTriggered map[string]bool
 	panelLogMu         stdsync.Mutex
 	// customLogDir, when non-empty, overrides defaultSessionLogDir()
@@ -119,29 +79,17 @@ type App struct {
 	// SetDefaultSessionLogDir; ongoing logs are not migrated.
 	customLogDir   string
 	customLogDirMu stdsync.RWMutex
-
-	// errCh accumulates non-fatal init failures during startup() so the
-	// frontend can surface them (see StartupError / "app:startup-error"
-	// event). Stores may stay nil if their init fails — the existing
-	// nil-guard pattern is preserved so today's working configs keep
-	// loading; the additive channel just makes the failure visible.
-	errCh      chan error
-	startupErr error
 }
 
 func NewApp(webviewDataPath string) *App {
-	a := &App{
+	return &App{
 		webviewDataPath:    webviewDataPath,
 		panelLogs:          make(map[string]*session.OutputLogger),
 		sessionToPanel:     make(map[string]string),
-		panelToSession:     make(map[string]string), // F-212
 		panelAutoTriggered: make(map[string]bool),
 		k8sManager:         k8s.NewManager(),
 		containerManager:   container.NewManager(),
-		errCh:              make(chan error, 16),
 	}
-	a.foreground.Store(true) // optimistic until SetAppVisibility lands
-	return a
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -169,14 +117,7 @@ func (a *App) startup(ctx context.Context) {
 	// Defer EventsEmit from WndProc to avoid blocking the modal resize/move loop.
 	a.moveResizeCh = make(chan string, 10)
 	go func() {
-		// F-206: the previous implementation ranged over a.moveResizeCh
-		// forever. shutdown() now closes the channel; the range loop
-		// exits and the goroutine returns instead of leaking for the
-		// process lifetime.
 		for evt := range a.moveResizeCh {
-			if a.ctx == nil {
-				continue
-			}
 			runtime.EventsEmit(a.ctx, evt)
 			if evt == "rdp:move-resize-end" {
 				a.saveWindowStateFromRuntime()
@@ -191,31 +132,29 @@ func (a *App) startup(ctx context.Context) {
 	cs, err := store.NewConnectionStore()
 	if err != nil {
 		log.Writef("Failed to init connection store: %v", err)
-		a.sendStartupErr(fmt.Errorf("connection store: %w", err))
-	} else {
-		a.connectionStore = cs
+		return
 	}
+	a.connectionStore = cs
 
 	ass, err := store.NewAISessionStore()
 	if err != nil {
 		log.Writef("Failed to init AI session store: %v", err)
-		a.sendStartupErr(fmt.Errorf("ai session store: %w", err))
-	} else {
-		a.aiSessionStore = ass
+		return
 	}
+	a.aiSessionStore = ass
 
 	ss, err := store.NewSettingsStore()
 	if err != nil {
 		log.Writef("Failed to init settings store: %v", err)
-		a.sendStartupErr(fmt.Errorf("settings store: %w", err))
-	} else {
-		a.settingsStore = ss
-		// Prime the session-log directory override from persisted settings
-		// so a log Enable that lands before the settings UI opens still
-		// respects the user's choice from a prior run.
-		if settings, err := ss.Load(); err == nil {
-			a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
-		}
+		return
+	}
+	a.settingsStore = ss
+
+	// Prime the session-log directory override from persisted settings
+	// so a log Enable that lands before the settings UI opens still
+	// respects the user's choice from a prior run.
+	if settings, err := ss.Load(); err == nil {
+		a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
 	}
 
 	// Init terminal history store (same config dir as other stores)
@@ -238,30 +177,11 @@ func (a *App) startup(ctx context.Context) {
 	})
 	go a.autoStartTunnels()
 
-	// F-043: poll WindowIsMinimised as a fallback for the visibility
-	// change the JS side doesn't get to fire (Cmd+H before any document
-	// is loaded, OS-level Alt+Tab). The SetAppVisibility hook is the
-	// primary entry point — this is belt-and-suspenders.
-	go a.watchForeground(ctx)
-
-	// F-407: NewSyncService's disk-touching init (UserConfigDir +
-	// MkdirAll + NewKeychain probing the OS keychain) can take
-	// 50–500ms+ on macOS. Run it on a goroutine so OnStartup returns
-	// promptly and the main window can paint. Wails callers that hit
-	// a.syncService before init completes briefly wait on Ready().
-	syncSvc, _ := sync.NewSyncServiceAsync()
-	a.syncService = syncSvc
-	// Schedule the post-init wiring (password store + auto-sync) once
-	// init completes so we don't race the goroutine.
-	go func() {
-		select {
-		case <-syncSvc.Ready():
-		case <-ctx.Done():
-			return
-		}
-		if syncSvc.PasswordStore() == nil {
-			return
-		}
+	syncSvc, err := sync.NewSyncService()
+	if err != nil {
+		log.Writef("Failed to create sync service: %v", err)
+	} else {
+		a.syncService = syncSvc
 		// Wire keychain into stores for password/API key migration
 		if a.connectionStore != nil {
 			a.connectionStore.SetPasswordStore(syncSvc.PasswordStore())
@@ -269,20 +189,13 @@ func (a *App) startup(ctx context.Context) {
 		if a.settingsStore != nil {
 			a.settingsStore.SetPasswordStore(syncSvc.PasswordStore())
 		}
-		// Auto-sync on startup if enabled. F-408: gate on foreground
-		// visibility so a hidden app (launched then immediately minimised,
-		// or started by a file association in the background) doesn't
-		// burn CPU + PBKDF2 + AES + git push cycles the user can't see.
+		// Auto-sync on startup if enabled
 		if syncSvc.IsAutoSyncEnabled() {
 			go func() {
-				if !a.waitForegroundFor(3 * time.Second) {
-					log.Writef("Auto-sync on startup skipped: app not foreground within 3s")
-					return
-				}
 				result, err := syncSvc.Sync()
 				if err != nil {
 					log.Writef("Auto-sync on startup failed: %v", err)
-				} else if result != nil && result.Direction == sync.SyncConflict {
+				} else if result.Direction == sync.SyncConflict {
 					runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
 						"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
 						"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
@@ -290,63 +203,10 @@ func (a *App) startup(ctx context.Context) {
 				}
 			}()
 		}
-	}()
+	}
 
 	// Restore window position and size from last session
 	a.restoreWindow(ctx)
-
-	// Drain any non-fatal init failures and surface them to the frontend so
-	// the user sees a banner instead of getting an NPE on the first store
-	// call. Additive only — stores that failed to init are still nil and
-	// guarded as before; the app still launches.
-	a.drainStartupErr()
-	if a.startupErr != nil {
-		runtime.EventsEmit(ctx, "app:startup-error", a.startupErr.Error())
-	}
-}
-
-// sendStartupErr records a non-fatal init failure so the frontend can see
-// it after startup completes. Channel is buffered (16) and only written
-// from the startup goroutine, so the send is non-blocking.
-func (a *App) sendStartupErr(err error) {
-	if err == nil {
-		return
-	}
-	select {
-	case a.errCh <- err:
-	default:
-		// Channel full — best-effort drop. The log line is the
-		// last-resort record in this case.
-		log.Writef("startup error channel full, dropping: %v", err)
-	}
-}
-
-// drainStartupErr joins every error sent during startup into a single
-// startupErr the frontend can query via StartupError().
-func (a *App) drainStartupErr() {
-	var errs []error
-	for {
-		select {
-		case err := <-a.errCh:
-			if err != nil {
-				errs = append(errs, err)
-			}
-		default:
-			a.startupErr = errors.Join(errs...)
-			return
-		}
-	}
-}
-
-// StartupError returns a human-readable, newline-joined list of any
-// non-fatal errors that occurred during startup, or "" if startup
-// completed cleanly. The frontend can call this on demand (e.g. after
-// the "app:startup-error" event) to display a banner.
-func (a *App) StartupError() string {
-	if a.startupErr == nil {
-		return ""
-	}
-	return a.startupErr.Error()
 }
 
 // restoreWindow restores the saved window position and size.
@@ -407,190 +267,6 @@ func (a *App) SaveWindowState(x, y, width, height int, maximised bool) {
 	a.localStateStore.Save(ls)
 }
 
-// IsForeground reports whether the app window is currently in the
-// foreground. Background goroutines consult this before running work
-// that should pause when the user can't see the terminal (F-043).
-func (a *App) IsForeground() bool {
-	return a.foreground.Load()
-}
-
-// waitForegroundFor blocks until the app is foreground or d elapses,
-// whichever comes first. Returns whether the foreground state was reached.
-// Used by F-408 to keep background goroutines (auto-sync on startup,
-// triggerAutoSync) from burning CPU/wakeups while the user can't see
-// the result. The 3s ceiling matches the manual recent bound fixes and
-// keeps a slow startup from blocking the caller.
-func (a *App) waitForegroundFor(d time.Duration) bool {
-	if a.IsForeground() {
-		return true
-	}
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		<-ticker.C
-		if a.IsForeground() {
-			return true
-		}
-	}
-	return a.IsForeground()
-}
-
-// SetAppVisibility is the lifecycle hook the frontend fires from
-// document.visibilitychange. It updates the foreground flag, emits a
-// `app:visibility` event so other Go-side listeners (e.g. auto-sync,
-// AI SSE keepalive) can pause/resume, and is safe to call from any
-// goroutine.
-//
-// Pass visible=false when the page goes hidden (tab switch, OS minimise,
-// Cmd+H, etc.). The polling goroutine started in startup() is a
-// fallback for cases where the JS event doesn't fire (e.g. macOS Cmd+H
-// before any document has loaded).
-func (a *App) SetAppVisibility(visible bool) {
-	prev := a.foreground.Load()
-	if prev == visible {
-		return
-	}
-	a.foreground.Store(visible)
-	a.foregroundMu.Lock()
-	a.foregroundMu.Unlock()
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, "app:visibility", visible)
-	}
-}
-
-// connDelta is the wire shape for store:connections:delta — only the
-// changed connection (or all connections on first emit) crosses the
-// bridge instead of the full store blob. See F-204.
-type connDelta struct {
-	Kind string                    `json:"kind"`             // "upsert" | "remove" | "replace"
-	ID   string                    `json:"id,omitempty"`     // for upsert/remove
-	Conn *session.ConnectionConfig `json:"connection,omitempty"`
-	All  *session.ConnectionStoreData `json:"all,omitempty"`  // for replace (first emit)
-}
-
-// F-205: typed event shapes for session:data / session:binary emits.
-type sessionDataEvent struct {
-	ID   string `json:"id"`
-	Data string `json:"data"`
-}
-
-type sessionBinaryEvent struct {
-	ID   string `json:"id"`
-	Data string `json:"data"`
-}
-
-// computeConnDelta returns the set of upsert/remove deltas between
-// the last snapshot and newData. If no snapshot exists yet (first save
-// after startup), returns a single "replace" delta carrying the full
-// new data so the frontend can hydrate without waiting for a sync.
-func (a *App) computeConnDelta(newData session.ConnectionStoreData) []connDelta {
-	a.lastConnSnapshotMu.RLock()
-	prev := a.lastConnSnapshot
-	a.lastConnSnapshotMu.RUnlock()
-
-	if prev.Connections == nil && prev.Groups == nil {
-		// F-204: no prior snapshot — ship a single replace so the
-		// frontend can hydrate without waiting for sync.
-		all := newData
-		return []connDelta{{Kind: "replace", All: &all}}
-	}
-
-	prevIDs := make(map[string]struct{}, len(prev.Connections))
-	for _, c := range prev.Connections {
-		prevIDs[c.ID] = struct{}{}
-	}
-	newIDs := make(map[string]struct{}, len(newData.Connections))
-	for _, c := range newData.Connections {
-		newIDs[c.ID] = struct{}{}
-	}
-
-	var deltas []connDelta
-	for _, c := range newData.Connections {
-		if _, ok := prevIDs[c.ID]; !ok {
-			cc := c
-			deltas = append(deltas, connDelta{Kind: "upsert", ID: c.ID, Conn: &cc})
-		}
-	}
-	for id := range prevIDs {
-		if _, ok := newIDs[id]; !ok {
-			deltas = append(deltas, connDelta{Kind: "remove", ID: id})
-		}
-	}
-	return deltas
-}
-
-// saveConnSnapshot updates the snapshot used for future delta
-// computation. Called after every successful Save.
-func (a *App) saveConnSnapshot(data session.ConnectionStoreData) {
-	a.lastConnSnapshotMu.Lock()
-	a.lastConnSnapshot = data
-	a.lastConnSnapshotMu.Unlock()
-}
-
-// llmHTTPClient returns the App-wide *http.Client used by every
-// LLM-bound call. F-208: hoisted here so three back-to-back
-// ChatCompletion calls reuse the same TCP+TLS connection instead of
-// paying a fresh handshake each time. FetchModels uses a shorter
-// timeout via a derived client (see FetchModels).
-func (a *App) llmHTTPClient() *http.Client {
-	a.httpClientOnce.Do(func() {
-		tr := &http.Transport{
-			MaxIdleConns:          100,
-			MaxIdleConnsPerHost:   8,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 30 * time.Second,
-			ExpectContinueTimeout: 2 * time.Second,
-		}
-		a.httpClient = &http.Client{Transport: tr}
-	})
-	return a.httpClient
-}
-
-// injectCacheControl adds ephemeral cache_control breakpoints on the
-// static system prompt and tools array so Anthropic's prompt caching
-// beta actually caches them across turns. Without this the
-// prompt-caching-2024-07-31 header is sent but the request body has
-// no breakpoints, so every turn re-ships and re-bills the static
-// prefix (~3 KB in typical Claude Code sessions). F-303.
-func injectCacheControl(reqBody map[string]interface{}) {
-	if sys, ok := reqBody["system"].(string); ok && sys != "" {
-		reqBody["system"] = []map[string]interface{}{{
-			"type":          "text",
-			"text":          sys,
-			"cache_control": map[string]string{"type": "ephemeral"},
-		}}
-	}
-	if tools, ok := reqBody["tools"].([]interface{}); ok && len(tools) > 0 {
-		if last, ok := tools[len(tools)-1].(map[string]interface{}); ok {
-			last["cache_control"] = map[string]string{"type": "ephemeral"}
-		}
-	}
-}
-// which don't fire the JS visibilitychange event (Cmd+H on macOS before
-// the WebView is loaded, OS-level Alt+Tab) still update the foreground
-// flag. Runs every 2s — coarse on purpose, this is a lifecycle hint not
-// a hot path. Exits when ctx is done.
-func (a *App) watchForeground(ctx context.Context) {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if a.ctx == nil {
-				continue
-			}
-			visible := !runtime.WindowIsMinimised(a.ctx)
-			if visible != a.foreground.Load() {
-				a.SetAppVisibility(visible)
-			}
-		}
-	}
-}
-
 func (a *App) shutdown(ctx context.Context) {
 	a.unsubclassMainWindow()
 	if a.tunnelService != nil {
@@ -598,15 +274,6 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	if a.sessionManager != nil {
 		a.sessionManager.CloseAll()
-	}
-	if a.terminalHistoryStore != nil {
-		_ = a.terminalHistoryStore.Close()
-	}
-	// F-206: close moveResizeCh so the deferred EventsEmit goroutine
-	// started in startup() returns instead of living for the process
-	// lifetime. close(nil) is a no-op so the nil guard below is safe.
-	if a.moveResizeCh != nil {
-		close(a.moveResizeCh)
 	}
 	os.RemoveAll(a.webviewDataPath)
 }
@@ -617,32 +284,12 @@ func (a *App) SaveConnections(data session.ConnectionStoreData) error {
 	if a.connectionStore == nil {
 		return fmt.Errorf("connection store not initialized")
 	}
-	// F-211 + F-204: write off the handler thread AND only ship the
-	// diff across the bridge. The frontend listens on
-	// store:connections:delta for save-time edits and on
-	// store:connections:changed (full blob) for sync-driven reloads —
-	// so the hot path now transfers a few-byte delta instead of every
-	// connection on every keystroke.
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- a.connectionStore.Save(data)
-	}()
-	go func() {
-		err := <-errCh
-		if err != nil {
-			log.Writef("SaveConnections async: %v", err)
-			return
-		}
-		deltas := a.computeConnDelta(data)
-		a.saveConnSnapshot(data)
-		if a.ctx != nil {
-			for _, d := range deltas {
-				runtime.EventsEmit(a.ctx, "store:connections:delta", d)
-			}
-		}
+	err := a.connectionStore.Save(data)
+	if err == nil {
+		runtime.EventsEmit(a.ctx, "store:connections:changed", data)
 		a.triggerAutoSync()
-	}()
-	return nil
+	}
+	return err
 }
 
 func (a *App) LoadConnections() (session.ConnectionStoreData, error) {
@@ -658,17 +305,11 @@ func (a *App) SaveTunnels(data session.TunnelStoreData) error {
 	if a.tunnelStore == nil {
 		return fmt.Errorf("tunnel store not initialized")
 	}
-	// F-211: tunnel save touches fs (atomic-rename), keep handler fast.
-	go func() {
-		if err := a.tunnelStore.Save(data); err != nil {
-			log.Writef("SaveTunnels async: %v", err)
-			return
-		}
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "store:tunnels:changed", data)
-		}
-	}()
-	return nil
+	err := a.tunnelStore.Save(data)
+	if err == nil {
+		runtime.EventsEmit(a.ctx, "store:tunnels:changed", data)
+	}
+	return err
 }
 
 func (a *App) LoadTunnels() (session.TunnelStoreData, error) {
@@ -919,67 +560,25 @@ func (a *App) triggerAutoSync() {
 	if a.syncService == nil || !a.syncService.IsAutoSyncEnabled() {
 		return
 	}
-	// F-408: skip the sync when the app is hidden. Saves triggered while
-	// the user is away (background tab, minimised window, macOS App Nap)
-	// would otherwise hit git fetch + push + PBKDF2 + AES with no benefit.
-	// The next foreground save trigger will re-arm coalesced sync.
-	if !a.IsForeground() {
-		return
-	}
-	// F-207: coalesce triggerAutoSync. A burst of saves (e.g. pasting
-	// 50 commands into QuickCommands) used to launch 50 concurrent
-	// git pull+push coroutines. Now we run at most one at a time and
-	// remember if a new trigger arrived during the run so we can fire
-	// exactly one follow-up.
-	if !a.syncInFlight.CompareAndSwap(false, true) {
-		a.syncPending.Store(true)
-		return
-	}
-	a.syncPending.Store(false)
 	go func() {
-		defer a.syncInFlight.Store(false)
-		for {
-			result, err := a.syncService.Sync()
-			if err != nil {
-				log.Writef("Auto-sync failed: %v", err)
-			} else if result.Direction == sync.SyncConflict {
-				runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
-					"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
-					"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
-				})
-			}
-			if err == nil && result.Direction == sync.SyncPull {
-				a.reloadStoresAfterSync()
-			}
-			runtime.EventsEmit(a.ctx, "sync:completed")
-			if !a.syncPending.CompareAndSwap(true, false) {
-				return
-			}
+		result, err := a.syncService.Sync()
+		if err != nil {
+			log.Writef("Auto-sync failed: %v", err)
+		} else if result.Direction == sync.SyncConflict {
+			runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
+				"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
+				"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
+			})
 		}
+		if err == nil && result.Direction == sync.SyncPull {
+			a.reloadStoresAfterSync()
+		}
+		runtime.EventsEmit(a.ctx, "sync:completed")
 	}()
 }
-// waitSyncReady briefly blocks on the async NewSyncService's Ready()
-// channel so callers that arrive during the ~ms-scale startup window
-// don't fail with "sync service not initialized" (F-407). Returns
-// true once ready, false on timeout.
-func (a *App) waitSyncReady(timeout time.Duration) bool {
-	if a.syncService == nil {
-		return false
-	}
-	select {
-	case <-a.syncService.Ready():
-		return true
-	case <-time.After(timeout):
-		return false
-	}
-}
-
 func (a *App) SyncGetConfig() (sync.SyncConfig, error) {
 	if a.syncService == nil {
 		return sync.SyncConfig{}, fmt.Errorf("sync service not initialized")
-	}
-	if !a.waitSyncReady(time.Second) {
-		return sync.SyncConfig{}, fmt.Errorf("sync service still initializing")
 	}
 	return a.syncService.GetConfig()
 }
@@ -989,9 +588,6 @@ func (a *App) SyncSaveConfig(config sync.SyncConfig, token string) error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
-	if !a.waitSyncReady(time.Second) {
-		return fmt.Errorf("sync service still initializing")
-	}
 	return a.syncService.SaveConfig(config, token)
 }
 
@@ -1000,23 +596,6 @@ func (a *App) SyncNow() (*sync.SyncResult, error) {
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
 	}
-	if !a.waitSyncReady(time.Second) {
-		return nil, fmt.Errorf("sync service still initializing")
-	}
-	// F-203 (partial): coalesce concurrent SyncNow calls. Multiple
-	// Settings→Sync clicks while a slow git push is in flight used to
-	// stack up N concurrent sync goroutines, each holding the Wails
-	// handler thread. If a sync is already running we return the
-	// "skipped" sentinel direction so the frontend's syncing flag
-	// still flips but no extra work is done. Fire-and-forget would
-	// also break syncStore.ts' syncing state, so the full async
-	// redesign is deferred to a frontend-coordinated change.
-	if a.syncInFlight.Load() {
-		return &sync.SyncResult{Direction: sync.SyncSkipped, Message: "sync already in flight"}, nil
-	}
-	a.syncInFlight.Store(true)
-	defer a.syncInFlight.Store(false)
-
 	result, err := a.syncService.Sync()
 	if err != nil {
 		return nil, err
@@ -1039,9 +618,6 @@ func (a *App) SyncResolveConflict(useLocal bool) (*sync.SyncResult, error) {
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
 	}
-	if !a.waitSyncReady(time.Second) {
-		return nil, fmt.Errorf("sync service still initializing")
-	}
 	result, err := a.syncService.ResolveConflict(useLocal)
 	if err != nil {
 		return nil, err
@@ -1062,9 +638,6 @@ func (a *App) SyncTestConnection() error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
-	if !a.waitSyncReady(time.Second) {
-		return fmt.Errorf("sync service still initializing")
-	}
 	return a.syncService.TestConnection()
 }
 
@@ -1073,26 +646,7 @@ func (a *App) SyncConfigureRepo(repoURL, username, token, masterPassword string)
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
 	}
-	if !a.waitSyncReady(time.Second) {
-		return nil, fmt.Errorf("sync service still initializing")
-	}
 	result, err := a.syncService.ConfigureRepo(repoURL, username, token, masterPassword)
-	if err == nil {
-		a.reloadStoresAfterSync()
-		runtime.EventsEmit(a.ctx, "sync:completed")
-	}
-	return result, err
-}
-
-// SyncConfigureLocalRepo sets up a local-only sync backup directory.
-func (a *App) SyncConfigureLocalRepo(localPath, masterPassword string) (*sync.SyncResult, error) {
-	if a.syncService == nil {
-		return nil, fmt.Errorf("sync service not initialized")
-	}
-	if !a.waitSyncReady(time.Second) {
-		return nil, fmt.Errorf("sync service still initializing")
-	}
-	result, err := a.syncService.ConfigureLocalRepo(localPath, masterPassword)
 	if err == nil {
 		a.reloadStoresAfterSync()
 		runtime.EventsEmit(a.ctx, "sync:completed")
@@ -1105,9 +659,6 @@ func (a *App) SyncChangePassword(oldPassword, newPassword string) error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
-	if !a.waitSyncReady(time.Second) {
-		return fmt.Errorf("sync service still initializing")
-	}
 	return a.syncService.ChangePassword(oldPassword, newPassword)
 }
 
@@ -1116,9 +667,6 @@ func (a *App) SyncVerifyPassword(password, username, token string) error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
-	if !a.waitSyncReady(time.Second) {
-		return fmt.Errorf("sync service still initializing")
-	}
 	return a.syncService.VerifySyncPassword(password, username, token)
 }
 
@@ -1126,9 +674,6 @@ func (a *App) SyncVerifyPassword(password, username, token string) error {
 func (a *App) SyncDeleteRepo() error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
-	}
-	if !a.waitSyncReady(time.Second) {
-		return fmt.Errorf("sync service still initializing")
 	}
 	return a.syncService.DeleteRepo()
 }
@@ -1152,6 +697,15 @@ func (a *App) LoadAIConfig() (store.AIConfig, error) {
 		}
 	}
 	return store.AIConfig{}, nil
+}
+
+// ClassifyCommandRisk is the server-side override for the AI model's
+// self-reported risk on execute_command / start_command. The frontend
+// dispatcher uses this to compute the effective risk as the maximum of
+// the model-claimed value and the server-classified value. Pure function;
+// no I/O, no panic, safe to call from any goroutine.
+func (a *App) ClassifyCommandRisk(command string) string {
+	return string(store.ClassifyCommandRisk(command))
 }
 
 // AI Session Store methods
@@ -1196,15 +750,11 @@ func (a *App) SaveQuickCommands(data store.QuickCommandData) error {
 	if a.quickCommandsStore == nil {
 		return fmt.Errorf("quick commands store not initialized")
 	}
-	// F-211: same async pattern as SaveConnections / SaveTunnels.
-	go func() {
-		if err := a.quickCommandsStore.Save(data); err != nil {
-			log.Writef("SaveQuickCommands async: %v", err)
-			return
-		}
+	err := a.quickCommandsStore.Save(data)
+	if err == nil {
 		a.triggerAutoSync()
-	}()
-	return nil
+	}
+	return err
 }
 
 func (a *App) LoadQuickCommands() (store.QuickCommandData, error) {
@@ -1456,17 +1006,6 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	if setter, ok := s.(interface{ SetLogOnConnect(bool) }); ok {
 		setter.SetLogOnConnect(config.LogOnConnect)
 	}
-	// Stash the initial terminal size the frontend measured BEFORE
-	// calling CreateSession. Connect() (called async below) reads it via
-	// getInitialSize() and uses it for PTY sizing — so the remote shell
-	// and Claude Code see the actual xterm cols from the first byte, not
-	// the default 80x24 that would otherwise be in use until the late
-	// SessionResize arrives.
-	if config.InitialCols > 0 && config.InitialRows > 0 {
-		if sz, ok := s.(interface{ SetPendingSize(int, int) }); ok {
-			sz.SetPendingSize(config.InitialCols, config.InitialRows)
-		}
-	}
 	// Apply terminal character encoding (SSH only). No-op for utf-8/empty.
 	if ssh, ok := s.(*session.SSHSession); ok {
 		ssh.SetEncoding(config.Encoding)
@@ -1589,20 +1128,16 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	}
 
 	s.SetOnDataCallback(func(data []byte) {
-		if a.ctx != nil {
-			// Pass struct, not pre-encoded JSON — EventsEmit marshals
-			// each arg itself, so a string would be quoted twice.
-			runtime.EventsEmit(a.ctx, "session:data", sessionDataEvent{
-				ID:   s.ID(),
-				Data: string(data),
-			})
-		}
+		runtime.EventsEmit(a.ctx, "session:data", map[string]interface{}{
+			"id":   s.ID(),
+			"data": string(data),
+		})
 	})
 
 	s.SetOnBinaryCallback(func(data []byte) {
-		runtime.EventsEmit(a.ctx, "session:binary", sessionBinaryEvent{
-			ID:   s.ID(),
-			Data: base64.StdEncoding.EncodeToString(data),
+		runtime.EventsEmit(a.ctx, "session:binary", map[string]interface{}{
+			"id":   s.ID(),
+			"data": base64.StdEncoding.EncodeToString(data),
 		})
 	})
 
@@ -1642,16 +1177,52 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 			return nil, fmt.Errorf("database connect failed: %w", err)
 		}
 		log.Writef("[CreateSession] database session connected successfully, id=%s", s.ID())
-	} else if !config.DeferConnect {
-		// Non-database sessions (SSH, Local, Mosh, Telnet, SFTP, FTP, SMB,
-		// WebDAV, S3, Serial, K8s, Mongo, Spice) auto-connect UNLESS the
-		// frontend set DeferConnect — which it does so it can mount the
-		// xterm terminal, fitAddon-measure the real cols/rows, write them
-		// into config.InitialCols/InitialRows and only THEN call
-		// SessionStart. Without that gap Claude Code draws tables at the
-		// 80x24 default before SessionResize propagates the real width,
-		// and the borders drift across output batches.
-		a.launchConnectGoroutine(s, sessionType, config)
+	} else {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
+				}
+			}()
+
+			// RDP TCP pre-check: fail fast before creating the ActiveX window.
+			if sessionType == "rdp" {
+				port := config.Port
+				if port <= 0 { port = 3389 }
+				addr := fmt.Sprintf("%s:%d", config.Host, port)
+				tcpConn, tcpErr := net.DialTimeout("tcp", addr, 5*time.Second)
+				if tcpErr != nil {
+					log.Writef("[CreateSession] RDP TCP pre-check to %s failed: %v", addr, tcpErr)
+					if a.ctx != nil {
+						runtime.EventsEmit(a.ctx, "session:status", map[string]interface{}{
+							"id":           s.ID(),
+							"status":       "error",
+							"errorMessage": fmt.Sprintf("Cannot reach %s: %v", addr, tcpErr),
+						})
+					}
+					if a.sessionManager != nil {
+						_ = a.sessionManager.Close(s.ID())
+					}
+					return
+				}
+				tcpConn.Close()
+				log.Writef("[CreateSession] RDP TCP pre-check to %s succeeded", addr)
+			}
+
+			if err := s.Connect(config); err != nil {
+				if a.ctx != nil {
+					runtime.EventsEmit(a.ctx, "session:data", map[string]interface{}{
+						"id":   s.ID(),
+						"data": fmt.Sprintf("\r\n\x1b[31m[Connection failed: %v]\x1b[0m\r\nPress Enter to retry...\r\n", err),
+					})
+				}
+				log.Writef("session %s connect error: %v", s.ID(), err)
+				// Remove failed session from manager to avoid leaking stale entries
+				if a.sessionManager != nil {
+					_ = a.sessionManager.Close(s.ID())
+				}
+			}
+		}()
 	}
 
 	info := &session.SessionInfo{
@@ -1661,80 +1232,6 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 		Status: s.Status(),
 	}
 	return info, nil
-}
-
-// launchConnectGoroutine starts the async Connect path that used to live
-// inline in CreateSession. Extracted so CreateSession can skip it when
-// the frontend opts into a deferred-start flow (DeferConnect=true) and
-// instead drives the connection via SessionStart after measuring cols/rows.
-func (a *App) launchConnectGoroutine(s session.Session, sessionType string, config session.ConnectionConfig) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
-			}
-		}()
-
-		// RDP TCP pre-check: fail fast before creating the ActiveX window.
-		if sessionType == "rdp" {
-			port := config.Port
-			if port <= 0 { port = 3389 }
-			addr := fmt.Sprintf("%s:%d", config.Host, port)
-			tcpConn, tcpErr := net.DialTimeout("tcp", addr, 5*time.Second)
-			if tcpErr != nil {
-				log.Writef("[CreateSession] RDP TCP pre-check to %s failed: %v", addr, tcpErr)
-				if a.ctx != nil {
-					runtime.EventsEmit(a.ctx, "session:status", map[string]interface{}{
-						"id":           s.ID(),
-						"status":       "error",
-						"errorMessage": fmt.Sprintf("Cannot reach %s: %v", addr, tcpErr),
-					})
-				}
-				if a.sessionManager != nil {
-					_ = a.sessionManager.Close(s.ID())
-				}
-				return
-			}
-			tcpConn.Close()
-			log.Writef("[CreateSession] RDP TCP pre-check to %s succeeded", addr)
-		}
-
-		if err := s.Connect(config); err != nil {
-			if a.ctx != nil {
-				runtime.EventsEmit(a.ctx, "session:data", map[string]interface{}{
-					"id":   s.ID(),
-					"data": fmt.Sprintf("\r\n\x1b[31m[Connection failed: %v]\x1b[0m\r\nPress Enter to retry...\r\n", err),
-				})
-			}
-			log.Writef("session %s connect error: %v", s.ID(), err)
-			if a.sessionManager != nil {
-				_ = a.sessionManager.Close(s.ID())
-			}
-		}
-	}()
-}
-
-// SessionStart triggers the actual Connect() for a session that was
-// created with config.DeferConnect=true. The frontend calls this AFTER
-// mounting the xterm terminal and writing the measured InitialCols/InitialRows
-// into the deferred config, so the PTY is created at the correct
-// dimensions from the first byte — no 80x24 default phase where Claude
-// Code can draw tables at the wrong column count.
-func (a *App) SessionStart(sessionID string, config session.ConnectionConfig) error {
-	if a.sessionManager == nil {
-		return fmt.Errorf("session manager not initialized")
-	}
-	s, ok := a.sessionManager.Get(sessionID)
-	if !ok {
-		return fmt.Errorf("session %s not found", sessionID)
-	}
-	// Re-stash the latest measured size in case the deferred config
-	// carries the real cols/rows the frontend discovered after mount.
-	if config.InitialCols > 0 && config.InitialRows > 0 {
-		s.SetPendingSize(config.InitialCols, config.InitialRows)
-	}
-	a.launchConnectGoroutine(s, config.Type, config)
-	return nil
 }
 
 func (a *App) CloseSession(sessionID string) error {
@@ -1747,57 +1244,11 @@ func (a *App) CloseSession(sessionID string) error {
 	return a.sessionManager.Close(sessionID)
 }
 
-// listSessionsMemo memoizes the last session list returned to the
-// frontend, along with a hash of (id, status) pairs. When the frontend
-// polls ListSessions without an underlying change, we return the same
-// slice and skip the per-call []SessionInfo allocation entirely. F-213.
-//
-// Hashing (id, status) only — Title / Type are static per session and
-// status is what the polling frontend cares about. Status transitions
-// always go through SetOnStatusChangeCallback → emit session:status,
-// so the frontend can rely on that event for live updates; ListSessions
-// is the initial / refresh path.
 func (a *App) ListSessions() []session.SessionInfo {
 	if a.sessionManager == nil {
 		return []session.SessionInfo{}
 	}
-	a.listSessionsMu.Lock()
-	defer a.listSessionsMu.Unlock()
-
-	infos := a.sessionManager.List()
-	hash := hashSessions(infos)
-	if hash == a.listSessionsHash && len(a.listSessionsCache) == len(infos) {
-		// No underlying change — return the cached slice so the caller
-		// gets the same backing array and Go skips allocating a new
-		// one. The slice header is still copied by value, which is what
-		// the Wails JSON encoder needs.
-		return a.listSessionsCache
-	}
-	a.listSessionsCache = infos
-	a.listSessionsHash = hash
-	return infos
-}
-
-// hashSessions produces a quick stable hash of (id, status) pairs.
-// Uses FNV-1a; collisions are vanishingly rare for any realistic
-// session count and just cause a single false refresh.
-func hashSessions(infos []session.SessionInfo) uint64 {
-	h := uint64(14695981039346656037) // FNV offset basis
-	for _, s := range infos {
-		for i := 0; i < len(s.ID); i++ {
-			h ^= uint64(s.ID[i])
-			h *= 1099511628211 // FNV prime
-		}
-		// SessionStatus is a string alias; fold the first 4 bytes in
-		// (status strings are short — typically "connected",
-		// "disconnected", "error").
-		status := string(s.Status)
-		for i := 0; i < len(status) && i < 4; i++ {
-			h ^= uint64(status[i]) << (uint(i) * 8)
-		}
-		h *= 1099511628211
-	}
-	return h
+	return a.sessionManager.List()
 }
 
 func (a *App) SessionWrite(sessionID string, data string) error {
@@ -2150,130 +1601,67 @@ func (a *App) GetRecentConnections() []string {
 	return a.recentStore.GetAll()
 }
 
+// ChatRequest is the struct form of ChatCompletion's parameters. We use a
+// struct instead of positional args because the call site carries six
+// independent knobs and adding a new one would otherwise be a breaking
+// change for every frontend caller.
+type ChatRequest struct {
+	APIKey      string
+	BaseURL     string
+	Model       string
+	RequestJSON string
+	Protocol    string
+	UserAgent   string
+}
+
 // ChatCompletion streams the Anthropic API response via SSE, emitting Wails
 // events for each token while collecting the full message. It returns the
 // complete message JSON when the stream ends (backward-compatible).
-func (a *App) ChatCompletion(apiKey, baseURL, model string, requestJSON string, protocol string, userAgent string) (string, error) {
+func (a *App) ChatCompletion(req ChatRequest) (string, error) {
 	// Parse the incoming request body (always Anthropic format from frontend)
 	var reqBody map[string]interface{}
-	if err := json.Unmarshal([]byte(requestJSON), &reqBody); err != nil {
+	if err := json.Unmarshal([]byte(req.RequestJSON), &reqBody); err != nil {
 		return "", fmt.Errorf("invalid request JSON: %w", err)
 	}
 
+	userAgent := req.UserAgent
 	if userAgent == "" {
 		userAgent = "uniTerm"
 	}
 
-	switch protocol {
+	switch req.Protocol {
 	case "openai":
-		return a.chatCompletionOpenAI(apiKey, baseURL, model, reqBody, userAgent)
+		return a.chatCompletionOpenAI(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
 	case "responses":
-		return a.chatCompletionResponses(apiKey, baseURL, model, reqBody, userAgent)
+		return a.chatCompletionResponses(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
 	}
-	return a.chatCompletionAnthropic(apiKey, baseURL, model, reqBody, userAgent)
-}
-
-// F-306: typed SSE envelope for Anthropic Messages events. Variant
-// fields stay as json.RawMessage so we only decode the few fields the
-// handler actually reads per event type.
-type anthropicStreamEvent struct {
-	Type         string          `json:"type"`
-	Index        int             `json:"index"`
-	ContentBlock json.RawMessage `json:"content_block"`
-	Delta        json.RawMessage `json:"delta"`
-	Message      json.RawMessage `json:"message"`
-	Usage        json.RawMessage `json:"usage"`
-	Error        json.RawMessage `json:"error"`
-}
-
-type anthropicDelta struct {
-	Type        string `json:"type"`
-	Text        string `json:"text"`
-	PartialJSON string `json:"partial_json"`
-}
-
-type anthropicMessageRole struct {
-	Role string `json:"role"`
-}
-
-type anthropicStopDelta struct {
-	StopReason string `json:"stop_reason"`
-}
-
-// F-320: typed payloads for the ai:* Wails events. Replacing the
-// per-token `map[string]interface{}` literal with a fixed struct saves
-// the alloc per event; the json.Marshal on the Wails side now writes
-// the same JSON shape (lowercase keys) so the frontend contract is
-// unchanged.
-type aiTokenEvent struct {
-	Text  string `json:"text"`
-	Index int    `json:"index"`
-}
-
-type aiBlockStartEvent struct {
-	Index        int                    `json:"index"`
-	ContentBlock map[string]interface{} `json:"content_block"`
-}
-
-type aiContentBlockStopEvent struct {
-	Index int `json:"index"`
-}
-
-type aiInputJsonDeltaEvent struct {
-	PartialJSON string `json:"partial_json"`
-}
-
-type aiMessageStartEvent struct {
-	Role string `json:"role"`
-}
-
-type aiDoneEvent struct {
-	Message    map[string]interface{} `json:"message"`
-	Usage      map[string]interface{} `json:"usage,omitempty"`
-	StopReason string                 `json:"stop_reason"`
+	return a.chatCompletionAnthropic(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
 }
 
 // chatCompletionAnthropic handles the native Anthropic Messages API with SSE streaming.
 func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
 	reqBody["stream"] = true
 
-	// F-303: insert ephemeral cache_control breakpoints on the static
-	// system + tools prefixes so Anthropic reuses the cached tokens
-	// across turns. Without these the prompt-caching beta header is a
-	// no-op — every turn re-ships and re-bills the static prefix.
-	injectCacheControl(reqBody)
-
 	modifiedJSON, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("marshal modified request: %w", err)
 	}
 
-	// Anthropic base URL conventionally omits /v1 (client appends /v1/messages).
-	// Tolerate legacy configs that already include the /v1 suffix.
-	base := strings.TrimRight(baseURL, "/")
-	var url string
-	if strings.HasSuffix(base, "/v1") {
-		url = base + "/messages"
-	} else {
-		url = base + "/v1/messages"
+	url, err := buildURL(baseURL, "anthropic")
+	if err != nil {
+		return "", err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	// F-308: register our cancel in the App-level pointer and
-	// only clear it on the way out if no one replaced us. The
-	// previous code stored a single context.CancelFunc under a
-	// mutex and unconditionally nil'd it on defer; when two
-	// ChatCompletion calls overlapped, call A's defer wiped
-	// call B's cancel and CancelChatStream became a no-op for B.
-	myCancel := cancel
-	a.chatCancel.Store(&myCancel)
+	a.chatCancelMu.Lock()
+	a.chatCancel = cancel
+	a.chatCancelMu.Unlock()
 	defer func() {
-		// CAS the slot back to nil, but only if it still points at
-		// our own cancel — a newer call may have already taken
-		// over the slot.
-		a.chatCancel.CompareAndSwap(&myCancel, nil)
+		a.chatCancelMu.Lock()
+		a.chatCancel = nil
+		a.chatCancelMu.Unlock()
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(modifiedJSON))
@@ -2286,7 +1674,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
 	req.Header.Set("User-Agent", userAgent)
 
-	client := a.llmHTTPClient()
+	client := &http.Client{Timeout: 0}
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -2297,10 +1685,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		// F-305: cap the error-body read at 64 KiB so a hostile or
-		// buggy upstream returning a multi-GB error body can't OOM
-		// the Go process.
-		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
+		body, _ := io.ReadAll(res.Body)
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
@@ -2309,12 +1694,6 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	var messageRole string
 	var usage map[string]interface{}
 	currentBlockIndex := -1
-	// F-307: bytes.Buffer per block. Accumulating text/input via
-	// string + string was O(n²) and paid a fresh alloc per token; we
-	// WriteString into a buffer and flush to a string exactly once at
-	// content_block_stop. Only one block is open at a time so a single
-	// pair of buffers is sufficient.
-	var currentTextBuf, currentInputBuf bytes.Buffer
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -2326,114 +1705,83 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 		}
 		dataStr := line[6:]
 
-		var ev anthropicStreamEvent
-		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
+		var event map[string]interface{}
+		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
 			continue
 		}
 
-		switch ev.Type {
+		eventType, _ := event["type"].(string)
+
+		switch eventType {
 		case "message_start":
-			var mr anthropicMessageRole
-			if err := json.Unmarshal(ev.Message, &mr); err == nil {
-				messageRole = mr.Role
+			if msg, ok := event["message"].(map[string]interface{}); ok {
+				messageRole, _ = msg["role"].(string)
 			}
 
 		case "content_block_start":
 			currentBlockIndex++
-			currentTextBuf.Reset()
-			currentInputBuf.Reset()
-			var block map[string]interface{}
-			if err := json.Unmarshal(ev.ContentBlock, &block); err == nil {
+			if block, ok := event["content_block"].(map[string]interface{}); ok {
 				currentBlock = block
-				// F-320: typed payload.
-				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
-					Index:        currentBlockIndex,
-					ContentBlock: block,
+				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
+					"index":         currentBlockIndex,
+					"content_block": block,
 				})
 			}
 
 		case "content_block_delta":
-			var delta anthropicDelta
-			if err := json.Unmarshal(ev.Delta, &delta); err != nil {
-				continue
-			}
-			switch delta.Type {
-			case "text_delta":
+			delta, _ := event["delta"].(map[string]interface{})
+			deltaType, _ := delta["type"].(string)
+
+			if deltaType == "text_delta" {
+				text, _ := delta["text"].(string)
 				if currentBlock != nil {
-					currentTextBuf.WriteString(delta.Text)
+					if currentBlock["text"] == nil {
+						currentBlock["text"] = ""
+					}
+					currentBlock["text"] = currentBlock["text"].(string) + text
 				}
-				// F-320: typed struct + dropped unused fields so
-				// the per-token EventsEmit doesn't allocate a
-				// fresh map[string]interface{}. The ai:token payload
-				// carries only text + index.
-				runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
-					Text:  delta.Text,
-					Index: currentBlockIndex,
+				runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
+					"text":  text,
+					"index": currentBlockIndex,
 				})
-			case "input_json_delta":
-				if currentBlock != nil {
-					currentInputBuf.WriteString(delta.PartialJSON)
+			}
+			if deltaType == "input_json_delta" && currentBlock != nil {
+				partial, _ := delta["partial_json"].(string)
+				if currentBlock["input"] == nil || fmt.Sprintf("%T", currentBlock["input"]) != "string" {
+					currentBlock["input"] = ""
+				}
+				if s, ok := currentBlock["input"].(string); ok {
+					currentBlock["input"] = s + partial
 				}
 			}
 
 		case "content_block_stop":
 			if currentBlock != nil {
-				// F-307: flush buffers into the block exactly once
-				// so downstream code sees a single string per field.
-				if currentTextBuf.Len() > 0 {
-					currentBlock["text"] = currentTextBuf.String()
-				}
-				currentTextBuf.Reset()
-				if currentInputBuf.Len() > 0 {
-					inputStr := currentInputBuf.String()
-					if blockType, _ := currentBlock["type"].(string); blockType == "tool_use" && inputStr != "" {
+				if blockType, _ := currentBlock["type"].(string); blockType == "tool_use" {
+					if inputStr, ok := currentBlock["input"].(string); ok && inputStr != "" {
 						var inputObj map[string]interface{}
 						if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
 							currentBlock["input"] = inputObj
-						} else {
-							currentBlock["input"] = inputStr
 						}
-					} else {
-						currentBlock["input"] = inputStr
 					}
 				}
-				currentInputBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
 				currentBlock = nil
 			}
 
 		case "message_delta":
-			if len(ev.Usage) > 0 {
-				var u map[string]interface{}
-				if err := json.Unmarshal(ev.Usage, &u); err == nil {
-					usage = u
-				}
+			if u, ok := event["usage"].(map[string]interface{}); ok {
+				usage = u
 			}
-			var sd anthropicStopDelta
-			if err := json.Unmarshal(ev.Delta, &sd); err == nil && sd.StopReason != "" {
-				// F-210: marshal the full message once into a pooled
-				// buffer and reuse the bytes for both the ai:done
-				// emit (Wails marshals the args separately) and the
-				// eventual return at message_stop. Previously this
-				// struct was rebuilt + remarshaled twice per turn.
-				// F-320: typed payload with json.RawMessage so the
-				// already-marshaled bytes pass through untouched.
-				fullMessage := map[string]interface{}{
-					"role":    messageRole,
-					"content": contentBlocks,
-				}
-				resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
-				if err == nil {
-					// F-320: typed emit; json.RawMessage preserves
-					// the already-marshaled message bytes verbatim.
-					runtime.EventsEmit(a.ctx, "ai:done", struct {
-						Message    json.RawMessage            `json:"message"`
-						Usage      map[string]interface{}     `json:"usage,omitempty"`
-						StopReason string                     `json:"stop_reason"`
-					}{
-						Message:    json.RawMessage(resultJSON),
-						Usage:      usage,
-						StopReason: sd.StopReason,
+			if delta, ok := event["delta"].(map[string]interface{}); ok {
+				if stopReason, ok := delta["stop_reason"].(string); ok {
+					runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
+						"message": map[string]interface{}{
+							"role":    messageRole,
+							"content": contentBlocks,
+						},
+						"usage":       usage,
+						"stop_reason": stopReason,
 					})
 				}
 			}
@@ -2443,18 +1791,16 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
+			resultJSON, err := json.Marshal(fullMessage)
 			if err != nil {
 				return "", fmt.Errorf("marshal full message: %w", err)
 			}
 			return string(resultJSON), nil
 
 		case "error":
-			var e struct {
-				Message string `json:"message"`
-			}
-			_ = json.Unmarshal(ev.Error, &e)
-			return "", fmt.Errorf("stream error: %s", e.Message)
+			errData, _ := event["error"].(map[string]interface{})
+			errMsg, _ := errData["message"].(string)
+			return "", fmt.Errorf("stream error: %s", errMsg)
 		}
 	}
 
@@ -2467,7 +1813,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			"role":    messageRole,
 			"content": contentBlocks,
 		}
-		resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
+		resultJSON, _ := json.Marshal(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -2475,35 +1821,6 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 }
 
 // anthropicToolToOpenAI converts an Anthropic tool definition to OpenAI format.
-// pooled *bytes.Buffer and returns the resulting JSON string. The
-// pool avoids per-turn allocator churn; in a heavy Claude Code session
-// the buffer grows once to ~3 KiB and stays warm. Returns the buffer
-// to the pool via defer in the caller (no — the string escapes the
-// goroutine, so we keep ownership here; the buffer can be reused when
-// the underlying JSON is no longer referenced by Wails).
-func marshalAnthropicFinalMessage(msg map[string]interface{}) ([]byte, error) {
-	buf := finalMsgPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer finalMsgPool.Put(buf)
-	enc := json.NewEncoder(buf)
-	if err := enc.Encode(msg); err != nil {
-		return nil, err
-	}
-	// json.Encoder always appends a trailing newline; trim it.
-	out := buf.Bytes()
-	if n := len(out); n > 0 && out[n-1] == '\n' {
-		out = out[:n-1]
-	}
-	return out, nil
-}
-
-var finalMsgPool = stdsync.Pool{
-	New: func() any {
-		b := &bytes.Buffer{}
-		b.Grow(4 * 1024)
-		return b
-	},
-}
 func anthropicToolToOpenAI(t map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"type": "function",
@@ -2607,37 +1924,14 @@ func toString(v interface{}) string {
 	}
 }
 
-// F-306: typed SSE shapes for OpenAI Chat Completions. Only the few
-// fields the loop reads (delta.content, delta.tool_calls[], choice.finish_reason)
-// get decoded; the rest is discarded by the json decoder.
-type openaiDeltaToolCall struct {
-	Index    *int   `json:"index,omitempty"`
-	ID       string `json:"id,omitempty"`
-	Function struct {
-		Name      string `json:"name,omitempty"`
-		Arguments string `json:"arguments,omitempty"`
-	} `json:"function"`
-}
-
-type openaiStreamDelta struct {
-	Content   string                `json:"content"`
-	ToolCalls []openaiDeltaToolCall `json:"tool_calls"`
-}
-
-type openaiStreamChoice struct {
-	Delta        openaiStreamDelta `json:"delta"`
-	FinishReason string            `json:"finish_reason"`
-}
-
-type openaiStreamEvent struct {
-	Choices []openaiStreamChoice `json:"choices"`
-}
-
 // chatCompletionOpenAI converts the Anthropic-format request to OpenAI,
 // calls the OpenAI Chat Completions API with SSE streaming, and converts
 // the response back to Anthropic format so the frontend sees no difference.
 func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
-	url := strings.TrimRight(baseURL, "/") + "/chat/completions"
+	url, err := buildURL(baseURL, "openai")
+	if err != nil {
+		return "", err
+	}
 
 	// --- Build OpenAI-format request body ---
 	openaiBody := map[string]interface{}{
@@ -2685,12 +1979,13 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	// F-308: see chatCompletionAnthropic for rationale; same CAS
-	// pattern keeps CancelChatStream honest across overlap.
-	myCancel := cancel
-	a.chatCancel.Store(&myCancel)
+	a.chatCancelMu.Lock()
+	a.chatCancel = cancel
+	a.chatCancelMu.Unlock()
 	defer func() {
-		a.chatCancel.CompareAndSwap(&myCancel, nil)
+		a.chatCancelMu.Lock()
+		a.chatCancel = nil
+		a.chatCancelMu.Unlock()
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestJSON))
@@ -2701,7 +1996,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", userAgent)
 
-	client := a.llmHTTPClient()
+	client := &http.Client{Timeout: 0}
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -2712,10 +2007,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		// F-305: cap the error-body read at 64 KiB so a hostile or
-		// buggy upstream returning a multi-GB error body can't OOM
-		// the Go process.
-		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
+		body, _ := io.ReadAll(res.Body)
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
@@ -2725,22 +2017,13 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	var messageRole = "assistant"
 	currentBlockIndex := -1
 	activeToolCalls := make(map[int]map[string]interface{}) // index -> accumulating tool_call
-	// F-307: per-block text and input buffers so accumulation is O(n)
-	// instead of O(n²) string concat per token. Flushed to the block
-	// map on content_block_stop / finish_reason.
-	var currentTextBuf, currentInputBuf bytes.Buffer
-	// Per-tool input buffer so each tool_call's argument concat stays
-	// O(n). Keyed by the tool's index — multiple tool_calls can run
-	// in parallel (one per idx).
-	toolInputBufs := make(map[int]*bytes.Buffer)
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	// Emit message_start at the beginning
-	// F-320: typed payload (frontend reads event.message.role).
-	runtime.EventsEmit(a.ctx, "ai:message_start", aiMessageStartEvent{
-		Role: "assistant",
+	runtime.EventsEmit(a.ctx, "ai:message_start", map[string]interface{}{
+		"message": map[string]interface{}{"role": "assistant"},
 	})
 
 	for scanner.Scan() {
@@ -2753,66 +2036,84 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 		if strings.TrimSpace(dataStr) == "[DONE]" {
 			// Emit content_block_stop for any open block
 			if currentBlock != nil {
-				if currentTextBuf.Len() > 0 {
-					currentBlock["text"] = currentTextBuf.String()
-				}
-				currentTextBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
-				runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
-					Index: currentBlockIndex,
+				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
+					"index": currentBlockIndex,
 				})
 				currentBlock = nil
 			}
-			// Close any open tool_use blocks
+			// Close any open tool_use blocks and parse their input JSON.
+			// This mirrors the finish_reason branch — without it, an upstream
+			// that emits [DONE] without a preceding finish_reason (or whose
+			// finish_reason delta failed to unmarshal at line 2061's silent
+			// `continue`) would leave tool_use blocks with `input` as a raw
+			// JSON string or even an empty string, which the frontend's
+			// `block.input || {}` would coerce to "" and break the dispatcher.
 			for idx, tc := range activeToolCalls {
+				if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
+					var inputObj map[string]interface{}
+					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
+						tc["input"] = inputObj
+					}
+				}
 				contentBlocks = append(contentBlocks, tc)
-				runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
-					Index: idx,
+				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
+					"index": idx,
 				})
 			}
 			activeToolCalls = make(map[int]map[string]interface{})
-			currentInputBuf.Reset()
 
-			// Emit message_delta and message_stop
-			// F-320: typed payload.
-			runtime.EventsEmit(a.ctx, "ai:done", aiDoneEvent{
-				Message: map[string]interface{}{
+			// Derive stopReason: any tool_use block means "tool_use".
+			// Previously this was hardcoded to "end_turn" — if the upstream
+			// finished mid-tool-call the frontend would route the next turn
+			// as if the model had finished its answer.
+			stopReason := "end_turn"
+			for _, b := range contentBlocks {
+				if b["type"] == "tool_use" {
+					stopReason = "tool_use"
+					break
+				}
+			}
+
+			runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
+				"message": map[string]interface{}{
 					"role":    messageRole,
 					"content": contentBlocks,
 				},
-				StopReason: "end_turn",
+				"stop_reason": stopReason,
 			})
 
 			fullMessage := map[string]interface{}{
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
+			resultJSON, _ := json.Marshal(fullMessage)
 			return string(resultJSON), nil
 		}
 
-		var ev openaiStreamEvent
-		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
+		var event map[string]interface{}
+		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
 			continue
 		}
-		if len(ev.Choices) == 0 {
+
+		choices, _ := event["choices"].([]interface{})
+		if len(choices) == 0 {
 			continue
 		}
-		choice := ev.Choices[0]
-		delta := choice.Delta
+		choice, _ := choices[0].(map[string]interface{})
+		delta, _ := choice["delta"].(map[string]interface{})
+		if delta == nil {
+			continue
+		}
 
 		// Handle text content
-		if delta.Content != "" {
+		if textDelta, ok := delta["content"].(string); ok && textDelta != "" {
 			if currentBlock == nil || currentBlock["type"] != "text" {
 				// Close previous block if any
 				if currentBlock != nil {
-					if currentTextBuf.Len() > 0 {
-						currentBlock["text"] = currentTextBuf.String()
-					}
-					currentTextBuf.Reset()
 					contentBlocks = append(contentBlocks, currentBlock)
-					runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
-						Index: currentBlockIndex,
+					runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
+						"index": currentBlockIndex,
 					})
 				}
 				currentBlockIndex++
@@ -2820,120 +2121,92 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 					"type": "text",
 					"text": "",
 				}
-				currentTextBuf.Reset()
-				// F-320: typed payload.
-				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
-					Index:        currentBlockIndex,
-					ContentBlock: currentBlock,
+				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
+					"index":         currentBlockIndex,
+					"content_block": currentBlock,
 				})
 			}
-			currentTextBuf.WriteString(delta.Content)
-			// F-320: typed struct + dropped unused fields — see
-			// chatCompletionAnthropic for rationale.
-			runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
-				Text:  delta.Content,
-				Index: currentBlockIndex,
+			currentBlock["text"] = currentBlock["text"].(string) + textDelta
+			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
+				"text":  textDelta,
+				"index": currentBlockIndex,
 			})
 		}
 
 		// Handle tool_calls in delta
-		for _, tc := range delta.ToolCalls {
-			if tc.Index == nil {
-				continue
-			}
-			idx := *tc.Index
+		if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
+			for _, tc := range toolCalls {
+				tcMap, _ := tc.(map[string]interface{})
+				idxF, _ := tcMap["index"].(float64)
+				idx := int(idxF)
 
-			if _, exists := activeToolCalls[idx]; !exists {
-				// Close current text block if open
-				if currentBlock != nil {
-					if currentTextBuf.Len() > 0 {
-						currentBlock["text"] = currentTextBuf.String()
+				if _, exists := activeToolCalls[idx]; !exists {
+					// Close current text block if open
+					if currentBlock != nil {
+						contentBlocks = append(contentBlocks, currentBlock)
+						runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
+							"index": currentBlockIndex,
+						})
+						currentBlock = nil
 					}
-					currentTextBuf.Reset()
-					contentBlocks = append(contentBlocks, currentBlock)
-					runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
-						Index: currentBlockIndex,
+					currentBlockIndex++
+					activeToolCalls[idx] = map[string]interface{}{
+						"type":  "tool_use",
+						"id":    tcMap["id"],
+						"name":  "",
+						"input": "",
+					}
+					runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
+						"index": currentBlockIndex,
+						"content_block": map[string]interface{}{
+							"type": "tool_use",
+							"id":   tcMap["id"],
+						},
 					})
-					currentBlock = nil
 				}
-				currentBlockIndex++
-				activeToolCalls[idx] = map[string]interface{}{
-					"type":  "tool_use",
-					"id":    tc.ID,
-					"name":  "",
-					"input": "",
-				}
-				// F-320: typed payload.
-				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
-					Index: currentBlockIndex,
-					ContentBlock: map[string]interface{}{
-						"type": "tool_use",
-						"id":   tc.ID,
-					},
-				})
-			}
 
-			atc := activeToolCalls[idx]
-			if tc.Function.Name != "" {
-				atc["name"] = tc.Function.Name
-			}
-			if args := tc.Function.Arguments; args != "" {
-				// F-307: append to a per-tool *bytes.Buffer instead of
-				// string concat (O(n²) over a long tool-args stream).
-				buf, ok := toolInputBufs[idx]
-				if !ok {
-					buf = &bytes.Buffer{}
-					toolInputBufs[idx] = buf
+				atc := activeToolCalls[idx]
+				if fn, ok := tcMap["function"].(map[string]interface{}); ok {
+					if name, ok := fn["name"].(string); ok && name != "" {
+						atc["name"] = name
+					}
+					if args, ok := fn["arguments"].(string); ok && args != "" {
+						if atc["input"] == nil {
+							atc["input"] = ""
+						}
+						atc["input"] = atc["input"].(string) + args
+						runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
+							"partial_json": args,
+						})
+					}
 				}
-				buf.WriteString(args)
-				// F-320: typed payload.
-				runtime.EventsEmit(a.ctx, "ai:input_json_delta", aiInputJsonDeltaEvent{
-					PartialJSON: args,
-				})
 			}
 		}
 
 		// Handle finish_reason on the choice level
-		finishReason := choice.FinishReason
-		if finishReason != "" && finishReason != "null" {
+		if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" && finishReason != "null" {
 			// Close any open text block
 			if currentBlock != nil {
-				if currentTextBuf.Len() > 0 {
-					currentBlock["text"] = currentTextBuf.String()
-				}
-				currentTextBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
-				runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
-					Index: currentBlockIndex,
+				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
+					"index": currentBlockIndex,
 				})
 				currentBlock = nil
 			}
 			// Close tool_use blocks and parse their input JSON
 			for idx, tc := range activeToolCalls {
-				// F-307: prefer the per-tool buffer over the
-				// possibly-empty tc["input"] string.
-				if buf, ok := toolInputBufs[idx]; ok && buf.Len() > 0 {
-					inputStr := buf.String()
-					var inputObj map[string]interface{}
-					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
-						tc["input"] = inputObj
-					} else {
-						tc["input"] = inputStr
-					}
-				} else if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
+				if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
 					var inputObj map[string]interface{}
 					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
 						tc["input"] = inputObj
 					}
 				}
 				contentBlocks = append(contentBlocks, tc)
-				runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
-					Index: idx,
+				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
+					"index": idx,
 				})
 			}
 			activeToolCalls = make(map[int]map[string]interface{})
-			toolInputBufs = nil
-			currentInputBuf.Reset()
 
 			stopReason := "end_turn"
 			if finishReason == "tool_calls" {
@@ -2944,20 +2217,19 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				stopReason = "end_turn"
 			}
 
-			// F-320: typed payload.
-			runtime.EventsEmit(a.ctx, "ai:done", aiDoneEvent{
-				Message: map[string]interface{}{
+			runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
+				"message": map[string]interface{}{
 					"role":    messageRole,
 					"content": contentBlocks,
 				},
-				StopReason: stopReason,
+				"stop_reason": stopReason,
 			})
 
 			fullMessage := map[string]interface{}{
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
+			resultJSON, _ := json.Marshal(fullMessage)
 			return string(resultJSON), nil
 		}
 	}
@@ -2974,7 +2246,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			"role":    messageRole,
 			"content": contentBlocks,
 		}
-		resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
+		resultJSON, _ := json.Marshal(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -3068,29 +2340,15 @@ func convertAnthropicMessageToResponses(msg map[string]interface{}) []map[string
 	return results
 }
 
-// F-306: typed SSE shapes for OpenAI Responses events. The wrapper
-// captures the discriminator + output_index; nested item fields are
-// decoded lazily per branch so we skip the ~99% of fields the loop
-// discards.
-type responsesStreamItem struct {
-	Type    string `json:"type"`
-	CallID  string `json:"call_id"`
-	Name    string `json:"name"`
-}
-
-type responsesStreamEvent struct {
-	Type        string          `json:"type"`
-	OutputIndex int             `json:"output_index"`
-	Item        json.RawMessage `json:"item"`
-	Delta       string          `json:"delta"`
-}
-
 // chatCompletionResponses converts the Anthropic-format request to the OpenAI
 // Responses API, calls /responses with SSE streaming, and converts the response
 // events back to Anthropic-format events so the frontend sees no difference.
 // Stateless: full history is sent as `input` each turn; reasoning items are ignored.
 func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
-	url := strings.TrimRight(baseURL, "/") + "/responses"
+	url, err := buildURL(baseURL, "responses")
+	if err != nil {
+		return "", err
+	}
 
 	// --- Build Responses-format request body ---
 	respBody := map[string]interface{}{
@@ -3134,12 +2392,13 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	// F-308: see chatCompletionAnthropic for rationale; same CAS
-	// pattern keeps CancelChatStream honest across overlap.
-	myCancel := cancel
-	a.chatCancel.Store(&myCancel)
+	a.chatCancelMu.Lock()
+	a.chatCancel = cancel
+	a.chatCancelMu.Unlock()
 	defer func() {
-		a.chatCancel.CompareAndSwap(&myCancel, nil)
+		a.chatCancelMu.Lock()
+		a.chatCancel = nil
+		a.chatCancelMu.Unlock()
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestJSON))
@@ -3150,7 +2409,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", userAgent)
 
-	client := a.llmHTTPClient()
+	client := &http.Client{Timeout: 0}
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -3161,10 +2420,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		// F-305: cap the error-body read at 64 KiB so a hostile or
-		// buggy upstream returning a multi-GB error body can't OOM
-		// the Go process.
-		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
+		body, _ := io.ReadAll(res.Body)
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
@@ -3174,19 +2430,12 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	blockByOutputIdx := make(map[int]map[string]interface{})
 	idxByOutputIdx := make(map[int]int)
 	nextBlockIndex := 0
-	// F-307: parallel maps of *bytes.Buffer so text/input accumulation
-	// is O(n) instead of O(n²) string concat per token. Outputs may run
-	// in parallel (different output_index) so a single shared buffer
-	// doesn't work — keep one per output_index.
-	textBufs := make(map[int]*bytes.Buffer)
-	inputBufs := make(map[int]*bytes.Buffer)
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	// F-320: typed payload.
-	runtime.EventsEmit(a.ctx, "ai:message_start", aiMessageStartEvent{
-		Role: "assistant",
+	runtime.EventsEmit(a.ctx, "ai:message_start", map[string]interface{}{
+		"message": map[string]interface{}{"role": "assistant"},
 	})
 
 	finish := func(stopReason string) (string, error) {
@@ -3194,19 +2443,11 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			"role":    "assistant",
 			"content": contentBlocks,
 		}
-		resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
-		if err != nil {
-			return "", fmt.Errorf("marshal final message: %w", err)
-		}
-		// F-320: typed payload with json.RawMessage so the
-		// already-marshaled message bytes pass through untouched.
-		runtime.EventsEmit(a.ctx, "ai:done", struct {
-			Message    json.RawMessage `json:"message"`
-			StopReason string          `json:"stop_reason"`
-		}{
-			Message:    json.RawMessage(resultJSON),
-			StopReason: stopReason,
+		runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
+			"message":     fullMessage,
+			"stop_reason": stopReason,
 		})
+		resultJSON, _ := json.Marshal(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -3220,125 +2461,104 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			continue
 		}
 
-		var ev responsesStreamEvent
-		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
+		var event map[string]interface{}
+		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
 			continue
 		}
 
-		switch ev.Type {
+		eventType, _ := event["type"].(string)
+		outputIdxF, _ := event["output_index"].(float64)
+		outputIdx := int(outputIdxF)
+
+		switch eventType {
 		case "response.output_item.added":
-			var item responsesStreamItem
-			if err := json.Unmarshal(ev.Item, &item); err != nil {
+			item, _ := event["item"].(map[string]interface{})
+			if item == nil {
 				continue
 			}
-			switch item.Type {
+			itemType, _ := item["type"].(string)
+			switch itemType {
 			case "message":
 				block := map[string]interface{}{"type": "text", "text": ""}
-				blockByOutputIdx[ev.OutputIndex] = block
-				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
-				// F-320: typed payload.
-				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
-					Index:        nextBlockIndex,
-					ContentBlock: block,
+				blockByOutputIdx[outputIdx] = block
+				idxByOutputIdx[outputIdx] = nextBlockIndex
+				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
+					"index":         nextBlockIndex,
+					"content_block": block,
 				})
 				nextBlockIndex++
 			case "function_call":
 				block := map[string]interface{}{
 					"type":  "tool_use",
-					"id":    item.CallID,
-					"name":  item.Name,
+					"id":    item["call_id"],
+					"name":  item["name"],
 					"input": "",
 				}
-				blockByOutputIdx[ev.OutputIndex] = block
-				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
-				// F-320: typed payload.
-				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
-					Index: nextBlockIndex,
-					ContentBlock: map[string]interface{}{
+				blockByOutputIdx[outputIdx] = block
+				idxByOutputIdx[outputIdx] = nextBlockIndex
+				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
+					"index": nextBlockIndex,
+					"content_block": map[string]interface{}{
 						"type": "tool_use",
-						"id":   item.CallID,
-						"name": item.Name,
+						"id":   item["call_id"],
+						"name": item["name"],
 					},
 				})
 				nextBlockIndex++
 			}
 
 		case "response.output_text.delta":
-			block := blockByOutputIdx[ev.OutputIndex]
+			block := blockByOutputIdx[outputIdx]
 			if block == nil {
 				continue
 			}
-			if ev.Delta == "" {
+			delta, _ := event["delta"].(string)
+			if delta == "" {
 				continue
 			}
-			// F-307: append to per-block *bytes.Buffer instead of
-			// O(n²) string concatenation. Flushed on output_item.done.
-			buf, ok := textBufs[ev.OutputIndex]
-			if !ok {
-				buf = &bytes.Buffer{}
-				textBufs[ev.OutputIndex] = buf
-			}
-			buf.WriteString(ev.Delta)
-			// F-320: typed struct + dropped unused fields — see
-			// chatCompletionAnthropic for rationale.
-			runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
-				Text:  ev.Delta,
-				Index: idxByOutputIdx[ev.OutputIndex],
+			block["text"] = block["text"].(string) + delta
+			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
+				"text":  delta,
+				"index": idxByOutputIdx[outputIdx],
 			})
 
 		case "response.function_call_arguments.delta":
-			block := blockByOutputIdx[ev.OutputIndex]
+			block := blockByOutputIdx[outputIdx]
 			if block == nil {
 				continue
 			}
-			if ev.Delta == "" {
+			delta, _ := event["delta"].(string)
+			if delta == "" {
 				continue
 			}
-			buf, ok := inputBufs[ev.OutputIndex]
-			if !ok {
-				buf = &bytes.Buffer{}
-				inputBufs[ev.OutputIndex] = buf
+			if block["input"] == nil {
+				block["input"] = ""
 			}
-			buf.WriteString(ev.Delta)
-			// F-320: typed payload.
-			runtime.EventsEmit(a.ctx, "ai:input_json_delta", aiInputJsonDeltaEvent{
-				PartialJSON: ev.Delta,
+			block["input"] = block["input"].(string) + delta
+			runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
+				"partial_json": delta,
 			})
 
 		case "response.output_item.done":
-			block := blockByOutputIdx[ev.OutputIndex]
+			block := blockByOutputIdx[outputIdx]
 			if block == nil {
 				continue
 			}
-			// F-307: flush per-block buffers once into the block map.
-			if buf, ok := textBufs[ev.OutputIndex]; ok {
-				if buf.Len() > 0 {
-					block["text"] = buf.String()
-				}
-				delete(textBufs, ev.OutputIndex)
-			}
-			if buf, ok := inputBufs[ev.OutputIndex]; ok {
-				if buf.Len() > 0 {
-					inputStr := buf.String()
-					if block["type"] == "tool_use" {
-						var inputObj map[string]interface{}
-						if json.Unmarshal([]byte(inputStr), &inputObj) == nil {
-							block["input"] = inputObj
-						} else {
-							block["input"] = map[string]interface{}{}
-						}
+			if block["type"] == "tool_use" {
+				if inputStr, ok := block["input"].(string); ok {
+					var inputObj map[string]interface{}
+					if inputStr != "" && json.Unmarshal([]byte(inputStr), &inputObj) == nil {
+						block["input"] = inputObj
 					} else {
-						block["input"] = inputStr
+						block["input"] = map[string]interface{}{}
 					}
 				}
-				delete(inputBufs, ev.OutputIndex)
 			}
 			contentBlocks = append(contentBlocks, block)
-			// F-320: typed payload.
-			runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
-				Index: idxByOutputIdx[ev.OutputIndex],
+			runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
+				"index": idxByOutputIdx[outputIdx],
 			})
-			delete(blockByOutputIdx, ev.OutputIndex)
+			delete(blockByOutputIdx, outputIdx)
 
 		case "response.completed":
 			stopReason := "end_turn"
@@ -3351,9 +2571,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			return finish(stopReason)
 
 		case "response.failed", "error":
-			// Marshal the typed event back out for the error message; the
-			// caller doesn't need the original map shape.
-			body, _ := json.Marshal(ev)
+			body, _ := json.Marshal(event)
 			return "", fmt.Errorf("responses stream error: %s", string(body))
 		}
 	}
@@ -3371,10 +2589,10 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 
 // CancelChatStream cancels the currently active ChatCompletion stream.
 func (a *App) CancelChatStream() {
-	// F-308: load the atomic.Pointer (no lock needed); a nil slot
-	// means no stream is active.
-	if p := a.chatCancel.Load(); p != nil {
-		(*p)()
+	a.chatCancelMu.Lock()
+	defer a.chatCancelMu.Unlock()
+	if a.chatCancel != nil {
+		a.chatCancel()
 	}
 }
 
@@ -3389,18 +2607,23 @@ type ModelInfo struct {
 // /v1/models with the x-api-key + anthropic-version headers, mirroring
 // chatCompletionAnthropic's URL and auth handling.
 func (a *App) FetchModels(apiKey, baseURL, protocol string) ([]ModelInfo, error) {
-	base := strings.TrimRight(baseURL, "/")
-
-	var url string
-	if protocol == "anthropic" {
-		// Base URL conventionally omits /v1; tolerate legacy configs with it.
-		if strings.HasSuffix(base, "/v1") {
-			url = base + "/models"
-		} else {
-			url = base + "/v1/models"
-		}
-	} else {
-		url = base + "/models"
+	// For /models the protocol only changes the URL shape for anthropic;
+	// all OpenAI-compatible variants (including Chinese LLMs) hit /v1/models.
+	buildProtocol := protocol
+	if buildProtocol == "" {
+		buildProtocol = "openai"
+	}
+	if buildProtocol == "glm-native" || buildProtocol == "custom" {
+		buildProtocol = "openai"
+	}
+	url, err := buildURL(baseURL, buildProtocol)
+	if err != nil {
+		return nil, err
+	}
+	// buildURL always appends /chat/completions or /responses. For models,
+	// we want /models instead. Re-strip the suffix and add /models.
+	if idx := strings.LastIndex(url, "/"); idx > 0 {
+		url = url[:idx+1] + "models"
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -3415,13 +2638,8 @@ func (a *App) FetchModels(apiKey, baseURL, protocol string) ([]ModelInfo, error)
 	}
 	req.Header.Set("User-Agent", "uniTerm")
 
-	// F-208: share the same transport as the LLM clients so the model
-	// list call also benefits from the keep-alive pool; the request
-	// itself carries its own 10s deadline via the per-request context.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req = req.WithContext(ctx)
-	res, err := a.llmHTTPClient().Do(req)
+	client := &http.Client{Timeout: 10 * time.Second}
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -3767,48 +2985,9 @@ func (a *App) RemoveTempFile(path string) error {
 // FrontendLog writes a frontend log message to the application log file.
 // This is the canonical interface for the frontend to persist debug/audit
 // messages alongside backend logs.
-func (a *App) FrontendLog(level, tag, message, fieldsJSON string) {
-	var fields map[string]any
-	if fieldsJSON != "" {
-		_ = json.Unmarshal([]byte(fieldsJSON), &fields)
-	}
-	switch level {
-	case "DEBUG":
-		diag.Debug(tag, message, fields)
-	case "WARN":
-		diag.Warn(tag, message, fields)
-	case "ERROR":
-		diag.Error(tag, message, fields)
-	default:
-		diag.Info(tag, message, fields)
-	}
-}
-
-// GetDiagnosticLogs reads recent NDJSON log entries, optionally filtered.
-func (a *App) GetDiagnosticLogs(since string, levels []string, tag string, text string, limit int) ([]diag.Entry, error) {
-	return diag.Query(diag.QueryOpts{
-		Since:  since,
-		Levels: levels,
-		Tag:    tag,
-		Text:   text,
-		Limit:  limit,
-	})
-}
-
-// DiagnosticLogSummary returns aggregate counts + op stats from the in-process metrics registry.
-func (a *App) DiagnosticLogSummary() (diag.Summary, error) {
-	return diag.Snapshot(), nil
-}
-
-// ExportDiagnosticBundle writes the active log directory + manifest as a
-// tar.gz at the given target path. Returns an error if diag has not been
-// initialised.
-func (a *App) ExportDiagnosticBundle(targetPath string) error {
-	dir := diag.LogsDir()
-	if dir == "" {
-		return fmt.Errorf("diag not initialized")
-	}
-	return diag.ExportBundle(dir, targetPath)
+func (a *App) FrontendLog(tag string, message string) {
+	_ = log.Init()
+	log.Writef("[%s] %s", tag, message)
 }
 
 // GetDefaultShell returns the system's default shell path for local terminals.
@@ -3975,11 +3154,7 @@ func (a *App) RegisterSessionForPanel(sessionID, panelID string) {
 		return
 	}
 	a.panelLogMu.Lock()
-	// F-212: also maintain the inverse index so panel→session lookups
-	// in panelLogTitle / EnableSessionOutputLog / DisableSessionOutputLog
-	// are O(1) instead of scanning every binding.
 	a.sessionToPanel[sessionID] = panelID
-	a.panelToSession[panelID] = sessionID
 	logger := a.panelLogs[panelID]
 	autoTriggered := a.panelAutoTriggered[panelID]
 	a.panelLogMu.Unlock()
@@ -4029,15 +3204,7 @@ func (a *App) UnregisterSession(sessionID string) {
 		return
 	}
 	a.panelLogMu.Lock()
-	if panelID, ok := a.sessionToPanel[sessionID]; ok {
-		delete(a.sessionToPanel, sessionID)
-		// F-212: only clear the inverse index when it still points at
-		// the session we're unregistering \u2014 the panel may already be
-		// bound to a different session (the next reconnect).
-		if a.panelToSession[panelID] == sessionID {
-			delete(a.panelToSession, panelID)
-		}
-	}
+	delete(a.sessionToPanel, sessionID)
 	a.panelLogMu.Unlock()
 	a.installWriter(sessionID, nil)
 }
@@ -4068,10 +3235,14 @@ func (a *App) installWriter(sessionID string, logger *session.OutputLogger) {
 // current session's Title if available, otherwise a short synthetic
 // name derived from panelID.
 func (a *App) panelLogTitle(panelID string) (name, protocol string) {
-	// F-212: O(1) lookup via the inverse index maintained in
-	// RegisterSessionForPanel / UnregisterSession.
 	a.panelLogMu.Lock()
-	sessionID := a.panelToSession[panelID]
+	var sessionID string
+	for sid, pid := range a.sessionToPanel {
+		if pid == panelID {
+			sessionID = sid
+			break
+		}
+	}
 	a.panelLogMu.Unlock()
 	if sessionID != "" && a.sessionManager != nil {
 		if s, ok := a.sessionManager.Get(sessionID); ok {
@@ -4113,9 +3284,16 @@ func (a *App) EnableSessionOutputLog(panelID, dir string) (string, error) {
 		logger = &session.OutputLogger{}
 		a.panelLogs[panelID] = logger
 	}
-	// F-212: O(1) inverse-index lookup instead of scanning
-	// sessionToPanel.
-	sessionID := a.panelToSession[panelID]
+	// Find any session currently bound to this panel so we can wire the
+	// writer while we still hold the lock (avoids a race with concurrent
+	// register/unregister calls).
+	var sessionID string
+	for sid, pid := range a.sessionToPanel {
+		if pid == panelID {
+			sessionID = sid
+			break
+		}
+	}
 	a.panelLogMu.Unlock()
 
 	path, err := logger.Enable(dir, name, protocol)
@@ -4138,9 +3316,13 @@ func (a *App) DisableSessionOutputLog(panelID string) error {
 	a.panelLogMu.Lock()
 	logger := a.panelLogs[panelID]
 	delete(a.panelLogs, panelID)
-	// F-212: O(1) inverse-index lookup instead of scanning
-	// sessionToPanel.
-	sessionID := a.panelToSession[panelID]
+	var sessionID string
+	for sid, pid := range a.sessionToPanel {
+		if pid == panelID {
+			sessionID = sid
+			break
+		}
+	}
 	a.panelLogMu.Unlock()
 	if sessionID != "" {
 		a.installWriter(sessionID, nil)
@@ -4932,11 +4114,7 @@ func (a *App) K8sExecSession(connID, namespace, pod, container string) (*session
 		return nil, fmt.Errorf("k8s manager not initialized")
 	}
 	// initial size fallback; real size arrives via Resize after the frontend mounts xterm
-	// Use a bounded context so a slow/unreachable apiserver can't hang the
-	// WS upgrade indefinitely; cancellation propagates into the dialer.
-	dialCtx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
-	defer cancel()
-	wsConn, err := a.k8sManager.DialExec(dialCtx, connID, namespace, pod, container, 80, 24)
+	wsConn, err := a.k8sManager.DialExec(connID, namespace, pod, container, 80, 24)
 	if err != nil {
 		return nil, err
 	}
