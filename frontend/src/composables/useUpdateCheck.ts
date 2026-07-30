@@ -1,4 +1,4 @@
-import { reactive, ref, watch, h } from 'vue'
+import { reactive, ref, watch, computed, h } from 'vue'
 import { ElMessage } from 'element-plus'
 import { msg } from '../services/message'
 import { CheckForUpdate, GetAppInfo } from '../../wailsjs/go/main/App'
@@ -33,11 +33,15 @@ const CHECK_TIMEOUT = 15000
 const updateInfo = ref<UpdateInfo | null>(null)
 const checking = ref(false)
 const autoCheck = ref(true)
+const appVersion = ref<string>('')
 
 let timer: ReturnType<typeof setInterval> | null = null
 
 function startTimer() {
   stopTimer()
+  // Dev builds have no published release to compare against; skip the
+  // periodic GitHub/Gitee poll entirely.
+  if (appVersion.value === 'dev') return
   timer = setInterval(() => {
     checkForUpdate()
   }, 24 * 60 * 60 * 1000)
@@ -51,6 +55,7 @@ function stopTimer() {
 }
 
 async function checkForUpdate(showStatus = false): Promise<UpdateInfo | null> {
+  if (appVersion.value === 'dev') return null
   checking.value = true
   const updateSource = locale.value === 'zh-CN' ? 'gitee' : 'github'
   try {
@@ -95,8 +100,10 @@ watch(autoCheck, (enabled) => {
 
 function initAutoCheck() {
   checking.value = false
-  // Fetch current version immediately so About page shows it
+  // Fetch current version immediately so About page shows it and the
+  // dev-build gate above can see whether to suppress update UI.
   GetAppInfo().then(info => {
+    appVersion.value = info.version || ''
     if (!updateInfo.value) {
       updateInfo.value = { hasUpdate: false, current: info.version, latest: '', releaseUrl: '' }
     }
@@ -106,7 +113,7 @@ function initAutoCheck() {
     const v = settings.settings.autoCheckUpdate
     autoCheck.value = (v == null) ? true : v
   } catch { /* use default */ }
-  if (autoCheck.value) {
+  if (autoCheck.value && appVersion.value !== 'dev') {
     setTimeout(() => checkForUpdate(), 5000)
     startTimer()
   }
@@ -116,6 +123,8 @@ const state = reactive({
   updateInfo,
   checking,
   autoCheck,
+  appVersion,
+  isDev: computed(() => appVersion.value === 'dev'),
   checkForUpdate,
   initAutoCheck,
 })

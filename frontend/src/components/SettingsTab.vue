@@ -709,7 +709,7 @@
               Gitee
             </a>
           </div>
-          <div class="about-update-actions">
+          <div v-if="!updateCheck.isDev" class="about-update-actions">
             <el-button
               :loading="updateCheck.checking"
               @click="handleCheckUpdate"
@@ -720,11 +720,6 @@
                   : t("settings.checkUpdate")
               }}
             </el-button>
-          </div>
-          <div class="about-auto-check">
-            <el-checkbox v-model="updateCheck.autoCheck">
-              {{ t("settings.autoCheckUpdate") }}
-            </el-checkbox>
           </div>
         </div>
       </div>
@@ -1924,11 +1919,6 @@ async function onToggleSystemTitleBar(v: boolean) {
 
 .about-update-actions {
   margin-top: 20px;
-}
-.about-auto-check {
-  margin-top: 12px;
-  font-size: 13px;
-  font-family: var(--font-ui);
 }
 
 .kb-key {
