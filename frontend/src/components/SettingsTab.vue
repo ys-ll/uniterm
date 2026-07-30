@@ -1076,11 +1076,16 @@ syncStore.loadConfig();
 
 // ── System fonts ──
 const systemFonts = ref<{ label: string; value: string }[]>([]);
+// Merge system fonts with the bundled FONT_OPTIONS fallback so fonts that
+// are loaded only via @font-face (e.g. @fontsource-variable/jetbrains-mono,
+// which is not registered with the OS font catalog) still appear in the
+// dropdown. Dedupe by label (case-insensitive) to avoid showing "JetBrains
+// Mono" twice on systems that happen to have it installed.
 const fontOptions = computed(() => {
-  if (systemFonts.value.length > 0) {
-    return systemFonts.value;
-  }
-  return FONT_OPTIONS;
+  if (systemFonts.value.length === 0) return FONT_OPTIONS;
+  const seen = new Set(systemFonts.value.map((f) => f.label.toLowerCase()));
+  const extras = FONT_OPTIONS.filter((f) => !seen.has(f.label.toLowerCase()));
+  return [...systemFonts.value, ...extras];
 });
 
 const { terminalThemeGroups, isCustomTheme } = useTerminalThemeOptions();

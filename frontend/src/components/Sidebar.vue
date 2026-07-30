@@ -488,11 +488,14 @@ const activeView = ref<'connections' | 'quickCommands' | 'tunnels' | 'history' |
 
 // ── Personalization panel ──
 const systemFonts = ref<{ label: string; value: string }[]>([])
+// Merge system fonts with FONT_OPTIONS so bundled @font-face fonts
+// (e.g. @fontsource-variable/jetbrains-mono, not in the OS font catalog)
+// still surface in the dropdown. Dedupe by case-insensitive label.
 const personalizationFontOptions = computed(() => {
-  if (systemFonts.value.length > 0) {
-    return systemFonts.value
-  }
-  return FONT_OPTIONS
+  if (systemFonts.value.length === 0) return FONT_OPTIONS
+  const seen = new Set(systemFonts.value.map((f) => f.label.toLowerCase()))
+  const extras = FONT_OPTIONS.filter((f) => !seen.has(f.label.toLowerCase()))
+  return [...systemFonts.value, ...extras]
 })
 
 const { terminalThemeGroups, isCustomTheme } = useTerminalThemeOptions()
