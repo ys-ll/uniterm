@@ -17,7 +17,7 @@ export function AppendFileBase64(arg1:string,arg2:string,arg3:number):Promise<vo
 
 export function CancelChatStream():Promise<void>;
 
-export function ChatCompletion(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
+export function ChatCompletion(arg1:main.ChatRequest):Promise<string>;
 
 export function CheckForUpdate(arg1:string):Promise<update.UpdateInfo>;
 

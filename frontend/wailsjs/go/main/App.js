@@ -18,8 +18,8 @@ export function CancelChatStream() {
   return window['go']['main']['App']['CancelChatStream']();
 }
 
-export function ChatCompletion(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['main']['App']['ChatCompletion'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function ChatCompletion(arg1) {
+  return window['go']['main']['App']['ChatCompletion'](arg1);
 }
 
 export function CheckForUpdate(arg1) {

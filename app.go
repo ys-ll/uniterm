@@ -1601,27 +1601,41 @@ func (a *App) GetRecentConnections() []string {
 	return a.recentStore.GetAll()
 }
 
+// ChatRequest is the struct form of ChatCompletion's parameters. We use a
+// struct instead of positional args because the call site carries six
+// independent knobs and adding a new one would otherwise be a breaking
+// change for every frontend caller.
+type ChatRequest struct {
+	APIKey      string
+	BaseURL     string
+	Model       string
+	RequestJSON string
+	Protocol    string
+	UserAgent   string
+}
+
 // ChatCompletion streams the Anthropic API response via SSE, emitting Wails
 // events for each token while collecting the full message. It returns the
 // complete message JSON when the stream ends (backward-compatible).
-func (a *App) ChatCompletion(apiKey, baseURL, model string, requestJSON string, protocol string, userAgent string) (string, error) {
+func (a *App) ChatCompletion(req ChatRequest) (string, error) {
 	// Parse the incoming request body (always Anthropic format from frontend)
 	var reqBody map[string]interface{}
-	if err := json.Unmarshal([]byte(requestJSON), &reqBody); err != nil {
+	if err := json.Unmarshal([]byte(req.RequestJSON), &reqBody); err != nil {
 		return "", fmt.Errorf("invalid request JSON: %w", err)
 	}
 
+	userAgent := req.UserAgent
 	if userAgent == "" {
 		userAgent = "uniTerm"
 	}
 
-	switch protocol {
+	switch req.Protocol {
 	case "openai":
-		return a.chatCompletionOpenAI(apiKey, baseURL, model, reqBody, userAgent)
+		return a.chatCompletionOpenAI(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
 	case "responses":
-		return a.chatCompletionResponses(apiKey, baseURL, model, reqBody, userAgent)
+		return a.chatCompletionResponses(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
 	}
-	return a.chatCompletionAnthropic(apiKey, baseURL, model, reqBody, userAgent)
+	return a.chatCompletionAnthropic(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
 }
 
 // chatCompletionAnthropic handles the native Anthropic Messages API with SSE streaming.
