@@ -1107,5 +1107,9 @@
   "settings.skillsImportZip": "Zip をインポート",
   "settings.skillsImportDir": "フォルダーをインポート",
   "settings.skillsImportFolderHint": "references/ と scripts/ を含むフォルダースキルに対応",
-  "settings.skillsImportOk": "スキル「{name}」をインポートしました"
+  "settings.skillsImportOk": "スキル「{name}」をインポートしました",
+  "settings": {
+    "detectedProtocolHint": "Detected provider — suggested protocol: {protocol}",
+    "apply": "Apply"
+  }
 }

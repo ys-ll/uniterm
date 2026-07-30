@@ -1107,5 +1107,9 @@
   "settings.skillsImportZip": "Zip importieren",
   "settings.skillsImportDir": "Ordner importieren",
   "settings.skillsImportFolderHint": "Unterstützt Ordner-Skills mit references/ und scripts/",
-  "settings.skillsImportOk": "Skill „{name}“ importiert"
+  "settings.skillsImportOk": "Skill „{name}“ importiert",
+  "settings": {
+    "detectedProtocolHint": "Detected provider — suggested protocol: {protocol}",
+    "apply": "Apply"
+  }
 }

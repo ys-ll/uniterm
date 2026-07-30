@@ -1107,5 +1107,9 @@
   "settings.skillsImportZip": "匯入 Zip",
   "settings.skillsImportDir": "匯入目錄",
   "settings.skillsImportFolderHint": "或匯入含 SKILL.md 的目錄",
-  "settings.skillsImportOk": "已匯入技能「{name}」"
+  "settings.skillsImportOk": "已匯入技能「{name}」",
+  "settings": {
+    "detectedProtocolHint": "Detected provider — suggested protocol: {protocol}",
+    "apply": "Apply"
+  }
 }

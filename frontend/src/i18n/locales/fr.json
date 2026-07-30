@@ -1107,5 +1107,9 @@
   "settings.skillsImportZip": "Importer un Zip",
   "settings.skillsImportDir": "Importer un dossier",
   "settings.skillsImportFolderHint": "Prend en charge les compétences en dossier avec references/ et scripts/",
-  "settings.skillsImportOk": "Compétence « {name} » importée"
+  "settings.skillsImportOk": "Compétence « {name} » importée",
+  "settings": {
+    "detectedProtocolHint": "Detected provider — suggested protocol: {protocol}",
+    "apply": "Apply"
+  }
 }

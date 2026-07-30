@@ -1107,5 +1107,9 @@
   "settings.skillsImportZip": "Zip 가져오기",
   "settings.skillsImportDir": "폴터 가져오기",
   "settings.skillsImportFolderHint": "references/ 및 scripts/가 있는 폴터 스킬 지원",
-  "settings.skillsImportOk": "스킬 \"{name}\"을(를) 가져왔습니다"
+  "settings.skillsImportOk": "스킬 \"{name}\"을(를) 가져왔습니다",
+  "settings": {
+    "detectedProtocolHint": "Detected provider — suggested protocol: {protocol}",
+    "apply": "Apply"
+  }
 }

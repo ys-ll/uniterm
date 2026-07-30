@@ -1107,5 +1107,9 @@
   "settings.skillsImportZip": "Импорт Zip",
   "settings.skillsImportDir": "Импорт папки",
   "settings.skillsImportFolderHint": "Поддерживает навыки-папки с references/ и scripts/",
-  "settings.skillsImportOk": "Навык \"{name}\" импортирован"
+  "settings.skillsImportOk": "Навык \"{name}\" импортирован",
+  "settings": {
+    "detectedProtocolHint": "Detected provider — suggested protocol: {protocol}",
+    "apply": "Apply"
+  }
 }

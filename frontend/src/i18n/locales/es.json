@@ -1107,5 +1107,9 @@
   "settings.skillsImportZip": "Importar Zip",
   "settings.skillsImportDir": "Importar carpeta",
   "settings.skillsImportFolderHint": "Admite skills de carpeta con references/ y scripts/",
-  "settings.skillsImportOk": "Skill \"{name}\" importado"
+  "settings.skillsImportOk": "Skill \"{name}\" importado",
+  "settings": {
+    "detectedProtocolHint": "Detected provider — suggested protocol: {protocol}",
+    "apply": "Apply"
+  }
 }
