@@ -1203,7 +1203,7 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 		}
 	}
 	// Apply terminal character encoding (SSH only). No-op for utf-8/empty.
-	if ssh, ok := s.(*session.SshSession); ok {
+	if ssh, ok := s.(*session.SSHSession); ok {
 		ssh.SetEncoding(config.Encoding)
 	}
 
@@ -1304,7 +1304,7 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 
 	// SFTP concurrency limit
 	if sessionType == "sftp" {
-		if sftp, ok := s.(*session.SftpSession); ok {
+		if sftp, ok := s.(*session.SFTPSession); ok {
 			n := config.SftpMaxConcurrency
 			if n <= 0 {
 				n = 5
@@ -1357,10 +1357,10 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 				payload["clientH"] = ch
 			}
 			// Attach proxyAddr for VNC and SPICE sessions
-			if vnc, ok := s.(*session.VncSession); ok {
+			if vnc, ok := s.(*session.VNCSession); ok {
 				payload["proxyAddr"] = vnc.ProxyAddr()
 			}
-			if spice, ok := s.(*session.SpiceSession); ok {
+			if spice, ok := s.(*session.SPICESession); ok {
 				payload["proxyAddr"] = spice.ProxyAddr()
 			}
 		}
