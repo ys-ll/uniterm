@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, nextTick, onMounted, onUnmounted, inject } from 'vue'
+import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount, onUnmounted, inject } from 'vue'
 import { Radio, Sparkles, MoreHorizontal, X, SquareTerminal, Laptop, Cable, Terminal, Zap } from '@lucide/vue'
 import BaseTerminal from './BaseTerminal.vue'
 import { useTabStore } from '../stores/tabStore'
@@ -288,6 +288,8 @@ function cancelEdit() {
 
 let retryAttempt = 0
 let autoRetried = false
+let autoRetryTimer: ReturnType<typeof setTimeout> | null = null
+let retryInFlight: Promise<void> | null = null
 
 function onSessionStatus(status: string) {
   if (status === 'retry') {
@@ -304,12 +306,31 @@ function onSessionStatus(status: string) {
     // cycle (manual Enter resets the guard).
     if (!autoRetried) {
       autoRetried = true
-      setTimeout(() => retryConnection(true), 200)
+      autoRetryTimer = setTimeout(() => {
+        autoRetryTimer = null
+        retryConnection(true)
+      }, 200)
     }
   }
 }
 
 async function retryConnection(silent = false) {
+  // Guard against concurrent retries (manual Enter racing the auto-retry
+  // setTimeout, or a second disconnect firing before the first retry
+  // finishes). Without this, two CreateSession calls race and the losing
+  // backend session is orphaned — never Closed, just leaked until app exit.
+  if (retryInFlight) return retryInFlight
+  retryInFlight = (async () => {
+    await doRetryConnection(silent)
+  })()
+  try {
+    await retryInFlight
+  } finally {
+    retryInFlight = null
+  }
+}
+
+async function doRetryConnection(silent = false) {
   retryAttempt++
   if (props.panel.type === 'local') {
     // Auto-retry (silent): just reset mouse modes and add a newline so the
@@ -430,6 +451,18 @@ async function retryConnection(silent = false) {
 onMounted(() => {
   document.addEventListener('click', onDocumentClick)
   refreshOutputLogState()
+})
+
+onBeforeUnmount(() => {
+  // Cancel pending auto-retry so it doesn't fire after the panel is gone.
+  // Without this, a 'disconnected' event triggered by CloseSession during tab
+  // teardown schedules a setTimeout that creates a new backend session after
+  // the panel is already removed — the new session is then orphaned until
+  // app shutdown because nothing holds a reference to call CloseSession on it.
+  if (autoRetryTimer) {
+    clearTimeout(autoRetryTimer)
+    autoRetryTimer = null
+  }
 })
 
 onUnmounted(() => {

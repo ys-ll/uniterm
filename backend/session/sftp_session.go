@@ -26,11 +26,16 @@ type SFTPSession struct {
 	sshClient  *ssh.Client
 	sftpClient *sftp.Client
 	cwd        string
-	localCwd   string
 	mu         sync.RWMutex
 	transfers  map[string]*TransferTask
 	taskSeq    int64
 	sem        chan struct{} // concurrency limiter, nil = unlimited
+	// localFSOps embeds the path-traversal-safe local file ops (LocalXxx
+	// below) so SFTP shares the same symlink-containment guard as the
+	// SMB/WebDAV/S3/FTP sessions. The embedded localCwd field is what
+	// ListLocal / ChangeLocalDir / Get / Put and the LocalXxx methods all
+	// read and write.
+	localFSOps
 }
 
 func NewSFTPSession(id string) *SFTPSession {
@@ -41,9 +46,11 @@ func NewSFTPSession(id string) *SFTPSession {
 			sessionType: "sftp",
 			status:      StatusDisconnected,
 		},
-		cwd:       "/",
-		localCwd:  homeDir,
+		cwd:      "/",
 		transfers: make(map[string]*TransferTask),
+		localFSOps: localFSOps{
+			localCwd: homeDir,
+		},
 	}
 }
 
@@ -580,93 +587,35 @@ func (s *SFTPSession) Put(localPath, remotePath string, recursive bool) (string,
 // --- Local file operations ---
 
 func (s *SFTPSession) LocalRemove(p string, recursive bool) error {
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.localCwd, p)
-	}
-	if recursive {
-		return os.RemoveAll(p)
-	}
-	fi, err := os.Stat(p)
-	if err != nil {
-		return err
-	}
-	if fi.IsDir() {
-		entries, err := os.ReadDir(p)
-		if err != nil {
-			return err
-		}
-		if len(entries) > 0 {
-			return fmt.Errorf("directory not empty (%d items)", len(entries))
-		}
-	}
-	return os.Remove(p)
+	return s.localFSOps.LocalRemove(p, recursive)
 }
 
 func (s *SFTPSession) LocalRename(oldName, newName string) error {
-	old := oldName
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(s.localCwd, old)
-	}
-	newPath := newName
-	if !filepath.IsAbs(newPath) {
-		newPath = filepath.Join(s.localCwd, newPath)
-	}
-	return os.Rename(old, newPath)
+	return s.localFSOps.LocalRename(oldName, newName)
 }
 
 func (s *SFTPSession) LocalMkdir(dir string) error {
-	p := dir
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.localCwd, p)
-	}
-	return os.MkdirAll(p, 0755)
+	return s.localFSOps.LocalMkdir(dir)
 }
 
 // LocalGetContent reads a local file's full content.
 func (s *SFTPSession) LocalGetContent(localPath string) ([]byte, error) {
-	p := localPath
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.localCwd, p)
-	}
-	return os.ReadFile(p)
+	return s.localFSOps.LocalGetContent(localPath)
 }
 
 // LocalPutContent writes content to a local file, creating parent directories as needed.
 func (s *SFTPSession) LocalPutContent(localPath string, content []byte) error {
-	p := localPath
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.localCwd, p)
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-		return err
-	}
-	return os.WriteFile(p, content, 0644)
+	return s.localFSOps.LocalPutContent(localPath, content)
 }
 
 // LocalCopy copies a local file or directory.
 func (s *SFTPSession) LocalCopy(oldPath, newPath string) error {
-	old := oldPath
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(s.localCwd, old)
-	}
-	n := newPath
-	if !filepath.IsAbs(n) {
-		n = filepath.Join(s.localCwd, n)
-	}
-	return localCopyRecursive(old, n)
+	return s.localFSOps.LocalCopy(oldPath, newPath)
 }
 
 // LocalMove moves a local file or directory (rename, same filesystem only).
 func (s *SFTPSession) LocalMove(oldPath, newPath string) error {
-	old := oldPath
-	if !filepath.IsAbs(old) {
-		old = filepath.Join(s.localCwd, old)
-	}
-	n := newPath
-	if !filepath.IsAbs(n) {
-		n = filepath.Join(s.localCwd, n)
-	}
-	return os.Rename(old, n)
+	return s.localFSOps.LocalMove(oldPath, newPath)
 }
 
 // PutContent writes raw content directly to a remote file via SFTP.
