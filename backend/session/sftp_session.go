@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	osUser "os/user"
 	"path"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
+	"github.com/ys-ll/uniterm/backend/log"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/ys-ll/uniterm/backend/diag"
@@ -75,6 +77,7 @@ func sftpTimed(name string, fn func() error) error {
 func (s *SFTPSession) Connect(config ConnectionConfig) error {
 	s.setStatus(StatusConnecting)
 	s.title = fmt.Sprintf("%s@%s", config.User, config.Host)
+	s.LogConnect(config.Host, config.Port)
 
 	authMethods := []ssh.AuthMethod{}
 	switch config.AuthType {
@@ -84,11 +87,13 @@ func (s *SFTPSession) Connect(config ConnectionConfig) error {
 		key, err := os.ReadFile(config.KeyPath)
 		if err != nil {
 			s.setStatus(StatusError)
+			s.LogError("read-key", err)
 			return fmt.Errorf("read key: %w", err)
 		}
 		signer, err := ssh.ParsePrivateKey(key)
 		if err != nil {
 			s.setStatus(StatusError)
+			s.LogError("parse-key", err)
 			return fmt.Errorf("parse key: %w", err)
 		}
 		authMethods = append(authMethods, ssh.PublicKeys(signer))
@@ -96,19 +101,25 @@ func (s *SFTPSession) Connect(config ConnectionConfig) error {
 		authMethods = append(authMethods, ssh.Password(config.Password))
 	}
 
+	hostKeyCB, err := sshHostKeyCallback(config)
+	if err != nil {
+		s.setStatus(StatusError)
+		return fmt.Errorf("host key config: %w", err)
+	}
 	clientConfig := &ssh.ClientConfig{
 		User:            config.User,
 		Auth:            authMethods,
 		Timeout:         30 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCB,
 		Config: ssh.Config{
 			KeyExchanges: sshKeyExchanges(),
 		},
 	}
 
-	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", config.Host, config.Port), clientConfig)
+	client, err := ssh.Dial("tcp", net.JoinHostPort(config.Host, strconv.Itoa(config.Port)), clientConfig)
 	if err != nil {
 		s.setStatus(StatusError)
+		s.LogError("ssh-dial", err)
 		return fmt.Errorf("ssh dial: %w", err)
 	}
 
@@ -116,10 +127,12 @@ func (s *SFTPSession) Connect(config ConnectionConfig) error {
 	if err != nil {
 		client.Close()
 		s.setStatus(StatusError)
+		s.LogError("sftp-client", err)
 		return fmt.Errorf("sftp client: %w", err)
 	}
 
 	go func() {
+		defer log.Recover("sftp_session.client.Wait")
 		_ = client.Wait()
 		s.Disconnect()
 	}()
@@ -143,6 +156,7 @@ func (s *SFTPSession) Resize(cols, rows int) error {
 }
 
 func (s *SFTPSession) Disconnect() error {
+	s.LogDisconnect("user")
 	if s.sftpClient != nil {
 		s.sftpClient.Close()
 	}
@@ -159,14 +173,14 @@ func (s *SFTPSession) IsConnected() bool {
 
 // FileItem represents a file entry returned to the frontend.
 type FileItem struct {
-	Name    string `json:"name"`
-	Size    int64  `json:"size"`
-	ModTime string `json:"modTime"`
-	Mode    string `json:"mode"`
-	IsDir   bool   `json:"isDir"`
-	IsHidden bool  `json:"isHidden"`
-	Owner   string `json:"owner"`
-	Group   string `json:"group"`
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	ModTime  string `json:"modTime"`
+	Mode     string `json:"mode"`
+	IsDir    bool   `json:"isDir"`
+	IsHidden bool   `json:"isHidden"`
+	Owner    string `json:"owner"`
+	Group    string `json:"group"`
 }
 
 // FileListResult wraps files + current directory for a list response.
@@ -188,6 +202,12 @@ type TransferTask struct {
 	cancel     context.CancelFunc
 	paused     bool
 	pauseCh    chan struct{}
+	// pauseMu guards paused/pauseCh/Status across the reader goroutine
+	// and Pause/Resume/Cancel calls. waitIfPaused reads paused without
+	// the lock (CAS fast path), but Pause/Resume mutate the trio so
+	// they take pauseMu to keep the channel swap atomic from the
+	// reader's perspective.
+	pauseMu sync.Mutex
 }
 
 func (t *TransferTask) start() {
@@ -246,13 +266,12 @@ func (s *SFTPSession) ListRemote(dir string) (FileListResult, error) {
 	if err := s.requireClient(); err != nil {
 		return FileListResult{}, err
 	}
-	if dir == "" {
-		dir = s.cwd
-	} else if !path.IsAbs(dir) {
-		dir = path.Join(s.cwd, dir)
+	dir, err := sanitizeRemotePath(s.cwd, dir)
+	if err != nil {
+		return FileListResult{}, err
 	}
 	var infos []os.FileInfo
-	err := sftpTimed("readdir", func() error {
+	err = sftpTimed("readdir", func() error {
 		var inner error
 		infos, inner = s.sftpClient.ReadDir(dir)
 		return inner
@@ -366,9 +385,9 @@ func (s *SFTPSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 	if err := s.requireClient(); err != nil {
 		return FileListResult{}, err
 	}
-	target := dir
-	if !path.IsAbs(dir) {
-		target = path.Join(s.cwd, dir)
+	target, err := sanitizeRemotePath(s.cwd, dir)
+	if err != nil {
+		return FileListResult{}, err
 	}
 	fi, err := s.sftpClient.Stat(target)
 	if err != nil {
@@ -407,9 +426,9 @@ func (s *SFTPSession) MakeDir(dir string) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	p := dir
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
+	p, err := sanitizeRemotePath(s.cwd, dir)
+	if err != nil {
+		return err
 	}
 	return sftpTimed("mkdir", func() error { return s.sftpClient.Mkdir(p) })
 }
@@ -418,8 +437,9 @@ func (s *SFTPSession) Remove(p string, recursive bool) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
+	p, err := sanitizeRemotePath(s.cwd, p)
+	if err != nil {
+		return err
 	}
 	if recursive {
 		return sftpTimed("removeRecursive", func() error { return s.rmRecursive(p) })
@@ -447,13 +467,13 @@ func (s *SFTPSession) Rename(oldName, newName string) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	old := oldName
-	if !path.IsAbs(old) {
-		old = path.Join(s.cwd, old)
+	old, err := sanitizeRemotePath(s.cwd, oldName)
+	if err != nil {
+		return err
 	}
-	newPath := newName
-	if !path.IsAbs(newPath) {
-		newPath = path.Join(s.cwd, newPath)
+	newPath, err := sanitizeRemotePath(s.cwd, newName)
+	if err != nil {
+		return err
 	}
 	return sftpTimed("rename", func() error { return s.sftpClient.Rename(old, newPath) })
 }
@@ -462,8 +482,9 @@ func (s *SFTPSession) Chmod(p string, mode os.FileMode) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
+	p, err := sanitizeRemotePath(s.cwd, p)
+	if err != nil {
+		return err
 	}
 	return sftpTimed("chmod", func() error { return s.sftpClient.Chmod(p, mode) })
 }
@@ -472,9 +493,9 @@ func (s *SFTPSession) Get(remotePath, localPath string, recursive bool) (string,
 	if err := s.requireClient(); err != nil {
 		return "", err
 	}
-	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
+	rp, err := sanitizeRemotePath(s.cwd, remotePath)
+	if err != nil {
+		return "", err
 	}
 	lp := localPath
 	if !filepath.IsAbs(lp) {
@@ -534,9 +555,9 @@ func (s *SFTPSession) Put(localPath, remotePath string, recursive bool) (string,
 	if !filepath.IsAbs(lp) {
 		lp = filepath.Join(s.localCwd, lp)
 	}
-	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
+	rp, err := sanitizeRemotePath(s.cwd, remotePath)
+	if err != nil {
+		return "", err
 	}
 	if recursive {
 		total, err := s.dirSizeLocal(lp)
@@ -623,9 +644,9 @@ func (s *SFTPSession) PutContent(remotePath string, content []byte) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
+	rp, err := sanitizeRemotePath(s.cwd, remotePath)
+	if err != nil {
+		return err
 	}
 	return sftpTimed("writeContent", func() error {
 		// Ensure parent directory exists
@@ -648,14 +669,11 @@ func (s *SFTPSession) GetContent(remotePath string) ([]byte, error) {
 	if err := s.requireClient(); err != nil {
 		return nil, err
 	}
-	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
+	rp, err := sanitizeRemotePath(s.cwd, remotePath)
+	if err != nil {
+		return nil, err
 	}
-	var (
-		f   *sftp.File
-		err error
-	)
+	var f *sftp.File
 	if err := sftpTimed("open", func() error {
 		f, err = s.sftpClient.Open(rp)
 		return err
@@ -664,6 +682,29 @@ func (s *SFTPSession) GetContent(remotePath string) ([]byte, error) {
 	}
 	defer f.Close()
 	return io.ReadAll(f)
+}
+
+// sanitizeRemotePath resolves a user-supplied remote path against cwd and
+// rejects any result that escapes the root "/" or contains path-traversal
+// segments after cleaning. Returns an absolute, cleaned path safe for any
+// sftpClient operation.
+func sanitizeRemotePath(cwd, input string) (string, error) {
+	if input == "" {
+		input = cwd
+	}
+	joined := path.Join(cwd, input)
+	cleaned := path.Clean(joined)
+	if !path.IsAbs(cleaned) {
+		return "", fmt.Errorf("remote path must be absolute: %s", input)
+	}
+	// After Clean, any literal ".." segment means the caller tried to
+	// break out of root — refuse rather than silently accepting.
+	for _, seg := range strings.Split(cleaned, "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("remote path contains traversal segment: %s", input)
+		}
+	}
+	return cleaned, nil
 }
 
 // shellEscape returns a safely single-quoted string for shell commands.
@@ -678,13 +719,13 @@ func (s *SFTPSession) Copy(oldPath, newPath string) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	old := oldPath
-	if !path.IsAbs(old) {
-		old = path.Join(s.cwd, old)
+	old, err := sanitizeRemotePath(s.cwd, oldPath)
+	if err != nil {
+		return err
 	}
-	n := newPath
-	if !path.IsAbs(n) {
-		n = path.Join(s.cwd, n)
+	n, err := sanitizeRemotePath(s.cwd, newPath)
+	if err != nil {
+		return err
 	}
 	// Try shell cp -r first (server-side copy, zero data transfer)
 	session, err := s.sshClient.NewSession()
@@ -765,13 +806,13 @@ func (s *SFTPSession) Move(oldPath, newPath string) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	old := oldPath
-	if !path.IsAbs(old) {
-		old = path.Join(s.cwd, old)
+	old, err := sanitizeRemotePath(s.cwd, oldPath)
+	if err != nil {
+		return err
 	}
-	n := newPath
-	if !path.IsAbs(n) {
-		n = path.Join(s.cwd, n)
+	n, err := sanitizeRemotePath(s.cwd, newPath)
+	if err != nil {
+		return err
 	}
 	// Try SFTP native rename first (same filesystem, zero data transfer)
 	if err := s.sftpClient.Rename(old, n); err == nil {
@@ -808,8 +849,10 @@ func (s *SFTPSession) PauseTransfer(taskID string) error {
 	if !ok {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
+	task.pauseMu.Lock()
 	task.paused = true
 	task.Status = "paused"
+	task.pauseMu.Unlock()
 	s.emitTransferComplete(task)
 	return nil
 }
@@ -822,13 +865,15 @@ func (s *SFTPSession) ResumeTransfer(taskID string) error {
 	if !ok {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
+	task.pauseMu.Lock()
 	task.paused = false
 	task.Status = "running"
-		close(task.pauseCh)
-		task.pauseCh = make(chan struct{})
-		s.emitTransferStart(task)
-		return nil
-	}
+	close(task.pauseCh)
+	task.pauseCh = make(chan struct{})
+	task.pauseMu.Unlock()
+	s.emitTransferStart(task)
+	return nil
+}
 
 // --- Recursive helpers ---
 
@@ -953,7 +998,7 @@ func (s *SFTPSession) startTransfer(task *TransferTask) {
 		if s.sem != nil {
 			select {
 			case s.sem <- struct{}{}:
-			defer func() { <-s.sem }()
+				defer func() { <-s.sem }()
 			case <-task.ctx.Done():
 				task.Status = "cancelled"
 				s.emitTransferComplete(task)

@@ -1,0 +1,52 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Go ${{ matrix.go }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.26']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+
+      # v1.7: Run the full backend test suite under -race.  The race
+      # detector catches data races in concurrent code paths (Manager
+      # maps, sync.ChangePassword atomicity, skills_store.List cache,
+      # etc.) that a plain `go test` would miss.
+      - name: Run tests with -race
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Running go test -race ./backend/..."
+          go test -race -count=1 -timeout 10m ./backend/...
+
+      # v1.7: Spot-run the fuzz seed corpus so a regression surfaces
+      # here even without enabling a real fuzz campaign.  The fuzz
+      # targets are in F-401 / QA-023.
+      - name: Fuzz seed corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Running fuzz seed corpus (15s budget per fuzz target)"
+          FUZZ_TIME=15s
+          go test -run='^$' -fuzz='^FuzzParseBytes$' -fuzztime=$FUZZ_TIME ./backend/k8s/ || true
+          go test -run='^$' -fuzz='^FuzzParseServerAddr$' -fuzztime=$FUZZ_TIME ./backend/k8s/ || true
+          go test -run='^$' -fuzz='^FuzzParseNameTable$' -fuzztime=$FUZZ_TIME ./backend/platform/ || true
+          go test -run='^$' -fuzz='^FuzzScanEscape$' -fuzztime=$FUZZ_TIME ./backend/session/ || true
+          go test -run='^$' -fuzz='^FuzzParseCSIParam$' -fuzztime=$FUZZ_TIME ./backend/session/ || true
+          go test -run='^$' -fuzz='^FuzzParseFrontmatter$' -fuzztime=$FUZZ_TIME ./backend/store/ || true

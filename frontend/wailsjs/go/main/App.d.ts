@@ -21,6 +21,8 @@ export function ChatCompletion(arg1:main.ChatRequest):Promise<string>;
 
 export function CheckForUpdate(arg1:string):Promise<update.UpdateInfo>;
 
+export function ClassifyCommandRisk(arg1:string):Promise<store.RiskLevel>;
+
 export function ClearBackgroundImage():Promise<void>;
 
 export function CloseSession(arg1:string):Promise<void>;
@@ -166,7 +168,7 @@ export function ImportSkillFromZip(arg1:string):Promise<string>;
 
 export function IsForeground():Promise<boolean>;
 
-export function K8sConnect(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
+export function K8sConnect(arg1:string,arg2:boolean,arg3:string,arg4:string,arg5:string,arg6:string,arg7:boolean):Promise<string>;
 
 export function K8sDisconnect(arg1:string):Promise<void>;
 

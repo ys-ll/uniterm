@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go.bug.st/serial"
 	"io"
@@ -16,16 +17,13 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"runtime/debug"
-	"sort"
-	"strconv"
 	"strings"
 	stdsync "sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 	"github.com/google/uuid"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/ys-ll/uniterm/backend/container"
 	"github.com/ys-ll/uniterm/backend/database"
 	"github.com/ys-ll/uniterm/backend/k8s"
@@ -59,37 +57,83 @@ type App struct {
 	wndProcCb            uintptr // keep alive to prevent GC
 	inSizeMove           bool
 	webviewDataPath      string
-	chatCancel           context.CancelFunc // active stream cancellation
-	chatCancelMu         stdsync.Mutex      // guards chatCancel
-	moveResizeCh         chan string        // defer EventsEmit from WndProc
+	chatCancel           atomic.Pointer[context.CancelFunc] // per-call swap so overlapping ChatCompletion calls cancel cleanly
+	moveResizeCh         chan string                        // defer EventsEmit from WndProc
+	// foreground flag — true while the window is visible and the
+	// user is interacting. Background goroutines (keepalive, output_log
+	// flush, k8s watches, auto-sync) consult IsForeground before burning
+	// CPU. Updated via SetAppVisibility and a low-frequency minimised poll
+	// as a fallback for paths that don't fire visibilitychange (e.g. macOS
+	// Cmd+H before the WebView loads).
+	foreground   atomic.Bool
+	foregroundMu stdsync.RWMutex
+
+	// lastConnSnapshot is the last-saved connection blob. Used to compute
+	// delta emits so a SaveConnections burst doesn't ship the entire store
+	// across the bridge on every call. Guarded by lastConnSnapshotMu.
+	lastConnSnapshot   session.ConnectionStoreData
+	lastConnSnapshotMu stdsync.RWMutex
+
+	// triggerAutoSync coalescing: syncInFlight tracks whether a sync
+	// goroutine is running; syncPending records that a new trigger arrived
+	// during the run so we fire exactly one follow-up.
+	syncInFlight atomic.Bool
+	syncPending  atomic.Bool
+
+	// Single shared http.Client for chatCompletion* / FetchModels. Built
+	// lazily once on first use so tests that don't hit the LLM path don't
+	// pay for the transport; subsequent calls reuse the keep-alive pool.
+	httpClient     *http.Client
+	httpClientOnce stdsync.Once
+
+	// ListSessions memoization. Frontend polls this and allocates a fresh
+	// []SessionInfo on every call; when the (id, status) set hasn't changed
+	// we return the cached slice and skip the per-session SessionInfo copy
+	// and the JSON-marshal pass on the Wails side.
+	listSessionsMu    stdsync.Mutex
+	listSessionsCache []session.SessionInfo
+	listSessionsHash  uint64
 
 	// Session output log state (issue #227). Logs are keyed by panelID so
 	// they survive reconnects — a single panel may cycle through many
 	// session objects and the log file spans all of them. sessionToPanel
 	// tracks the current session→panel binding so emitData can look up
-	// the right logger. panelAutoTriggered records which panels have
-	// already been considered for the LogOnConnect auto-enable so
-	// reconnects don't re-enable a log the user manually stopped.
+	// the right logger. panelToSession is the inverse for O(1) lookup.
+	// panelAutoTriggered records which panels have already been considered
+	// for LogOnConnect auto-enable so reconnects don't re-enable a log the
+	// user manually stopped.
 	panelLogs          map[string]*session.OutputLogger
 	sessionToPanel     map[string]string
+	panelToSession     map[string]string
 	panelAutoTriggered map[string]bool
 	panelLogMu         stdsync.Mutex
-	// customLogDir, when non-empty, overrides defaultSessionLogDir()
-	// as the target for new session logs. Set from settings via
-	// SetDefaultSessionLogDir; ongoing logs are not migrated.
+	// customLogDir overrides defaultSessionLogDir() as the target for new
+	// session logs. Set from settings via SetDefaultSessionLogDir; ongoing
+	// logs are not migrated.
 	customLogDir   string
 	customLogDirMu stdsync.RWMutex
+
+	// errCh accumulates non-fatal init failures during startup() so the
+	// frontend can surface them via StartupError / "app:startup-error".
+	// Stores may stay nil if their init fails — the nil-guard pattern is
+	// preserved; the additive channel just makes the failure visible.
+	errCh      chan error
+	startupErr error
 }
 
 func NewApp(webviewDataPath string) *App {
-	return &App{
+	a := &App{
 		webviewDataPath:    webviewDataPath,
 		panelLogs:          make(map[string]*session.OutputLogger),
 		sessionToPanel:     make(map[string]string),
+		panelToSession:     make(map[string]string),
 		panelAutoTriggered: make(map[string]bool),
 		k8sManager:         k8s.NewManager(),
 		containerManager:   container.NewManager(),
+		errCh:              make(chan error, 16),
 	}
+	a.foreground.Store(true) // optimistic until SetAppVisibility lands
+	return a
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -117,7 +161,12 @@ func (a *App) startup(ctx context.Context) {
 	// Defer EventsEmit from WndProc to avoid blocking the modal resize/move loop.
 	a.moveResizeCh = make(chan string, 10)
 	go func() {
+		// shutdown() closes the channel; the range loop exits and the
+		// goroutine returns instead of leaking for the process lifetime.
 		for evt := range a.moveResizeCh {
+			if a.ctx == nil {
+				continue
+			}
 			runtime.EventsEmit(a.ctx, evt)
 			if evt == "rdp:move-resize-end" {
 				a.saveWindowStateFromRuntime()
@@ -132,29 +181,31 @@ func (a *App) startup(ctx context.Context) {
 	cs, err := store.NewConnectionStore()
 	if err != nil {
 		log.Writef("Failed to init connection store: %v", err)
-		return
+		a.sendStartupErr(fmt.Errorf("connection store: %w", err))
+	} else {
+		a.connectionStore = cs
 	}
-	a.connectionStore = cs
 
 	ass, err := store.NewAISessionStore()
 	if err != nil {
 		log.Writef("Failed to init AI session store: %v", err)
-		return
+		a.sendStartupErr(fmt.Errorf("ai session store: %w", err))
+	} else {
+		a.aiSessionStore = ass
 	}
-	a.aiSessionStore = ass
 
 	ss, err := store.NewSettingsStore()
 	if err != nil {
 		log.Writef("Failed to init settings store: %v", err)
-		return
-	}
-	a.settingsStore = ss
-
-	// Prime the session-log directory override from persisted settings
-	// so a log Enable that lands before the settings UI opens still
-	// respects the user's choice from a prior run.
-	if settings, err := ss.Load(); err == nil {
-		a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
+		a.sendStartupErr(fmt.Errorf("settings store: %w", err))
+	} else {
+		a.settingsStore = ss
+		// Prime the session-log directory override from persisted settings
+		// so a log Enable that lands before the settings UI opens still
+		// respects the user's choice from a prior run.
+		if settings, err := ss.Load(); err == nil {
+			a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
+		}
 	}
 
 	// Init terminal history store (same config dir as other stores)
@@ -177,11 +228,29 @@ func (a *App) startup(ctx context.Context) {
 	})
 	go a.autoStartTunnels()
 
-	syncSvc, err := sync.NewSyncService()
-	if err != nil {
-		log.Writef("Failed to create sync service: %v", err)
-	} else {
-		a.syncService = syncSvc
+	// watchForeground polls WindowIsMinimised as a fallback for paths
+	// where the JS visibilitychange event doesn't fire (Cmd+H before any
+	// document loads, OS-level Alt+Tab). SetAppVisibility is the primary
+	// entry point; this is belt-and-suspenders.
+	go a.watchForeground(ctx)
+
+	// NewSyncService's disk-touching init (UserConfigDir + MkdirAll +
+	// NewKeychain probing the OS keychain) can take 50–500ms+ on macOS.
+	// Run it on a goroutine so OnStartup returns promptly. Wails callers
+	// that hit a.syncService before init completes briefly wait on Ready().
+	syncSvc, _ := sync.NewSyncServiceAsync()
+	a.syncService = syncSvc
+	// Schedule post-init wiring (password store + auto-sync) once init
+	// completes so we don't race the goroutine.
+	go func() {
+		select {
+		case <-syncSvc.Ready():
+		case <-ctx.Done():
+			return
+		}
+		if syncSvc.PasswordStore() == nil {
+			return
+		}
 		// Wire keychain into stores for password/API key migration
 		if a.connectionStore != nil {
 			a.connectionStore.SetPasswordStore(syncSvc.PasswordStore())
@@ -189,13 +258,20 @@ func (a *App) startup(ctx context.Context) {
 		if a.settingsStore != nil {
 			a.settingsStore.SetPasswordStore(syncSvc.PasswordStore())
 		}
-		// Auto-sync on startup if enabled
+		// Gate on foreground so a hidden app (launched then immediately
+		// minimised, or started by a file association in the background)
+		// doesn't burn CPU + PBKDF2 + AES + git push cycles the user can't
+		// see.
 		if syncSvc.IsAutoSyncEnabled() {
 			go func() {
+				if !a.waitForegroundFor(3 * time.Second) {
+					log.Writef("Auto-sync on startup skipped: app not foreground within 3s")
+					return
+				}
 				result, err := syncSvc.Sync()
 				if err != nil {
 					log.Writef("Auto-sync on startup failed: %v", err)
-				} else if result.Direction == sync.SyncConflict {
+				} else if result != nil && result.Direction == sync.SyncConflict {
 					runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
 						"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
 						"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
@@ -203,10 +279,63 @@ func (a *App) startup(ctx context.Context) {
 				}
 			}()
 		}
-	}
+	}()
 
 	// Restore window position and size from last session
 	a.restoreWindow(ctx)
+
+	// Drain any non-fatal init failures and surface them to the frontend so
+	// the user sees a banner instead of getting an NPE on the first store
+	// call. Additive only — stores that failed to init are still nil and
+	// guarded as before; the app still launches.
+	a.drainStartupErr()
+	if a.startupErr != nil {
+		runtime.EventsEmit(ctx, "app:startup-error", a.startupErr.Error())
+	}
+}
+
+// sendStartupErr records a non-fatal init failure so the frontend can see
+// it after startup completes. Channel is buffered (16) and only written
+// from the startup goroutine, so the send is non-blocking.
+func (a *App) sendStartupErr(err error) {
+	if err == nil {
+		return
+	}
+	select {
+	case a.errCh <- err:
+	default:
+		// Channel full — best-effort drop. The log line is the
+		// last-resort record in this case.
+		log.Writef("startup error channel full, dropping: %v", err)
+	}
+}
+
+// drainStartupErr joins every error sent during startup into a single
+// startupErr the frontend can query via StartupError().
+func (a *App) drainStartupErr() {
+	var errs []error
+	for {
+		select {
+		case err := <-a.errCh:
+			if err != nil {
+				errs = append(errs, err)
+			}
+		default:
+			a.startupErr = errors.Join(errs...)
+			return
+		}
+	}
+}
+
+// StartupError returns a human-readable, newline-joined list of any
+// non-fatal errors that occurred during startup, or "" if startup
+// completed cleanly. The frontend can call this on demand (e.g. after
+// the "app:startup-error" event) to display a banner.
+func (a *App) StartupError() string {
+	if a.startupErr == nil {
+		return ""
+	}
+	return a.startupErr.Error()
 }
 
 // restoreWindow restores the saved window position and size.
@@ -267,6 +396,182 @@ func (a *App) SaveWindowState(x, y, width, height int, maximised bool) {
 	a.localStateStore.Save(ls)
 }
 
+// IsForeground reports whether the app window is currently in the
+// foreground. Background goroutines consult this before running work
+// that should pause when the user can't see the terminal.
+func (a *App) IsForeground() bool {
+	return a.foreground.Load()
+}
+
+// waitForegroundFor blocks until the app is foreground or d elapses,
+// whichever comes first. Returns whether the foreground state was reached.
+// Used to keep background goroutines (auto-sync on startup, triggerAutoSync)
+// from burning CPU/wakeups while the user can't see the result. The 3s
+// ceiling matches the manual recent bound fixes and keeps a slow startup
+// from blocking the caller.
+func (a *App) waitForegroundFor(d time.Duration) bool {
+	if a.IsForeground() {
+		return true
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		<-ticker.C
+		if a.IsForeground() {
+			return true
+		}
+	}
+	return a.IsForeground()
+}
+
+// SetAppVisibility is the lifecycle hook the frontend fires from
+// document.visibilitychange. Safe to call from any goroutine. Pass
+// visible=false when the page goes hidden (tab switch, OS minimise, Cmd+H).
+// The polling goroutine started in startup() is a fallback for cases where
+// the JS event doesn't fire (e.g. macOS Cmd+H before any document loaded).
+func (a *App) SetAppVisibility(visible bool) {
+	prev := a.foreground.Load()
+	if prev == visible {
+		return
+	}
+	a.foreground.Store(visible)
+	a.foregroundMu.Lock()
+	a.foregroundMu.Unlock()
+}
+
+// connDelta is the wire shape for store:connections:delta — only the
+// changed connection (or all connections on first emit) crosses the
+// bridge instead of the full store blob.
+type connDelta struct {
+	Kind string                       `json:"kind"`         // "upsert" | "remove" | "replace"
+	ID   string                       `json:"id,omitempty"` // for upsert/remove
+	Conn *session.ConnectionConfig    `json:"connection,omitempty"`
+	All  *session.ConnectionStoreData `json:"all,omitempty"` // for replace (first emit)
+}
+
+type sessionDataEvent struct {
+	ID   string `json:"id"`
+	Data string `json:"data"`
+}
+
+type sessionBinaryEvent struct {
+	ID   string `json:"id"`
+	Data string `json:"data"`
+}
+
+// computeConnDelta returns the set of upsert/remove deltas between
+// the last snapshot and newData. If no snapshot exists yet (first save
+// after startup), returns a single "replace" delta carrying the full
+// new data so the frontend can hydrate without waiting for a sync.
+func (a *App) computeConnDelta(newData session.ConnectionStoreData) []connDelta {
+	a.lastConnSnapshotMu.RLock()
+	prev := a.lastConnSnapshot
+	a.lastConnSnapshotMu.RUnlock()
+
+	if prev.Connections == nil && prev.Groups == nil {
+		// No prior snapshot — ship a single replace so the frontend can
+		// hydrate without waiting for sync.
+		all := newData
+		return []connDelta{{Kind: "replace", All: &all}}
+	}
+
+	prevIDs := make(map[string]struct{}, len(prev.Connections))
+	for _, c := range prev.Connections {
+		prevIDs[c.ID] = struct{}{}
+	}
+	newIDs := make(map[string]struct{}, len(newData.Connections))
+	for _, c := range newData.Connections {
+		newIDs[c.ID] = struct{}{}
+	}
+
+	var deltas []connDelta
+	for _, c := range newData.Connections {
+		if _, ok := prevIDs[c.ID]; !ok {
+			cc := c
+			deltas = append(deltas, connDelta{Kind: "upsert", ID: c.ID, Conn: &cc})
+		}
+	}
+	for id := range prevIDs {
+		if _, ok := newIDs[id]; !ok {
+			deltas = append(deltas, connDelta{Kind: "remove", ID: id})
+		}
+	}
+	return deltas
+}
+
+// saveConnSnapshot updates the snapshot used for future delta
+// computation. Called after every successful Save.
+func (a *App) saveConnSnapshot(data session.ConnectionStoreData) {
+	a.lastConnSnapshotMu.Lock()
+	a.lastConnSnapshot = data
+	a.lastConnSnapshotMu.Unlock()
+}
+
+// llmHTTPClient returns the App-wide *http.Client used by every LLM-bound
+// call. Hoisted here so three back-to-back ChatCompletion calls reuse the
+// same TCP+TLS connection instead of paying a fresh handshake each time.
+// FetchModels uses a shorter timeout via a derived client (see FetchModels).
+func (a *App) llmHTTPClient() *http.Client {
+	a.httpClientOnce.Do(func() {
+		tr := &http.Transport{
+			MaxIdleConns:          100,
+			MaxIdleConnsPerHost:   8,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			ExpectContinueTimeout: 2 * time.Second,
+		}
+		a.httpClient = &http.Client{Transport: tr}
+	})
+	return a.httpClient
+}
+
+// injectCacheControl adds ephemeral cache_control breakpoints on the
+// static system prompt and tools array so Anthropic's prompt caching
+// beta actually caches them across turns. Without this the
+// prompt-caching-2024-07-31 header is sent but the request body has no
+// breakpoints, so every turn re-ships and re-bills the static prefix
+// (~3 KB in typical Claude Code sessions).
+func injectCacheControl(reqBody map[string]interface{}) {
+	if sys, ok := reqBody["system"].(string); ok && sys != "" {
+		reqBody["system"] = []map[string]interface{}{{
+			"type":          "text",
+			"text":          sys,
+			"cache_control": map[string]string{"type": "ephemeral"},
+		}}
+	}
+	if tools, ok := reqBody["tools"].([]interface{}); ok && len(tools) > 0 {
+		if last, ok := tools[len(tools)-1].(map[string]interface{}); ok {
+			last["cache_control"] = map[string]string{"type": "ephemeral"}
+		}
+	}
+}
+
+// watchForeground polls window state so paths which don't fire the JS
+// visibilitychange event (Cmd+H on macOS before the WebView is loaded,
+// OS-level Alt+Tab) still update the foreground flag. Runs every 2s —
+// coarse on purpose, this is a lifecycle hint not a hot path. Exits when
+// ctx is done.
+func (a *App) watchForeground(ctx context.Context) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if a.ctx == nil {
+				continue
+			}
+			visible := !runtime.WindowIsMinimised(a.ctx)
+			if visible != a.foreground.Load() {
+				a.SetAppVisibility(visible)
+			}
+		}
+	}
+}
+
 func (a *App) shutdown(ctx context.Context) {
 	a.unsubclassMainWindow()
 	if a.tunnelService != nil {
@@ -274,6 +579,15 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	if a.sessionManager != nil {
 		a.sessionManager.CloseAll()
+	}
+	if a.terminalHistoryStore != nil {
+		_ = a.terminalHistoryStore.Close()
+	}
+	// close moveResizeCh so the deferred EventsEmit goroutine started in
+	// startup() returns instead of living for the process lifetime.
+	// close(nil) is a no-op so the nil guard below is safe.
+	if a.moveResizeCh != nil {
+		close(a.moveResizeCh)
 	}
 	os.RemoveAll(a.webviewDataPath)
 }
@@ -284,12 +598,31 @@ func (a *App) SaveConnections(data session.ConnectionStoreData) error {
 	if a.connectionStore == nil {
 		return fmt.Errorf("connection store not initialized")
 	}
-	err := a.connectionStore.Save(data)
-	if err == nil {
-		runtime.EventsEmit(a.ctx, "store:connections:changed", data)
+	// Write off the handler thread and only ship the diff across the bridge.
+	// The frontend listens on store:connections:delta for save-time edits
+	// and on store:connections:changed (full blob) for sync-driven reloads —
+	// so the hot path transfers a few-byte delta instead of every connection
+	// on every keystroke.
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- a.connectionStore.Save(data)
+	}()
+	go func() {
+		err := <-errCh
+		if err != nil {
+			log.Writef("SaveConnections async: %v", err)
+			return
+		}
+		deltas := a.computeConnDelta(data)
+		a.saveConnSnapshot(data)
+		if a.ctx != nil {
+			for _, d := range deltas {
+				runtime.EventsEmit(a.ctx, "store:connections:delta", d)
+			}
+		}
 		a.triggerAutoSync()
-	}
-	return err
+	}()
+	return nil
 }
 
 func (a *App) LoadConnections() (session.ConnectionStoreData, error) {
@@ -305,11 +638,17 @@ func (a *App) SaveTunnels(data session.TunnelStoreData) error {
 	if a.tunnelStore == nil {
 		return fmt.Errorf("tunnel store not initialized")
 	}
-	err := a.tunnelStore.Save(data)
-	if err == nil {
-		runtime.EventsEmit(a.ctx, "store:tunnels:changed", data)
-	}
-	return err
+	// tunnel save touches fs (atomic-rename); keep handler fast.
+	go func() {
+		if err := a.tunnelStore.Save(data); err != nil {
+			log.Writef("SaveTunnels async: %v", err)
+			return
+		}
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "store:tunnels:changed", data)
+		}
+	}()
+	return nil
 }
 
 func (a *App) LoadTunnels() (session.TunnelStoreData, error) {
@@ -536,148 +875,6 @@ func (a *App) ClearBackgroundImage() error {
 	return nil
 }
 
-// reloadStoresAfterSync reloads connections and settings from disk and emits
-// events so the frontend refreshes after a sync pull.
-func (a *App) reloadStoresAfterSync() {
-	if a.connectionStore != nil {
-		if data, err := a.connectionStore.Load(); err == nil {
-			runtime.EventsEmit(a.ctx, "store:connections:changed", data)
-		}
-	}
-	if a.settingsStore != nil {
-		if settings, err := a.settingsStore.Load(); err == nil {
-			runtime.EventsEmit(a.ctx, "store:settings:changed", settings)
-		}
-	}
-	if a.quickCommandsStore != nil {
-		if data, err := a.quickCommandsStore.Load(); err == nil {
-			runtime.EventsEmit(a.ctx, "store:quickCommands:changed", data)
-		}
-	}
-}
-
-func (a *App) triggerAutoSync() {
-	if a.syncService == nil || !a.syncService.IsAutoSyncEnabled() {
-		return
-	}
-	go func() {
-		result, err := a.syncService.Sync()
-		if err != nil {
-			log.Writef("Auto-sync failed: %v", err)
-		} else if result.Direction == sync.SyncConflict {
-			runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
-				"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
-				"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
-			})
-		}
-		if err == nil && result.Direction == sync.SyncPull {
-			a.reloadStoresAfterSync()
-		}
-		runtime.EventsEmit(a.ctx, "sync:completed")
-	}()
-}
-func (a *App) SyncGetConfig() (sync.SyncConfig, error) {
-	if a.syncService == nil {
-		return sync.SyncConfig{}, fmt.Errorf("sync service not initialized")
-	}
-	return a.syncService.GetConfig()
-}
-
-// SyncSaveConfig saves the sync configuration.
-func (a *App) SyncSaveConfig(config sync.SyncConfig, token string) error {
-	if a.syncService == nil {
-		return fmt.Errorf("sync service not initialized")
-	}
-	return a.syncService.SaveConfig(config, token)
-}
-
-// SyncNow runs an immediate sync.
-func (a *App) SyncNow() (*sync.SyncResult, error) {
-	if a.syncService == nil {
-		return nil, fmt.Errorf("sync service not initialized")
-	}
-	result, err := a.syncService.Sync()
-	if err != nil {
-		return nil, err
-	}
-	if result.Direction == sync.SyncConflict {
-		runtime.EventsEmit(a.ctx, "sync:conflict", map[string]interface{}{
-			"localTime":  result.Conflict.LocalTime.Format(time.RFC3339),
-			"remoteTime": result.Conflict.RemoteTime.Format(time.RFC3339),
-		})
-	}
-	if result.Direction == sync.SyncPull {
-		a.reloadStoresAfterSync()
-	}
-	runtime.EventsEmit(a.ctx, "sync:completed")
-	return result, nil
-}
-
-// SyncResolveConflict resolves a sync conflict.
-func (a *App) SyncResolveConflict(useLocal bool) (*sync.SyncResult, error) {
-	if a.syncService == nil {
-		return nil, fmt.Errorf("sync service not initialized")
-	}
-	result, err := a.syncService.ResolveConflict(useLocal)
-	if err != nil {
-		return nil, err
-	}
-	if result.Direction == sync.SyncPull {
-		if data, err := a.connectionStore.Load(); err == nil {
-			runtime.EventsEmit(a.ctx, "store:connections:changed", data)
-		}
-		if settings, err := a.settingsStore.Load(); err == nil {
-			runtime.EventsEmit(a.ctx, "store:settings:changed", settings)
-		}
-	}
-	return result, nil
-}
-
-// SyncTestConnection tests the repository connection.
-func (a *App) SyncTestConnection() error {
-	if a.syncService == nil {
-		return fmt.Errorf("sync service not initialized")
-	}
-	return a.syncService.TestConnection()
-}
-
-// SyncConfigureRepo sets up a new or existing sync repository.
-func (a *App) SyncConfigureRepo(repoURL, username, token, masterPassword string) (*sync.SyncResult, error) {
-	if a.syncService == nil {
-		return nil, fmt.Errorf("sync service not initialized")
-	}
-	result, err := a.syncService.ConfigureRepo(repoURL, username, token, masterPassword)
-	if err == nil {
-		a.reloadStoresAfterSync()
-		runtime.EventsEmit(a.ctx, "sync:completed")
-	}
-	return result, err
-}
-
-// SyncChangePassword re-encrypts synced files with a new master password.
-func (a *App) SyncChangePassword(oldPassword, newPassword string) error {
-	if a.syncService == nil {
-		return fmt.Errorf("sync service not initialized")
-	}
-	return a.syncService.ChangePassword(oldPassword, newPassword)
-}
-
-// SyncVerifyPassword verifies the given password can decrypt the repo config.
-func (a *App) SyncVerifyPassword(password, username, token string) error {
-	if a.syncService == nil {
-		return fmt.Errorf("sync service not initialized")
-	}
-	return a.syncService.VerifySyncPassword(password, username, token)
-}
-
-// SyncDeleteRepo removes the sync repository configuration.
-func (a *App) SyncDeleteRepo() error {
-	if a.syncService == nil {
-		return fmt.Errorf("sync service not initialized")
-	}
-	return a.syncService.DeleteRepo()
-}
-
 func (a *App) LoadAIConfig() (store.AIConfig, error) {
 	if a.settingsStore == nil {
 		return store.AIConfig{}, fmt.Errorf("settings store not initialized")
@@ -697,15 +894,6 @@ func (a *App) LoadAIConfig() (store.AIConfig, error) {
 		}
 	}
 	return store.AIConfig{}, nil
-}
-
-// ClassifyCommandRisk is the server-side override for the AI model's
-// self-reported risk on execute_command / start_command. The frontend
-// dispatcher uses this to compute the effective risk as the maximum of
-// the model-claimed value and the server-classified value. Pure function;
-// no I/O, no panic, safe to call from any goroutine.
-func (a *App) ClassifyCommandRisk(command string) string {
-	return string(store.ClassifyCommandRisk(command))
 }
 
 // AI Session Store methods
@@ -750,11 +938,15 @@ func (a *App) SaveQuickCommands(data store.QuickCommandData) error {
 	if a.quickCommandsStore == nil {
 		return fmt.Errorf("quick commands store not initialized")
 	}
-	err := a.quickCommandsStore.Save(data)
-	if err == nil {
+	// Same async pattern as SaveConnections / SaveTunnels.
+	go func() {
+		if err := a.quickCommandsStore.Save(data); err != nil {
+			log.Writef("SaveQuickCommands async: %v", err)
+			return
+		}
 		a.triggerAutoSync()
-	}
-	return err
+	}()
+	return nil
 }
 
 func (a *App) LoadQuickCommands() (store.QuickCommandData, error) {
@@ -794,6 +986,13 @@ func (a *App) ListSkillFiles(name string) (store.SkillFileList, error) {
 	return a.skillsStore.ListSkillFiles(name)
 }
 
+// ClassifyCommandRisk exposes the backend risk classifier to the frontend so
+// effectiveRisk() in services/agent.ts can merge the model-claimed risk with
+// the server-classified risk.
+func (a *App) ClassifyCommandRisk(command string) store.RiskLevel {
+	return store.ClassifyCommandRisk(command)
+}
+
 func (a *App) SetSkillEnabled(name string, enabled bool) error {
 	if a.skillsStore == nil {
 		return fmt.Errorf("skills store not initialized")
@@ -806,13 +1005,6 @@ func (a *App) SetSkillLocked(name string, locked bool) error {
 		return fmt.Errorf("skills store not initialized")
 	}
 	return a.skillsStore.SetLocked(name, locked)
-}
-
-func (a *App) SetSkillSortOrder(name string, order int) error {
-	if a.skillsStore == nil {
-		return fmt.Errorf("skills store not initialized")
-	}
-	return a.skillsStore.SetSortOrder(name, order)
 }
 
 func (a *App) DeleteSkill(name string) error {
@@ -878,13 +1070,6 @@ func (a *App) SetCommandLocked(name string, locked bool) error {
 		return fmt.Errorf("commands store not initialized")
 	}
 	return a.commandsStore.SetLocked(name, locked)
-}
-
-func (a *App) SetCommandSortOrder(name string, order int) error {
-	if a.commandsStore == nil {
-		return fmt.Errorf("commands store not initialized")
-	}
-	return a.commandsStore.SetSortOrder(name, order)
 }
 
 func (a *App) DeleteCommand(name string) error {
@@ -1006,8 +1191,19 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	if setter, ok := s.(interface{ SetLogOnConnect(bool) }); ok {
 		setter.SetLogOnConnect(config.LogOnConnect)
 	}
+	// Stash the initial terminal size the frontend measured BEFORE
+	// calling CreateSession. Connect() (called async below) reads it via
+	// getInitialSize() and uses it for PTY sizing — so the remote shell
+	// and Claude Code see the actual xterm cols from the first byte, not
+	// the default 80x24 that would otherwise be in use until the late
+	// SessionResize arrives.
+	if config.InitialCols > 0 && config.InitialRows > 0 {
+		if sz, ok := s.(interface{ SetPendingSize(int, int) }); ok {
+			sz.SetPendingSize(config.InitialCols, config.InitialRows)
+		}
+	}
 	// Apply terminal character encoding (SSH only). No-op for utf-8/empty.
-	if ssh, ok := s.(*session.SSHSession); ok {
+	if ssh, ok := s.(*session.SshSession); ok {
 		ssh.SetEncoding(config.Encoding)
 	}
 
@@ -1108,7 +1304,7 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 
 	// SFTP concurrency limit
 	if sessionType == "sftp" {
-		if sftp, ok := s.(*session.SFTPSession); ok {
+		if sftp, ok := s.(*session.SftpSession); ok {
 			n := config.SftpMaxConcurrency
 			if n <= 0 {
 				n = 5
@@ -1118,7 +1314,7 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	}
 
 	// Set parent HWND for RDP sessions
-	if rdp, ok := s.(*session.RDPSession); ok {
+	if rdp, ok := s.(*session.RdpSession); ok {
 		rdp.SetParentHwnd(a.mainHwnd)
 		// Notify the frontend when the user exits native full screen so it can
 		// resume position sync.
@@ -1128,16 +1324,20 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	}
 
 	s.SetOnDataCallback(func(data []byte) {
-		runtime.EventsEmit(a.ctx, "session:data", map[string]interface{}{
-			"id":   s.ID(),
-			"data": string(data),
-		})
+		if a.ctx != nil {
+			// Pass struct, not pre-encoded JSON — EventsEmit marshals
+			// each arg itself, so a string would be quoted twice.
+			runtime.EventsEmit(a.ctx, "session:data", sessionDataEvent{
+				ID:   s.ID(),
+				Data: string(data),
+			})
+		}
 	})
 
 	s.SetOnBinaryCallback(func(data []byte) {
-		runtime.EventsEmit(a.ctx, "session:binary", map[string]interface{}{
-			"id":   s.ID(),
-			"data": base64.StdEncoding.EncodeToString(data),
+		runtime.EventsEmit(a.ctx, "session:binary", sessionBinaryEvent{
+			ID:   s.ID(),
+			Data: base64.StdEncoding.EncodeToString(data),
 		})
 	})
 
@@ -1149,7 +1349,7 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 		// For RDP sessions, include client area screen coordinates so the
 		// frontend can position the overlay window without fragile browser APIs.
 		if status == session.StatusConnected {
-			if rdp, ok := s.(*session.RDPSession); ok {
+			if rdp, ok := s.(*session.RdpSession); ok {
 				cx, cy, cw, ch := rdp.ClientAreaScreenRect()
 				payload["clientX"] = cx
 				payload["clientY"] = cy
@@ -1157,10 +1357,10 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 				payload["clientH"] = ch
 			}
 			// Attach proxyAddr for VNC and SPICE sessions
-			if vnc, ok := s.(*session.VNCSession); ok {
+			if vnc, ok := s.(*session.VncSession); ok {
 				payload["proxyAddr"] = vnc.ProxyAddr()
 			}
-			if spice, ok := s.(*session.SPICESession); ok {
+			if spice, ok := s.(*session.SpiceSession); ok {
 				payload["proxyAddr"] = spice.ProxyAddr()
 			}
 		}
@@ -1177,52 +1377,16 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 			return nil, fmt.Errorf("database connect failed: %w", err)
 		}
 		log.Writef("[CreateSession] database session connected successfully, id=%s", s.ID())
-	} else {
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
-				}
-			}()
-
-			// RDP TCP pre-check: fail fast before creating the ActiveX window.
-			if sessionType == "rdp" {
-				port := config.Port
-				if port <= 0 { port = 3389 }
-				addr := fmt.Sprintf("%s:%d", config.Host, port)
-				tcpConn, tcpErr := net.DialTimeout("tcp", addr, 5*time.Second)
-				if tcpErr != nil {
-					log.Writef("[CreateSession] RDP TCP pre-check to %s failed: %v", addr, tcpErr)
-					if a.ctx != nil {
-						runtime.EventsEmit(a.ctx, "session:status", map[string]interface{}{
-							"id":           s.ID(),
-							"status":       "error",
-							"errorMessage": fmt.Sprintf("Cannot reach %s: %v", addr, tcpErr),
-						})
-					}
-					if a.sessionManager != nil {
-						_ = a.sessionManager.Close(s.ID())
-					}
-					return
-				}
-				tcpConn.Close()
-				log.Writef("[CreateSession] RDP TCP pre-check to %s succeeded", addr)
-			}
-
-			if err := s.Connect(config); err != nil {
-				if a.ctx != nil {
-					runtime.EventsEmit(a.ctx, "session:data", map[string]interface{}{
-						"id":   s.ID(),
-						"data": fmt.Sprintf("\r\n\x1b[31m[Connection failed: %v]\x1b[0m\r\nPress Enter to retry...\r\n", err),
-					})
-				}
-				log.Writef("session %s connect error: %v", s.ID(), err)
-				// Remove failed session from manager to avoid leaking stale entries
-				if a.sessionManager != nil {
-					_ = a.sessionManager.Close(s.ID())
-				}
-			}
-		}()
+	} else if !config.DeferConnect {
+		// Non-database sessions (SSH, Local, Mosh, Telnet, SFTP, FTP, SMB,
+		// WebDAV, S3, Serial, K8s, Mongo, Spice) auto-connect UNLESS the
+		// frontend set DeferConnect — which it does so it can mount the
+		// xterm terminal, fitAddon-measure the real cols/rows, write them
+		// into config.InitialCols/InitialRows and only THEN call
+		// SessionStart. Without that gap Claude Code draws tables at the
+		// 80x24 default before SessionResize propagates the real width,
+		// and the borders drift across output batches.
+		a.launchConnectGoroutine(s, sessionType, config)
 	}
 
 	info := &session.SessionInfo{
@@ -1232,6 +1396,82 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 		Status: s.Status(),
 	}
 	return info, nil
+}
+
+// launchConnectGoroutine starts the async Connect path that used to live
+// inline in CreateSession. Extracted so CreateSession can skip it when
+// the frontend opts into a deferred-start flow (DeferConnect=true) and
+// instead drives the connection via SessionStart after measuring cols/rows.
+func (a *App) launchConnectGoroutine(s session.Session, sessionType string, config session.ConnectionConfig) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
+			}
+		}()
+
+		// RDP TCP pre-check: fail fast before creating the ActiveX window.
+		if sessionType == "rdp" {
+			port := config.Port
+			if port <= 0 {
+				port = 3389
+			}
+			addr := fmt.Sprintf("%s:%d", config.Host, port)
+			tcpConn, tcpErr := net.DialTimeout("tcp", addr, 5*time.Second)
+			if tcpErr != nil {
+				log.Writef("[CreateSession] RDP TCP pre-check to %s failed: %v", addr, tcpErr)
+				if a.ctx != nil {
+					runtime.EventsEmit(a.ctx, "session:status", map[string]interface{}{
+						"id":           s.ID(),
+						"status":       "error",
+						"errorMessage": fmt.Sprintf("Cannot reach %s: %v", addr, tcpErr),
+					})
+				}
+				if a.sessionManager != nil {
+					_ = a.sessionManager.Close(s.ID())
+				}
+				return
+			}
+			tcpConn.Close()
+			log.Writef("[CreateSession] RDP TCP pre-check to %s succeeded", addr)
+		}
+
+		if err := s.Connect(config); err != nil {
+			if a.ctx != nil {
+				runtime.EventsEmit(a.ctx, "session:data", map[string]interface{}{
+					"id":   s.ID(),
+					"data": fmt.Sprintf("\r\n\x1b[31m[Connection failed: %v]\x1b[0m\r\nPress Enter to retry...\r\n", err),
+				})
+			}
+			log.Writef("session %s connect error: %v", s.ID(), err)
+			if a.sessionManager != nil {
+				_ = a.sessionManager.Close(s.ID())
+			}
+		}
+	}()
+}
+
+// SessionStart triggers the actual Connect() for a session that was
+// created with config.DeferConnect=true. The frontend calls this AFTER
+// mounting the xterm terminal and writing the measured InitialCols/InitialRows
+// into the deferred config, so the PTY is created at the correct
+// dimensions from the first byte — no 80x24 default phase where Claude
+// Code can draw tables at the wrong column count.
+func (a *App) SessionStart(sessionID string, config session.ConnectionConfig) error {
+	if a.sessionManager == nil {
+		return fmt.Errorf("session manager not initialized")
+	}
+	s, ok := a.sessionManager.Get(sessionID)
+	if !ok {
+		return fmt.Errorf("session %s not found", sessionID)
+	}
+	// Re-stash the latest measured size in case the deferred config
+	// carries the real cols/rows the frontend discovered after mount.
+	if config.InitialCols > 0 && config.InitialRows > 0 {
+		s.SetPendingSize(config.InitialCols, config.InitialRows)
+	}
+	a.launchConnectGoroutine(s, config.Type, config)
+	return nil
 }
 
 func (a *App) CloseSession(sessionID string) error {
@@ -1244,11 +1484,57 @@ func (a *App) CloseSession(sessionID string) error {
 	return a.sessionManager.Close(sessionID)
 }
 
+// ListSessions memoizes the last session list returned to the frontend
+// along with a hash of (id, status) pairs. When the frontend polls
+// ListSessions without an underlying change, we return the same slice
+// and skip the per-call []SessionInfo allocation.
+//
+// Hashing (id, status) only — Title / Type are static per session and
+// status is what the polling frontend cares about. Status transitions
+// always go through SetOnStatusChangeCallback → emit session:status, so
+// the frontend can rely on that event for live updates; ListSessions is
+// the initial / refresh path.
 func (a *App) ListSessions() []session.SessionInfo {
 	if a.sessionManager == nil {
 		return []session.SessionInfo{}
 	}
-	return a.sessionManager.List()
+	a.listSessionsMu.Lock()
+	defer a.listSessionsMu.Unlock()
+
+	infos := a.sessionManager.List()
+	hash := hashSessions(infos)
+	if hash == a.listSessionsHash && len(a.listSessionsCache) == len(infos) {
+		// No underlying change — return the cached slice so the caller
+		// gets the same backing array and Go skips allocating a new
+		// one. The slice header is still copied by value, which is what
+		// the Wails JSON encoder needs.
+		return a.listSessionsCache
+	}
+	a.listSessionsCache = infos
+	a.listSessionsHash = hash
+	return infos
+}
+
+// hashSessions produces a quick stable hash of (id, status) pairs.
+// Uses FNV-1a; collisions are vanishingly rare for any realistic
+// session count and just cause a single false refresh.
+func hashSessions(infos []session.SessionInfo) uint64 {
+	h := uint64(14695981039346656037) // FNV offset basis
+	for _, s := range infos {
+		for i := 0; i < len(s.ID); i++ {
+			h ^= uint64(s.ID[i])
+			h *= 1099511628211 // FNV prime
+		}
+		// SessionStatus is a string alias; fold the first 4 bytes in
+		// (status strings are short — typically "connected",
+		// "disconnected", "error").
+		status := string(s.Status)
+		for i := 0; i < len(status) && i < 4; i++ {
+			h ^= uint64(status[i]) << (uint(i) * 8)
+		}
+		h *= 1099511628211
+	}
+	return h
 }
 
 func (a *App) SessionWrite(sessionID string, data string) error {
@@ -1416,7 +1702,7 @@ func (a *App) RDPSetPosition(sessionID string, x, y, w, h int) error {
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
-	rdp, ok := s.(*session.RDPSession)
+	rdp, ok := s.(*session.RdpSession)
 	if !ok {
 		return fmt.Errorf("session is not RDP")
 	}
@@ -1432,7 +1718,7 @@ func (a *App) RDPShow(sessionID string) error {
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
-	rdp, ok := s.(*session.RDPSession)
+	rdp, ok := s.(*session.RdpSession)
 	if !ok {
 		return fmt.Errorf("session is not RDP")
 	}
@@ -1449,7 +1735,7 @@ func (a *App) RDPSetFullScreen(sessionID string, full bool) error {
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
-	rdp, ok := s.(*session.RDPSession)
+	rdp, ok := s.(*session.RdpSession)
 	if !ok {
 		return fmt.Errorf("session is not RDP")
 	}
@@ -1465,7 +1751,7 @@ func (a *App) RDPHide(sessionID string) error {
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
-	rdp, ok := s.(*session.RDPSession)
+	rdp, ok := s.(*session.RdpSession)
 	if !ok {
 		return fmt.Errorf("session is not RDP")
 	}
@@ -1601,67 +1887,127 @@ func (a *App) GetRecentConnections() []string {
 	return a.recentStore.GetAll()
 }
 
-// ChatRequest is the struct form of ChatCompletion's parameters. We use a
-// struct instead of positional args because the call site carries six
-// independent knobs and adding a new one would otherwise be a breaking
-// change for every frontend caller.
-type ChatRequest struct {
-	APIKey      string
-	BaseURL     string
-	Model       string
-	RequestJSON string
-	Protocol    string
-	UserAgent   string
-}
-
 // ChatCompletion streams the Anthropic API response via SSE, emitting Wails
 // events for each token while collecting the full message. It returns the
 // complete message JSON when the stream ends (backward-compatible).
-func (a *App) ChatCompletion(req ChatRequest) (string, error) {
+func (a *App) ChatCompletion(apiKey, baseURL, model string, requestJSON string, protocol string, userAgent string) (string, error) {
 	// Parse the incoming request body (always Anthropic format from frontend)
 	var reqBody map[string]interface{}
-	if err := json.Unmarshal([]byte(req.RequestJSON), &reqBody); err != nil {
+	if err := json.Unmarshal([]byte(requestJSON), &reqBody); err != nil {
 		return "", fmt.Errorf("invalid request JSON: %w", err)
 	}
 
-	userAgent := req.UserAgent
 	if userAgent == "" {
 		userAgent = "uniTerm"
 	}
 
-	switch req.Protocol {
+	switch protocol {
 	case "openai":
-		return a.chatCompletionOpenAI(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
+		return a.chatCompletionOpenAI(apiKey, baseURL, model, reqBody, userAgent)
 	case "responses":
-		return a.chatCompletionResponses(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
+		return a.chatCompletionResponses(apiKey, baseURL, model, reqBody, userAgent)
 	}
-	return a.chatCompletionAnthropic(req.APIKey, req.BaseURL, req.Model, reqBody, userAgent)
+	return a.chatCompletionAnthropic(apiKey, baseURL, model, reqBody, userAgent)
+}
+
+// anthropicStreamEvent is the typed SSE envelope for Anthropic Messages
+// events. Variant fields stay as json.RawMessage so we only decode the
+// few fields the handler actually reads per event type.
+type anthropicStreamEvent struct {
+	Type         string          `json:"type"`
+	Index        int             `json:"index"`
+	ContentBlock json.RawMessage `json:"content_block"`
+	Delta        json.RawMessage `json:"delta"`
+	Message      json.RawMessage `json:"message"`
+	Usage        json.RawMessage `json:"usage"`
+	Error        json.RawMessage `json:"error"`
+}
+
+type anthropicDelta struct {
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	PartialJSON string `json:"partial_json"`
+}
+
+type anthropicMessageRole struct {
+	Role string `json:"role"`
+}
+
+type anthropicStopDelta struct {
+	StopReason string `json:"stop_reason"`
+}
+
+// Typed payloads for the ai:* Wails events. Replacing the per-token
+// map[string]interface{} literal with a fixed struct saves the alloc per
+// event; json.Marshal on the Wails side writes the same JSON shape
+// (lowercase keys) so the frontend contract is unchanged.
+type aiTokenEvent struct {
+	Text  string `json:"text"`
+	Index int    `json:"index"`
+}
+
+type aiBlockStartEvent struct {
+	Index        int                    `json:"index"`
+	ContentBlock map[string]interface{} `json:"content_block"`
+}
+
+type aiContentBlockStopEvent struct {
+	Index int `json:"index"`
+}
+
+type aiInputJsonDeltaEvent struct {
+	PartialJSON string `json:"partial_json"`
+}
+
+type aiMessageStartEvent struct {
+	Role string `json:"role"`
+}
+
+type aiDoneEvent struct {
+	Message    map[string]interface{} `json:"message"`
+	Usage      map[string]interface{} `json:"usage,omitempty"`
+	StopReason string                 `json:"stop_reason"`
 }
 
 // chatCompletionAnthropic handles the native Anthropic Messages API with SSE streaming.
 func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
 	reqBody["stream"] = true
 
+	// Insert ephemeral cache_control breakpoints on the static system +
+	// tools prefixes so Anthropic reuses the cached tokens across turns.
+	// Without these the prompt-caching beta header is a no-op — every turn
+	// re-ships and re-bills the static prefix.
+	injectCacheControl(reqBody)
+
 	modifiedJSON, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", fmt.Errorf("marshal modified request: %w", err)
 	}
 
-	url, err := buildURL(baseURL, "anthropic")
-	if err != nil {
-		return "", err
+	// Anthropic base URL conventionally omits /v1 (client appends /v1/messages).
+	// Tolerate legacy configs that already include the /v1 suffix.
+	base := strings.TrimRight(baseURL, "/")
+	var url string
+	if strings.HasSuffix(base, "/v1") {
+		url = base + "/messages"
+	} else {
+		url = base + "/v1/messages"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	a.chatCancelMu.Lock()
-	a.chatCancel = cancel
-	a.chatCancelMu.Unlock()
+	// Register our cancel in the App-level pointer and only clear it on
+	// the way out if no one replaced us. Per-call swap so overlapping
+	// ChatCompletion calls each keep their own cancel; the old mutex
+	// pattern would let call A's defer wipe call B's cancel.
+	myCancel := cancel
+	a.chatCancel.Store(&myCancel)
 	defer func() {
-		a.chatCancelMu.Lock()
-		a.chatCancel = nil
-		a.chatCancelMu.Unlock()
+		// CAS the slot back to nil, but only if it still points at
+		// our own cancel — a newer call may have already taken
+		// over the slot.
+		a.chatCancel.CompareAndSwap(&myCancel, nil)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(modifiedJSON))
@@ -1674,7 +2020,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
 	req.Header.Set("User-Agent", userAgent)
 
-	client := &http.Client{Timeout: 0}
+	client := a.llmHTTPClient()
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -1685,7 +2031,9 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(res.Body)
+		// Cap the error-body read at 64 KiB so a hostile or buggy upstream
+		// returning a multi-GB error body can't OOM the Go process.
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
@@ -1694,6 +2042,11 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 	var messageRole string
 	var usage map[string]interface{}
 	currentBlockIndex := -1
+	// bytes.Buffer per block. Accumulating text/input via string + string
+	// was O(n²) and paid a fresh alloc per token; WriteString into a buffer
+	// and flush to a string exactly once at content_block_stop. Only one
+	// block is open at a time so a single pair of buffers is sufficient.
+	var currentTextBuf, currentInputBuf bytes.Buffer
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -1705,83 +2058,104 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 		}
 		dataStr := line[6:]
 
-		var event map[string]interface{}
-		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
+		var ev anthropicStreamEvent
+		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
 			continue
 		}
 
-		eventType, _ := event["type"].(string)
-
-		switch eventType {
+		switch ev.Type {
 		case "message_start":
-			if msg, ok := event["message"].(map[string]interface{}); ok {
-				messageRole, _ = msg["role"].(string)
+			var mr anthropicMessageRole
+			if err := json.Unmarshal(ev.Message, &mr); err == nil {
+				messageRole = mr.Role
 			}
 
 		case "content_block_start":
 			currentBlockIndex++
-			if block, ok := event["content_block"].(map[string]interface{}); ok {
+			currentTextBuf.Reset()
+			currentInputBuf.Reset()
+			var block map[string]interface{}
+			if err := json.Unmarshal(ev.ContentBlock, &block); err == nil {
 				currentBlock = block
-				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
-					"index":         currentBlockIndex,
-					"content_block": block,
+				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
+					Index:        currentBlockIndex,
+					ContentBlock: block,
 				})
 			}
 
 		case "content_block_delta":
-			delta, _ := event["delta"].(map[string]interface{})
-			deltaType, _ := delta["type"].(string)
-
-			if deltaType == "text_delta" {
-				text, _ := delta["text"].(string)
-				if currentBlock != nil {
-					if currentBlock["text"] == nil {
-						currentBlock["text"] = ""
-					}
-					currentBlock["text"] = currentBlock["text"].(string) + text
-				}
-				runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-					"text":  text,
-					"index": currentBlockIndex,
-				})
+			var delta anthropicDelta
+			if err := json.Unmarshal(ev.Delta, &delta); err != nil {
+				continue
 			}
-			if deltaType == "input_json_delta" && currentBlock != nil {
-				partial, _ := delta["partial_json"].(string)
-				if currentBlock["input"] == nil || fmt.Sprintf("%T", currentBlock["input"]) != "string" {
-					currentBlock["input"] = ""
+			switch delta.Type {
+			case "text_delta":
+				if currentBlock != nil {
+					currentTextBuf.WriteString(delta.Text)
 				}
-				if s, ok := currentBlock["input"].(string); ok {
-					currentBlock["input"] = s + partial
+				runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
+					Text:  delta.Text,
+					Index: currentBlockIndex,
+				})
+			case "input_json_delta":
+				if currentBlock != nil {
+					currentInputBuf.WriteString(delta.PartialJSON)
 				}
 			}
 
 		case "content_block_stop":
 			if currentBlock != nil {
-				if blockType, _ := currentBlock["type"].(string); blockType == "tool_use" {
-					if inputStr, ok := currentBlock["input"].(string); ok && inputStr != "" {
+				// Flush buffers once so downstream code sees a single
+				// string per field.
+				if currentTextBuf.Len() > 0 {
+					currentBlock["text"] = currentTextBuf.String()
+				}
+				currentTextBuf.Reset()
+				if currentInputBuf.Len() > 0 {
+					inputStr := currentInputBuf.String()
+					if blockType, _ := currentBlock["type"].(string); blockType == "tool_use" && inputStr != "" {
 						var inputObj map[string]interface{}
 						if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
 							currentBlock["input"] = inputObj
+						} else {
+							currentBlock["input"] = inputStr
 						}
+					} else {
+						currentBlock["input"] = inputStr
 					}
 				}
+				currentInputBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
 				currentBlock = nil
 			}
 
 		case "message_delta":
-			if u, ok := event["usage"].(map[string]interface{}); ok {
-				usage = u
+			if len(ev.Usage) > 0 {
+				var u map[string]interface{}
+				if err := json.Unmarshal(ev.Usage, &u); err == nil {
+					usage = u
+				}
 			}
-			if delta, ok := event["delta"].(map[string]interface{}); ok {
-				if stopReason, ok := delta["stop_reason"].(string); ok {
-					runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
-						"message": map[string]interface{}{
-							"role":    messageRole,
-							"content": contentBlocks,
-						},
-						"usage":       usage,
-						"stop_reason": stopReason,
+			var sd anthropicStopDelta
+			if err := json.Unmarshal(ev.Delta, &sd); err == nil && sd.StopReason != "" {
+				// Marshal the full message once into a pooled buffer and
+				// reuse the bytes for both the ai:done emit and the eventual
+				// return at message_stop. Previously this struct was rebuilt
+				// + remarshaled twice per turn.
+				fullMessage := map[string]interface{}{
+					"role":    messageRole,
+					"content": contentBlocks,
+				}
+				resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
+				if err == nil {
+					runtime.EventsEmit(a.ctx, "ai:done", struct {
+						Message    json.RawMessage        `json:"message"`
+						Usage      map[string]interface{} `json:"usage,omitempty"`
+						StopReason string                 `json:"stop_reason"`
+					}{
+						Message:    json.RawMessage(resultJSON),
+						Usage:      usage,
+						StopReason: sd.StopReason,
 					})
 				}
 			}
@@ -1791,16 +2165,18 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, err := json.Marshal(fullMessage)
+			resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
 			if err != nil {
 				return "", fmt.Errorf("marshal full message: %w", err)
 			}
 			return string(resultJSON), nil
 
 		case "error":
-			errData, _ := event["error"].(map[string]interface{})
-			errMsg, _ := errData["message"].(string)
-			return "", fmt.Errorf("stream error: %s", errMsg)
+			var e struct {
+				Message string `json:"message"`
+			}
+			_ = json.Unmarshal(ev.Error, &e)
+			return "", fmt.Errorf("stream error: %s", e.Message)
 		}
 	}
 
@@ -1813,7 +2189,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			"role":    messageRole,
 			"content": contentBlocks,
 		}
-		resultJSON, _ := json.Marshal(fullMessage)
+		resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -1821,6 +2197,36 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 }
 
 // anthropicToolToOpenAI converts an Anthropic tool definition to OpenAI format.
+// pooled *bytes.Buffer and returns the resulting JSON string. The
+// pool avoids per-turn allocator churn; in a heavy Claude Code session
+// the buffer grows once to ~3 KiB and stays warm. Returns the buffer
+// to the pool via defer in the caller (no — the string escapes the
+// goroutine, so we keep ownership here; the buffer can be reused when
+// the underlying JSON is no longer referenced by Wails).
+func marshalAnthropicFinalMessage(msg map[string]interface{}) ([]byte, error) {
+	buf := finalMsgPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer finalMsgPool.Put(buf)
+	enc := json.NewEncoder(buf)
+	if err := enc.Encode(msg); err != nil {
+		return nil, err
+	}
+	// json.Encoder always appends a trailing newline; trim it.
+	out := buf.Bytes()
+	if n := len(out); n > 0 && out[n-1] == '\n' {
+		out = out[:n-1]
+	}
+	return out, nil
+}
+
+var finalMsgPool = stdsync.Pool{
+	New: func() any {
+		b := &bytes.Buffer{}
+		b.Grow(4 * 1024)
+		return b
+	},
+}
+
 func anthropicToolToOpenAI(t map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"type": "function",
@@ -1924,14 +2330,37 @@ func toString(v interface{}) string {
 	}
 }
 
+// Typed SSE shapes for OpenAI Chat Completions. Only the few fields the
+// loop reads (delta.content, delta.tool_calls[], choice.finish_reason)
+// get decoded; the rest is discarded by the json decoder.
+type openaiDeltaToolCall struct {
+	Index    *int   `json:"index,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Function struct {
+		Name      string `json:"name,omitempty"`
+		Arguments string `json:"arguments,omitempty"`
+	} `json:"function"`
+}
+
+type openaiStreamDelta struct {
+	Content   string                `json:"content"`
+	ToolCalls []openaiDeltaToolCall `json:"tool_calls"`
+}
+
+type openaiStreamChoice struct {
+	Delta        openaiStreamDelta `json:"delta"`
+	FinishReason string            `json:"finish_reason"`
+}
+
+type openaiStreamEvent struct {
+	Choices []openaiStreamChoice `json:"choices"`
+}
+
 // chatCompletionOpenAI converts the Anthropic-format request to OpenAI,
 // calls the OpenAI Chat Completions API with SSE streaming, and converts
 // the response back to Anthropic format so the frontend sees no difference.
 func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
-	url, err := buildURL(baseURL, "openai")
-	if err != nil {
-		return "", err
-	}
+	url := strings.TrimRight(baseURL, "/") + "/chat/completions"
 
 	// --- Build OpenAI-format request body ---
 	openaiBody := map[string]interface{}{
@@ -1979,13 +2408,12 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	a.chatCancelMu.Lock()
-	a.chatCancel = cancel
-	a.chatCancelMu.Unlock()
+	// Per-call swap so overlapping ChatCompletion calls each keep their own
+	// cancel; see chatCompletionAnthropic for full rationale.
+	myCancel := cancel
+	a.chatCancel.Store(&myCancel)
 	defer func() {
-		a.chatCancelMu.Lock()
-		a.chatCancel = nil
-		a.chatCancelMu.Unlock()
+		a.chatCancel.CompareAndSwap(&myCancel, nil)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestJSON))
@@ -1996,7 +2424,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", userAgent)
 
-	client := &http.Client{Timeout: 0}
+	client := a.llmHTTPClient()
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -2007,7 +2435,9 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(res.Body)
+		// Cap the error-body read at 64 KiB so a hostile or buggy upstream
+		// returning a multi-GB error body can't OOM the Go process.
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
@@ -2017,13 +2447,21 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 	var messageRole = "assistant"
 	currentBlockIndex := -1
 	activeToolCalls := make(map[int]map[string]interface{}) // index -> accumulating tool_call
+	// Per-block text and input buffers so accumulation is O(n) instead of
+	// O(n²) string concat per token. Flushed to the block map on
+	// content_block_stop / finish_reason.
+	var currentTextBuf, currentInputBuf bytes.Buffer
+	// Per-tool input buffer so each tool_call's argument concat stays
+	// O(n). Keyed by the tool's index — multiple tool_calls can run in
+	// parallel (one per idx).
+	toolInputBufs := make(map[int]*bytes.Buffer)
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	// Emit message_start at the beginning
-	runtime.EventsEmit(a.ctx, "ai:message_start", map[string]interface{}{
-		"message": map[string]interface{}{"role": "assistant"},
+	// Emit message_start at the beginning.
+	runtime.EventsEmit(a.ctx, "ai:message_start", aiMessageStartEvent{
+		Role: "assistant",
 	})
 
 	for scanner.Scan() {
@@ -2036,84 +2474,65 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 		if strings.TrimSpace(dataStr) == "[DONE]" {
 			// Emit content_block_stop for any open block
 			if currentBlock != nil {
+				if currentTextBuf.Len() > 0 {
+					currentBlock["text"] = currentTextBuf.String()
+				}
+				currentTextBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
-				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-					"index": currentBlockIndex,
+				runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
+					Index: currentBlockIndex,
 				})
 				currentBlock = nil
 			}
-			// Close any open tool_use blocks and parse their input JSON.
-			// This mirrors the finish_reason branch — without it, an upstream
-			// that emits [DONE] without a preceding finish_reason (or whose
-			// finish_reason delta failed to unmarshal at line 2061's silent
-			// `continue`) would leave tool_use blocks with `input` as a raw
-			// JSON string or even an empty string, which the frontend's
-			// `block.input || {}` would coerce to "" and break the dispatcher.
+			// Close any open tool_use blocks
 			for idx, tc := range activeToolCalls {
-				if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
-					var inputObj map[string]interface{}
-					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
-						tc["input"] = inputObj
-					}
-				}
 				contentBlocks = append(contentBlocks, tc)
-				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-					"index": idx,
+				runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
+					Index: idx,
 				})
 			}
 			activeToolCalls = make(map[int]map[string]interface{})
+			currentInputBuf.Reset()
 
-			// Derive stopReason: any tool_use block means "tool_use".
-			// Previously this was hardcoded to "end_turn" — if the upstream
-			// finished mid-tool-call the frontend would route the next turn
-			// as if the model had finished its answer.
-			stopReason := "end_turn"
-			for _, b := range contentBlocks {
-				if b["type"] == "tool_use" {
-					stopReason = "tool_use"
-					break
-				}
-			}
-
-			runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
-				"message": map[string]interface{}{
+			// Emit message_delta and message_stop
+			runtime.EventsEmit(a.ctx, "ai:done", aiDoneEvent{
+				Message: map[string]interface{}{
 					"role":    messageRole,
 					"content": contentBlocks,
 				},
-				"stop_reason": stopReason,
+				StopReason: "end_turn",
 			})
 
 			fullMessage := map[string]interface{}{
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, _ := json.Marshal(fullMessage)
+			resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
 			return string(resultJSON), nil
 		}
 
-		var event map[string]interface{}
-		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
+		var ev openaiStreamEvent
+		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
 			continue
 		}
-
-		choices, _ := event["choices"].([]interface{})
-		if len(choices) == 0 {
+		if len(ev.Choices) == 0 {
 			continue
 		}
-		choice, _ := choices[0].(map[string]interface{})
-		delta, _ := choice["delta"].(map[string]interface{})
-		if delta == nil {
-			continue
-		}
+		choice := ev.Choices[0]
+		delta := choice.Delta
 
 		// Handle text content
-		if textDelta, ok := delta["content"].(string); ok && textDelta != "" {
+		if delta.Content != "" {
 			if currentBlock == nil || currentBlock["type"] != "text" {
 				// Close previous block if any
 				if currentBlock != nil {
+					if currentTextBuf.Len() > 0 {
+						currentBlock["text"] = currentTextBuf.String()
+					}
+					currentTextBuf.Reset()
 					contentBlocks = append(contentBlocks, currentBlock)
-					runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-						"index": currentBlockIndex,
+					runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
+						Index: currentBlockIndex,
 					})
 				}
 				currentBlockIndex++
@@ -2121,92 +2540,115 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 					"type": "text",
 					"text": "",
 				}
-				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
-					"index":         currentBlockIndex,
-					"content_block": currentBlock,
+				currentTextBuf.Reset()
+				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
+					Index:        currentBlockIndex,
+					ContentBlock: currentBlock,
 				})
 			}
-			currentBlock["text"] = currentBlock["text"].(string) + textDelta
-			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-				"text":  textDelta,
-				"index": currentBlockIndex,
+			currentTextBuf.WriteString(delta.Content)
+			runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
+				Text:  delta.Content,
+				Index: currentBlockIndex,
 			})
 		}
 
 		// Handle tool_calls in delta
-		if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
-			for _, tc := range toolCalls {
-				tcMap, _ := tc.(map[string]interface{})
-				idxF, _ := tcMap["index"].(float64)
-				idx := int(idxF)
+		for _, tc := range delta.ToolCalls {
+			if tc.Index == nil {
+				continue
+			}
+			idx := *tc.Index
 
-				if _, exists := activeToolCalls[idx]; !exists {
-					// Close current text block if open
-					if currentBlock != nil {
-						contentBlocks = append(contentBlocks, currentBlock)
-						runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-							"index": currentBlockIndex,
-						})
-						currentBlock = nil
+			if _, exists := activeToolCalls[idx]; !exists {
+				// Close current text block if open
+				if currentBlock != nil {
+					if currentTextBuf.Len() > 0 {
+						currentBlock["text"] = currentTextBuf.String()
 					}
-					currentBlockIndex++
-					activeToolCalls[idx] = map[string]interface{}{
-						"type":  "tool_use",
-						"id":    tcMap["id"],
-						"name":  "",
-						"input": "",
-					}
-					runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
-						"index": currentBlockIndex,
-						"content_block": map[string]interface{}{
-							"type": "tool_use",
-							"id":   tcMap["id"],
-						},
+					currentTextBuf.Reset()
+					contentBlocks = append(contentBlocks, currentBlock)
+					runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
+						Index: currentBlockIndex,
 					})
+					currentBlock = nil
 				}
+				currentBlockIndex++
+				activeToolCalls[idx] = map[string]interface{}{
+					"type":  "tool_use",
+					"id":    tc.ID,
+					"name":  "",
+					"input": "",
+				}
+				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
+					Index: currentBlockIndex,
+					ContentBlock: map[string]interface{}{
+						"type": "tool_use",
+						"id":   tc.ID,
+					},
+				})
+			}
 
-				atc := activeToolCalls[idx]
-				if fn, ok := tcMap["function"].(map[string]interface{}); ok {
-					if name, ok := fn["name"].(string); ok && name != "" {
-						atc["name"] = name
-					}
-					if args, ok := fn["arguments"].(string); ok && args != "" {
-						if atc["input"] == nil {
-							atc["input"] = ""
-						}
-						atc["input"] = atc["input"].(string) + args
-						runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
-							"partial_json": args,
-						})
-					}
+			atc := activeToolCalls[idx]
+			if tc.Function.Name != "" {
+				atc["name"] = tc.Function.Name
+			}
+			if args := tc.Function.Arguments; args != "" {
+				// Append to a per-tool *bytes.Buffer instead of string
+				// concat (O(n²) over a long tool-args stream).
+				buf, ok := toolInputBufs[idx]
+				if !ok {
+					buf = &bytes.Buffer{}
+					toolInputBufs[idx] = buf
 				}
+				buf.WriteString(args)
+				runtime.EventsEmit(a.ctx, "ai:input_json_delta", aiInputJsonDeltaEvent{
+					PartialJSON: args,
+				})
 			}
 		}
 
 		// Handle finish_reason on the choice level
-		if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" && finishReason != "null" {
+		finishReason := choice.FinishReason
+		if finishReason != "" && finishReason != "null" {
 			// Close any open text block
 			if currentBlock != nil {
+				if currentTextBuf.Len() > 0 {
+					currentBlock["text"] = currentTextBuf.String()
+				}
+				currentTextBuf.Reset()
 				contentBlocks = append(contentBlocks, currentBlock)
-				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-					"index": currentBlockIndex,
+				runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
+					Index: currentBlockIndex,
 				})
 				currentBlock = nil
 			}
 			// Close tool_use blocks and parse their input JSON
 			for idx, tc := range activeToolCalls {
-				if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
+				// Prefer the per-tool buffer over the possibly-empty
+				// tc["input"] string.
+				if buf, ok := toolInputBufs[idx]; ok && buf.Len() > 0 {
+					inputStr := buf.String()
+					var inputObj map[string]interface{}
+					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
+						tc["input"] = inputObj
+					} else {
+						tc["input"] = inputStr
+					}
+				} else if inputStr, ok := tc["input"].(string); ok && inputStr != "" {
 					var inputObj map[string]interface{}
 					if err := json.Unmarshal([]byte(inputStr), &inputObj); err == nil {
 						tc["input"] = inputObj
 					}
 				}
 				contentBlocks = append(contentBlocks, tc)
-				runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-					"index": idx,
+				runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
+					Index: idx,
 				})
 			}
 			activeToolCalls = make(map[int]map[string]interface{})
+			toolInputBufs = nil
+			currentInputBuf.Reset()
 
 			stopReason := "end_turn"
 			if finishReason == "tool_calls" {
@@ -2217,19 +2659,19 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				stopReason = "end_turn"
 			}
 
-			runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
-				"message": map[string]interface{}{
+			runtime.EventsEmit(a.ctx, "ai:done", aiDoneEvent{
+				Message: map[string]interface{}{
 					"role":    messageRole,
 					"content": contentBlocks,
 				},
-				"stop_reason": stopReason,
+				StopReason: stopReason,
 			})
 
 			fullMessage := map[string]interface{}{
 				"role":    messageRole,
 				"content": contentBlocks,
 			}
-			resultJSON, _ := json.Marshal(fullMessage)
+			resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
 			return string(resultJSON), nil
 		}
 	}
@@ -2246,7 +2688,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			"role":    messageRole,
 			"content": contentBlocks,
 		}
-		resultJSON, _ := json.Marshal(fullMessage)
+		resultJSON, _ := marshalAnthropicFinalMessage(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -2340,15 +2782,28 @@ func convertAnthropicMessageToResponses(msg map[string]interface{}) []map[string
 	return results
 }
 
+// Typed SSE shapes for OpenAI Responses events. The wrapper captures
+// the discriminator + output_index; nested item fields are decoded
+// lazily per branch so we skip the ~99% of fields the loop discards.
+type responsesStreamItem struct {
+	Type   string `json:"type"`
+	CallID string `json:"call_id"`
+	Name   string `json:"name"`
+}
+
+type responsesStreamEvent struct {
+	Type        string          `json:"type"`
+	OutputIndex int             `json:"output_index"`
+	Item        json.RawMessage `json:"item"`
+	Delta       string          `json:"delta"`
+}
+
 // chatCompletionResponses converts the Anthropic-format request to the OpenAI
 // Responses API, calls /responses with SSE streaming, and converts the response
 // events back to Anthropic-format events so the frontend sees no difference.
 // Stateless: full history is sent as `input` each turn; reasoning items are ignored.
 func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string) (string, error) {
-	url, err := buildURL(baseURL, "responses")
-	if err != nil {
-		return "", err
-	}
+	url := strings.TrimRight(baseURL, "/") + "/responses"
 
 	// --- Build Responses-format request body ---
 	respBody := map[string]interface{}{
@@ -2392,13 +2847,12 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
-	a.chatCancelMu.Lock()
-	a.chatCancel = cancel
-	a.chatCancelMu.Unlock()
+	// Per-call swap so overlapping ChatCompletion calls each keep their own
+	// cancel; see chatCompletionAnthropic for full rationale.
+	myCancel := cancel
+	a.chatCancel.Store(&myCancel)
 	defer func() {
-		a.chatCancelMu.Lock()
-		a.chatCancel = nil
-		a.chatCancelMu.Unlock()
+		a.chatCancel.CompareAndSwap(&myCancel, nil)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestJSON))
@@ -2409,7 +2863,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("User-Agent", userAgent)
 
-	client := &http.Client{Timeout: 0}
+	client := a.llmHTTPClient()
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
@@ -2420,7 +2874,9 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(res.Body)
+		// Cap the error-body read at 64 KiB so a hostile or buggy upstream
+		// returning a multi-GB error body can't OOM the Go process.
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 64*1024))
 		return "", fmt.Errorf("HTTP %d: %s", res.StatusCode, string(body))
 	}
 
@@ -2430,12 +2886,18 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	blockByOutputIdx := make(map[int]map[string]interface{})
 	idxByOutputIdx := make(map[int]int)
 	nextBlockIndex := 0
+	// Parallel maps of *bytes.Buffer so text/input accumulation is O(n)
+	// instead of O(n²) string concat per token. Outputs may run in
+	// parallel (different output_index) so a single shared buffer doesn't
+	// work — keep one per output_index.
+	textBufs := make(map[int]*bytes.Buffer)
+	inputBufs := make(map[int]*bytes.Buffer)
 
 	scanner := bufio.NewScanner(res.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	runtime.EventsEmit(a.ctx, "ai:message_start", map[string]interface{}{
-		"message": map[string]interface{}{"role": "assistant"},
+	runtime.EventsEmit(a.ctx, "ai:message_start", aiMessageStartEvent{
+		Role: "assistant",
 	})
 
 	finish := func(stopReason string) (string, error) {
@@ -2443,11 +2905,17 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			"role":    "assistant",
 			"content": contentBlocks,
 		}
-		runtime.EventsEmit(a.ctx, "ai:done", map[string]interface{}{
-			"message":     fullMessage,
-			"stop_reason": stopReason,
+		resultJSON, err := marshalAnthropicFinalMessage(fullMessage)
+		if err != nil {
+			return "", fmt.Errorf("marshal final message: %w", err)
+		}
+		runtime.EventsEmit(a.ctx, "ai:done", struct {
+			Message    json.RawMessage `json:"message"`
+			StopReason string          `json:"stop_reason"`
+		}{
+			Message:    json.RawMessage(resultJSON),
+			StopReason: stopReason,
 		})
-		resultJSON, _ := json.Marshal(fullMessage)
 		return string(resultJSON), nil
 	}
 
@@ -2461,104 +2929,119 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			continue
 		}
 
-		var event map[string]interface{}
-		if err := json.Unmarshal([]byte(dataStr), &event); err != nil {
+		var ev responsesStreamEvent
+		if err := json.Unmarshal([]byte(dataStr), &ev); err != nil {
 			continue
 		}
 
-		eventType, _ := event["type"].(string)
-		outputIdxF, _ := event["output_index"].(float64)
-		outputIdx := int(outputIdxF)
-
-		switch eventType {
+		switch ev.Type {
 		case "response.output_item.added":
-			item, _ := event["item"].(map[string]interface{})
-			if item == nil {
+			var item responsesStreamItem
+			if err := json.Unmarshal(ev.Item, &item); err != nil {
 				continue
 			}
-			itemType, _ := item["type"].(string)
-			switch itemType {
+			switch item.Type {
 			case "message":
 				block := map[string]interface{}{"type": "text", "text": ""}
-				blockByOutputIdx[outputIdx] = block
-				idxByOutputIdx[outputIdx] = nextBlockIndex
-				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
-					"index":         nextBlockIndex,
-					"content_block": block,
+				blockByOutputIdx[ev.OutputIndex] = block
+				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
+				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
+					Index:        nextBlockIndex,
+					ContentBlock: block,
 				})
 				nextBlockIndex++
 			case "function_call":
 				block := map[string]interface{}{
 					"type":  "tool_use",
-					"id":    item["call_id"],
-					"name":  item["name"],
+					"id":    item.CallID,
+					"name":  item.Name,
 					"input": "",
 				}
-				blockByOutputIdx[outputIdx] = block
-				idxByOutputIdx[outputIdx] = nextBlockIndex
-				runtime.EventsEmit(a.ctx, "ai:block_start", map[string]interface{}{
-					"index": nextBlockIndex,
-					"content_block": map[string]interface{}{
+				blockByOutputIdx[ev.OutputIndex] = block
+				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
+				runtime.EventsEmit(a.ctx, "ai:block_start", aiBlockStartEvent{
+					Index: nextBlockIndex,
+					ContentBlock: map[string]interface{}{
 						"type": "tool_use",
-						"id":   item["call_id"],
-						"name": item["name"],
+						"id":   item.CallID,
+						"name": item.Name,
 					},
 				})
 				nextBlockIndex++
 			}
 
 		case "response.output_text.delta":
-			block := blockByOutputIdx[outputIdx]
+			block := blockByOutputIdx[ev.OutputIndex]
 			if block == nil {
 				continue
 			}
-			delta, _ := event["delta"].(string)
-			if delta == "" {
+			if ev.Delta == "" {
 				continue
 			}
-			block["text"] = block["text"].(string) + delta
-			runtime.EventsEmit(a.ctx, "ai:token", map[string]interface{}{
-				"text":  delta,
-				"index": idxByOutputIdx[outputIdx],
+			// Append to per-block *bytes.Buffer instead of O(n²) string
+			// concatenation. Flushed on output_item.done.
+			buf, ok := textBufs[ev.OutputIndex]
+			if !ok {
+				buf = &bytes.Buffer{}
+				textBufs[ev.OutputIndex] = buf
+			}
+			buf.WriteString(ev.Delta)
+			runtime.EventsEmit(a.ctx, "ai:token", aiTokenEvent{
+				Text:  ev.Delta,
+				Index: idxByOutputIdx[ev.OutputIndex],
 			})
 
 		case "response.function_call_arguments.delta":
-			block := blockByOutputIdx[outputIdx]
+			block := blockByOutputIdx[ev.OutputIndex]
 			if block == nil {
 				continue
 			}
-			delta, _ := event["delta"].(string)
-			if delta == "" {
+			if ev.Delta == "" {
 				continue
 			}
-			if block["input"] == nil {
-				block["input"] = ""
+			buf, ok := inputBufs[ev.OutputIndex]
+			if !ok {
+				buf = &bytes.Buffer{}
+				inputBufs[ev.OutputIndex] = buf
 			}
-			block["input"] = block["input"].(string) + delta
-			runtime.EventsEmit(a.ctx, "ai:input_json_delta", map[string]interface{}{
-				"partial_json": delta,
+			buf.WriteString(ev.Delta)
+			runtime.EventsEmit(a.ctx, "ai:input_json_delta", aiInputJsonDeltaEvent{
+				PartialJSON: ev.Delta,
 			})
 
 		case "response.output_item.done":
-			block := blockByOutputIdx[outputIdx]
+			block := blockByOutputIdx[ev.OutputIndex]
 			if block == nil {
 				continue
 			}
-			if block["type"] == "tool_use" {
-				if inputStr, ok := block["input"].(string); ok {
-					var inputObj map[string]interface{}
-					if inputStr != "" && json.Unmarshal([]byte(inputStr), &inputObj) == nil {
-						block["input"] = inputObj
+			// Flush per-block buffers once into the block map.
+			if buf, ok := textBufs[ev.OutputIndex]; ok {
+				if buf.Len() > 0 {
+					block["text"] = buf.String()
+				}
+				delete(textBufs, ev.OutputIndex)
+			}
+			if buf, ok := inputBufs[ev.OutputIndex]; ok {
+				if buf.Len() > 0 {
+					inputStr := buf.String()
+					if block["type"] == "tool_use" {
+						var inputObj map[string]interface{}
+						if json.Unmarshal([]byte(inputStr), &inputObj) == nil {
+							block["input"] = inputObj
+						} else {
+							block["input"] = map[string]interface{}{}
+						}
 					} else {
-						block["input"] = map[string]interface{}{}
+						block["input"] = inputStr
 					}
 				}
+				delete(inputBufs, ev.OutputIndex)
 			}
 			contentBlocks = append(contentBlocks, block)
-			runtime.EventsEmit(a.ctx, "ai:content_block_stop", map[string]interface{}{
-				"index": idxByOutputIdx[outputIdx],
+			runtime.EventsEmit(a.ctx, "ai:content_block_stop", aiContentBlockStopEvent{
+				Index: idxByOutputIdx[ev.OutputIndex],
 			})
-			delete(blockByOutputIdx, outputIdx)
+			delete(blockByOutputIdx, ev.OutputIndex)
 
 		case "response.completed":
 			stopReason := "end_turn"
@@ -2571,7 +3054,9 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			return finish(stopReason)
 
 		case "response.failed", "error":
-			body, _ := json.Marshal(event)
+			// Marshal the typed event back out for the error message; the
+			// caller doesn't need the original map shape.
+			body, _ := json.Marshal(ev)
 			return "", fmt.Errorf("responses stream error: %s", string(body))
 		}
 	}
@@ -2589,10 +3074,10 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 
 // CancelChatStream cancels the currently active ChatCompletion stream.
 func (a *App) CancelChatStream() {
-	a.chatCancelMu.Lock()
-	defer a.chatCancelMu.Unlock()
-	if a.chatCancel != nil {
-		a.chatCancel()
+	// atomic.Pointer.Load is lock-free; a nil slot means no stream is
+	// active.
+	if p := a.chatCancel.Load(); p != nil {
+		(*p)()
 	}
 }
 
@@ -2607,23 +3092,18 @@ type ModelInfo struct {
 // /v1/models with the x-api-key + anthropic-version headers, mirroring
 // chatCompletionAnthropic's URL and auth handling.
 func (a *App) FetchModels(apiKey, baseURL, protocol string) ([]ModelInfo, error) {
-	// For /models the protocol only changes the URL shape for anthropic;
-	// all OpenAI-compatible variants (including Chinese LLMs) hit /v1/models.
-	buildProtocol := protocol
-	if buildProtocol == "" {
-		buildProtocol = "openai"
-	}
-	if buildProtocol == "glm-native" || buildProtocol == "custom" {
-		buildProtocol = "openai"
-	}
-	url, err := buildURL(baseURL, buildProtocol)
-	if err != nil {
-		return nil, err
-	}
-	// buildURL always appends /chat/completions or /responses. For models,
-	// we want /models instead. Re-strip the suffix and add /models.
-	if idx := strings.LastIndex(url, "/"); idx > 0 {
-		url = url[:idx+1] + "models"
+	base := strings.TrimRight(baseURL, "/")
+
+	var url string
+	if protocol == "anthropic" {
+		// Base URL conventionally omits /v1; tolerate legacy configs with it.
+		if strings.HasSuffix(base, "/v1") {
+			url = base + "/models"
+		} else {
+			url = base + "/v1/models"
+		}
+	} else {
+		url = base + "/models"
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -2638,8 +3118,13 @@ func (a *App) FetchModels(apiKey, baseURL, protocol string) ([]ModelInfo, error)
 	}
 	req.Header.Set("User-Agent", "uniTerm")
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	res, err := client.Do(req)
+	// Share the same transport as the LLM clients so the model list call
+	// also benefits from the keep-alive pool; the request itself carries
+	// its own 10s deadline via the per-request context.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+	res, err := a.llmHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -2664,293 +3149,6 @@ func (a *App) FetchModels(apiKey, baseURL, protocol string) ([]ModelInfo, error)
 }
 
 // SFTP direct API — called from frontend without terminal layer
-
-// fileTransferSession is the common interface for SFTP and FTP sessions.
-type fileTransferSession interface {
-	ListRemote(dir string) (session.FileListResult, error)
-	ListLocal(dir string) (session.FileListResult, error)
-	ChangeRemoteDir(dir string) (session.FileListResult, error)
-	ChangeLocalDir(dir string) (session.FileListResult, error)
-	ListLocalDrives() ([]session.FileItem, error)
-	MakeDir(dir string) error
-	Remove(path string, recursive bool) error
-	Rename(oldPath, newPath string) error
-	Chmod(path string, mode os.FileMode) error
-	LocalRemove(path string, recursive bool) error
-	LocalRename(oldPath, newPath string) error
-	LocalMkdir(dir string) error
-	LocalGetContent(path string) ([]byte, error)
-	LocalPutContent(path string, content []byte) error
-	LocalCopy(oldPath, newPath string) error
-	LocalMove(oldPath, newPath string) error
-	Get(remotePath, localPath string, recursive bool) (string, error)
-	Put(localPath, remotePath string, recursive bool) (string, error)
-	PutContent(remotePath string, content []byte) error
-	GetContent(remotePath string) ([]byte, error)
-	Copy(oldPath, newPath string) error
-	Move(oldPath, newPath string) error
-	CancelTransfer(taskID string) error
-	PauseTransfer(taskID string) error
-	ResumeTransfer(taskID string) error
-}
-
-func (a *App) getSftp(sid string) (fileTransferSession, error) {
-	if a.sessionManager == nil {
-		return nil, fmt.Errorf("session manager not initialized")
-	}
-	s, ok := a.sessionManager.Get(sid)
-	if !ok {
-		return nil, fmt.Errorf("session not found: %s", sid)
-	}
-	if fs, ok := s.(fileTransferSession); ok {
-		return fs, nil
-	}
-	return nil, fmt.Errorf("not a file transfer session: %s", sid)
-}
-
-func (a *App) SftpListRemote(sessionID, dir string) (session.FileListResult, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return session.FileListResult{}, err
-	}
-	return fs.ListRemote(dir)
-}
-
-func (a *App) SftpListLocal(sessionID, dir string) (session.FileListResult, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return session.FileListResult{}, err
-	}
-	return fs.ListLocal(dir)
-}
-
-func (a *App) SftpChangeRemoteDir(sessionID, dir string) (session.FileListResult, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return session.FileListResult{}, err
-	}
-	return fs.ChangeRemoteDir(dir)
-}
-
-func (a *App) SftpChangeLocalDir(sessionID, dir string) (session.FileListResult, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return session.FileListResult{}, err
-	}
-	return fs.ChangeLocalDir(dir)
-}
-
-func (a *App) SftpListLocalDrives(sessionID string) ([]session.FileItem, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return fs.ListLocalDrives()
-}
-
-func (a *App) SftpMakeDir(sessionID, dir string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.MakeDir(dir)
-}
-
-func (a *App) SftpRemove(sessionID, path string, recursive bool) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.Remove(path, recursive)
-}
-
-func (a *App) SftpRename(sessionID, oldPath, newPath string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.Rename(oldPath, newPath)
-}
-
-func (a *App) SftpChmod(sessionID, path, mode string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	modeUint, err := strconv.ParseUint(mode, 8, 32)
-	if err != nil {
-		return fmt.Errorf("invalid mode: %s", mode)
-	}
-	return fs.Chmod(path, os.FileMode(modeUint))
-}
-
-func (a *App) SftpLocalRemove(sessionID, path string, recursive bool) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.LocalRemove(path, recursive)
-}
-
-func (a *App) SftpLocalRename(sessionID, oldPath, newPath string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.LocalRename(oldPath, newPath)
-}
-
-func (a *App) SftpLocalMkdir(sessionID, dir string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.LocalMkdir(dir)
-}
-
-func (a *App) SftpLocalGetContent(sessionID, localPath string) (string, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return "", err
-	}
-	content, err := fs.LocalGetContent(localPath)
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(content), nil
-}
-
-func (a *App) SftpLocalPutContent(sessionID, localPath, contentBase64, encoding string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	content, err := base64.StdEncoding.DecodeString(contentBase64)
-	if err != nil {
-		return err
-	}
-	// Re-encode if target encoding is not UTF-8 (frontend always sends UTF-8)
-	content, err = convertEncoding(content, encoding)
-	if err != nil {
-		return err
-	}
-	return fs.LocalPutContent(localPath, content)
-}
-
-func (a *App) SftpLocalCopy(sessionID, oldPath, newPath string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.LocalCopy(oldPath, newPath)
-}
-
-func (a *App) SftpLocalMove(sessionID, oldPath, newPath string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.LocalMove(oldPath, newPath)
-}
-
-func (a *App) SftpGet(sessionID, remotePath, localPath string, recursive bool) (string, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return "", err
-	}
-	return fs.Get(remotePath, localPath, recursive)
-}
-
-func (a *App) SftpCancelTransfer(sessionID, taskID string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.CancelTransfer(taskID)
-}
-
-func (a *App) SftpPauseTransfer(sessionID, taskID string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.PauseTransfer(taskID)
-}
-
-func (a *App) SftpResumeTransfer(sessionID, taskID string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.ResumeTransfer(taskID)
-}
-
-func (a *App) SftpPut(sessionID, localPath, remotePath string, recursive bool) (string, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return "", err
-	}
-	return fs.Put(localPath, remotePath, recursive)
-}
-
-func (a *App) SftpPutContent(sessionID, remotePath, contentBase64, encoding string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	content, err := base64.StdEncoding.DecodeString(contentBase64)
-	if err != nil {
-		return err
-	}
-	// Re-encode if target encoding is not UTF-8 (frontend always sends UTF-8)
-	content, err = convertEncoding(content, encoding)
-	if err != nil {
-		return err
-	}
-	return fs.PutContent(remotePath, content)
-}
-
-// convertEncoding converts UTF-8 bytes to the target encoding.
-// Returns the original bytes unchanged if encoding is UTF-8 or empty.
-func convertEncoding(utf8Bytes []byte, encoding string) ([]byte, error) {
-	switch strings.ToLower(encoding) {
-	case "", "utf-8", "utf8":
-		return utf8Bytes, nil
-	case "gbk", "gb2312", "gb18030":
-		reader := transform.NewReader(bytes.NewReader(utf8Bytes), simplifiedchinese.GBK.NewEncoder())
-		return io.ReadAll(reader)
-	default:
-		return nil, fmt.Errorf("unsupported encoding: %s", encoding)
-	}
-}
-
-func (a *App) SftpGetContent(sessionID, remotePath string) (string, error) {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return "", err
-	}
-	content, err := fs.GetContent(remotePath)
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(content), nil
-}
-
-func (a *App) SftpCopy(sessionID, oldPath, newPath string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.Copy(oldPath, newPath)
-}
-
-func (a *App) SftpMove(sessionID, oldPath, newPath string) error {
-	fs, err := a.getSftp(sessionID)
-	if err != nil {
-		return err
-	}
-	return fs.Move(oldPath, newPath)
-}
 
 // WriteTempFile writes base64-encoded content to a temp file and returns its path.
 func (a *App) WriteTempFile(fileName, contentBase64 string) (string, error) {
@@ -3130,286 +3328,6 @@ func (a *App) ConnectSerial(portName string, baudRate int, dataBits int, stopBit
 	}, nil
 }
 
-// \u2500\u2500 Session output log \u2500\u2500
-
-// SessionLogInfo describes the current session-log state for a panel.
-// Path is "" when Enabled is false.
-type SessionLogInfo struct {
-	Enabled bool   `json:"enabled"`
-	Path    string `json:"path"`
-}
-
-// RegisterSessionForPanel binds a session to a panel and, if the panel
-// already has an active log, attaches the log writer to the session so
-// output starts landing in the log immediately. The frontend calls this
-// right after CreateSession succeeds, and on every reconnect.
-//
-// On the first Register for a panel (i.e. not a reconnect), if the
-// session was created from a connection with LogOnConnect=true, the
-// log is enabled automatically. Later Registers for the same panel
-// never re-trigger — the user's manual stop is respected across
-// reconnects for the life of the panel.
-func (a *App) RegisterSessionForPanel(sessionID, panelID string) {
-	if sessionID == "" || panelID == "" {
-		return
-	}
-	a.panelLogMu.Lock()
-	a.sessionToPanel[sessionID] = panelID
-	logger := a.panelLogs[panelID]
-	autoTriggered := a.panelAutoTriggered[panelID]
-	a.panelLogMu.Unlock()
-
-	// Existing logger (reconnect case): rewire writer, don't re-enable.
-	if logger != nil {
-		a.installWriter(sessionID, logger)
-		return
-	}
-
-	// First Register for this panel: check LogOnConnect and auto-enable.
-	if !autoTriggered {
-		a.panelLogMu.Lock()
-		a.panelAutoTriggered[panelID] = true
-		a.panelLogMu.Unlock()
-		if a.sessionWantsAutoLog(sessionID) {
-			// EnableSessionOutputLog handles the writer install internally.
-			if _, err := a.EnableSessionOutputLog(panelID, ""); err != nil {
-				log.Writef("[RegisterSessionForPanel] auto-enable log failed: %v", err)
-			}
-		}
-	}
-}
-
-// sessionWantsAutoLog reports whether the session was created from a
-// connection that opted in to LogOnConnect. Returns false for missing
-// or non-terminal sessions.
-func (a *App) sessionWantsAutoLog(sessionID string) bool {
-	if a.sessionManager == nil {
-		return false
-	}
-	s, ok := a.sessionManager.Get(sessionID)
-	if !ok {
-		return false
-	}
-	if q, ok := s.(interface{ AutoLogOnConnect() bool }); ok {
-		return q.AutoLogOnConnect()
-	}
-	return false
-}
-
-// UnregisterSession clears the session\u2192panel binding and detaches any
-// writer from the session. The logger itself is unaffected: it stays on
-// the panel, waiting for the next session (reconnect) to register.
-func (a *App) UnregisterSession(sessionID string) {
-	if sessionID == "" {
-		return
-	}
-	a.panelLogMu.Lock()
-	delete(a.sessionToPanel, sessionID)
-	a.panelLogMu.Unlock()
-	a.installWriter(sessionID, nil)
-}
-
-// installWriter finds the given session and installs (or clears) the
-// output-log writer callback. Non-terminal session types silently
-// ignore the request.
-func (a *App) installWriter(sessionID string, logger *session.OutputLogger) {
-	if a.sessionManager == nil {
-		return
-	}
-	s, ok := a.sessionManager.Get(sessionID)
-	if !ok {
-		return
-	}
-	setter, ok := s.(interface{ SetOutputLogWriter(func([]byte)) })
-	if !ok {
-		return
-	}
-	if logger == nil {
-		setter.SetOutputLogWriter(nil)
-		return
-	}
-	setter.SetOutputLogWriter(logger.WriteOutput)
-}
-
-// panelLogTitle picks the filename base for a panel's log. Uses the
-// current session's Title if available, otherwise a short synthetic
-// name derived from panelID.
-func (a *App) panelLogTitle(panelID string) (name, protocol string) {
-	a.panelLogMu.Lock()
-	var sessionID string
-	for sid, pid := range a.sessionToPanel {
-		if pid == panelID {
-			sessionID = sid
-			break
-		}
-	}
-	a.panelLogMu.Unlock()
-	if sessionID != "" && a.sessionManager != nil {
-		if s, ok := a.sessionManager.Get(sessionID); ok {
-			return s.Title(), s.Type()
-		}
-	}
-	suffix := panelID
-	if len(suffix) > 8 {
-		suffix = suffix[:8]
-	}
-	return "panel_" + suffix, "session"
-}
-
-// EnableSessionOutputLog starts writing terminal output for the given
-// panel to a .log file. If dir is empty, the default session log
-// directory is used. Returns the final path after sanitization and
-// same-second collision suffixing.
-//
-// The log is bound to the panel, not the session \u2014 so a reconnect
-// (which creates a fresh session under the same panel) keeps writing
-// to the same file.
-func (a *App) EnableSessionOutputLog(panelID, dir string) (string, error) {
-	if panelID == "" {
-		return "", fmt.Errorf("panelID required")
-	}
-	// When the caller didn't pin a directory, fall back to the user's
-	// configured override; if that is also empty, OutputLogger.Enable
-	// will pick the OS default.
-	if dir == "" {
-		a.customLogDirMu.RLock()
-		dir = a.customLogDir
-		a.customLogDirMu.RUnlock()
-	}
-	name, protocol := a.panelLogTitle(panelID)
-
-	a.panelLogMu.Lock()
-	logger := a.panelLogs[panelID]
-	if logger == nil {
-		logger = &session.OutputLogger{}
-		a.panelLogs[panelID] = logger
-	}
-	// Find any session currently bound to this panel so we can wire the
-	// writer while we still hold the lock (avoids a race with concurrent
-	// register/unregister calls).
-	var sessionID string
-	for sid, pid := range a.sessionToPanel {
-		if pid == panelID {
-			sessionID = sid
-			break
-		}
-	}
-	a.panelLogMu.Unlock()
-
-	path, err := logger.Enable(dir, name, protocol)
-	if err != nil {
-		return "", err
-	}
-	if sessionID != "" {
-		a.installWriter(sessionID, logger)
-	}
-	return path, nil
-}
-
-// DisableSessionOutputLog closes the log file for the given panel,
-// writes a footer banner, detaches the writer from any active session,
-// and drops the panel's logger. Idempotent.
-func (a *App) DisableSessionOutputLog(panelID string) error {
-	if panelID == "" {
-		return nil
-	}
-	a.panelLogMu.Lock()
-	logger := a.panelLogs[panelID]
-	delete(a.panelLogs, panelID)
-	var sessionID string
-	for sid, pid := range a.sessionToPanel {
-		if pid == panelID {
-			sessionID = sid
-			break
-		}
-	}
-	a.panelLogMu.Unlock()
-	if sessionID != "" {
-		a.installWriter(sessionID, nil)
-	}
-	if logger != nil {
-		logger.Disable()
-	}
-	return nil
-}
-
-// GetSessionOutputLogInfo returns the current log state for a panel.
-// Returns zero value when the panel has no active log.
-func (a *App) GetSessionOutputLogInfo(panelID string) SessionLogInfo {
-	if panelID == "" {
-		return SessionLogInfo{}
-	}
-	a.panelLogMu.Lock()
-	logger := a.panelLogs[panelID]
-	a.panelLogMu.Unlock()
-	if logger == nil {
-		return SessionLogInfo{}
-	}
-	return SessionLogInfo{Enabled: logger.Enabled(), Path: logger.Path()}
-}
-
-// OpenPathInExplorer reveals the given file in the platform file
-// manager. On Windows uses `explorer /select,<path>`; macOS uses
-// `open -R`; Linux uses `xdg-open <dir>` (no selection semantic in
-// xdg-open, so the parent directory is opened).
-func (a *App) OpenPathInExplorer(path string) error {
-	if path == "" {
-		return fmt.Errorf("empty path")
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		abs = path
-	}
-	isDir := false
-	if info, err := os.Stat(abs); err == nil {
-		isDir = info.IsDir()
-	}
-	switch goruntime.GOOS {
-	case "windows":
-		// explorer.exe returns exit code 1 on success; ignore Run's error.
-		if isDir {
-			_ = exec.Command("explorer", abs).Run()
-		} else {
-			_ = exec.Command("explorer", "/select,", abs).Run()
-		}
-		return nil
-	case "darwin":
-		if isDir {
-			return exec.Command("open", abs).Run()
-		}
-		return exec.Command("open", "-R", abs).Run()
-	default:
-		if isDir {
-			return exec.Command("xdg-open", abs).Run()
-		}
-		return exec.Command("xdg-open", filepath.Dir(abs)).Run()
-	}
-}
-
-// SetDefaultSessionLogDir installs a user-configured override for the
-// directory used by new session logs. Empty clears the override and
-// restores the OS default. Existing log files are not migrated; the
-// change only affects logs enabled after this call.
-func (a *App) SetDefaultSessionLogDir(dir string) {
-	a.customLogDirMu.Lock()
-	a.customLogDir = dir
-	a.customLogDirMu.Unlock()
-}
-
-// GetDefaultSessionLogDir returns the directory a fresh session log
-// would land in: the user's override if set, otherwise the OS default
-// (~/Documents/uniTerm/logs on all platforms). Used by the settings UI
-// to show the current default path as a placeholder.
-func (a *App) GetDefaultSessionLogDir() string {
-	a.customLogDirMu.RLock()
-	custom := a.customLogDir
-	a.customLogDirMu.RUnlock()
-	if custom != "" {
-		return custom
-	}
-	return session.DefaultSessionLogDir()
-}
-
 // ── Database methods ──
 
 func (a *App) dbSession(sessionID string) (*session.DatabaseSession, error) {
@@ -3460,693 +3378,6 @@ func (a *App) mongoSession(sessionID string) (*session.MongoSession, error) {
 		return nil, fmt.Errorf("session is not a mongodb session: %s (type=%s)", sessionID, s.Type())
 	}
 	return ms, nil
-}
-
-// ── Redis methods ──
-
-func (a *App) RedisPing(sessionID string) error {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return rs.Ping()
-}
-
-func (a *App) RedisSwitchDB(sessionID string, idx int) error {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return rs.SwitchDB(idx)
-}
-
-func (a *App) RedisScanKeys(sessionID string, pattern string, cursor uint64, count int64) (*session.ScanResult, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return rs.ScanKeys(pattern, cursor, count)
-}
-
-func (a *App) RedisGetKeyInfo(sessionID string, key string) (*session.RedisKeyInfo, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return rs.GetKeyInfo(key)
-}
-
-func (a *App) RedisDBSize(sessionID string) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return rs.DBSize()
-}
-
-func (a *App) RedisKeyspaceInfo(sessionID string) (map[int]int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return rs.KeyspaceInfo()
-}
-
-func (a *App) RedisDeleteKey(sessionID string, key string) error {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return rs.DeleteKey(key)
-}
-
-func (a *App) RedisKeyExists(sessionID string, key string) (bool, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return false, err
-	}
-	return rs.KeyExists(key)
-}
-
-func (a *App) RedisGetKeyTTL(sessionID string, key string) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return -2, err
-	}
-	return rs.GetKeyTTL(key)
-}
-
-func (a *App) RedisSetKeyTTL(sessionID string, key string, seconds int64) error {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return rs.SetKeyTTL(key, seconds)
-}
-
-func (a *App) RedisGetString(sessionID string, key string) (string, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return "", err
-	}
-	return rs.GetString(key)
-}
-
-func (a *App) RedisSetString(sessionID string, key string, value string) error {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return rs.SetString(key, value)
-}
-
-func (a *App) RedisGetHashAll(sessionID string, key string) ([]session.FieldEntry, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return rs.GetHashAll(key)
-}
-
-func (a *App) RedisHashSet(sessionID string, key string, field string, value string) error {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return rs.HashSet(key, field, value)
-}
-
-func (a *App) RedisHashDel(sessionID string, key string, fields []string) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return rs.HashDel(key, fields)
-}
-
-func (a *App) RedisGetListRange(sessionID string, key string, start int64, stop int64) ([]string, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return rs.GetListRange(key, start, stop)
-}
-
-func (a *App) RedisListPush(sessionID string, key string, direction string, values []string) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return rs.ListPush(key, direction, values)
-}
-
-func (a *App) RedisListPop(sessionID string, key string, direction string) (string, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return "", err
-	}
-	return rs.ListPop(key, direction)
-}
-
-func (a *App) RedisListSet(sessionID string, key string, index int64, value string) error {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return rs.ListSet(key, index, value)
-}
-
-func (a *App) RedisListRemove(sessionID string, key string, value string, count int64) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return rs.ListRemove(key, value, count)
-}
-
-func (a *App) RedisGetSetAll(sessionID string, key string) ([]string, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return rs.GetSetAll(key)
-}
-
-func (a *App) RedisSetAdd(sessionID string, key string, members []string) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return rs.SetAdd(key, members)
-}
-
-func (a *App) RedisSetRemove(sessionID string, key string, members []string) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return rs.SetRemove(key, members)
-}
-
-func (a *App) RedisGetSortedSetRange(sessionID string, key string, min string, max string) ([]session.ScoredMember, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return rs.GetSortedSetRange(key, min, max)
-}
-
-func (a *App) RedisZSetAdd(sessionID string, key string, members []session.ScoredMember) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return rs.ZSetAdd(key, members)
-}
-
-func (a *App) RedisZSetRemove(sessionID string, key string, members []string) (int64, error) {
-	rs, err := a.redisSession(sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return rs.ZSetRemove(key, members)
-}
-
-// ── MongoDB methods ──
-
-func (a *App) MongoPing(sessionID string) error {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return ms.Ping()
-}
-
-func (a *App) MongoListDatabases(sessionID string) ([]string, error) {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return ms.ListDatabases()
-}
-
-func (a *App) MongoListCollections(sessionID string, dbName string) ([]string, error) {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return ms.ListCollections(dbName)
-}
-
-func (a *App) MongoFind(sessionID string, dbName string, collection string, filterJSON string, skip int64, limit int64) (*session.MongoQueryResult, error) {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return ms.Find(dbName, collection, filterJSON, skip, limit)
-}
-
-func (a *App) MongoGetDocument(sessionID string, dbName string, collection string, docID string) (string, error) {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return "", err
-	}
-	return ms.GetDocument(dbName, collection, docID)
-}
-
-func (a *App) MongoInsertOne(sessionID string, dbName string, collection string, docJSON string) (string, error) {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return "", err
-	}
-	return ms.InsertOne(dbName, collection, docJSON)
-}
-
-func (a *App) MongoUpdateOne(sessionID string, dbName string, collection string, filterJSON string, updateJSON string) error {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return ms.UpdateOne(dbName, collection, filterJSON, updateJSON)
-}
-
-func (a *App) MongoDeleteOne(sessionID string, dbName string, collection string, filterJSON string) error {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return ms.DeleteOne(dbName, collection, filterJSON)
-}
-
-func (a *App) MongoListIndexes(sessionID string, dbName string, collection string) ([]session.MongoIndexInfo, error) {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return ms.ListIndexes(dbName, collection)
-}
-
-func (a *App) MongoCreateCollection(sessionID string, dbName string, collection string) error {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return ms.CreateCollection(dbName, collection)
-}
-
-func (a *App) MongoDropCollection(sessionID string, dbName string, collection string) error {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return ms.DropCollection(dbName, collection)
-}
-
-func (a *App) MongoDropDatabase(sessionID string, dbName string) error {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return ms.DropDatabase(dbName)
-}
-
-func (a *App) MongoCreateIndex(sessionID string, dbName string, collection string, name string, keys []string, unique bool) error {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return ms.CreateIndex(dbName, collection, name, keys, unique)
-}
-
-func (a *App) MongoDropIndex(sessionID string, dbName string, collection string, name string) error {
-	ms, err := a.mongoSession(sessionID)
-	if err != nil {
-		return err
-	}
-	return ms.DropIndex(dbName, collection, name)
-}
-
-func (a *App) GetDatabases(sessionID string) ([]string, error) {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	dbs, err := p.GetDatabases(ds.DB())
-	if err != nil {
-		log.Writef("[GetDatabases] failed: %v", err)
-	}
-	return dbs, err
-}
-
-func (a *App) GetTables(sessionID string, dbName string) ([]database.TableInfo, error) {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	tables, err := p.GetTables(ds.DB(), dbName)
-	if err != nil {
-		log.Writef("[GetTables] failed: %v", err)
-		return nil, err
-	}
-	sort.Slice(tables, func(i, j int) bool {
-		return tables[i].Name < tables[j].Name
-	})
-	return tables, nil
-}
-
-func (a *App) GetTableSchema(sessionID string, dbName string, tableName string) (*database.SchemaResult, error) {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return p.GetTableSchema(ds.DB(), dbName, tableName)
-}
-
-func (a *App) CreateDatabase(sessionID string, dbName string) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.CreateDatabase(ds.DB(), dbName)
-}
-
-func (a *App) DropDatabase(sessionID string, dbName string) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.DropDatabase(ds.DB(), dbName)
-}
-
-func (a *App) CreateTable(sessionID string, dbName string, tableName string) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.CreateTable(ds.DB(), dbName, tableName)
-}
-
-func (a *App) DropTable(sessionID string, dbName string, tableName string) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.DropTable(ds.DB(), dbName, tableName)
-}
-
-func (a *App) DropView(sessionID string, dbName string, viewName string) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.DropView(ds.DB(), dbName, viewName)
-}
-
-func (a *App) TruncateTable(sessionID string, dbName string, tableName string) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.TruncateTable(ds.DB(), dbName, tableName)
-}
-
-func (a *App) ExecuteQuery(sessionID string, dbName string, sql string) (*database.QueryResult, error) {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return database.ExecuteQuery(p, ds.DB(), dbName, sql)
-}
-
-func (a *App) ExecuteStatement(sessionID string, dbName string, sql string) (*database.ExecResult, error) {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return database.ExecuteStatement(p, ds.DB(), dbName, sql)
-}
-
-func (a *App) DBDefaultTableQuery(sessionID string, dbName string, tableName string) (string, error) {
-	_, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return "", err
-	}
-	return p.DefaultTableQuery(dbName, tableName, 100), nil
-}
-
-func (a *App) DBInsertRow(sessionID string, dbName string, tableName string, values map[string]any) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.InsertRow(ds.DB(), dbName, tableName, values)
-}
-
-func (a *App) DBUpdateRow(sessionID string, dbName string, tableName string, set map[string]any, where map[string]any) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.UpdateRow(ds.DB(), dbName, tableName, set, where)
-}
-
-func (a *App) DBDeleteRow(sessionID string, dbName string, tableName string, where map[string]any) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.DeleteRow(ds.DB(), dbName, tableName, where)
-}
-
-func (a *App) AddColumn(sessionID string, dbName string, tableName string, col database.ColumnDef) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.AddColumn(ds.DB(), dbName, tableName, col)
-}
-
-func (a *App) ModifyColumn(sessionID string, dbName string, tableName string, col database.ColumnDef) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.ModifyColumn(ds.DB(), dbName, tableName, col)
-}
-
-func (a *App) DropColumn(sessionID string, dbName string, tableName string, colName string) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.DropColumn(ds.DB(), dbName, tableName, colName)
-}
-
-func (a *App) AddIndex(sessionID string, dbName string, tableName string, idx database.IndexDef) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.AddIndex(ds.DB(), dbName, tableName, idx)
-}
-
-func (a *App) DropIndexOp(sessionID string, dbName string, tableName string, idxName string, isPrimary bool, autoIncCols []string) error {
-	ds, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return err
-	}
-	return p.DropIndex(ds.DB(), dbName, tableName, idxName, isPrimary, autoIncCols)
-}
-
-func (a *App) GetDBCapabilities(sessionID string) (database.DBCapabilities, error) {
-	_, p, err := a.dbProvider(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return database.MergeCapabilities(p.GetCapabilities()), nil
-}
-
-// ─── Kubernetes ────────────────────────────────────────────────
-
-// K8sContextInfo 是前端可见的 context 元信息。
-type K8sContextInfo = k8s.ContextInfo
-
-// K8sListContexts 解析给定 kubeconfig 内容并返回 context 列表。
-// source 为文件路径或 YAML 内联字符串；根据 sourceIsPath 区分。
-func (a *App) K8sListContexts(source string, sourceIsPath bool) ([]K8sContextInfo, error) {
-	raw, err := readKubeconfigSource(source, sourceIsPath)
-	if err != nil {
-		return nil, err
-	}
-	return a.k8sManager.ListContexts(raw)
-}
-
-// K8sConnect 建立到 kubeconfig 中指定 context 的连接，返回 connID。
-// 若 tunnelSSHConnID 非空，会先起一条 SSH 隧道，把到 apiserver 的 TCP 拨号
-// 劫持到本地 loopback；TLS 校验仍按 kubeconfig 里的原 hostname 走。
-func (a *App) K8sConnect(source string, sourceIsPath bool, contextName string,
-	tunnelSSHConnID, tunnelSSHUser, tunnelSSHPassword string) (string, error) {
-	raw, err := readKubeconfigSource(source, sourceIsPath)
-	if err != nil {
-		return "", err
-	}
-
-	if tunnelSSHConnID == "" {
-		return a.k8sManager.Connect(a.ctx, raw, contextName)
-	}
-
-	// ── SSH Tunnel for K8s ─────────────────────────────────────
-	if a.tunnelService == nil {
-		return "", fmt.Errorf("tunnel service not initialized")
-	}
-	if a.connectionStore == nil {
-		return "", fmt.Errorf("connection store not initialized")
-	}
-	data, err := a.connectionStore.Load()
-	if err != nil {
-		return "", fmt.Errorf("load connections for tunnel: %w", err)
-	}
-	var tunnelSSHConfig *session.ConnectionConfig
-	for _, c := range data.Connections {
-		if c.ID == tunnelSSHConnID {
-			tunnelSSHConfig = &c
-			break
-		}
-	}
-	if tunnelSSHConfig == nil {
-		return "", fmt.Errorf("tunnel SSH connection not found: %s", tunnelSSHConnID)
-	}
-	if tunnelSSHUser != "" {
-		tunnelSSHConfig.User = tunnelSSHUser
-	}
-	if tunnelSSHPassword != "" {
-		tunnelSSHConfig.Password = tunnelSSHPassword
-	}
-
-	// 从 kubeconfig 解出 apiserver host/port 作为隧道目标
-	kc, err := k8s.ParseBytes(raw)
-	if err != nil {
-		return "", fmt.Errorf("kubeconfig: %w", err)
-	}
-	ctxName := contextName
-	if ctxName == "" {
-		ctxName = kc.CurrentContext
-	}
-	ctxEntry, ok := kc.Contexts[ctxName]
-	if !ok {
-		return "", fmt.Errorf("context %q not found", ctxName)
-	}
-	cluster, ok := kc.Clusters[ctxEntry.Cluster]
-	if !ok {
-		return "", fmt.Errorf("cluster %q not found", ctxEntry.Cluster)
-	}
-	targetHost, targetPort, err := k8s.ParseServerAddr(cluster.Server)
-	if err != nil {
-		return "", fmt.Errorf("parse apiserver url: %w", err)
-	}
-
-	// 用同一个 key 既做 K8s connID 也做 TunnelService 的 sessionID，
-	// 方便 Disconnect 时的 onClose 回调直接 Stop 同名隧道。
-	tunnelKey := uuid.New().String()
-	localPort, err := a.tunnelService.Start(tunnelKey, *tunnelSSHConfig, targetHost, targetPort)
-	if err != nil {
-		return "", fmt.Errorf("tunnel start: %w", err)
-	}
-	log.Writef("[K8sConnect] tunnel established for k8s=%s via ssh=%s, localPort=%d",
-		tunnelKey, tunnelSSHConnID, localPort)
-
-	var dialer net.Dialer
-	dialOverride := func(ctx context.Context, _ /*network*/, _ /*addr*/ string) (net.Conn, error) {
-		return dialer.DialContext(ctx, "tcp", k8s.LocalAddr(localPort))
-	}
-	onClose := func() {
-		a.tunnelService.Stop(tunnelKey)
-	}
-
-	connID, err := a.k8sManager.ConnectWith(raw, contextName, k8s.ConnectOptions{
-		PresetID:     tunnelKey,
-		DialOverride: dialOverride,
-		OnClose:      onClose,
-	})
-	if err != nil {
-		a.tunnelService.Stop(tunnelKey)
-		return "", err
-	}
-	return connID, nil
-}
-
-func (a *App) K8sDisconnect(connID string) {
-	a.k8sManager.Disconnect(connID)
-}
-
-// K8sResponse 是前端可见的 REST 响应。Body 为 JSON 原文字符串。
-type K8sResponse struct {
-	Status int    `json:"status"`
-	Body   string `json:"body"`
-}
-
-func (a *App) K8sRequest(connID, method, path, body, contentType string) (K8sResponse, error) {
-	status, out, err := a.k8sManager.Request(a.ctx, connID, method, path, []byte(body), contentType)
-	if err != nil {
-		return K8sResponse{}, err
-	}
-	return K8sResponse{Status: status, Body: string(out)}, nil
-}
-
-func (a *App) K8sStartWatch(connID, path string) (string, error) {
-	return a.k8sManager.StartWatch(connID, path)
-}
-
-func (a *App) K8sStopWatch(watchID string) {
-	a.k8sManager.StopWatch(watchID)
-}
-
-func (a *App) K8sStartLogStream(connID, namespace, pod, container string, tailLines int, timestamps, previous bool) (string, error) {
-	return a.k8sManager.StartLogStream(connID, namespace, pod, container, tailLines, timestamps, previous)
-}
-
-func (a *App) K8sStopLogStream(streamID string) {
-	a.k8sManager.StopLogStream(streamID)
-}
-
-func (a *App) K8sExecSession(connID, namespace, pod, container string) (*session.SessionInfo, error) {
-	if a.k8sManager == nil {
-		return nil, fmt.Errorf("k8s manager not initialized")
-	}
-	// initial size fallback; real size arrives via Resize after the frontend mounts xterm
-	wsConn, err := a.k8sManager.DialExec(context.Background(), connID, namespace, pod, container, 80, 24)
-	if err != nil {
-		return nil, err
-	}
-	id := uuid.New().String()
-	sess := session.NewK8sExecSession(id, wsConn)
-	sess.SetOnDataCallback(func(data []byte) {
-		runtime.EventsEmit(a.ctx, "session:data", map[string]interface{}{
-			"id":   sess.ID(),
-			"data": string(data),
-		})
-	})
-	sess.SetOnStatusChangeCallback(func(status session.SessionStatus) {
-		runtime.EventsEmit(a.ctx, "session:status", map[string]interface{}{
-			"id":     sess.ID(),
-			"status": status,
-		})
-	})
-	a.sessionManager.Add(sess)
-	return &session.SessionInfo{ID: id, Type: "k8s-exec", Title: pod, Status: session.StatusConnected}, nil
-}
-
-func readKubeconfigSource(source string, sourceIsPath bool) ([]byte, error) {
-	if !sourceIsPath {
-		return []byte(source), nil
-	}
-	if len(source) > 1 && source[0] == '~' {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			source = filepath.Join(home, source[1:])
-		}
-	}
-	return os.ReadFile(source)
 }
 
 // ─── Container ─────────────────────────────────────────────────

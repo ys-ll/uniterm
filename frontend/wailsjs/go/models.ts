@@ -1758,7 +1758,20 @@ export namespace store {
 	        this.version = source["version"];
 	    }
 	}
-	
+
+	export class RiskLevel {
+	    static read: string = "read";
+	    static write: string = "write";
+	    static dangerous: string = "dangerous";
+
+	    static createFrom(source: any = {}) {
+	        return new RiskLevel(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	    }
+	}
 
 }
 

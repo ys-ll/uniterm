@@ -22,6 +22,10 @@ export function ChatCompletion(arg1) {
   return window['go']['main']['App']['ChatCompletion'](arg1);
 }
 
+export function ClassifyCommandRisk(arg1) {
+  return window['go']['main']['App']['ClassifyCommandRisk'](arg1);
+}
+
 export function CheckForUpdate(arg1) {
   return window['go']['main']['App']['CheckForUpdate'](arg1);
 }
@@ -310,8 +314,8 @@ export function IsForeground() {
   return window['go']['main']['App']['IsForeground']();
 }
 
-export function K8sConnect(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['main']['App']['K8sConnect'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function K8sConnect(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['K8sConnect'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function K8sDisconnect(arg1) {
