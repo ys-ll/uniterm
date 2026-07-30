@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -89,6 +90,7 @@ func TestRunPostLoginExpectAutomationDrainsStaleOutputBeforeNextStep(t *testing.
 	output.Append([]byte("root@jump:~$ "))
 	output.Append([]byte("stale startup text root@jump:~$ "))
 
+	var sentMu sync.Mutex
 	var sent []string
 	errCh := make(chan error, 1)
 	go func() {
@@ -99,7 +101,9 @@ func TestRunPostLoginExpectAutomationDrainsStaleOutputBeforeNextStep(t *testing.
 			},
 			Output: output,
 			Send: func(data []byte) error {
+				sentMu.Lock()
 				sent = append(sent, string(data))
+				sentMu.Unlock()
 				return nil
 			},
 			IsConnected:    func() bool { return true },
@@ -108,8 +112,12 @@ func TestRunPostLoginExpectAutomationDrainsStaleOutputBeforeNextStep(t *testing.
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	if len(sent) != 1 {
-		t.Fatalf("sent %d payloads before fresh second prompt, want 1: %#v", len(sent), sent)
+	sentMu.Lock()
+	gotLen := len(sent)
+	gotSnapshot := append([]string(nil), sent...)
+	sentMu.Unlock()
+	if gotLen != 1 {
+		t.Fatalf("sent %d payloads before fresh second prompt, want 1: %#v", gotLen, gotSnapshot)
 	}
 
 	output.Append([]byte("root@jump:/tmp$ "))
@@ -123,6 +131,7 @@ func TestRunPostLoginExpectAutomationDrainsStaleOutputBeforeNextStep(t *testing.
 		t.Fatal("runPostLoginExpectAutomation did not finish")
 	}
 
+	sentMu.Lock()
 	want := []string{"cd /tmp\r", "pwd\r"}
 	if len(sent) != len(want) {
 		t.Fatalf("sent %d payloads, want %d: %#v", len(sent), len(want), sent)
@@ -132,4 +141,5 @@ func TestRunPostLoginExpectAutomationDrainsStaleOutputBeforeNextStep(t *testing.
 			t.Fatalf("sent[%d] = %q, want %q", i, sent[i], want[i])
 		}
 	}
+	sentMu.Unlock()
 }
