@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -45,31 +46,57 @@ func TestBackoffLoop_RetriesUntilCancelled(t *testing.T) {
 }
 
 func TestBackoffLoop_FiresOnReconnect(t *testing.T) {
-	got := []error{nil, nil}
+	// ROOT CAUSE: the original test wrote to a shared slice from the
+	// OnReconnect callback (running on the BackoffLoop goroutine) and
+	// read it from the test goroutine after time.Sleep, with no
+	// synchronization. Replace the slice+time.Sleep with a buffered
+	// channel handoff so the main goroutine observes a deterministic
+	// happens-before; also wait for BackoffLoop to return so we don't
+	// leak the goroutine.
+	reconnect := make(chan error, 1)
 	cfg := RetryConfig{
 		Initial:        time.Millisecond,
 		Max:            2 * time.Millisecond,
 		JitterFraction: 0,
 		OnReconnect: func(err error) {
-			if got[0] == nil {
-				got[0] = err
-			} else {
-				got[1] = err
+			select {
+			case reconnect <- err:
+			default:
 			}
 		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var callsMu sync.Mutex
 	calls := 0
-	go BackoffLoop(ctx, cfg, func() error {
-		calls++
-		if calls >= 2 {
-			cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- BackoffLoop(ctx, cfg, func() error {
+			callsMu.Lock()
+			calls++
+			n := calls
+			callsMu.Unlock()
+			if n >= 2 {
+				cancel()
+			}
+			return errors.New("retry me")
+		})
+	}()
+
+	select {
+	case err := <-reconnect:
+		if err == nil || err.Error() != "retry me" {
+			t.Fatalf("OnReconnect fired with unexpected err: %v", err)
 		}
-		return errors.New("retry me")
-	})
-	time.Sleep(20 * time.Millisecond)
-	if got[0] == nil || got[0].Error() != "retry me" {
-		t.Fatalf("OnReconnect not fired: %v", got)
+	case <-time.After(time.Second):
+		t.Fatal("OnReconnect did not fire")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("BackoffLoop did not return after cancel")
 	}
 }
 
