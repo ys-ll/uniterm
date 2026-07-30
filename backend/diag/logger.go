@@ -91,6 +91,15 @@ func Close() {
 }
 
 func (l *Logger) closeLocked() {
+	// ROOT CAUSE: l.closed is read under l.mu by flusher() and written
+	// here without the lock — a real data race against the 1-second
+	// ticker. closeLocked is called from Close() which holds the
+	// package-level mu, but the flusher only synchronizes on l.mu, so
+	// we must take l.mu here too. Acquiring it also serializes us with
+	// write()'s l.mu.Lock()/Unlock, ensuring no in-flight Write can
+	// race with close(flushCh) below.
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.closed {
 		return
 	}
