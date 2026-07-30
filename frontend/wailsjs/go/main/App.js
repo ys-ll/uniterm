@@ -18,16 +18,16 @@ export function CancelChatStream() {
   return window['go']['main']['App']['CancelChatStream']();
 }
 
-export function ChatCompletion(arg1) {
-  return window['go']['main']['App']['ChatCompletion'](arg1);
-}
-
-export function ClassifyCommandRisk(arg1) {
-  return window['go']['main']['App']['ClassifyCommandRisk'](arg1);
+export function ChatCompletion(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['ChatCompletion'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function CheckForUpdate(arg1) {
   return window['go']['main']['App']['CheckForUpdate'](arg1);
+}
+
+export function ClassifyCommandRisk(arg1) {
+  return window['go']['main']['App']['ClassifyCommandRisk'](arg1);
 }
 
 export function ClearBackgroundImage() {
@@ -198,8 +198,8 @@ export function FileSize(arg1) {
   return window['go']['main']['App']['FileSize'](arg1);
 }
 
-export function FrontendLog(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['FrontendLog'](arg1, arg2, arg3, arg4);
+export function FrontendLog(arg1, arg2) {
+  return window['go']['main']['App']['FrontendLog'](arg1, arg2);
 }
 
 export function GetAppInfo() {
@@ -228,22 +228,6 @@ export function GetDatabases(arg1) {
 
 export function GetDefaultSessionLogDir() {
   return window['go']['main']['App']['GetDefaultSessionLogDir']();
-}
-
-// NOTE: Manual mirror of `app.go` diag bindings. `wails dev` will regenerate
-// this file and overwrite these wrappers. Keep the signature in sync with
-// `(*App).GetDiagnosticLogs` / `(*App).DiagnosticLogSummary` /
-// `(*App).ExportDiagnosticBundle` in `app.go` until the next regeneration.
-export function GetDiagnosticLogs(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['GetDiagnosticLogs'](arg1, arg2, arg3, arg4, arg5);
-}
-
-export function DiagnosticLogSummary() {
-  return window['go']['main']['App']['DiagnosticLogSummary']();
-}
-
-export function ExportDiagnosticBundle(arg1) {
-  return window['go']['main']['App']['ExportDiagnosticBundle'](arg1);
 }
 
 export function GetDefaultShell() {
@@ -314,8 +298,8 @@ export function IsForeground() {
   return window['go']['main']['App']['IsForeground']();
 }
 
-export function K8sConnect(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['K8sConnect'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function K8sConnect(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['K8sConnect'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function K8sDisconnect(arg1) {
@@ -726,10 +710,6 @@ export function SetCommandLocked(arg1, arg2) {
   return window['go']['main']['App']['SetCommandLocked'](arg1, arg2);
 }
 
-export function SetCommandSortOrder(arg1, arg2) {
-  return window['go']['main']['App']['SetCommandSortOrder'](arg1, arg2);
-}
-
 export function SetDefaultSessionLogDir(arg1) {
   return window['go']['main']['App']['SetDefaultSessionLogDir'](arg1);
 }
@@ -748,10 +728,6 @@ export function SetSkillEnabled(arg1, arg2) {
 
 export function SetSkillLocked(arg1, arg2) {
   return window['go']['main']['App']['SetSkillLocked'](arg1, arg2);
-}
-
-export function SetSkillSortOrder(arg1, arg2) {
-  return window['go']['main']['App']['SetSkillSortOrder'](arg1, arg2);
 }
 
 export function SftpCancelTransfer(arg1, arg2) {

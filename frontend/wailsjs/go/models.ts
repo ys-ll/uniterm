@@ -525,37 +525,15 @@ export namespace main {
 	export class SessionLogInfo {
 	    enabled: boolean;
 	    path: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SessionLogInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
 	        this.path = source["path"];
-	    }
-	}
-	export class ChatRequest {
-	    apiKey: string;
-	    baseURL: string;
-	    model: string;
-	    requestJSON: string;
-	    protocol: string;
-	    userAgent: string;
-
-	    static createFrom(source: any = {}) {
-	        return new ChatRequest(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.apiKey = source["apiKey"];
-	        this.baseURL = source["baseURL"];
-	        this.model = source["model"];
-	        this.requestJSON = source["requestJSON"];
-	        this.protocol = source["protocol"];
-	        this.userAgent = source["userAgent"];
 	    }
 	}
 
@@ -634,6 +612,9 @@ export namespace session {
 	    k8sContext?: string;
 	    k8sNamespace?: string;
 	    k8sInsecureTls?: boolean;
+	    knownHostsPath?: string;
+	    strictHostKeyChecking?: boolean;
+	    acceptNewHostKey?: boolean;
 	    containerTransport?: string;
 	    containerSSHConnId?: string;
 	    containerRuntime?: string;
@@ -697,6 +678,9 @@ export namespace session {
 	        this.k8sContext = source["k8sContext"];
 	        this.k8sNamespace = source["k8sNamespace"];
 	        this.k8sInsecureTls = source["k8sInsecureTls"];
+	        this.knownHostsPath = source["knownHostsPath"];
+	        this.strictHostKeyChecking = source["strictHostKeyChecking"];
+	        this.acceptNewHostKey = source["acceptNewHostKey"];
 	        this.containerTransport = source["containerTransport"];
 	        this.containerSSHConnId = source["containerSSHConnId"];
 	        this.containerRuntime = source["containerRuntime"];
@@ -1350,6 +1334,30 @@ export namespace store {
 		    return a;
 		}
 	}
+	export class DiagSettings {
+	    enabled: boolean;
+	    level: string;
+	    fileSizeCapMiB: number;
+	    dirSizeCapMiB: number;
+	    rateLimitPerSec: number;
+	    dedupWindowSec: number;
+	    keepFiles: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DiagSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.level = source["level"];
+	        this.fileSizeCapMiB = source["fileSizeCapMiB"];
+	        this.dirSizeCapMiB = source["dirSizeCapMiB"];
+	        this.rateLimitPerSec = source["rateLimitPerSec"];
+	        this.dedupWindowSec = source["dedupWindowSec"];
+	        this.keepFiles = source["keepFiles"];
+	    }
+	}
 	export class TerminalThemeColors {
 	    background: string;
 	    foreground: string;
@@ -1476,10 +1484,13 @@ export namespace store {
 	    fontSize: number;
 	    selectionAction: string;
 	    rightClickAction: string;
+	    middleClickAction: string;
 	    maxHistoryLines: number;
 	    smartCompletion?: boolean;
 	    highlightEnabled?: boolean;
+	    cursorBlink?: boolean;
 	    sessionLogDir?: string;
+	    swallowWheelInAltScreen?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new TerminalSettings(source);
@@ -1492,10 +1503,13 @@ export namespace store {
 	        this.fontSize = source["fontSize"];
 	        this.selectionAction = source["selectionAction"];
 	        this.rightClickAction = source["rightClickAction"];
+	        this.middleClickAction = source["middleClickAction"];
 	        this.maxHistoryLines = source["maxHistoryLines"];
 	        this.smartCompletion = source["smartCompletion"];
 	        this.highlightEnabled = source["highlightEnabled"];
+	        this.cursorBlink = source["cursorBlink"];
 	        this.sessionLogDir = source["sessionLogDir"];
+	        this.swallowWheelInAltScreen = source["swallowWheelInAltScreen"];
 	    }
 	}
 	export class AppSettings {
@@ -1510,6 +1524,7 @@ export namespace store {
 	    sftpBookmarks: SFTPBookmarks;
 	    customTerminalThemes: CustomTerminalTheme[];
 	    defaultLocalShell: string;
+	    diag: DiagSettings;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -1528,6 +1543,7 @@ export namespace store {
 	        this.sftpBookmarks = this.convertValues(source["sftpBookmarks"], SFTPBookmarks);
 	        this.customTerminalThemes = this.convertValues(source["customTerminalThemes"], CustomTerminalTheme);
 	        this.defaultLocalShell = source["defaultLocalShell"];
+	        this.diag = this.convertValues(source["diag"], DiagSettings);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1578,6 +1594,7 @@ export namespace store {
 	        this.version = source["version"];
 	    }
 	}
+	
 	
 	export class HistoryEntry {
 	    id: string;
@@ -1758,20 +1775,7 @@ export namespace store {
 	        this.version = source["version"];
 	    }
 	}
-
-	export class RiskLevel {
-	    static read: string = "read";
-	    static write: string = "write";
-	    static dangerous: string = "dangerous";
-
-	    static createFrom(source: any = {}) {
-	        return new RiskLevel(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	    }
-	}
+	
 
 }
 
