@@ -389,9 +389,31 @@ const SANITIZE_STRIP_RE =
 
 function sanitizeTerminalHistory(text: string): string {
   if (!text) return text
-  const cleaned = text.replace(SANITIZE_STRIP_RE, (m) =>
-    m.charCodeAt(0) === 0x0a ? '\n\n' : ''
+  let cleaned = text
+  // ZModem HEX header fragments
+  cleaned = cleaned.replace(/\*{2,}(?:\x18)?[ABC][0-9a-fA-F]{10,}/g, '')
+  // ZModem ZDLE (0x18) and backspace (0x08) sequences
+  cleaned = cleaned.replace(/\x18+/g, '')
+  cleaned = cleaned.replace(/\x08+/g, '')
+  // ASCII control chars except \n, \r, \t and ESC
+  cleaned = cleaned.replace(/[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]/g, '')
+  // Drop U+FFFD replacement chars. Live data is stripped before write
+  // (see the session:data handler) but history restore goes through this
+  // path, so the same filter applies here. Without it a tab switch
+  // replays the '─���─' pattern Claude Code emits.
+  cleaned = cleaned.replace(/\uFFFD/g, '')
+  // Drop binary garbage decoded as random Unicode blocks. Keep ASCII, CJK,
+  // box-drawing, block elements, arrows, math symbols and braille so that
+  // Claude Code / modern TUI output survives a KeepAlive history restore
+  // intact. Previously only ASCII + CJK survived — every box border, spinner
+  // and progress bar was stripped on tab switch, leaving tables as raw text
+  // with no alignment.
+  cleaned = cleaned.replace(
+    /[^\x00-\x7f一-鿿぀-ゟ゠-ヿ가-힯─-╿▀-▟←-⇿∀-⋿⟀-⟯⠀-⣿⬀-⯿]/g,
+    ''
   )
+  // Collapse blank lines left by removed garbage
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n')
   // Forward debug info to backend log so we can inspect the raw garbage.
   if (cleaned !== text) {
     FrontendLog('sanitizeTerminalHistory', `raw last 400: ${JSON.stringify(text.slice(-400))}`)
@@ -483,8 +505,17 @@ function resize() {
     if (terminal.cols <= 0 || terminal.rows <= 0) return
 
     // Trust terminal.cols/rows set by fitAddon.fit() — xterm's internal
-    // measure already accounts for the scrollbar gutter.
+    // measure already accounts for the scrollbar gutter. The previous
+    // Math.floor((rect.width - TERMINAL_PADDING * 2 - scrollbarWidth) /
+    // cellWidth) recomputation double-subtracted the gutter and produced
+    // an off-by-one column on every Claude Code table border, causing the
+    // whole rendered table to drift half a cell.
     terminal.resize(terminal.cols, terminal.rows)
+    // Force a full-viewport redraw. xterm's canvas may keep old glyphs
+    // when the viewport scrolls during a rapid write burst (Claude Code
+    // spinner), producing ghost text residue until the next paint. A
+    // full refresh wipes the canvas before the next frame.
+    terminal.refresh(0, terminal.rows - 1)
     SessionResize(sid, terminal.cols, terminal.rows).catch(() => {})
   } else {
     getFitAddon()?.fit()
@@ -779,8 +810,9 @@ onMounted(() => {
   )
   terminal.loadAddon(webLinksAddon)
 
-  // Unicode 11 activeVersion is set in terminalManager.ts right after the
-  // addon loads; no need to set it here again.
+  // Unicode 11 activeVersion is set inside terminalManager.ts right after
+  // the addon is loaded, so it's already in effect by the time this
+  // component mounts. No need to set it here again.
 
   // Set up search results listener from shared SearchAddon
   const managed = getManagedTerminal(props.sessionId || '')
@@ -1159,7 +1191,12 @@ onMounted(() => {
       data = data.replace(ED2_COMBINED_RE, scrollClear)
       data = data.replace(ED2_RE, scrollClear)
     }
-    data = data.replace(FFFD_RE, '')
+    // Drop U+FFFD replacement chars. Claude Code occasionally embeds
+    // partial UTF-8 sequences or genuinely invalid bytes in its output
+    // (visible as '���' between box-drawing chars, e.g. '─���─'); the
+    // Go decoder surfaces these as U+FFFD on its way through Wails IPC.
+    // They serve no purpose for the user, only clutter the rendered line.
+    data = data.replace(/\uFFFD/g, '')
     if (props.mode === 'sftp') {
       const cleaned = data.replace(SFTP_OSC633_RE, '')
       if (cleaned) {

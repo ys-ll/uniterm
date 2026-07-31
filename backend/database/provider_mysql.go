@@ -43,14 +43,19 @@ func (p *mysqlProvider) DriverName() string {
 }
 
 func (p *mysqlProvider) Quote(name string) string {
-	return "`" + name + "`"
+	q, _ := SafeMyIdent(name)
+	return q
 }
 
 func (p *mysqlProvider) PrepareExec(db execer, dbName string) error {
 	if dbName == "" {
 		return nil
 	}
-	_, err := db.ExecContext(context.Background(), fmt.Sprintf("USE `%s`", dbName))
+	q, err := SafeMyIdent(dbName)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(context.Background(), "USE "+q)
 	return err
 }
 
@@ -149,7 +154,11 @@ func (p *mysqlProvider) GetDatabases(db *sql.DB) ([]string, error) {
 }
 
 func (p *mysqlProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, error) {
-	results, err := queryStrings(db, fmt.Sprintf("SHOW FULL TABLES FROM `%s`", dbName))
+	q, err := SafeMyIdent(dbName)
+	if err != nil {
+		return nil, err
+	}
+	results, err := queryStrings(db, "SHOW FULL TABLES FROM "+q)
 	if err != nil {
 		return nil, fmt.Errorf("get tables: %w", err)
 	}
@@ -174,7 +183,15 @@ func (p *mysqlProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, error
 }
 
 func (p *mysqlProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error) {
-	colRows, err := queryStrings(db, fmt.Sprintf("SHOW FULL COLUMNS FROM `%s`.`%s`", dbName, tableName))
+	qDb, err := SafeMyIdent(dbName)
+	if err != nil {
+		return nil, err
+	}
+	qTbl, err := SafeMyIdent(tableName)
+	if err != nil {
+		return nil, err
+	}
+	colRows, err := queryStrings(db, "SHOW FULL COLUMNS FROM "+qDb+"."+qTbl)
 	if err != nil {
 		return nil, fmt.Errorf("get columns: %w", err)
 	}
@@ -210,7 +227,7 @@ func (p *mysqlProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*S
 		})
 	}
 
-	idxRows, err := queryStrings(db, fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", dbName, tableName))
+	idxRows, err := queryStrings(db, "SHOW INDEX FROM "+qDb+"."+qTbl)
 	if err != nil {
 		return nil, fmt.Errorf("get indexes: %w", err)
 	}
@@ -242,12 +259,20 @@ func (p *mysqlProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*S
 // ── DDL: Database ──
 
 func (p *mysqlProvider) CreateDatabase(db *sql.DB, dbName string) error {
-	_, err := db.Exec(fmt.Sprintf("CREATE DATABASE `%s`", dbName))
+	q, err := SafeMyIdent(dbName)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("CREATE DATABASE " + q)
 	return err
 }
 
 func (p *mysqlProvider) DropDatabase(db *sql.DB, dbName string) error {
-	_, err := db.Exec(fmt.Sprintf("DROP DATABASE `%s`", dbName))
+	q, err := SafeMyIdent(dbName)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("DROP DATABASE " + q)
 	return err
 }
 
@@ -255,41 +280,73 @@ func (p *mysqlProvider) DropDatabase(db *sql.DB, dbName string) error {
 
 func (p *mysqlProvider) CreateTable(db *sql.DB, dbName, tableName string) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}
-	_, err := db.Exec(fmt.Sprintf("CREATE TABLE `%s` (id INT AUTO_INCREMENT PRIMARY KEY)", tableName))
+	qTbl, err := SafeMyIdent(tableName)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("CREATE TABLE " + qTbl + " (id INT AUTO_INCREMENT PRIMARY KEY)")
 	return err
 }
 
 func (p *mysqlProvider) DropTable(db *sql.DB, dbName, tableName string) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}
-	_, err := db.Exec(fmt.Sprintf("DROP TABLE `%s`", tableName))
+	qTbl, err := SafeMyIdent(tableName)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("DROP TABLE " + qTbl)
 	return err
 }
 
 func (p *mysqlProvider) DropView(db *sql.DB, dbName, viewName string) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}
-	_, err := db.Exec(fmt.Sprintf("DROP VIEW `%s`", viewName))
+	qView, err := SafeMyIdent(viewName)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("DROP VIEW " + qView)
 	return err
 }
 
 func (p *mysqlProvider) TruncateTable(db *sql.DB, dbName, tableName string) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}
-	_, err := db.Exec(fmt.Sprintf("TRUNCATE TABLE `%s`", tableName))
+	qTbl, err := SafeMyIdent(tableName)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("TRUNCATE TABLE " + qTbl)
 	return err
 }
 
@@ -297,7 +354,11 @@ func (p *mysqlProvider) TruncateTable(db *sql.DB, dbName, tableName string) erro
 
 func (p *mysqlProvider) AddColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}
@@ -308,7 +369,11 @@ func (p *mysqlProvider) AddColumn(db *sql.DB, dbName, tableName string, col Colu
 
 func (p *mysqlProvider) ModifyColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}
@@ -319,7 +384,11 @@ func (p *mysqlProvider) ModifyColumn(db *sql.DB, dbName, tableName string, col C
 
 func (p *mysqlProvider) DropColumn(db *sql.DB, dbName, tableName, colName string) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}
@@ -331,7 +400,11 @@ func (p *mysqlProvider) DropColumn(db *sql.DB, dbName, tableName, colName string
 
 func (p *mysqlProvider) AddIndex(db *sql.DB, dbName, tableName string, idx IndexDef) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}
@@ -361,7 +434,11 @@ func (p *mysqlProvider) AddIndex(db *sql.DB, dbName, tableName string, idx Index
 
 func (p *mysqlProvider) DropIndex(db *sql.DB, dbName, tableName, idxName string, isPrimary bool, autoIncCols []string) error {
 	if dbName != "" {
-		if _, err := db.Exec(fmt.Sprintf("USE `%s`", dbName)); err != nil {
+		q, err := SafeMyIdent(dbName)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec("USE " + q); err != nil {
 			return err
 		}
 	}

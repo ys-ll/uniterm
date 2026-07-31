@@ -241,6 +241,9 @@ func (s *SyncService) Sync() (*SyncResult, error) {
 
 // ResolveConflict handles a conflict by forcing push or reset.
 func (s *SyncService) ResolveConflict(useLocal bool) (*SyncResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	config, err := s.configStore.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
@@ -501,19 +504,33 @@ func getConfigModTime(dir string) time.Time {
 }
 
 // isConfigDirEmpty returns true if the config dir has no meaningful data.
+// Counts every persisted JSON the app cares about — not only connections —
+// so a user with settings / AI / quick-commands but no connections is not
+// treated as "empty" and silently overwritten on first sync
+// (SYNC-P0-1).
 func isConfigDirEmpty(dir string) bool {
-	connPath := filepath.Join(dir, "connections.json")
-	data, err := os.ReadFile(connPath)
-	if err != nil {
-		return true
+	for _, name := range []string{"connections.json", "settings.json", "quickCommands.json", "ai-sessions.json", "skills.json"} {
+		path := filepath.Join(dir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if len(data) == 0 {
+			continue
+		}
+		// Treat as non-empty if the file parses to anything other than
+		// an explicitly empty wrapper.
+		var probe map[string]json.RawMessage
+		if err := json.Unmarshal(data, &probe); err != nil {
+			// Unparseable — still treat as non-empty so the user's data
+			// is never silently nuked.
+			return false
+		}
+		if len(probe) > 0 {
+			return false
+		}
 	}
-	var wrapper struct {
-		Connections []interface{} `json:"connections"`
-	}
-	if err := json.Unmarshal(data, &wrapper); err != nil {
-		return true
-	}
-	return len(wrapper.Connections) == 0
+	return true
 }
 
 // compareConfigDirs compares two decrypted config directories.
@@ -790,10 +807,12 @@ func (s *SyncService) DeleteRepo() error {
 	return s.configStore.Save(SyncConfig{Branch: "main"})
 }
 
-// commitMsg builds a commit message with device name and timestamp.
+// commitMsg builds a commit message. Hostname and user identity are
+// intentionally NOT included — the sync repo is often shared across
+// devices and machines, and leaking os.Hostname() to a public-by-mistake
+// repo is a privacy regression (SYNC-P1-4).
 func commitMsg(action string) string {
-	host, _ := os.Hostname()
-	return fmt.Sprintf("%s | %s | %s", action, host, time.Now().Format(time.RFC3339))
+	return fmt.Sprintf("%s | %s", action, time.Now().Format(time.RFC3339))
 }
 
 // compareLocalWithRepo decrypts repo files and compares them with local config.

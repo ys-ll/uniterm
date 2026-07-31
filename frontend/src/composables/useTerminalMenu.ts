@@ -56,12 +56,24 @@ export function useTerminalMenu(options: UseTerminalMenuOptions): UseTerminalMen
     return { left: left + 'px', top: top + 'px' }
   }
 
-  // Write to the OS clipboard. Pick the API once at module load: Wails'
-  // ClipboardSetText is reliable in WebView2; the browser API stays as a
-  // fallback when Wails itself is missing (dev outside the runtime).
-  type ClipboardWriter = (text: string) => Promise<boolean>
-  const wailsWriter: ClipboardWriter = async (text) => {
-    try { return await ClipboardSetText(text) } catch { return false }
+  // Write to the OS clipboard via Wails first (reliable in WebView2), falling
+  // back to the browser clipboard API when the runtime call reports failure.
+  //
+  // Wails' ClipboardSetText returns Promise<boolean> — `false` means the OS
+  // refused (focus loss, AppKit permission glitch on macOS), NOT a thrown
+  // error. The previous try/catch only handled rejections, so a `resolve(false)`
+  // silently left the clipboard empty. Now we check the resolved value and
+  // fall through to navigator.clipboard.writeText in that case.
+  async function writeClipboard(text: string) {
+    let ok = false
+    try {
+      ok = await ClipboardSetText(text)
+    } catch {
+      ok = false
+    }
+    if (!ok) {
+      try { await navigator.clipboard.writeText(text) } catch { /* ignore */ }
+    }
   }
   const browserWriter: ClipboardWriter = async (text) => {
     try { await navigator.clipboard.writeText(text); return true } catch { return false }
@@ -71,8 +83,11 @@ export function useTerminalMenu(options: UseTerminalMenuOptions): UseTerminalMen
     : browserWriter
 
   function copySelection() {
-    // Trust getSelection() at click time; the contextmenu-captured ref can
-    // be stale in WKWebView (right-click mousedown clears the xterm selection).
+    // Re-read the xterm selection at click time. hasSelection.value was
+    // captured during contextmenu, but in WKWebView the right-click
+    // mousedown can clear the xterm selection between contextmenu and the
+    // menu click, leaving hasSelection stale. Trust getSelection() — the
+    // authoritative source — rather than the cached ref.
     const text = options.getSelection()
     if (text) {
       writeClipboard(text)

@@ -614,6 +614,11 @@ const renderedContent = computed(() => {
     html = escapeHtml(props.message.content)
   } else {
     html = renderMarkdown(props.message.content)
+    // Sanitize the markdown output before assigning to v-html. Model
+    // output can include `javascript:` / `data:` URLs in `[link](url)`
+    // markdown and `![alt](x" onerror="...)` payloads that escape the
+    // regex-based renderer. FE-01.
+    html = sanitizeRenderedHtml(html)
   }
   if (props.searchText) {
     html = highlightText(html, props.searchText)
@@ -627,6 +632,31 @@ function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/\n/g, '<br>')
+}
+
+// Sanitize markdown-produced HTML before it's assigned to v-html.
+// Conservative strip-list: anything outside this allowlist is removed.
+// Addresses FE-01 (XSS via model output).
+function sanitizeRenderedHtml(html: string): string {
+  // Drop dangerous tags entirely (including their content).
+  const dangerousTags = [
+    'script', 'iframe', 'object', 'embed', 'style', 'form',
+    'link', 'meta', 'base', 'svg', 'math',
+  ]
+  for (const tag of dangerousTags) {
+    const re = new RegExp(`<${tag}\\b[\\s\\S]*?<\\/${tag}>`, 'gi')
+    html = html.replace(re, '')
+    const reSelf = new RegExp(`<${tag}\\b[^>]*\\/?>`, 'gi')
+    html = html.replace(reSelf, '')
+  }
+  // Strip on*="..." event-handler attributes (any attribute starting with on).
+  html = html.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+  // Strip javascript:/data:/vbscript: URL schemes in href/src.
+  html = html.replace(
+    /\s+(href|src|action|formaction|xlink:href)\s*=\s*("\s*(?:javascript|data|vbscript):[^"]*"|'\s*(?:javascript|data|vbscript):[^']*'|(?:javascript|data|vbscript):[^\s>]+)/gi,
+    '',
+  )
+  return html
 }
 </script>
 

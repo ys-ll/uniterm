@@ -39,7 +39,8 @@ func (p *rqliteProvider) DriverName() string {
 }
 
 func (p *rqliteProvider) Quote(name string) string {
-	return `"` + name + `"`
+	q, _ := SafePgIdent(name)
+	return q
 }
 
 func (p *rqliteProvider) PrepareExec(db execer, dbName string) error {
