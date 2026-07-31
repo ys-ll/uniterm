@@ -3,7 +3,9 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // parseParams parses "key1=val1&key2=val2" into a map.
@@ -43,6 +45,10 @@ func NewDB(dbType, dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", dbType, err)
 	}
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 	return db, nil
 }
 
@@ -111,6 +117,44 @@ func queryAny(db *sql.DB, query string, args ...any) ([]map[string]any, []string
 	return result, cols, rows.Err()
 }
 
+// QueryRowsStream streams rows to a callback without allocating a map per row.
+// Use it for large results (>~1000 rows); for small results the existing
+// queryStrings / queryAny maps are fine. The callback receives a reusable
+// []string sized to len(cols); values are pre-converted via scanToString.
+// Returning a non-nil error from the callback aborts the scan.
+func QueryRowsStream(db *sql.DB, query string, callback func(row []string) error, args ...any) error {
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	values := make([]any, len(cols))
+	valuePtrs := make([]any, len(cols))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+	out := make([]string, len(cols))
+
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return err
+		}
+		for i, v := range values {
+			out[i] = scanToString(v)
+		}
+		if err := callback(out); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 func scanToAny(v any) any {
 	if v == nil {
 		return nil
@@ -127,9 +171,19 @@ func scanToString(v any) string {
 	if v == nil {
 		return ""
 	}
-	switch s := v.(type) {
+	switch x := v.(type) {
 	case []byte:
-		return string(s)
+		return string(x)
+	case string:
+		return x
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case float64:
+		return strconv.FormatFloat(x, 'g', -1, 64)
+	case bool:
+		return strconv.FormatBool(x)
+	case time.Time:
+		return x.Format(time.RFC3339Nano)
 	default:
 		return fmt.Sprintf("%v", v)
 	}

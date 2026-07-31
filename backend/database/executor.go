@@ -4,7 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"time"
 )
+
+// queryTimeout caps user-initiated ad-hoc queries / DDL on a single
+// connection. Without this the UI cannot cancel a stuck query — the user
+// has to kill the whole app. 30s is generous enough for normal browsing
+// and short enough that an accidental cross-join SELECT will not freeze the
+// result grid for half a minute.
+var queryTimeout = 30 * time.Second
 
 type QueryResultColumn struct {
 	Name string `json:"name"`
@@ -22,7 +30,8 @@ type ExecResult struct {
 }
 
 func ExecuteQuery(p Provider, db *sql.DB, dbName, sqlStr string) (*QueryResult, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, err
@@ -76,7 +85,8 @@ func ExecuteQuery(p Provider, db *sql.DB, dbName, sqlStr string) (*QueryResult, 
 }
 
 func ExecuteStatement(p Provider, db *sql.DB, dbName, sqlStr string) (*ExecResult, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, err
