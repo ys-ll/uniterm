@@ -3,6 +3,11 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { TERMINAL_THEMES } from '../types/settings'
 import type { TerminalThemeEntry } from '../types/settings'
 
+// TERMINAL_THEMES is a frozen module constant — partition it once at module
+// load rather than re-filtering on every dependency change of terminalThemeGroups.
+const DARK_THEMES = TERMINAL_THEMES.filter(t => t.type === 'dark')
+const LIGHT_THEMES = TERMINAL_THEMES.filter(t => t.type === 'light')
+
 /** Grouped terminal theme options for the theme <el-select>: built-in themes
  * split into Dark/Light, plus a Custom group for user-defined themes (only
  * shown when at least one exists). Shared by Sidebar.vue's personalization
@@ -21,8 +26,8 @@ export function useTerminalThemeOptions() {
 
   const terminalThemeGroups = computed(() => {
     const groups = [
-      { label: 'Dark', options: TERMINAL_THEMES.filter(t => t.type === 'dark') },
-      { label: 'Light', options: TERMINAL_THEMES.filter(t => t.type === 'light') }
+      { label: 'Dark', options: DARK_THEMES },
+      { label: 'Light', options: LIGHT_THEMES }
     ]
     if (customThemeEntries.value.length > 0) {
       groups.push({ label: 'Custom', options: customThemeEntries.value })

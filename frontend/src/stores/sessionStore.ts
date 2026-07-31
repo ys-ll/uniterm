@@ -12,19 +12,48 @@ interface SessionData {
   // so it is a stable sequence number for tracking replay position across
   // trims. See getDataFromChunk.
   seq: number
+  // Sum of `data[i].length` (string code units). Used to enforce a byte-size
+  // cap so total resident memory per session stays bounded under real-world
+  // chunk sizes (F-019 P0).
+  bytes: number
 }
 
-// Keep at most MAX_CHUNKS buffered per session; once exceeded, drop the oldest
-// down to TRIM_TO. Trimming removes from the front, which is why consumers must
-// track position by `seq` (a stable sequence number), not by array index.
+// Chunk-count cap (legacy protection against pathological tiny-chunk floods).
+// Once `data.length > MAX_CHUNKS`, drop from the front down to TRIM_TO.
+// Trimming removes from the front, which is why consumers must track position
+// by `seq` (a stable sequence number), not by array index.
 const MAX_CHUNKS = 2000
 const TRIM_TO = 1000
 
+// Byte-size cap (F-019 P0). Real chunks are typically 4 KB–16 KB; an 8-tab
+// session at the old 2000-chunk ceiling held ~64 MB resident in Pinia state.
+// Cap each session to MAX_BYTES (~256 KB, ≈ 4× viewport) and, when exceeded,
+// trim from the front down to MAX_BYTES_TO before appending so we don't
+// thrash on every subsequent chunk.
+const MAX_BYTES = 256 * 1024
+const MAX_BYTES_TO = 192 * 1024
+
 function pushChunk(s: SessionData, chunk: string) {
   s.data.push(chunk)
+  s.bytes += chunk.length
   s.seq++
   if (s.data.length > MAX_CHUNKS) {
-    s.data.splice(0, s.data.length - TRIM_TO)
+    const drop = s.data.length - TRIM_TO
+    for (let i = 0; i < drop; i++) s.bytes -= s.data[i].length
+    s.data.splice(0, drop)
+  }
+  if (s.bytes > MAX_BYTES) {
+    let dropIdx = 0
+    let dropped = 0
+    const target = s.bytes - MAX_BYTES_TO
+    while (dropIdx < s.data.length && dropped < target) {
+      dropped += s.data[dropIdx].length
+      dropIdx++
+    }
+    if (dropIdx > 0) {
+      s.data.splice(0, dropIdx)
+      s.bytes -= dropped
+    }
   }
 }
 
@@ -45,7 +74,7 @@ let unsubSessionData: (() => void) | null = null
 unsubSessionStatus = EventsOn('session:status', (payload: { id: string; status: SessionStatus }) => {
   let s = sessionState.sessions.get(payload.id)
   if (!s) {
-    s = { id: payload.id, status: 'connecting', data: [], seq: 0 }
+    s = { id: payload.id, status: 'connecting', data: [], seq: 0, bytes: 0 }
     sessionState.sessions.set(payload.id, s)
   }
   s.status = payload.status
@@ -54,7 +83,7 @@ unsubSessionStatus = EventsOn('session:status', (payload: { id: string; status: 
 unsubSessionData = EventsOn('session:data', (payload: { id: string; data: string }) => {
   let s = sessionState.sessions.get(payload.id)
   if (!s) {
-    s = { id: payload.id, status: 'connecting', data: [], seq: 0 }
+    s = { id: payload.id, status: 'connecting', data: [], seq: 0, bytes: 0 }
     sessionState.sessions.set(payload.id, s)
   }
   pushChunk(s, payload.data)
@@ -76,7 +105,7 @@ export const useSessionStore = defineStore('session', () => {
         existing.status = 'connecting'
       }
     } else {
-      sessionState.sessions.set(id, { id, status: 'connecting', data: [], seq: 0 })
+      sessionState.sessions.set(id, { id, status: 'connecting', data: [], seq: 0, bytes: 0 })
     }
   }
 
@@ -141,7 +170,23 @@ export const useSessionStore = defineStore('session', () => {
     return s.data.slice(idx).join('')
   }
 
+  // Drop the buffered output for `id` (F-019 cleanup-on-close). Calling before
+  // the map delete lets GC reclaim the string chunks promptly instead of
+  // waiting for the next reactive write to fire.
+  function clearData(id: string) {
+    const s = sessionState.sessions.get(id)
+    if (s) {
+      s.data.length = 0
+      s.bytes = 0
+    }
+  }
+
   function removeSession(id: string) {
+    const s = sessionState.sessions.get(id)
+    if (s) {
+      s.data.length = 0
+      s.bytes = 0
+    }
     sessionState.sessions.delete(id)
   }
 
@@ -154,6 +199,7 @@ export const useSessionStore = defineStore('session', () => {
     getData,
     getChunkCount,
     getDataFromChunk,
+    clearData,
     removeSession
   }
 })

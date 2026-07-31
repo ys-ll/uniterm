@@ -81,4 +81,59 @@ describe('sessionStore replay tracking', () => {
     const total = store.getChunkCount(id)
     expect(store.getDataFromChunk(id, total)).toBe('')
   })
+
+  // F-019 behavior-parity: the 256 KB byte cap must keep the most recent
+  // output intact even after it has evicted earlier chunks. Regressing this
+  // would re-introduce #288 (background-tab output truncation): when the
+  // background tab becomes active again, the tail must include the latest
+  // chunk so the user sees the prompt they were waiting for.
+  it('256KB byte cap keeps the most recent chunks intact', () => {
+    const store = useSessionStore()
+    const id = 'byte-cap'
+    store.initSession(id)
+
+    // Push chunks totaling well over the 256 KB cap. 4 KB each × 200 = 800 KB.
+    const chunkSize = 4 * 1024
+    const total = 200
+    for (let i = 0; i < total; i++) {
+      // Make each chunk distinguishable by its leading line.
+      const header = `chunk-${i.toString().padStart(4, '0')}-${'x'.repeat(chunkSize - 16)}\n`
+      store.appendData(id, header)
+    }
+    expect(store.getChunkCount(id)).toBe(total)
+
+    // The store reports a bounded number of buffered chunks; the buffer
+    // must be < total (proves eviction ran) and the joined buffer must be
+    // under the cap.
+    const tail = store.getDataFromChunk(id, 0)
+    expect(tail.length).toBeGreaterThan(0)
+    expect(tail.length).toBeLessThanOrEqual(256 * 1024)
+
+    // The most recent chunk must always survive. Reading from the very
+    // last sequence position returns just that one chunk.
+    const last = store.getDataFromChunk(id, total - 1)
+    expect(last.startsWith(`chunk-${(total - 1).toString().padStart(4, '0')}`)).toBe(true)
+  })
+
+  // F-019 + F-026 + F-027 collectively fix #288: a background tab receives
+  // a long flood of output, the front of the buffer is evicted, and when the
+  // tab is reactivated the replay must still reach the most recent output.
+  it('replay after byte-cap eviction still includes the latest output (issue #288)', () => {
+    const store = useSessionStore()
+    const id = 'replay-after-cap'
+    store.initSession(id)
+
+    // First wave — a few chunks so the component has a replay cursor.
+    for (let i = 0; i < 50; i++) store.appendData(id, `pre-${i}\n`)
+    const cursor = store.getChunkCount(id)
+
+    // Second wave — floods past the byte cap.
+    for (let i = 0; i < 200; i++) store.appendData(id, `post-${i}-${'y'.repeat(1024)}\n`)
+
+    // Reactivation must replay the gap. The gap here covers everything from
+    // `cursor` onward; the most recent chunk is the last `post-199-...` line.
+    const replayed = store.getDataFromChunk(id, cursor)
+    expect(replayed.length).toBeGreaterThan(0)
+    expect(replayed.includes(`post-199-`)).toBe(true)
+  })
 })

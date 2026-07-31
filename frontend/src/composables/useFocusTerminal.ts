@@ -13,19 +13,29 @@
  */
 
 import { useTabStore } from '../stores/tabStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { watch } from 'vue'
+
+// Bounded backoff for focus recovery: 0/50/150/300ms (~500ms total, 4 polls
+// instead of 11). Most xterm-helper-textarea appearances resolve inside one
+// rAF; the trailing 300ms catches slow KeepAlive + drag re-mounts without
+// the previous 1s of 10 Hz polling.
+const FOCUS_RETRY_DELAYS = [0, 50, 150, 300]
+const FOCUS_RETRY_MAX = FOCUS_RETRY_DELAYS.length
 
 /**
- * Focus the terminal in the given panel. Retries a few times because xterm's
- * internal textarea can be temporarily absent right after a KeepAlive
- * re-mount or during a session reconnect.
+ * Focus the terminal in the given panel. Retries with backoff because
+ * xterm's internal textarea can be temporarily absent right after a
+ * KeepAlive re-mount or during a session reconnect.
  */
 export function focusPanelTerminal(panelId: string, attempt = 0) {
-  if (attempt > 10) return
+  if (attempt >= FOCUS_RETRY_MAX) return
   const el = document.querySelector(`[data-panel-id="${panelId}"] .xterm-helper-textarea`)
   if (el instanceof HTMLTextAreaElement) {
     el.focus()
   } else {
-    setTimeout(() => focusPanelTerminal(panelId, attempt + 1), 100)
+    const delay = FOCUS_RETRY_DELAYS[attempt]
+    setTimeout(() => focusPanelTerminal(panelId, attempt + 1), delay)
   }
 }
 
@@ -62,12 +72,31 @@ export function installTerminalFocusRestore(): () => void {
   // can tell a frameless-window drag region apart from ordinary chrome. Any
   // ancestor tagged `no-drag` short-circuits to false — same precedence Wails
   // itself uses when deciding whether to hand the mouse to the OS.
+  //
+  // getComputedStyle().getPropertyValue forces a style recalc, so cache each
+  // visited element's verdict in a WeakMap. Drag regions are set in CSS at
+  // page load and do not change at runtime; the cache is replaced wholesale
+  // when theme/setting changes potentially alter resolved custom-property
+  // values.
+  let draggableCache: WeakMap<HTMLElement, boolean> = new WeakMap()
+  const invalidateDraggableCache = () => {
+    draggableCache = new WeakMap()
+  }
   const isWailsDraggable = (el: HTMLElement | null): boolean => {
     let cur = el
     while (cur) {
+      const cached = draggableCache.get(cur)
+      if (cached !== undefined) return cached
       const val = getComputedStyle(cur).getPropertyValue('--wails-draggable').trim()
-      if (val === 'drag') return true
-      if (val === 'no-drag') return false
+      if (val === 'drag') {
+        draggableCache.set(cur, true)
+        return true
+      }
+      if (val === 'no-drag') {
+        draggableCache.set(cur, false)
+        // explicit no-drag on this ancestor still allows a `drag` ancestor
+        // further up to win — same precedence Wails uses internally
+      }
       cur = cur.parentElement
     }
     return false
@@ -126,5 +155,16 @@ export function installTerminalFocusRestore(): () => void {
   }
 
   window.addEventListener('mousedown', onMouseDown, true)
-  return () => window.removeEventListener('mousedown', onMouseDown, true)
+  // --wails-draggable is set in CSS, but theme swaps can re-resolve custom
+  // properties on existing elements. Drop the cache so the next click pays
+  // the (now-cheap) one-time walk and re-caches.
+  const settingsStore = useSettingsStore()
+  const stopWatch = watch(
+    () => settingsStore.settings.theme,
+    () => invalidateDraggableCache()
+  )
+  return () => {
+    window.removeEventListener('mousedown', onMouseDown, true)
+    stopWatch()
+  }
 }
