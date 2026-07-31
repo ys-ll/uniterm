@@ -308,6 +308,8 @@
   "settings.themeDeepBlue": "深蓝",
   "settings.themeLight": "浅色",
   "settings.themeSystem": "跟随系统",
+  "settings.themeWin11": "Windows 11",
+  "settings.themeMacOS26": "macOS 26",
   "settings.language": "语言",
   "settings.langSystem": "系统默认",
   "settings.closeTabPrompt": "关闭标签页提示",

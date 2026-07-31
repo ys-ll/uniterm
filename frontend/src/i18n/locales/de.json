@@ -305,6 +305,8 @@
   "settings.themeDeepBlue": "Tiefblau",
   "settings.themeLight": "Hell",
   "settings.themeSystem": "System",
+  "settings.themeWin11": "Windows 11",
+  "settings.themeMacOS26": "macOS 26",
   "settings.language": "Sprache",
   "settings.langSystem": "Systemstandard",
   "settings.closeTabPrompt": "Tab-Schließen-Bestätigung",

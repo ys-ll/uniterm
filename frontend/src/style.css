@@ -244,20 +244,20 @@
 
 /* Windows 11 - mica light */
 [data-theme="win11"] {
-  --bg-base: #f3f7fc;
-  --bg-elevated: #eaf2fb;
+  --bg-base: #fafafa;
+  --bg-elevated: #f3f3f3;
   --bg-surface: #ffffff;
-  --bg-overlay: #e0eaf5;
-  --bg-hover: #d8e4f3;
-  --bg-active: #c5d8ec;
+  --bg-overlay: #ebebeb;
+  --bg-hover: #e5e5e5;
+  --bg-active: #d9d9d9;
   --text-primary: #1c1c1c;
   --text-secondary: #5c5c5c;
   --text-muted: #707070;
   --text-disabled: #9a9a9a;
-  --accent: #0067c0;
-  --accent-glow: rgba(0, 103, 192, 0.24);
-  --accent-subtle: rgba(0, 103, 192, 0.10);
-  --info: #005ba1;
+  --accent: #0078d4;
+  --accent-glow: rgba(0, 120, 212, 0.22);
+  --accent-subtle: rgba(0, 120, 212, 0.08);
+  --info: #006ab1;
   --info-subtle: rgba(0, 106, 177, 0.08);
   --on-accent: #ffffff;
   --chart-1: #16a34a;
@@ -357,7 +357,7 @@
 
 /* Windows 11 - body background gradient (Mica simulation) */
 [data-theme="win11"] body {
-  background: linear-gradient(180deg, #e8f0fa 0%, #d8e4f3 100%);
+  background: linear-gradient(180deg, #fafbfc 0%, #f3f3f3 100%);
 }
 @media (prefers-color-scheme: dark) {
   [data-theme="win11"] body {
@@ -1086,4 +1086,399 @@ body.drag-active .zone {
 /* Cover the case where autocomplete reuses select-dropdown */
 .el-autocomplete-suggestion .el-select-dropdown__item {
   font-size: 12px !important;
+}
+
+/* ====================================================================
+   Windows 11 - component overrides
+   ==================================================================== */
+
+/* Tabs: 8px rounded rectangles, accent block on active */
+[data-theme="win11"] .el-tabs__item {
+  border-radius: 8px;
+  padding: 0 16px;
+  height: 32px;
+  line-height: 32px;
+  color: var(--text-primary);
+  transition: background-color 0.1s ease;
+}
+[data-theme="win11"] .el-tabs__item:hover {
+  background: var(--bg-hover);
+}
+[data-theme="win11"] .el-tabs__item.is-active,
+[data-theme="win11"] .el-tabs__item.is-active:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 500;
+}
+[data-theme="win11"] .el-tabs__active-bar { display: none; }
+
+/* Buttons: Fluent-style 32px tall, 4px radius, accent primary with subtle shadow */
+[data-theme="win11"] .el-button {
+  height: 32px !important;
+  padding: 6px 16px !important;
+  font-size: 13px !important;
+  border-radius: 4px;
+  font-weight: 400;
+}
+[data-theme="win11"] .el-button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+}
+[data-theme="win11"] .el-button--primary:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+}
+[data-theme="win11"] .el-button:not(.el-button--primary):not(.el-button--text) {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+[data-theme="win11"] .el-button:not(.el-button--primary):not(.el-button--text):hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+/* Inputs: bottom-border only */
+[data-theme="win11"] .el-input__wrapper {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 4px 4px 0 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+[data-theme="win11"] .el-input__wrapper:hover { border-bottom-color: var(--border-hover); }
+[data-theme="win11"] .el-input__wrapper.is-focus {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 1px 0 0 var(--accent);
+}
+[data-theme="win11"] .el-textarea__inner {
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+[data-theme="win11"] .el-textarea__inner:focus { border-color: var(--accent); }
+
+/* Dialog: 8px radius, deep shadow */
+[data-theme="win11"] .el-dialog,
+[data-theme="win11"] .el-message-box {
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+/* Menu: 3px accent bar on active */
+[data-theme="win11"] .el-menu-item.is-active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  position: relative;
+}
+[data-theme="win11"] .el-menu-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+/* Checkbox / Radio: 2px corner radius, 16px, hover state with accent border */
+[data-theme="win11"] .el-checkbox__inner,
+[data-theme="win11"] .el-radio__inner {
+  border-radius: 2px;
+  width: 16px;
+  height: 16px;
+  border-width: 1px;
+  background: var(--bg-surface);
+}
+[data-theme="win11"] .el-checkbox__inner:hover,
+[data-theme="win11"] .el-radio__inner:hover {
+  border-color: var(--accent);
+}
+
+/* Scrollbar: 8px wide, fades in on hover */
+[data-theme="win11"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-theme="win11"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+[data-theme="win11"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Sidebar personalization panel: tighter 12px row spacing */
+[data-theme="win11"] .personalization-panel .persist-section { margin-bottom: 12px; }
+
+/* BaseTerminal outer frame: subtle border that matches Win11 surface */
+[data-theme="win11"] .base-terminal {
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+/* macOS 26 - light (Liquid Glass simulation) */
+[data-theme="macos26"] {
+  --bg-base: #ffffff;
+  --bg-elevated: #ececef;
+  --bg-surface: #ffffff;
+  --bg-overlay: #f5f5f7;
+  --bg-hover: #f0f0f3;
+  --bg-active: #e5e5e8;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-muted: #86868b;
+  --text-disabled: #a1a1a6;
+  --accent: #007aff;
+  --accent-glow: rgba(0, 122, 255, 0.20);
+  --accent-subtle: rgba(0, 122, 255, 0.10);
+  --info: #0064cd;
+  --info-subtle: rgba(0, 100, 205, 0.08);
+  --on-accent: #ffffff;
+  --chart-1: #30b257;
+  --chart-2: #1e88e5;
+  --chart-3: #ff9500;
+  --chart-4: #af52de;
+  --chart-4-alt: #c184e8;
+  --success: #28a745;
+  --success-dim: #1e7e34;
+  --success-subtle: rgba(40, 167, 69, 0.08);
+  --success-glow: rgba(40, 167, 69, 0.18);
+  --warning: #ff9500;
+  --warning-subtle: rgba(255, 149, 0, 0.10);
+  --error: #ff3b30;
+  --error-subtle: rgba(255, 59, 48, 0.08);
+  --error-glow: rgba(255, 59, 48, 0.18);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(0, 0, 0, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --scrim: rgba(255, 255, 255, 0.5);
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --radius-sm: 4px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.20);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #ffffff;
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color: #ececef;
+  --el-fill-color-light: #f5f5f7;
+  --el-fill-color-lighter: #f0f0f3;
+  --el-text-color-primary: #1d1d1f;
+  --el-text-color-regular: #6e6e73;
+  --el-text-color-secondary: #86868b;
+  --el-text-color-placeholder: #a1a1a6;
+  --el-border-color: rgba(0, 0, 0, 0.16);
+  --el-border-color-light: rgba(0, 0, 0, 0.10);
+  --el-border-color-lighter: rgba(0, 0, 0, 0.08);
+  --el-input-height: 28px;
+  --el-component-size: 28px;
+}
+
+/* macOS 26 - dark (Liquid Glass dark) */
+@media (prefers-color-scheme: dark) {
+  [data-theme="macos26"] {
+    --bg-base: #1e1e1e;
+    --bg-elevated: #2c2c2e;
+    --bg-surface: #1e1e1e;
+    --bg-overlay: #3a3a3c;
+    --bg-hover: #3a3a3c;
+    --bg-active: #48484a;
+    --text-primary: #f5f5f7;
+    --text-secondary: #aeaeb2;
+    --text-muted: #8e8e93;
+    --text-disabled: #636366;
+    --accent: #0a84ff;
+    --accent-glow: rgba(10, 132, 255, 0.22);
+    --accent-subtle: rgba(10, 132, 255, 0.12);
+    --info: #64d2ff;
+    --info-subtle: rgba(100, 210, 255, 0.10);
+    --on-accent: #ffffff;
+    --success: #30d158;
+    --success-dim: #28a745;
+    --success-subtle: rgba(48, 209, 88, 0.10);
+    --success-glow: rgba(48, 209, 88, 0.20);
+    --warning: #ff9f0a;
+    --warning-subtle: rgba(255, 159, 10, 0.12);
+    --error: #ff453a;
+    --error-subtle: rgba(255, 69, 58, 0.10);
+    --error-glow: rgba(255, 69, 58, 0.20);
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(255, 255, 255, 0.18);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(0, 0, 0, 0.4);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.20);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.32);
+    --el-bg-color: #1e1e1e;
+    --el-bg-color-page: #1e1e1e;
+    --el-fill-color-blank: #1e1e1e;
+    --el-fill-color: #2c2c2e;
+    --el-fill-color-light: #3a3a3c;
+    --el-fill-color-lighter: #48484a;
+    --el-text-color-primary: #f5f5f7;
+    --el-text-color-regular: #aeaeb2;
+    --el-text-color-secondary: #8e8e93;
+    --el-text-color-placeholder: #636366;
+    --el-border-color: rgba(255, 255, 255, 0.18);
+    --el-border-color-light: rgba(255, 255, 255, 0.10);
+    --el-border-color-lighter: rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* macOS 26 - body Liquid Glass radial gradient */
+[data-theme="macos26"] body {
+  background: radial-gradient(ellipse at top, rgba(255, 255, 255, 0.6) 0%, transparent 50%), var(--bg-base);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="macos26"] body {
+    background: radial-gradient(ellipse at top, rgba(255, 255, 255, 0.04) 0%, transparent 60%), var(--bg-base);
+  }
+}
+
+/* ====================================================================
+   macOS 26 - component overrides
+   ==================================================================== */
+
+/* Tabs: rounder, 2px accent underline on active (no block) */
+[data-theme="macos26"] .el-tabs__item {
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 32px;
+  line-height: 32px;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color 0.12s ease;
+}
+[data-theme="macos26"] .el-tabs__item:hover { color: var(--text-primary); }
+[data-theme="macos26"] .el-tabs__item.is-active,
+[data-theme="macos26"] .el-tabs__item.is-active:hover {
+  color: var(--accent);
+  font-weight: 600;
+  background: transparent;
+}
+[data-theme="macos26"] .el-tabs__active-bar {
+  background: var(--accent);
+  height: 2px;
+  border-radius: 1px;
+}
+
+/* Buttons: pill-shaped capsule, 14px radius, accent primary with subtle fill */
+[data-theme="macos26"] .el-button {
+  height: 30px !important;
+  padding: 4px 18px !important;
+  font-size: 13px !important;
+  border-radius: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+[data-theme="macos26"] .el-button--primary {
+  background: var(--accent);
+  border: none;
+  color: var(--on-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+[data-theme="macos26"] .el-button--primary:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+[data-theme="macos26"] .el-button:not(.el-button--primary):not(.el-button--text) {
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+[data-theme="macos26"] .el-button:not(.el-button--primary):not(.el-button--text):hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+/* Inputs: full border 1px, 6px radius, 2px focus ring */
+[data-theme="macos26"] .el-input__wrapper {
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 1px var(--border-subtle);
+  border-radius: 6px;
+}
+[data-theme="macos26"] .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+[data-theme="macos26"] .el-textarea__inner {
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+[data-theme="macos26"] .el-textarea__inner:focus { border-color: var(--accent); }
+
+/* Dialog: 14px radius, soft shadow */
+[data-theme="macos26"] .el-dialog,
+[data-theme="macos26"] .el-message-box {
+  border-radius: 14px;
+  background: var(--bg-surface);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* Menu: macOS-style subtle background on active, no left bar */
+[data-theme="macos26"] .el-menu-item.is-active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+[data-theme="macos26"] .el-menu-item.is-active::before { display: none; }
+
+/* Checkbox / Radio: 4px corner radius (rounder than Win11), 16px, hover state with accent border */
+[data-theme="macos26"] .el-checkbox__inner,
+[data-theme="macos26"] .el-radio__inner {
+  border-radius: 4px;
+  width: 16px;
+  height: 16px;
+  border-width: 1.5px;
+  background: var(--bg-surface);
+}
+[data-theme="macos26"] .el-checkbox__inner:hover,
+[data-theme="macos26"] .el-radio__inner:hover {
+  border-color: var(--accent);
+}
+
+/* Scrollbar */
+[data-theme="macos26"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+[data-theme="macos26"] ::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+[data-theme="macos26"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Sidebar: force the macOS darker-sidebar look.
+   The existing .sidebar class lives in Sidebar.vue — this rule overrides
+   its background to --bg-elevated (the macOS signature darker-than-content
+   shade). No .vue change needed. */
+[data-theme="macos26"] .sidebar { background: var(--bg-elevated); }
+
+/* AppHeader: subtle backdrop (Liquid Glass lite).
+   NOTE: AppHeader.vue already paints a 1px hairline via .app-header::after,
+   so we deliberately omit `border-bottom` here to avoid stacking a 2px line. */
+[data-theme="macos26"] .app-header {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="macos26"] .app-header {
+    background: rgba(30, 30, 30, 0.7);
+  }
+}
+
+/* Sidebar personalization panel: 14px row spacing (looser than Win11) */
+[data-theme="macos26"] .personalization-panel .persist-section { margin-bottom: 14px; }
+
+/* SettingsTab: 12px gap, no left bar */
+[data-theme="macos26"] .settings-tab-content .settings-section { margin-bottom: 12px; }
+[data-theme="macos26"] .settings-tab-content .settings-section.active { box-shadow: none; }
+
+/* BaseTerminal: rounded 8px frame.
+   NOTE: BaseTerminal.vue uses class="base-terminal", not .terminal-frame. */
+[data-theme="macos26"] .base-terminal {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
 }

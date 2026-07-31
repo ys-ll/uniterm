@@ -308,6 +308,8 @@
   "settings.themeDeepBlue": "Deep Blue",
   "settings.themeLight": "Light",
   "settings.themeSystem": "System",
+  "settings.themeWin11": "Windows 11",
+  "settings.themeMacOS26": "macOS 26",
   "settings.language": "Language",
   "settings.langSystem": "System Default",
   "settings.closeTabPrompt": "Close Tab Confirmation",

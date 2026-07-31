@@ -305,6 +305,8 @@
   "settings.themeDeepBlue": "Bleu profond",
   "settings.themeLight": "Clair",
   "settings.themeSystem": "Système",
+  "settings.themeWin11": "Windows 11",
+  "settings.themeMacOS26": "macOS 26",
   "settings.language": "Langue",
   "settings.langSystem": "Valeur par défaut du système",
   "settings.closeTabPrompt": "Confirmation de fermeture d'onglet",
