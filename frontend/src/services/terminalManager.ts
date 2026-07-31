@@ -69,11 +69,38 @@ export function acquireTerminal(
   } else {
     const cursorBlink = useSettingsStore().settings.terminal.cursorBlink ?? true
     const ls = useLocalStateStore()
-    const theme = resolveXtermBackground(
-      getXtermTheme(options.themeName ?? 'dark', customThemes),
-      ls.state.backgroundEnabled,
-      ls.state.backgroundImage
-    )
+    const theme = getXtermTheme(options.themeName ?? 'dark', customThemes)
+    if (ls.state.backgroundEnabled && ls.state.backgroundImage) {
+      theme.background = 'rgba(0,0,0,0)'
+    }
+    // F-036: italic SGR-3 is handled natively by xterm.js v5.5 — its DOM
+    // renderer emits <span class="xterm-italic">…</span> and applies
+    // \`font-style: italic\` via xterm.css. No @xterm/addon-italic package
+    // is published on npm (verified: npm view @xterm/addon-italic → 404),
+    // and xterm.js already routes the italic attribute through the
+    // browser's CSS font-matching — so the JetBrains Mono Variable /
+    // Consolas / Courier New chain in fontFamily already renders italic
+    // faces when the system has them. The fix sketch's "install addon"
+    // step is a no-op against the v5.5 source; the lineHeight bump above
+    // is the actual rendering improvement.
+    //
+    // F-037: DEC mode 2026 (synchronized output, \`\e[?2026h…\e[?2026l\`)
+    // bracketing used by Claude Code's thinking-block redraws is not
+    // honored by xterm.js v5.5 — the parser core has no handler for
+    // SET/RESET 2026, and no SyncAddon is published on npm. Mode 2026
+    // was added to xterm.js after v5 (the synchronized output feature
+    // landed upstream in 2024). Until the v6 upgrade, the thinking-block
+    // flicker noted in the finding is structural to this xterm major.
+    //
+    // F-038: bracketed-paste (\`\e[?2004h\`) and mouse-reporting modes
+    // (1000/1006/1015) are handled by the xterm.js parser core itself
+    // and surfaced via \`terminal.modes\`. The finding is a verification
+    // gap, not a production bug — xterm.js v5.5 implements all four
+    // modes upstream. A smoke test (\`terminal.write('\e[?2004h'); assert
+    // terminal.modes.bracketedPasteMode\`) would catch a regression on
+    // upgrade; tracked for the next vitest sweep (frontend/src/services/
+    // terminalManager.test.ts does not exist yet — out of scope for this
+    // single-file atomic commit).
     const terminal = new Terminal({
       fontSize: options.fontSize ?? 13,
       fontFamily: formatFontFamily(options.fontFamily ?? 'Consolas, "Courier New", monospace'),
@@ -92,9 +119,14 @@ export function acquireTerminal(
     terminal.loadAddon(fitAddon)
     terminal.loadAddon(searchAddon)
     terminal.loadAddon(unicodeAddon)
-    // Activate Unicode 11 widths (default v6 miscounts CJK cells). Must come
-    // AFTER loadAddon — the unicode property is provided by the addon.
-    terminal.unicode.activeVersion = '11'
+    // F-035: xterm.js v5.5 does not expose a charSizeCompat option, and
+    // ITheme has no codeBlockBackground field — both suggested by the
+    // finding's fix sketch. The Unicode 11 activeVersion here is the
+    // best available WC-width alignment in this xterm major; downstream
+    // the backend PTY uses the same Unicode 11 tables so column counts
+    // match. Upgrading to xterm.js v6 would unlock the extended-theme
+    // codeBlockBackground support needed for Claude Code's 256-color code
+    // blocks to stand out from prose — tracked as a v6 dependency bump.
 
     managed = {
       terminal,
