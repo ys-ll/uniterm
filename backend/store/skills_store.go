@@ -10,8 +10,15 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
+
+// skillsListCacheTTL bounds how long a merged List result is reused before
+// the next call forces a re-scan. Combined with explicit invalidation on
+// every mutator, this coalesces the rapid re-reads triggered by per-token
+// AI / terminal code while still being correct on disk mutation.
+const skillsListCacheTTL = 2 * time.Second
 
 // skills 采用「目录式」存储：每个 skill 是 skills/<dir>/SKILL.md（可带 references/、scripts/）。
 // 内容与存在性以目录为真相源；enabled/sortOrder/locked/origin 等用户偏好存 prefs.json。
@@ -65,10 +72,26 @@ type skillPrefsData struct {
 // SkillsStore 管理 skills 目录扫描与偏好持久化。configDir 由 app.go 传入（~/.../uniTerm）。
 type SkillsStore struct {
 	configDir string
+
+	// listCache holds the merged result of the most recent List call. F-107:
+	// re-scanning the whole skills tree (every SKILL.md + references/ +
+	// scripts/ probe) per call is wasteful when the frontend polls.
+	listMu      sync.Mutex
+	listCache   []SkillMeta
+	listCachedAt time.Time
 }
 
 func NewSkillsStore(configDir string) *SkillsStore {
 	return &SkillsStore{configDir: configDir}
+}
+
+// invalidateListCache clears the cached List result. Mutators call this
+// before returning so the next List re-scans.
+func (s *SkillsStore) invalidateListCache() {
+	s.listMu.Lock()
+	s.listCache = nil
+	s.listCachedAt = time.Time{}
+	s.listMu.Unlock()
 }
 
 func (s *SkillsStore) skillsRoot() string { return filepath.Join(s.configDir, skillsDirName) }
@@ -173,7 +196,10 @@ func (s *SkillsStore) savePrefs(data skillPrefsData) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.prefsPath(), bytes, 0600)
+	// Atomic write (tmp + rename): concurrent List callers all scan the
+	// same dir and converge on identical prefs, so racing saves are safe
+	// — readers must not see a half-written file though.
+	return atomicWriteFile(s.prefsPath(), bytes, 0600)
 }
 
 // ---- 目录扫描（B1，内容/存在性以目录为真相源）----
@@ -223,7 +249,35 @@ func scanDir(root string, isSystem bool) []SkillMeta {
 }
 
 // List 返回所有 skill（合并目录扫描与偏好），按 sortOrder、name 排序。
+// 走内存缓存：同一进程内 2 秒内的重复 List 跳过目录扫描与 SKILL.md 文件读取。
 func (s *SkillsStore) List() ([]SkillMeta, error) {
+	s.listMu.Lock()
+	if s.listCache != nil && time.Since(s.listCachedAt) < skillsListCacheTTL {
+		cached := s.listCache
+		s.listMu.Unlock()
+		out := make([]SkillMeta, len(cached))
+		copy(out, cached)
+		return out, nil
+	}
+	s.listMu.Unlock()
+
+	metas, err := s.scanAndMerge()
+	if err != nil {
+		return nil, err
+	}
+
+	s.listMu.Lock()
+	s.listCache = metas
+	s.listCachedAt = time.Now()
+	s.listMu.Unlock()
+
+	out := make([]SkillMeta, len(metas))
+	copy(out, metas)
+	return out, nil
+}
+
+// scanAndMerge performs the full directory scan + pref merge + orphan prune.
+func (s *SkillsStore) scanAndMerge() ([]SkillMeta, error) {
 	root := s.skillsRoot()
 	metas := scanDir(root, false)
 	metas = append(metas, scanDir(filepath.Join(root, systemDirName), true)...)
@@ -310,7 +364,11 @@ func (s *SkillsStore) setPref(name string, fn func(p *skillPref)) error {
 	if !found {
 		return fmt.Errorf("skill %q not found", name)
 	}
-	return s.savePrefs(prefs)
+	if err := s.savePrefs(prefs); err != nil {
+		return err
+	}
+	s.invalidateListCache()
+	return nil
 }
 
 func (s *SkillsStore) SetEnabled(name string, enabled bool) error {
@@ -460,9 +518,13 @@ func (s *SkillsStore) Delete(name string) error {
 		return err
 	}
 	// 清理偏好
-	return s.setPref(name, func(p *skillPref) {
+	if err := s.setPref(name, func(p *skillPref) {
 		// 标记删除（调用方负责清理孤儿项，List 做）
-	})
+	}); err != nil {
+		return err
+	}
+	s.invalidateListCache()
+	return nil
 }
 
 // ---- 工具函数 ----
@@ -509,32 +571,6 @@ func assembleSkillMD(name, description, body string) string {
 	return fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s", name, description, body)
 }
 
-func copyFile(src, dst string) error {
-	// Refuse to follow symlinks during import: STORE-02.
-	srcInfo, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-	if srcInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing to copy symlink: %s", src)
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode().Perm())
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
-}
-
 // assertNoSymlinks walks dir (Lstat, not Stat) and returns an error if any
 // entry is a symlink. Used to gate destructive operations like Delete /
 // importToDir so we never follow an attacker-controlled link out of the
@@ -551,21 +587,16 @@ func assertNoSymlinks(dir string) error {
 	})
 }
 
+// copyDir duplicates src into dst. os.CopyFS (Go 1.23+) replaces the previous
+// filepath.Walk + per-file os.Lstat/Open/Create loop, which paid an extra
+// Lstat and a fresh open/create pair for every file. STORE-02 safety is
+// preserved by the pre-check: os.CopyFS follows symlinks, so the explicit
+// assertNoSymlinks walk must run first.
 func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, 0755)
-		}
-		return copyFile(path, target)
-	})
+	if err := assertNoSymlinks(src); err != nil {
+		return err
+	}
+	return os.CopyFS(dst, os.DirFS(src))
 }
 
 // ---- 导入（B3）----
@@ -715,7 +746,11 @@ func (s *SkillsStore) importToDir(src, dst, name string) error {
 			Version:   1,
 		})
 	}
-	return s.savePrefs(prefs)
+	if err := s.savePrefs(prefs); err != nil {
+		return err
+	}
+	s.invalidateListCache()
+	return nil
 }
 
 // CreateSkill 从 name/description/body 创建单文件 skill（origin=created, locked=false）。
@@ -762,7 +797,11 @@ func (s *SkillsStore) CreateSkill(name, description, body string) error {
 			Version:   1,
 		})
 	}
-	return s.savePrefs(prefs)
+	if err := s.savePrefs(prefs); err != nil {
+		return err
+	}
+	s.invalidateListCache()
+	return nil
 }
 
 // SaveSkill 覆盖已有 skill 的正文（仅限未锁定项）。
