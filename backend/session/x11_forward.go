@@ -264,7 +264,7 @@ func (f *x11Forwarder) handleX11(ch ssh.NewChannel, display string) {
 
 	local, err := DialLocalX(display)
 	if err != nil {
-		f.onError("[x11] Could not connect to the local X11 server.\r\n[x11] Display target: " + displayTargetString(display) + "\r\n[x11] " + xServerHint(runtime.GOOS))
+		f.errorf("[x11] Could not connect to the local X11 server.\r\n[x11] Display target: %s\r\n[x11] %s", displayTargetString(display), xServerHint(runtime.GOOS))
 		return
 	}
 	defer local.Close()
