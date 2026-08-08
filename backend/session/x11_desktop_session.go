@@ -52,8 +52,8 @@ func resolveDesktopCommand(cfg ConnectionConfig) (string, error) {
 
 // X11DesktopSession opens an SSH connection to a remote host with X11
 // forwarding enabled and runs the chosen desktop command. The remote X
-// clients are bridged to the local X server (VcXsrv/XQuartz/Xorg) over
-// SSH's x11 channel — the actual desktop is rendered outside uniTerm.
+// clients are bridged to the local X server (VcXsrv/XQuartz/Xephyr/Xorg)
+// over SSH's x11 channel — the actual desktop is rendered outside uniTerm.
 // The session represents the lifecycle of that desktop process:
 // Connected while the command is running, Disconnected when it exits.
 type X11DesktopSession struct {
@@ -68,6 +68,10 @@ type X11DesktopSession struct {
 	// X server state (root window, screen resolution, WM) from leaking into
 	// other sessions.
 	vcxsrv *exec.Cmd
+	// xephyr holds the Xephyr nested X server process on Linux.
+	// Launched when available to contain the remote desktop in a single
+	// window instead of integrating into the host desktop.
+	xephyr *exec.Cmd
 }
 
 func NewX11DesktopSession(id string) *X11DesktopSession {
@@ -101,16 +105,17 @@ func (s *X11DesktopSession) ConnectX11Desktop(cfg ConnectionConfig) error {
 	// X11 forward is mandatory for this type.
 	cfg.X11Forwarding = true
 
-	// On Windows, X11 Desktop spawns a dedicated VcXsrv instance on
-	// a dynamically chosen free display. The scan starts after the
-	// SSH X11 forwarding display (typically :0) to avoid port
-	// conflicts. This isolates the desktop environment's X server
-	// state (root window, screen resolution, window manager) from
-	// SSH X11 forwarding sessions which share their own X server.
-	// The VcXsrv process is killed on Disconnect so the next X11
-	// Desktop starts fresh.
+	// Resolve the local X server to use.
 	//
-	// On macOS/Linux the standard $DISPLAY X server is used as-is.
+	// Windows: spawn a dedicated VcXsrv on a free display. Single-window
+	// mode (no -multiwindow): the entire remote desktop is contained in
+	// one window.
+	//
+	// Linux: try Xephyr first for the same single-window experience.
+	// Falls back to the host $DISPLAY if Xephyr is not installed.
+	//
+	// macOS: use the host XQuartz display (XQuartz is already rootless,
+	// each X window gets its own macOS window).
 	var display string
 	if runtime.GOOS == "windows" {
 		startFrom := sshX11DisplayNumber() + 1
@@ -123,26 +128,54 @@ func (s *X11DesktopSession) ConnectX11Desktop(cfg ConnectionConfig) error {
 			return fmt.Errorf("x11-desktop: no free X11 display found")
 		}
 		display = "localhost:" + strconv.Itoa(d)
-		cmd := launchVcXsrv(d)
-		if cmd == nil {
+		vcmd := launchVcXsrv(d)
+		if vcmd == nil {
 			s.setStatus(StatusError)
 			return fmt.Errorf("x11-desktop: failed to start VcXsrv on :%d", d)
 		}
-		s.vcxsrv = cmd
+		s.vcxsrv = vcmd
+	} else if runtime.GOOS == "linux" {
+		// Try Xephyr first — a nested X server that runs the remote
+		// desktop in a single resizable window instead of integrating
+		// into the host desktop.
+		hostDisplay := os.Getenv("DISPLAY")
+		if hostDisplay == "" {
+			hostDisplay = resolveLocalDisplay("")
+		}
+		startFrom := 1
+		if _, dn, _, perr := ParseDisplay(hostDisplay); perr == nil {
+			startFrom = dn + 1
+		}
+		if d := findFreeUnixDisplay(startFrom); d >= 0 {
+			if xcmd := launchXephyr(d); xcmd != nil {
+				s.xephyr = xcmd
+				display = ":" + strconv.Itoa(d)
+			}
+		}
+		if display == "" {
+			// Xephyr not available — fall back to host display
+			// (remote desktop windows integrate into host desktop).
+			display = hostDisplay
+		}
 	} else {
+		// macOS: use the host XQuartz display.
 		display = os.Getenv("DISPLAY")
 		if display == "" {
 			display = resolveLocalDisplay(display)
 		}
-		if display == "" {
-			s.setStatus(StatusError)
-			return fmt.Errorf("x11-desktop: $DISPLAY is empty")
-		}
+	}
+	if display == "" {
+		s.setStatus(StatusError)
+		return fmt.Errorf("x11-desktop: $DISPLAY is empty")
 	}
 	if _, derr := DialLocalX(display); derr != nil {
 		if s.vcxsrv != nil {
 			s.vcxsrv.Process.Kill()
 			s.vcxsrv = nil
+		}
+		if s.xephyr != nil {
+			s.xephyr.Process.Kill()
+			s.xephyr = nil
 		}
 		s.setStatus(StatusError)
 		return fmt.Errorf("x11-desktop: local X server unreachable: %w", derr)
@@ -194,9 +227,9 @@ func (s *X11DesktopSession) ConnectX11Desktop(cfg ConnectionConfig) error {
 }
 
 // Disconnect tears down the X11 forwarder, SSH session, SSH client, and
-// the dedicated VcXsrv process (if any). Idempotent: sync.Once guarantees
-// the cleanup runs once even if the underlying resources are nil (e.g.
-// Disconnect called before Connect, or after a partial failure).
+// the dedicated X server processes (if any). Idempotent: sync.Once
+// guarantees the cleanup runs once even if the underlying resources are
+// nil (e.g. Disconnect called before Connect, or after a partial failure).
 func (s *X11DesktopSession) Disconnect() error {
 	s.quitOnce.Do(func() {
 		if s.x11Fwd != nil {
@@ -212,6 +245,10 @@ func (s *X11DesktopSession) Disconnect() error {
 		if s.vcxsrv != nil {
 			s.vcxsrv.Process.Kill()
 			s.vcxsrv = nil
+		}
+		if s.xephyr != nil {
+			s.xephyr.Process.Kill()
+			s.xephyr = nil
 		}
 		s.setStatus(StatusDisconnected)
 	})

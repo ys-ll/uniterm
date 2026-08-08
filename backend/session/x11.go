@@ -136,6 +136,71 @@ func findFreeDisplay(startFrom int) int {
 	return -1
 }
 
+// findFreeUnixDisplay scans display numbers starting from startFrom,
+// returning the first one where neither a unix socket at /tmp/.X11-unix/XN
+// nor a TCP listener on port 6000+N exists. Returns -1 if no free display
+// is found in the range [startFrom, 99].
+func findFreeUnixDisplay(startFrom int) int {
+	for d := startFrom; d < 100; d++ {
+		sock := fmt.Sprintf("/tmp/.X11-unix/X%d", d)
+		if _, err := os.Stat(sock); err == nil {
+			continue
+		}
+		port := fmt.Sprintf("127.0.0.1:%d", 6000+d)
+		c, err := net.DialTimeout("tcp", port, 200*time.Millisecond)
+		if err == nil {
+			c.Close()
+			continue
+		}
+		return d
+	}
+	return -1
+}
+
+// xephyrPath returns the path to the Xephyr binary, or an error if it is
+// not found. Searches $PATH and common install locations.
+func xephyrPath() (string, error) {
+	candidates := []string{"Xephyr"}
+	for _, p := range candidates {
+		if path, err := exec.LookPath(p); err == nil {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("Xephyr not found; install xserver-xephyr (Debian/Ubuntu), xorg-x11-server-Xephyr (Fedora), or xorg-server-xephyr (Arch)")
+}
+
+// launchXephyr starts Xephyr on the given display number as a nested X
+// server window. The window is resizable and terminates automatically when
+// the last X client disconnects. Returns nil if Xephyr is not available or
+// fails to start.
+func launchXephyr(display int) *exec.Cmd {
+	path, err := xephyrPath()
+	if err != nil {
+		return nil
+	}
+	dispStr := fmt.Sprintf(":%d", display)
+	// -ac: disable access control (auth is handled by X11 forwarding layer)
+	// -screen WxH: initial window size
+	// -resizeable: user can resize the window
+	// -terminate: exit when last client disconnects
+	cmd := exec.Command(path, dispStr, "-ac", "-screen", "1280x800", "-resizeable", "-terminate")
+	home, _ := os.UserHomeDir()
+	cmd.Dir = home
+	if err := cmd.Start(); err != nil {
+		return nil
+	}
+	// Wait for Xephyr to open its unix socket (up to 5 s).
+	sock := fmt.Sprintf("/tmp/.X11-unix/X%d", display)
+	for i := 0; i < 50; i++ {
+		time.Sleep(100 * time.Millisecond)
+		if _, err := os.Stat(sock); err == nil {
+			return cmd
+		}
+	}
+	cmd.Process.Kill()
+	return nil
+}
+
 // launchVcXsrv starts a new VcXsrv instance on the given display number
 // and waits up to 5 s for it to become ready. Returns the exec.Cmd so the
 // caller can manage the process lifetime (e.g. kill it when done). Returns
