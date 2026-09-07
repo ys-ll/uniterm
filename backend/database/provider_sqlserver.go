@@ -353,6 +353,12 @@ func (p *sqlserverProvider) TruncateTable(db *sql.DB, dbName, tableName string) 
 	return err
 }
 
+// CopyTable clones structure and data via SELECT INTO (no indexes/constraints).
+func (p *sqlserverProvider) CopyTable(db *sql.DB, dbName, tableName, newTableName string) error {
+	_, err := db.Exec(p.withUse(dbName, fmt.Sprintf("SELECT * INTO %s FROM %s", p.qualifiedTable(newTableName), p.qualifiedTable(tableName))))
+	return err
+}
+
 // ── DDL: Column ──
 
 func (p *sqlserverProvider) AddColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error {

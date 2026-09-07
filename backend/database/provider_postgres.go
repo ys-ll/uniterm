@@ -355,6 +355,29 @@ func (p *postgresProvider) TruncateTable(db *sql.DB, dbName, tableName string) e
 	return err
 }
 
+// CopyTable clones structure and data in one statement. It resolves the
+// current schema because dbName is the database, not a schema (same as DumpTable).
+func (p *postgresProvider) CopyTable(db *sql.DB, dbName, tableName, newTableName string) error {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	schema := "public"
+	if dbName != "" {
+		schema = dbName
+	}
+	if curSchema, err := pgCurrentSchema(conn); err == nil && curSchema != "" {
+		schema = curSchema
+	}
+
+	q := p.Quote
+	_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s.%s", q(newTableName), q(schema), q(tableName)))
+	return err
+}
+
 // ── DDL: Column ──
 
 func (p *postgresProvider) AddColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error {

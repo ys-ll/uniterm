@@ -76,6 +76,11 @@ type Provider interface {
 	DropView(db *sql.DB, dbName, viewName string) error
 	TruncateTable(db *sql.DB, dbName, tableName string) error
 
+	// CopyTable creates a new table as a copy of an existing one (structure
+	// plus data where the dialect supports it). Only plain tables are offered
+	// this in the UI; views are not passed here.
+	CopyTable(db *sql.DB, dbName, tableName, newTableName string) error
+
 	// DDL: Column
 	AddColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error
 	ModifyColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error

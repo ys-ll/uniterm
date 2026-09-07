@@ -174,6 +174,14 @@ func (a *App) DumpTable(sessionID string, dbName string, tableName string, withS
 	return p.DumpTable(ds.DB(), dbName, tableName, database.DumpOptions{Structure: withStructure, Data: withData})
 }
 
+func (a *App) CopyTable(sessionID string, dbName string, tableName string, newTableName string) error {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return err
+	}
+	return p.CopyTable(ds.DB(), dbName, tableName, newTableName)
+}
+
 func (a *App) DBInsertRow(sessionID string, dbName string, tableName string, values map[string]any) error {
 	ds, p, err := a.dbProvider(sessionID)
 	if err != nil {

@@ -282,6 +282,17 @@ func (p *oracleProvider) TruncateTable(db *sql.DB, dbName, tableName string) err
 	return err
 }
 
+// CopyTable clones structure and data via CREATE TABLE AS SELECT (no
+// constraints/indexes, like the other providers' quick copies).
+func (p *oracleProvider) CopyTable(db *sql.DB, dbName, tableName, newTableName string) error {
+	owner, err := p.resolveSchema(db, dbName)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(fmt.Sprintf("CREATE TABLE %s AS SELECT * FROM %s", p.Quote(newTableName), p.qualifiedTable(owner, tableName)))
+	return err
+}
+
 // ── DDL: Column ──
 
 func (p *oracleProvider) AddColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error {

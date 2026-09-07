@@ -21,7 +21,7 @@
       </Menu>
     </div>
     <div ref="treeContentRef" class="tree-content" @contextmenu.prevent="onTreeContextMenu">
-      <div v-if="loading" class="tree-loading">{{ t('db.loading') }}</div>
+      <div v-if="loading || runningSqlFile" class="tree-loading">{{ t('db.loading') }}</div>
       <template v-for="db in filteredDbs" :key="db.name">
         <div
           class="db-header"
@@ -67,6 +67,7 @@
       <template v-if="current && current.type === 'db'">
         <MenuItem @click="onCtxListDatabase">{{ t('db.tableList') }}</MenuItem>
         <MenuItem @click="onCtxNewQuery">{{ t('db.newQuery') }}</MenuItem>
+        <MenuItem @click="onCtxRunSqlFile">{{ t('db.runSqlFile') }}</MenuItem>
         <MenuDivider />
         <MenuItem v-if="canCreateDatabase" @click="onCtxNewDatabase">{{ t('db.newDatabase') }}</MenuItem>
         <MenuItem @click="onCtxNewTable">{{ t('db.newTable') }}</MenuItem>
@@ -79,6 +80,7 @@
         <MenuItem v-if="current.tableType !== 'view'" @click="onCtxViewStructure">{{ t('db.tableStructure') }}</MenuItem>
         <MenuDivider />
         <MenuItem @click="onCtxCopyName">{{ t('db.copyName') }}</MenuItem>
+        <MenuItem v-if="(current as DbMenuCtx).tableType !== 'view'" @click="onCtxCopyTable">{{ t('db.copyTable') }}</MenuItem>
         <MenuDivider />
         <MenuItem @click="onCtxExportStructure">{{ t('db.exportStructure') }}</MenuItem>
         <MenuItem v-if="current.tableType !== 'view'" @click="onCtxExportData">{{ t('db.exportData') }}</MenuItem>
@@ -152,6 +154,24 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Copy Table dialog -->
+    <el-dialog append-to-body v-model="copyTableVisible" :title="t('db.copyTable')" width="380px">
+      <el-form label-width="80px">
+        <el-form-item :label="t('db.sourceTable')">
+          <el-input :model-value="copySourceTable" disabled />
+        </el-form-item>
+        <el-form-item :label="t('db.tableName')">
+          <el-input v-model="copyTableName" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="copyTableVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :disabled="!copyTableName.trim()" @click="onCopyTable">
+          {{ t('common.confirm') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -159,7 +179,7 @@
 import { ref, watch, computed, nextTick } from 'vue'
 import { Database, Table2, Eye, ChevronRight, ChevronDown, RefreshCw, MoreHorizontal } from '@lucide/vue'
 import { useI18n } from '../i18n'
-import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64 } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
@@ -458,6 +478,84 @@ function onCtxExportData() {
 
 function onCtxExportStructureData() {
   exportTable(true, true)
+}
+
+// ── Run SQL file (database context menu) ──
+
+// Wails v3 rejects the picker promise with "cancelled by user" when the
+// dialog is dismissed, instead of resolving with an empty path.
+function isDialogCancel(e: unknown): boolean {
+  return String(e).toLowerCase().includes('cancel')
+}
+
+function decodeBase64(b64: string): string {
+  try {
+    const bin = atob(b64)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return new TextDecoder('utf-8').decode(bytes)
+  } catch {
+    return ''
+  }
+}
+
+const runningSqlFile = ref(false)
+
+async function onCtxRunSqlFile() {
+  ctxMenuVisible.value = false
+  const dbName = ctxDbName.value
+  let path = ''
+  try {
+    path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
+  } catch (e) {
+    if (!isDialogCancel(e)) msg.error((e as any)?.message || String(e))
+    return
+  }
+  if (!path) return
+  try {
+    runningSqlFile.value = true
+    const b64 = await ReadFileBase64(path)
+    const text = decodeBase64(b64)
+    const result = await ExecuteSQLScript(props.sessionId, dbName, text)
+    if (result?.failedLine) {
+      msg.error(t('db.scriptFailedLine', { line: result.failedLine }))
+    } else {
+      const name = path.split(/[\\/]/).pop() || path
+      msg.success(t('db.scriptExecuted', { n: result?.executed ?? 0 }) + ` · ${name}`)
+    }
+  } catch (e: any) {
+    msg.error(e?.message || String(e))
+  } finally {
+    runningSqlFile.value = false
+  }
+}
+
+// ── Copy table ──
+
+const copyTableVisible = ref(false)
+const copySourceTable = ref('')
+const copyTableName = ref('')
+
+function onCtxCopyTable() {
+  ctxMenuVisible.value = false
+  copySourceTable.value = ctxTableName.value
+  copyTableName.value = ctxTableName.value + '_copy'
+  copyTableVisible.value = true
+}
+
+async function onCopyTable() {
+  const dbName = ctxDbName.value
+  const newName = copyTableName.value.trim()
+  if (!copySourceTable.value || !newName) return
+  try {
+    await CopyTable(props.sessionId, dbName, copySourceTable.value, newName)
+    copyTableVisible.value = false
+    msg.success(t('db.copyTableDone', { name: newName }))
+    await refreshDb(dbName)
+  } catch (e: any) {
+    console.error('Failed to copy table:', e)
+    msg.error(e?.message || String(e))
+  }
 }
 
 function encodeBase64(text: string): string {

@@ -360,6 +360,32 @@ func (p *mysqlProvider) TruncateTable(db *sql.DB, dbName, tableName string) erro
 	return err
 }
 
+// CopyTable clones structure via CREATE TABLE ... LIKE and bulk-copies rows
+// with INSERT ... SELECT, both native server-side statements.
+func (p *mysqlProvider) CopyTable(db *sql.DB, dbName, tableName, newTableName string) error {
+	conn, err := p.mysqlUseDB(db, dbName)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	qSrc, err := SafeMyIdent(tableName)
+	if err != nil {
+		return err
+	}
+	qDst, err := SafeMyIdent(newTableName)
+	if err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(context.Background(), "CREATE TABLE "+qDst+" LIKE "+qSrc); err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(context.Background(), "INSERT INTO "+qDst+" SELECT * FROM "+qSrc); err != nil {
+		// Keep the empty clone so the user can inspect it; report the copy error.
+		return err
+	}
+	return nil
+}
+
 // ── DDL: Column ──
 
 func (p *mysqlProvider) AddColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error {
