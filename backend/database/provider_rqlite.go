@@ -264,6 +264,44 @@ func (p *rqliteProvider) TruncateTable(db *sql.DB, dbName, tableName string) err
 	return err
 }
 
+// CopyTable has no native clone in SQLite/rqlite; replay the DumpTable output
+// (structure + INSERTs) with the destination name substituted for the source.
+func (p *rqliteProvider) CopyTable(db *sql.DB, dbName, tableName, newTableName string) error {
+	dump, err := p.DumpTable(db, dbName, tableName, DumpOptions{Structure: true, Data: true})
+	if err != nil {
+		return err
+	}
+	stmts := SplitScript(dump)
+	ctx := context.Background()
+	for _, st := range stmts {
+		// Skip the DROP guard emitted by DumpTable — the destination must be
+		// created fresh or fail loudly if it already exists.
+		if strings.HasPrefix(strings.ToUpper(st.SQL), "DROP ") {
+			continue
+		}
+		// The CREATE and INSERT statements reference the source table name;
+		// rename the first occurrence (CREATE "...name") and the INSERT target.
+		sqlStr := renameLeadingTableRef(st.SQL, tableName, newTableName)
+		if _, err := db.ExecContext(ctx, sqlStr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// renameLeadingTableRef rewrites the quoted source table name that follows the
+// leading CREATE TABLE / INSERT INTO keyword of a dump statement.
+func renameLeadingTableRef(stmt, oldName, newName string) string {
+	q := strings.Index(stmt, `"`)
+	if q >= 0 {
+		quotedOld := `"` + oldName + `"`
+		if strings.Contains(stmt, quotedOld) {
+			return strings.Replace(stmt, quotedOld, `"`+newName+`"`, 1)
+		}
+	}
+	return stmt
+}
+
 // ── DDL: Column ──
 
 func (p *rqliteProvider) AddColumn(db *sql.DB, dbName, tableName string, col ColumnDef) error {
