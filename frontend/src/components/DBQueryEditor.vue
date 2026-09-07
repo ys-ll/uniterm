@@ -375,6 +375,36 @@ function isQuerySql(text: string): boolean {
   return /^\s*(WITH|SELECT|SHOW|DESCRIBE|DESC|EXPLAIN|PRAGMA)\b/i.test(stmt)
 }
 
+function hasMultipleStatements(text: string): boolean {
+  return SplitScriptLike(text).length > 1
+}
+
+// Lightweight statement count: respects quotes and line comments so a `;`
+// inside a literal doesn't count as a separator. Block comments/DELIMITER
+// don't matter for the >1 check in practice.
+function SplitScriptLike(text: string): string[] {
+  const parts: string[] = []
+  let cur = ''
+  let inSingle = false
+  let inDouble = false
+  let inBacktick = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    const prev = i > 0 ? text[i - 1] : ''
+    if (c === "'" && !inDouble && !inBacktick && prev !== '\\') inSingle = !inSingle
+    else if (c === '"' && !inSingle && !inBacktick && prev !== '\\') inDouble = !inDouble
+    else if (c === '`' && !inSingle && !inDouble) inBacktick = !inBacktick
+    else if (c === ';' && !inSingle && !inDouble && !inBacktick) {
+      if (cur.trim()) parts.push(cur)
+      cur = ''
+      continue
+    }
+    cur += c
+  }
+  if (cur.trim()) parts.push(cur)
+  return parts
+}
+
 function normalizeSql(s: string): string {
   return s.replace(/\s+/g, ' ').trim()
 }
@@ -531,7 +561,15 @@ async function onExecute() {
   }
 
   try {
-    if (isQuerySql(toRun)) {
+    // Multi-statement scripts must run as a script: ExecuteQuery/Statement
+    // would only send the first statement (multiStatements is off in the DSN).
+    if (hasMultipleStatements(toRun)) {
+      const result = await ExecuteSQLScript(props.sessionId, props.dbName || '', toRun)
+      if (!cancelled) {
+        scriptResult.value = result
+        if (result?.failedLine) emit('cellUpdated')
+      }
+    } else if (isQuerySql(toRun)) {
       const result = await ExecuteQuery(props.sessionId, props.dbName || '', firstStatement(toRun))
       if (!cancelled) {
         queryResult.value = result
@@ -580,16 +618,32 @@ function onCancelQuery() {
 
 const scriptResult = shallowRef<ScriptResult | null>(null)
 
+// Wails v3 rejects the picker promise with "cancelled by user" when the
+// dialog is dismissed, instead of resolving with an empty path.
+function isDialogCancel(e: unknown): boolean {
+  return String(e).toLowerCase().includes('cancel')
+}
+
+// Only load files up to 1MB into the editor; larger ones run without display.
+const sqlFileEditorLimit = 1 << 20
+
 async function onOpenScriptFile() {
+  let path = ''
   try {
-    const path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
-    if (!path) return
+    path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
+  } catch (e) {
+    if (!isDialogCancel(e)) error.value = (e as any)?.message || String(e)
+    return
+  }
+  if (!path) return
+  try {
     const b64 = await ReadFileBase64(path)
     const text = decodeBase64(b64)
     error.value = ''
     queryResult.value = null
     execResult.value = null
     scriptResult.value = null
+    if (text.length <= sqlFileEditorLimit) sql.value = text
     loading.value = true
     cancelled = false
     const result = await ExecuteSQLScript(props.sessionId, props.dbName || '', text)
