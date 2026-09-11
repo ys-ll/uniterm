@@ -229,6 +229,10 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 // it until SetDataDir picks a directory; on the normal path it runs once at
 // startup. Runs exactly once either way.
 func (a *App) initStores(dataDir string, upgrade bool) {
+	// Point clink:// local shells at the app data dir (they drop a tuned
+	// clink profile next to the stores; see backend/session/local_clink.go).
+	session.SetClinkProfileDir(filepath.Join(dataDir, "clink"))
+
 	cs, err := store.NewConnectionStore(dataDir)
 	if err != nil {
 		log.Writef("Failed to init connection store: %v", err)

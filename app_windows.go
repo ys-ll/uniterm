@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"unicode/utf16"
@@ -48,6 +49,11 @@ func (a *App) GetAvailableShells() []string {
 	add("pwsh.exe")
 	add("powershell.exe")
 	add("cmd.exe")
+	// CMD (Clink) rides the user's installed clink (1.1+); the Tabby-style
+	// profile tuning happens at session start (backend/session/local_clink.go).
+	if clink := findClink(); clink != "" {
+		shells = append(shells, session.ClinkShellPathPrefix+clink)
+	}
 	for _, p := range []string{
 		`C:\Program Files\Git\bin\bash.exe`,
 		`C:\Program Files (x86)\Git\bin\bash.exe`,
@@ -84,6 +90,11 @@ func (a *App) GetAvailableShells() []string {
 		for _, sh := range shells {
 			base := strings.ToLower(filepath.Base(sh))
 			if base == "cmd.exe" || base == "powershell.exe" {
+				shells = append(shells, session.AdminShellPathPrefix+sh)
+			}
+		}
+		for _, sh := range shells {
+			if _, ok := session.ParseClinkShellPath(sh); ok {
 				shells = append(shells, session.AdminShellPathPrefix+sh)
 			}
 		}
@@ -161,6 +172,49 @@ func probeCygwinRootdir() string {
 			key.Close()
 			if err == nil && rootdir != "" {
 				return rootdir
+			}
+		}
+	}
+	return ""
+}
+
+// findClink locates the user's clink (1.1+): PATH first (covers installs
+// that put themselves on PATH, scoop shims and chocolatey shims), then the
+// well known install directories clink's setup and package managers use.
+// The release layout ships arch-named executables (clink_x64.exe,
+// clink_arm64.exe, ... from the official zip), older/manual installs have a
+// plain clink.exe — both are accepted. Returns "" when clink is not found.
+func findClink() string {
+	archExe := map[string]string{
+		"amd64": "clink_x64.exe",
+		"arm64": "clink_arm64.exe",
+		"386":   "clink_x86.exe",
+	}[runtime.GOARCH]
+	for _, name := range []string{archExe, "clink.exe"} {
+		if name == "" {
+			continue
+		}
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	for _, dir := range []string{
+		filepath.Join(os.Getenv("ProgramFiles"), "clink"),
+		filepath.Join(os.Getenv("ProgramFiles(x86)"), "clink"),
+		filepath.Join(os.Getenv("LOCALAPPDATA"), "clink"),
+		filepath.Join(os.Getenv("USERPROFILE"), "scoop", "apps", "clink", "current"),
+		filepath.Join(os.Getenv("SCOOP"), "apps", "clink", "current"),
+	} {
+		if dir == "" {
+			continue
+		}
+		for _, name := range []string{archExe, "clink.exe"} {
+			if name == "" {
+				continue
+			}
+			p := filepath.Join(dir, name)
+			if _, err := os.Stat(p); err == nil {
+				return p
 			}
 		}
 	}

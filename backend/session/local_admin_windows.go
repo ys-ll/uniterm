@@ -73,10 +73,14 @@ func IsProcessElevated() bool {
 // message (instead of ShellExecuteEx parameters) avoids re-quoting a command
 // line through argv.
 type localPtySpawn struct {
-	CommandLine string `json:"commandLine"`
-	WorkDir     string `json:"workDir,omitempty"`
-	Cols        int    `json:"cols"`
-	Rows        int    `json:"rows"`
+	CommandLine string   `json:"commandLine"`
+	WorkDir     string   `json:"workDir,omitempty"`
+	// Extra environment entries for the spawned shell (on top of the
+	// broker's environ); nil keeps the broker's plain environment. Used e.g.
+	// by clink:// shells to pass WT_SESSION=0 into the elevated ConPTY.
+	Env  []string `json:"env,omitempty"`
+	Cols int      `json:"cols"`
+	Rows int      `json:"rows"`
 }
 
 // Frame types of the broker pipe protocol. Every message is

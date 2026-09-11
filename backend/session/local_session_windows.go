@@ -173,6 +173,21 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		elevate = !IsProcessElevated()
 	}
 
+	// clink:// shells run cmd.exe with clink injected (Tabby-style). The
+	// WT_SESSION hint tells clink the host is a ConPTY terminal like Windows
+	// Terminal, so it renders through the terminal's native VT stream instead
+	// of its own ANSI emulation layer.
+	clinkExe := ""
+	var clinkEnv []string
+	if p, ok := ParseClinkShellPath(shell); ok {
+		clinkExe = p
+		clinkEnv = []string{"WT_SESSION=0"}
+	}
+	clinkProfile := ""
+	if clinkExe != "" {
+		clinkProfile = ensureClinkProfile()
+	}
+
 	// Determine working directory: use config.Cwd if set, otherwise user home.
 	workDir := config.Cwd
 	if workDir == "" {
@@ -203,6 +218,14 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 			cmd = exec.Command("wsl.exe", "-d", distro)
 		}
 		cmd.Env = os.Environ()
+	} else if clinkExe != "" {
+		// Tabby-style clink injection: cmd.exe /k <clink> inject --profile
+		// <dir>, started through ConPTY (clink's DLL injection needs the
+		// console context ConPTY provides, so the pipe fallback below runs
+		// plain cmd instead).
+		commandLine = buildClinkCommandLine(clinkExe, clinkProfile)
+		cmd = exec.Command("cmd.exe")
+		cmd.Env = append(os.Environ(), clinkEnv...)
 	} else {
 		commandLine = buildCommandLine(shell)
 		lowerShell := strings.ToLower(shell)
@@ -235,6 +258,7 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		tp, err := startElevatedPty(localPtySpawn{
 			CommandLine: commandLine,
 			WorkDir:     workDir,
+			Env:         clinkEnv,
 			Cols:        cols,
 			Rows:        rows,
 		})
@@ -259,7 +283,11 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		if cols <= 0 || rows <= 0 {
 			cols, rows = 80, 24
 		}
-		c, err := conpty.Start(commandLine, conpty.ConPtyDimensions(cols, rows), conpty.ConPtyWorkDir(workDir), conpty.ConPtyEnv(os.Environ()))
+		env := os.Environ()
+		if len(clinkEnv) > 0 {
+			env = append(env, clinkEnv...)
+		}
+		c, err := conpty.Start(commandLine, conpty.ConPtyDimensions(cols, rows), conpty.ConPtyWorkDir(workDir), conpty.ConPtyEnv(env))
 		if err == nil {
 			s.cpty = c
 			if isMSYSBash {
@@ -474,6 +502,9 @@ func buildCommandLine(shell string) string {
 func shellName(path string) string {
 	if inner, ok := ParseAdminShellPath(path); ok {
 		return shellName(inner) + " (Admin)"
+	}
+	if _, ok := ParseClinkShellPath(path); ok {
+		return "CMD (Clink)"
 	}
 	if distro, ok := parseWSLPath(path); ok {
 		return "WSL - " + distro

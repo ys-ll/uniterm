@@ -1879,6 +1879,9 @@ function getShellLabel(path: string): string {
     const inner = getShellLabel(path.slice(8))
     return inner.endsWith(' (Admin)') ? inner : `${inner} (Admin)`
   }
+  if (lower.startsWith('clink://')) {
+    return 'Command Prompt (Clink)'
+  }
   if (lower.startsWith('wsl://')) {
     const distro = path.slice(6)
     return distro ? `WSL - ${distro}` : 'WSL'
