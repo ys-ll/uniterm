@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/ys-ll/uniterm/backend/credentials"
@@ -139,11 +140,12 @@ type AISettings struct {
 }
 
 type KeyBinding struct {
-	Ctrl  bool   `json:"ctrl"`
-	Meta  bool   `json:"meta"`
-	Shift bool   `json:"shift"`
-	Alt   bool   `json:"alt"`
-	Key   string `json:"key"`
+	Ctrl    bool   `json:"ctrl"`
+	Primary bool   `json:"primary"`
+	Meta    bool   `json:"meta"`
+	Shift   bool   `json:"shift"`
+	Alt     bool   `json:"alt"`
+	Key     string `json:"key"`
 }
 
 type AppSettings struct {
@@ -268,6 +270,9 @@ func (s *SettingsStore) Load() (AppSettings, error) {
 
 	// Decrypt model apiKeys; migrate legacy plaintext to encrypted on save.
 	needsSave := false
+	if migrateLegacyPrimaryBindings(data, settings.Keyboard) {
+		needsSave = true
+	}
 	for i := range settings.AI.Models {
 		m := &settings.AI.Models[i]
 		if m.APIKey == "" || ps == nil {
@@ -313,6 +318,59 @@ func (s *SettingsStore) Load() (AppSettings, error) {
 	return settings, nil
 }
 
+// migrateLegacyPrimaryBindings must inspect the original JSON: after normal
+// unmarshalling, a missing primary field is indistinguishable from an
+// explicitly saved false value. Only bindings from the old defaults are
+// migrated, so custom Ctrl/Meta shortcuts retain their exact modifiers.
+func migrateLegacyPrimaryBindings(data []byte, keyboard map[string]KeyBinding) bool {
+	var raw struct {
+		Keyboard map[string]json.RawMessage `json:"keyboard"`
+	}
+	if len(keyboard) == 0 || json.Unmarshal(data, &raw) != nil {
+		return false
+	}
+
+	changed := false
+	for action, primaryDefault := range defaultKeyboard() {
+		binding, ok := keyboard[action]
+		if !ok || !primaryDefault.Primary || jsonFieldPresent(raw.Keyboard[action], "primary") {
+			continue
+		}
+		if binding.Ctrl && !binding.Meta && binding.Shift == primaryDefault.Shift &&
+			binding.Alt == primaryDefault.Alt && strings.EqualFold(binding.Key, primaryDefault.Key) {
+			binding.Ctrl = false
+			binding.Primary = true
+			keyboard[action] = binding
+			changed = true
+		}
+	}
+
+	// One released default used Meta+K for quick commands on every platform.
+	// It is equivalent to the primary modifier on macOS and was broken on
+	// Windows, so it is safe to migrate without knowing the current platform.
+	if binding, ok := keyboard["openQuickCommands"]; ok &&
+		!jsonFieldPresent(raw.Keyboard["openQuickCommands"], "primary") &&
+		!binding.Ctrl && binding.Meta && !binding.Shift && !binding.Alt && strings.EqualFold(binding.Key, "k") {
+		binding.Meta = false
+		binding.Primary = true
+		keyboard["openQuickCommands"] = binding
+		changed = true
+	}
+	return changed
+}
+
+func jsonFieldPresent(data json.RawMessage, field string) bool {
+	if len(data) == 0 {
+		return false
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(data, &object) != nil {
+		return false
+	}
+	_, ok := object[field]
+	return ok
+}
+
 func defaultSettings() AppSettings {
 	return AppSettings{
 		Theme:    "dark",
@@ -355,17 +413,26 @@ func defaultSettings() AppSettings {
 
 func defaultKeyboard() map[string]KeyBinding {
 	return map[string]KeyBinding{
-		"nextTab":          {Ctrl: true, Shift: false, Alt: false, Key: "tab"},
-		"prevTab":          {Ctrl: true, Shift: true, Alt: false, Key: "tab"},
-		"newConnection":    {Ctrl: true, Shift: true, Alt: false, Key: "n"},
-		"toggleSidebar":    {Ctrl: true, Shift: true, Alt: false, Key: "h"},
-		"focusTerminal":    {Ctrl: true, Shift: true, Alt: false, Key: "j"},
-		"focusAI":          {Ctrl: true, Shift: true, Alt: false, Key: "k"},
-		"lockAI":           {Ctrl: true, Shift: true, Alt: false, Key: "l"},
-		"duplicateSession": {Ctrl: true, Shift: true, Alt: false, Key: "d"},
-		"closePanel":       {Ctrl: true, Shift: true, Alt: false, Key: "q"},
-		"navigatePrev":     {Ctrl: false, Shift: false, Alt: true, Key: "arrowleft"},
-		"navigateNext":     {Ctrl: false, Shift: false, Alt: true, Key: "arrowright"},
-		"openSettings":     {Ctrl: true, Shift: false, Alt: false, Key: ","},
+		"nextTab":                 {Primary: true, Shift: false, Alt: false, Key: "tab"},
+		"prevTab":                 {Primary: true, Shift: true, Alt: false, Key: "tab"},
+		"newConnection":           {Primary: true, Shift: true, Alt: false, Key: "n"},
+		"toggleSidebar":           {Primary: true, Shift: true, Alt: false, Key: "h"},
+		"openQuickCommands":       {Primary: true, Shift: false, Alt: false, Key: "k"},
+		"focusTerminal":           {Primary: true, Shift: true, Alt: false, Key: "j"},
+		"focusAI":                 {Primary: true, Shift: true, Alt: false, Key: "k"},
+		"lockAI":                  {Primary: true, Shift: true, Alt: false, Key: "l"},
+		"duplicateSession":        {Primary: true, Shift: true, Alt: false, Key: "d"},
+		"closePanel":              {Primary: true, Shift: true, Alt: false, Key: "q"},
+		"navigatePrev":            {Ctrl: false, Shift: false, Alt: true, Key: "arrowleft"},
+		"navigateNext":            {Ctrl: false, Shift: false, Alt: true, Key: "arrowright"},
+		"toggleWorkspaceMaximize": {Primary: true, Shift: true, Alt: false, Key: "enter"},
+		"terminalSearch":          {Primary: true, Shift: true, Alt: false, Key: "f"},
+		"openSettings":            {Primary: true, Shift: false, Alt: false, Key: ","},
+		"copy":                    {Primary: true, Shift: true, Alt: false, Key: "c"},
+		"paste":                   {Primary: true, Shift: true, Alt: false, Key: "v"},
+		"toggleLineNumbers":       {Primary: true, Shift: true, Alt: false, Key: "g"},
+		"toggleTimestamps":        {Primary: true, Shift: true, Alt: false, Key: "t"},
+		"zoomFontIn":              {Primary: true, Shift: false, Alt: false, Key: "="},
+		"zoomFontOut":             {Primary: true, Shift: false, Alt: false, Key: "-"},
 	}
 }

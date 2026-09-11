@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, DEFAULT_KEYBOARD } from '../types/settings'
 import { SaveSettings, LoadSettings, GetAvailableShells, SetDefaultSessionLogDir } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { Events } from '@wailsio/runtime'
 import { setLocale } from '../i18n'
+import { migrateLegacyPrimaryBinding, migrateLegacyQuickCommandsBinding } from '../composables/useKeyboardShortcuts'
 
 // Module-level un-subscriber for the cross-window store:settings:changed listener.
 // Tracked at module scope so re-imports under HMR can detach the previous
@@ -271,6 +272,17 @@ export const useSettingsStore = defineStore('settings', () => {
 })
 
 function mergeSettings(loaded: AppSettings): AppSettings {
+  const keyboard = {
+    ...DEFAULT_KEYBOARD,
+    ...(loaded.keyboard || {})
+  }
+  const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
+  for (const action of Object.keys(DEFAULT_KEYBOARD) as (keyof typeof DEFAULT_KEYBOARD)[]) {
+    keyboard[action] = migrateLegacyPrimaryBinding(keyboard[action], DEFAULT_KEYBOARD[action])
+  }
+  // Migrate the old platform-independent default, which produced Meta+K on
+  // Windows and therefore neither displayed nor behaved as Ctrl+K.
+  keyboard.openQuickCommands = migrateLegacyQuickCommandsBinding(keyboard.openQuickCommands, isMac)
   return {
     theme: loaded.theme || DEFAULT_SETTINGS.theme,
     language: loaded.language || DEFAULT_SETTINGS.language,
@@ -287,10 +299,7 @@ function mergeSettings(loaded: AppSettings): AppSettings {
       models: loaded.ai?.models?.length ? loaded.ai.models : DEFAULT_SETTINGS.ai.models,
       activeModelId: loaded.ai?.activeModelId || DEFAULT_SETTINGS.ai.activeModelId
     },
-    keyboard: {
-      ...DEFAULT_KEYBOARD,
-      ...(loaded.keyboard || {})
-    },
+    keyboard,
     autoCheckUpdate: loaded.autoCheckUpdate ?? DEFAULT_SETTINGS.autoCheckUpdate,
     updateSource: loaded.updateSource ?? DEFAULT_SETTINGS.updateSource,
     closeTabPrompt: loaded.closeTabPrompt ?? DEFAULT_SETTINGS.closeTabPrompt,

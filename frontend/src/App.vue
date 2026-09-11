@@ -208,7 +208,7 @@ import { useSyncStore } from './stores/syncStore'
 import { useCredentialStore } from './stores/credentialStore'
 import { disposeSessionStore } from './stores/sessionStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
-import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
+import { loadKeybindings, installGlobalListener, uninstallGlobalListener, resolvePlatformDigitShortcut } from './composables/useKeyboardShortcuts'
 import { focusPanelTerminal, installTerminalFocusRestore } from './composables/useFocusTerminal'
 import { useDuplicateSession } from './composables/useDuplicateSession'
 import type { ShortcutAction } from './types/settings'
@@ -746,31 +746,17 @@ function onWheel(e: WheelEvent) {
 }
 
 // Platform digit shortcuts: macOS uses Cmd/Option, Windows and Linux use
-// Ctrl/Alt. Cmd/Ctrl+1…9 switches tabs, Alt/Option+1…9 switches workspace
-// panels; Ctrl/Cmd+Shift+Enter maximizes the active panel.
+// Ctrl/Alt. Cmd/Ctrl+1…9/0 switches tabs, Alt/Option+1…9/0 switches workspace
+// panels (0 selects the tenth). Workspace maximize is handled by the
+// regular keybinding layer.
 let isMac = false
 function onPlatformSystemShortcut(e: KeyboardEvent) {
   if (e.defaultPrevented) return
-  const workspaceMaximizeShortcut = e.shiftKey && !e.altKey && (
-    (isMac && e.metaKey && !e.ctrlKey) ||
-    (!isMac && e.ctrlKey && !e.metaKey)
-  )
-  if (workspaceMaximizeShortcut && e.code === 'Enter') {
-    const tab = tabStore.activeTab
-    if (!tab || tab.type !== 'workspace' || !tab.activePanelId) return
-    e.preventDefault()
-    e.stopImmediatePropagation()
-    const panelId = tab.activePanelId
-    tabStore.toggleWorkspacePanelMaximize(tab.id)
-    nextTick(() => focusPanelTerminal(panelId))
-    return
-  }
-  const digitMatch = e.code.match(/^Digit([1-9])$/)
-  const workspaceModifier = e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey
-  if (workspaceModifier && digitMatch) {
+  const digitShortcut = resolvePlatformDigitShortcut(e, isMac)
+  if (digitShortcut?.action === 'workspace') {
     const tab = tabStore.activeTab
     if (!tab || tab.type !== 'workspace') return
-    const panelId = tab.panelIds[Number(digitMatch[1]) - 1]
+    const panelId = tab.panelIds[digitShortcut.index]
     if (!panelId) return
     e.preventDefault()
     e.stopImmediatePropagation()
@@ -778,12 +764,8 @@ function onPlatformSystemShortcut(e: KeyboardEvent) {
     nextTick(() => focusPanelTerminal(panelId))
     return
   }
-  const tabModifier = !e.altKey && !e.shiftKey && (
-    (isMac && e.metaKey && !e.ctrlKey) ||
-    (!isMac && e.ctrlKey && !e.metaKey)
-  )
-  if (tabModifier && digitMatch) {
-    const tab = tabStore.tabs[Number(digitMatch[1]) - 1]
+  if (digitShortcut?.action === 'tab') {
+    const tab = tabStore.tabs[digitShortcut.index]
     if (!tab) return
     e.preventDefault()
     e.stopImmediatePropagation()
@@ -1030,6 +1012,13 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   },
   navigatePrev: () => navigatePanel(-1),
   navigateNext: () => navigatePanel(1),
+  toggleWorkspaceMaximize: () => {
+    const tab = tabStore.activeTab
+    if (!tab || tab.type !== 'workspace' || !tab.activePanelId) return
+    const panelId = tab.activePanelId
+    tabStore.toggleWorkspacePanelMaximize(tab.id)
+    nextTick(() => focusPanelTerminal(panelId))
+  },
   openSettings: () => openSettings(),
   duplicateSession: () => {
     // Same logic as the tab context menu's "复制会话": delegate to the shared
@@ -1054,9 +1043,9 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
 }
 
 function applyKeybindings() {
-  // Digit shortcuts (Ctrl/Cmd+digit → tab, Alt/Option+digit → workspace
-  // panel) are fixed platform bindings handled by onPlatformSystemShortcut.
-  loadKeybindings(settingsStore.settings.keyboard, actionHandlers)
+  // Digit shortcuts (Ctrl/Cmd+1…9/0 → tab, Alt/Option+1…9/0 → workspace
+  // panel, with 0 selecting the tenth) are handled above.
+  loadKeybindings(settingsStore.settings.keyboard, actionHandlers, isMac)
 }
 
 onUnmounted(() => {

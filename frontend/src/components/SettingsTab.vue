@@ -900,6 +900,16 @@
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td>{{ t('shortcut.switchTabByNumber') }}</td>
+              <td><kbd class="kb-key">{{ fixedDigitShortcutDisplay('tab') }}</kbd></td>
+              <td class="kb-actions">—</td>
+            </tr>
+            <tr>
+              <td>{{ t('shortcut.switchWorkspacePanelByNumber') }}</td>
+              <td><kbd class="kb-key">{{ fixedDigitShortcutDisplay('workspace') }}</kbd></td>
+              <td class="kb-actions">—</td>
+            </tr>
             <tr
               v-for="action in (Object.keys(SHORTCUT_LABELS) as ShortcutAction[])"
               :key="action"
@@ -1187,7 +1197,7 @@ import SkillsManager from './SkillsManager.vue'
 import CommandsManager from './CommandsManager.vue'
 import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings } from '../types/settings'
 import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
-import { uninstallGlobalListener, installGlobalListener, formatKeyBinding } from '../composables/useKeyboardShortcuts'
+import { uninstallGlobalListener, installGlobalListener, formatKeyBinding, isReservedDigitBinding, effectiveBindingKey, bindingKeyFromEvent } from '../composables/useKeyboardShortcuts'
 import AddRepoDialog from './AddRepoDialog.vue'
 import EditRepoDialog from './EditRepoDialog.vue'
 import ChangePasswordDialog from './ChangePasswordDialog.vue'
@@ -1497,12 +1507,20 @@ function bindingDisplay(action: ShortcutAction): string {
   return formatKeyBinding(b, isMac.value)
 }
 
+function fixedDigitShortcutDisplay(action: 'tab' | 'workspace'): string {
+  const modifier = action === 'tab'
+    ? (isMac.value ? 'Cmd' : 'Ctrl')
+    : (isMac.value ? 'Option' : 'Alt')
+  return `${modifier}+1…9 / ${modifier}+0`
+}
+
 function isDefaultBinding(action: ShortcutAction): boolean {
   const current = settingsStore.settings.keyboard[action]
   const def = DEFAULT_KEYBOARD[action]
   if (!current || !def) return true
   return current.ctrl === def.ctrl && current.shift === def.shift
     && (current.meta || false) === (def.meta || false)
+    && (current.primary || false) === (def.primary || false)
     && current.alt === def.alt && current.key === def.key
 }
 
@@ -1521,7 +1539,7 @@ function startRebind(action: ShortcutAction) {
   uninstallGlobalListener()
   if (!rebindListenerActive) {
     rebindListenerActive = true
-    document.addEventListener('keydown', onRebindKeydown, true)
+    window.addEventListener('keydown', onRebindKeydown, true)
     window.addEventListener('blur', onRebindBlur)
   }
 }
@@ -1529,7 +1547,7 @@ function startRebind(action: ShortcutAction) {
 function stopRebind() {
   if (rebindListenerActive) {
     rebindListenerActive = false
-    document.removeEventListener('keydown', onRebindKeydown, true)
+    window.removeEventListener('keydown', onRebindKeydown, true)
     window.removeEventListener('blur', onRebindBlur)
   }
   rebindingAction.value = null
@@ -1539,7 +1557,7 @@ function stopRebind() {
 function clearBinding(action: ShortcutAction) {
   settingsStore.settings.keyboard = {
     ...settingsStore.settings.keyboard,
-    [action]: { ctrl: false, meta: false, shift: false, alt: false, key: '' }
+    [action]: { ctrl: false, meta: false, primary: false, shift: false, alt: false, key: '' }
   }
   settingsStore.save()
   stopRebind()
@@ -1556,9 +1574,15 @@ function onRebindKeydown(e: KeyboardEvent) {
   const binding: KeyBinding = {
     ctrl: e.ctrlKey,
     meta: e.metaKey,
+    primary: false,
     shift: e.shiftKey,
     alt: e.altKey,
-    key: key.toLowerCase(),
+    key: bindingKeyFromEvent(e),
+  }
+
+  if (isReservedDigitBinding(binding, isMac.value)) {
+    msg.warning(t('shortcut.reservedDigitBinding'))
+    return
   }
 
   // Check for conflicts and clear them
@@ -1566,7 +1590,7 @@ function onRebindKeydown(e: KeyboardEvent) {
   const kb = { ...settingsStore.settings.keyboard }
   kb[rebindingAction.value] = binding
   if (conflictAction) {
-    kb[conflictAction] = { ctrl: false, shift: false, alt: false, key: '' }
+    kb[conflictAction] = { ctrl: false, meta: false, primary: false, shift: false, alt: false, key: '' }
   }
   settingsStore.settings.keyboard = kb as KeyboardSettings
   settingsStore.save()
@@ -1574,18 +1598,14 @@ function onRebindKeydown(e: KeyboardEvent) {
 }
 
 function findConflict(binding: KeyBinding): ShortcutAction | null {
-  const targetKey = bindingKey(binding)
+  const targetKey = effectiveBindingKey(binding, isMac.value)
   const kb = settingsStore.settings.keyboard
   for (const [action, b] of Object.entries(kb) as [ShortcutAction, KeyBinding][]) {
     if (action === rebindingAction.value) continue
     if (!b.key) continue
-    if (bindingKey(b) === targetKey) return action
+    if (effectiveBindingKey(b, isMac.value) === targetKey) return action
   }
   return null
-}
-
-function bindingKey(binding: KeyBinding): string {
-  return `${binding.ctrl ? 'ctrl+' : ''}${binding.meta ? 'meta+' : ''}${binding.shift ? 'shift+' : ''}${binding.alt ? 'alt+' : ''}${binding.key.toLowerCase()}`
 }
 
 function onRebindBlur() {

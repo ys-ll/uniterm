@@ -147,6 +147,7 @@ export type ShortcutAction =
   | 'focusAI' | 'focusTerminal' | 'lockAI'
   | 'closePanel'
   | 'navigatePrev' | 'navigateNext'
+  | 'toggleWorkspaceMaximize'
   | 'duplicateSession'
   | 'terminalSearch'
   | 'openSettings'
@@ -160,14 +161,17 @@ export type ShortcutAction =
 export interface KeyBinding {
   ctrl: boolean
   meta?: boolean
+  // Platform primary modifier: Command on macOS, Ctrl elsewhere. Manual
+  // rebinding always stores concrete ctrl/meta flags instead.
+  primary?: boolean
   shift: boolean
   alt: boolean
   key: string
 }
 
 // Digit shortcuts are fixed platform bindings, not configurable per-action
-// entries: Ctrl/Cmd + 1…9 switches tabs and Alt/Option + 1…9 switches
-// workspace panels (see onPlatformSystemShortcut in App.vue).
+// entries: Ctrl/Cmd + 1…9/0 switches tabs and Alt/Option + 1…9/0 switches
+// workspace panels, with 0 selecting the tenth entry (see App.vue).
 export type KeyboardSettings = Partial<Record<ShortcutAction, KeyBinding>>
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
@@ -176,6 +180,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   prevTab: 'shortcut.prevTab',
   navigatePrev: 'shortcut.navigatePrev',
   navigateNext: 'shortcut.navigateNext',
+  toggleWorkspaceMaximize: 'shortcut.toggleWorkspaceMaximize',
   closePanel: 'shortcut.closePanel',
   toggleSidebar: 'shortcut.toggleSidebar',
   openQuickCommands: 'shortcut.openQuickCommands',
@@ -194,26 +199,27 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
 }
 
 export const DEFAULT_KEYBOARD: KeyboardSettings = {
-  nextTab: { ctrl: true, shift: false, alt: false, key: 'tab' },
-  prevTab: { ctrl: true, shift: true, alt: false, key: 'tab' },
-  newConnection: { ctrl: true, shift: true, alt: false, key: 'n' },
-  toggleSidebar: { ctrl: true, shift: true, alt: false, key: 'h' },
-  openQuickCommands: { ctrl: false, meta: true, shift: false, alt: false, key: 'k' },
-  focusTerminal: { ctrl: true, shift: true, alt: false, key: 'j' },
-  focusAI: { ctrl: true, shift: true, alt: false, key: 'k' },
-  closePanel: { ctrl: true, shift: true, alt: false, key: 'q' },
+  nextTab: { ctrl: false, primary: true, shift: false, alt: false, key: 'tab' },
+  prevTab: { ctrl: false, primary: true, shift: true, alt: false, key: 'tab' },
+  newConnection: { ctrl: false, primary: true, shift: true, alt: false, key: 'n' },
+  toggleSidebar: { ctrl: false, primary: true, shift: true, alt: false, key: 'h' },
+  openQuickCommands: { ctrl: false, meta: false, primary: true, shift: false, alt: false, key: 'k' },
+  focusTerminal: { ctrl: false, primary: true, shift: true, alt: false, key: 'j' },
+  focusAI: { ctrl: false, primary: true, shift: true, alt: false, key: 'k' },
+  closePanel: { ctrl: false, primary: true, shift: true, alt: false, key: 'q' },
   navigatePrev: { ctrl: false, shift: false, alt: true, key: 'arrowleft' },
   navigateNext: { ctrl: false, shift: false, alt: true, key: 'arrowright' },
-  lockAI: { ctrl: true, shift: true, alt: false, key: 'l' },
-  duplicateSession: { ctrl: true, shift: true, alt: false, key: 'd' },
-  terminalSearch: { ctrl: true, shift: true, alt: false, key: 'f' },
-  openSettings: { ctrl: true, shift: false, alt: false, key: ',' },
-  copy: { ctrl: true, shift: true, alt: false, key: 'c' },
-  paste: { ctrl: true, shift: true, alt: false, key: 'v' },
-  toggleLineNumbers: { ctrl: true, shift: true, alt: false, key: 'g' },
-  toggleTimestamps: { ctrl: true, shift: true, alt: false, key: 't' },
-  zoomFontIn: { ctrl: true, shift: false, alt: false, key: '=' },
-  zoomFontOut: { ctrl: true, shift: false, alt: false, key: '-' },
+  toggleWorkspaceMaximize: { ctrl: false, meta: false, primary: true, shift: true, alt: false, key: 'enter' },
+  lockAI: { ctrl: false, primary: true, shift: true, alt: false, key: 'l' },
+  duplicateSession: { ctrl: false, primary: true, shift: true, alt: false, key: 'd' },
+  terminalSearch: { ctrl: false, primary: true, shift: true, alt: false, key: 'f' },
+  openSettings: { ctrl: false, primary: true, shift: false, alt: false, key: ',' },
+  copy: { ctrl: false, primary: true, shift: true, alt: false, key: 'c' },
+  paste: { ctrl: false, primary: true, shift: true, alt: false, key: 'v' },
+  toggleLineNumbers: { ctrl: false, primary: true, shift: true, alt: false, key: 'g' },
+  toggleTimestamps: { ctrl: false, primary: true, shift: true, alt: false, key: 't' },
+  zoomFontIn: { ctrl: false, primary: true, shift: false, alt: false, key: '=' },
+  zoomFontOut: { ctrl: false, primary: true, shift: false, alt: false, key: '-' },
 }
 
 export interface SFTPBookmarks {

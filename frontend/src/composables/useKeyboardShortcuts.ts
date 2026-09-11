@@ -5,17 +5,52 @@ type ActionHandlers = Record<ShortcutAction, () => void>
 /**
  * Render a KeyBinding as a human-readable combo, e.g. Ctrl+Shift+C.
  * Shared by the settings UI and the terminal context-menu shortcut hints so
- * both show the same format (Cmd on macOS, Meta elsewhere).
+ * both show the same format. Explicit primary bindings resolve to Command on
+ * macOS and Ctrl elsewhere; manually configured Ctrl/Meta modifiers stay exact.
  */
 export function formatKeyBinding(b: KeyBinding, isMac: boolean): string {
   if (!b) return ''
+  const resolved = resolveKeyBinding(b, isMac)
   const parts: string[] = []
-  if (b.ctrl) parts.push('Ctrl')
-  if (b.meta) parts.push(isMac ? 'Cmd' : 'Meta')
-  if (b.shift) parts.push('Shift')
-  if (b.alt) parts.push('Alt')
-  parts.push(b.key)
+  if (resolved.ctrl) parts.push('Ctrl')
+  if (resolved.meta) parts.push(isMac ? 'Cmd' : 'Meta')
+  if (resolved.shift) parts.push('Shift')
+  if (resolved.alt) parts.push('Alt')
+  parts.push(resolved.key)
   return parts.join('+')
+}
+
+export function resolveKeyBinding(b: KeyBinding, isMac: boolean): KeyBinding {
+  if (!b.primary) return b
+  return {
+    ...b,
+    primary: false,
+    ctrl: !isMac,
+    meta: isMac,
+  }
+}
+
+export function migrateLegacyQuickCommandsBinding(
+  binding: KeyBinding | undefined,
+  isMac: boolean,
+): KeyBinding | undefined {
+  if (isMac || !binding?.meta || binding.primary !== undefined || binding.ctrl || binding.shift || binding.alt
+    || binding.key.toLowerCase() !== 'k') {
+    return binding
+  }
+  return { ctrl: false, meta: false, primary: true, shift: false, alt: false, key: 'k' }
+}
+
+export function migrateLegacyPrimaryBinding(
+  binding: KeyBinding | undefined,
+  defaultBinding: KeyBinding | undefined,
+): KeyBinding | undefined {
+  if (!binding || !defaultBinding?.primary || binding.primary !== undefined || !binding.ctrl || binding.meta
+    || binding.shift !== defaultBinding.shift || binding.alt !== defaultBinding.alt
+    || binding.key.toLowerCase() !== defaultBinding.key.toLowerCase()) {
+    return binding
+  }
+  return { ...defaultBinding }
 }
 
 function bindingKey(b: KeyBinding): string {
@@ -35,8 +70,56 @@ function normalize(e: KeyboardEvent): string {
   if (e.metaKey) parts.push('meta')
   if (e.shiftKey) parts.push('shift')
   if (e.altKey) parts.push('alt')
-  parts.push(e.key.toLowerCase())
+  parts.push(bindingKeyFromEvent(e))
   return parts.join('+')
+}
+
+export function bindingKeyFromEvent(
+  e: Pick<KeyboardEvent, 'key' | 'code'>,
+): string {
+  const digit = e.code.match(/^Digit([0-9])$/)
+  return digit ? digit[1] : e.key.toLowerCase()
+}
+
+export type PlatformDigitShortcut =
+  | { action: 'tab'; index: number }
+  | { action: 'workspace'; index: number }
+
+// Resolve only exact platform digit combinations. In particular, Alt+N and
+// Ctrl+N are mutually exclusive on Windows and must never select the same UI.
+export function resolvePlatformDigitShortcut(
+  e: Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey'>,
+  isMac: boolean,
+): PlatformDigitShortcut | null {
+  const match = e.code.match(/^Digit([0-9])$/)
+  if (!match || e.shiftKey) return null
+  // Match the conventional terminal shortcut layout: 1…9 select the first
+  // nine entries and 0 selects the tenth.
+  const digit = Number(match[1])
+  const index = digit === 0 ? 9 : digit - 1
+  if (e.altKey && !e.metaKey && !e.ctrlKey) {
+    return { action: 'workspace', index }
+  }
+  const tabModifier = !e.altKey && (
+    (isMac && e.metaKey && !e.ctrlKey) ||
+    (!isMac && e.ctrlKey && !e.metaKey)
+  )
+  return tabModifier ? { action: 'tab', index } : null
+}
+
+// Digit navigation is fixed and takes precedence over configurable actions.
+// Modified variants such as Ctrl+Shift+1 remain available to users.
+export function isReservedDigitBinding(b: KeyBinding, isMac: boolean): boolean {
+  const resolved = resolveKeyBinding(b, isMac)
+  if (!/^[0-9]$/.test(resolved.key) || resolved.shift) return false
+  if (resolved.alt && !resolved.ctrl && !resolved.meta) return true
+  return isMac
+    ? !!resolved.meta && !resolved.ctrl && !resolved.alt
+    : !!resolved.ctrl && !resolved.meta && !resolved.alt
+}
+
+export function effectiveBindingKey(b: KeyBinding, isMac: boolean): string {
+  return bindingKey(resolveKeyBinding(b, isMac))
 }
 
 // Module-level state: key combo → action handler
@@ -54,20 +137,19 @@ const TERMINAL_SCOPED_ACTIONS: ShortcutAction[] = ['copy', 'paste']
 export function loadKeybindings(
   bindings: KeyboardSettings,
   handlers: ActionHandlers,
+  isMac = false,
 ) {
   shortcutMap.clear()
   terminalShortcutMap.clear()
   actionKeyMap.clear()
   for (const [action, b] of Object.entries(bindings) as [ShortcutAction, KeyBinding][]) {
-    const key = bindingKey(b)
+    if (isReservedDigitBinding(b, isMac)) continue
+    const key = effectiveBindingKey(b, isMac)
     if (!key) continue
     const handler = handlers[action]
     if (handler) {
       const target = TERMINAL_SCOPED_ACTIONS.includes(action) ? terminalShortcutMap : shortcutMap
       target.set(key, handler)
-      if (!b.meta && b.ctrl) {
-        target.set(key.replace(/^ctrl\+/, 'meta+'), handler)
-      }
       actionKeyMap.set(action, key)
     }
   }
