@@ -208,7 +208,7 @@ import { useSyncStore } from './stores/syncStore'
 import { useCredentialStore } from './stores/credentialStore'
 import { disposeSessionStore } from './stores/sessionStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
-import { loadKeybindings, installGlobalListener, uninstallGlobalListener, matchDigitShortcut } from './composables/useKeyboardShortcuts'
+import { loadKeybindings, installGlobalListener, uninstallGlobalListener, matchDigitShortcut, isRebinding } from './composables/useKeyboardShortcuts'
 import { focusPanelTerminal, installTerminalFocusRestore } from './composables/useFocusTerminal'
 import { useDuplicateSession } from './composables/useDuplicateSession'
 import type { ShortcutAction } from './types/settings'
@@ -755,7 +755,9 @@ function onWheel(e: WheelEvent) {
 // (maximizePanel action).
 let isMac = false
 function onPlatformSystemShortcut(e: KeyboardEvent) {
-  if (e.defaultPrevented) return
+  // Stand down while the settings page captures a rebind — otherwise
+  // recording e.g. Ctrl+1 would switch tabs (and Cmd+Q would quit on mac).
+  if (e.defaultPrevented || isRebinding()) return
   const digitMatch = e.code.match(/^Digit([1-9])$/)
   if (digitMatch) {
     const kb = settingsStore.settings.keyboard

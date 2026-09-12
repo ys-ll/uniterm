@@ -142,6 +142,18 @@ export function getActionKey(action: ShortcutAction): string {
   return actionKeyMap.get(action) || ''
 }
 
+// True while the settings page is capturing a key rebind. Runtime handlers
+// (the global listener is already uninstalled, but e.g. App.vue's platform
+// digit handler is a separate capture listener) must stand down, otherwise
+// recording e.g. Ctrl+1 would switch tabs mid-capture.
+let rebinding = false
+export function setRebinding(v: boolean): void {
+  rebinding = v
+}
+export function isRebinding(): boolean {
+  return rebinding
+}
+
 function fire(e: KeyboardEvent, normalized: string, map: Map<string, () => void>): boolean {
   const handler = map.get(normalized)
   if (!handler) return false
@@ -255,6 +267,26 @@ function modifierText(mod: KeyBinding, isMac: boolean): string {
   if (mod.shift) parts.push('Shift')
   if (mod.alt) parts.push('Alt')
   return parts.join('+')
+}
+
+// Platform-default modifier flags per digit family: tabs switch with
+// Ctrl/Cmd (unified on mac), panels with Alt/Option.
+export const TAB_DEFAULT_FLAGS: KeyBinding = { ctrl: true, shift: false, alt: false, key: '' }
+export const PANEL_DEFAULT_FLAGS: KeyBinding = { ctrl: false, shift: false, alt: true, key: '' }
+
+export function digitModifierFlagsEqual(a: KeyBinding, b: KeyBinding): boolean {
+  return !!a.ctrl === !!b.ctrl && !!a.shift === !!b.shift && !!a.alt === !!b.alt
+}
+
+// True when assigning `binding` to one digit family would collide with the
+// other family's effective combo: an unset family falls back to its platform
+// default (`otherDefault` — ctrl for tabs, alt for panels), a configured
+// family uses its own flags, and a disabled (all-flags-off) family never
+// collides.
+export function digitModifierCollides(other: KeyBinding | undefined, otherDefault: KeyBinding, binding: KeyBinding): boolean {
+  if (other && !hasAnyFlag(other)) return false
+  const effective = other ?? otherDefault
+  return digitModifierFlagsEqual(effective, binding)
 }
 
 /**

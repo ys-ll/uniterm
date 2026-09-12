@@ -1257,7 +1257,7 @@ import SkillsManager from './SkillsManager.vue'
 import CommandsManager from './CommandsManager.vue'
 import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings } from '../types/settings'
 import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
-import { uninstallGlobalListener, installGlobalListener, formatKeyBinding } from '../composables/useKeyboardShortcuts'
+import { uninstallGlobalListener, installGlobalListener, formatKeyBinding, digitModifierCollides, digitModifierFlagsEqual, TAB_DEFAULT_FLAGS, PANEL_DEFAULT_FLAGS, setRebinding } from '../composables/useKeyboardShortcuts'
 import AddRepoDialog from './AddRepoDialog.vue'
 import EditRepoDialog from './EditRepoDialog.vue'
 import ChangePasswordDialog from './ChangePasswordDialog.vue'
@@ -1616,6 +1616,7 @@ let rebindListenerActive = false
 function startRebind(action: ShortcutAction) {
   rebindingAction.value = action
   uninstallGlobalListener()
+  setRebinding(true)
   if (!rebindListenerActive) {
     rebindListenerActive = true
     document.addEventListener('keydown', onRebindKeydown, true)
@@ -1632,6 +1633,7 @@ function stopRebind() {
   rebindingAction.value = null
   rebindingTabSwitch.value = false
   rebindingPanelSwitch.value = false
+  setRebinding(false)
   installGlobalListener()
 }
 
@@ -1731,32 +1733,39 @@ function isPanelSwitchModifierUnset(): boolean {
   return !settingsStore.settings.keyboard.panelSwitchModifier
 }
 
-function digitModifierFlagsEqual(a: KeyBinding, b: KeyBinding): boolean {
-  return !!a.ctrl === !!b.ctrl && !!a.shift === !!b.shift && !!a.alt === !!b.alt
-}
-
 function setDigitModifier(key: DigitModifierKey, binding: KeyBinding | null) {
   const kb: KeyboardSettings = { ...settingsStore.settings.keyboard }
   if (binding) {
-    kb[key] = binding
+    const isTab = key === 'tabSwitchModifier'
     // The two digit families are mutually exclusive: assigning one clears the
-    // other when it claims the same combo (the runtime would otherwise let
-    // tab switching silently win and the panel row would advertise a dead
-    // binding).
-    const otherKey: DigitModifierKey = key === 'tabSwitchModifier' ? 'panelSwitchModifier' : 'tabSwitchModifier'
-    const other = kb[otherKey]
-    if (other && (other.ctrl || other.shift || other.alt) && digitModifierFlagsEqual(other, binding)) {
+    // other when it claims the same combo. An unset other family still counts
+    // through its own platform default — otherwise e.g. panels set to Ctrl
+    // would silently lose to the default tab switching. This runs BEFORE the
+    // own-default check below: recording e.g. Ctrl back onto tabs must clear
+    // a conflicting panel binding even though Ctrl is also the tab default.
+    const otherKey: DigitModifierKey = isTab ? 'panelSwitchModifier' : 'tabSwitchModifier'
+    const otherDefault = isTab ? PANEL_DEFAULT_FLAGS : TAB_DEFAULT_FLAGS
+    if (digitModifierCollides(kb[otherKey], otherDefault, binding)) {
       kb[otherKey] = { ctrl: false, shift: false, alt: false, key: '' }
     }
-    // Mirror the per-action conflict rule: an action explicitly bound to the
-    // same combo with a digit key would shadow the family for that digit (the
-    // global keybinding listener runs before the platform handler), so clear
-    // it like findConflict does for regular rebinds.
-    for (const [action, b] of Object.entries(kb) as [ShortcutAction, KeyBinding][]) {
-      if ((action as string) === key) continue
-      if (!b || !b.key || !/^[1-9]$/.test(b.key)) continue
-      if (digitModifierFlagsEqual(b, binding)) {
-        kb[action] = { ctrl: false, shift: false, alt: false, key: '' }
+    const ownDefault = isTab ? TAB_DEFAULT_FLAGS : PANEL_DEFAULT_FLAGS
+    // Recording a family's own platform default (Ctrl for tabs, Alt for
+    // panels) is the same as never having configured it — store nothing so
+    // the row keeps showing the default and reset stays hidden.
+    if (digitModifierFlagsEqual(binding, ownDefault)) {
+      delete kb[key]
+    } else {
+      kb[key] = binding
+      // Mirror the per-action conflict rule: an action explicitly bound to
+      // the same combo with a digit key would shadow the family for that
+      // digit (the global keybinding listener runs before the platform
+      // handler), so clear it like findConflict does for regular rebinds.
+      for (const [action, b] of Object.entries(kb) as [ShortcutAction, KeyBinding][]) {
+        if ((action as string) === key) continue
+        if (!b || !b.key || !/^[1-9]$/.test(b.key)) continue
+        if (digitModifierFlagsEqual(b, binding)) {
+          kb[action] = { ctrl: false, shift: false, alt: false, key: '' }
+        }
       }
     }
   } else {
@@ -1800,6 +1809,7 @@ function clearPanelSwitchModifier() {
 function startRebindTabSwitch() {
   rebindingTabSwitch.value = true
   uninstallGlobalListener()
+  setRebinding(true)
   if (!rebindListenerActive) {
     rebindListenerActive = true
     document.addEventListener('keydown', onRebindKeydown, true)
@@ -1810,6 +1820,7 @@ function startRebindTabSwitch() {
 function startRebindPanelSwitch() {
   rebindingPanelSwitch.value = true
   uninstallGlobalListener()
+  setRebinding(true)
   if (!rebindListenerActive) {
     rebindListenerActive = true
     document.addEventListener('keydown', onRebindKeydown, true)

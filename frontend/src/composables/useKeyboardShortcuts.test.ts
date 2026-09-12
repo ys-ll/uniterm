@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   loadKeybindings, onGlobalKeydown, matchDigitShortcut, panelDigitShortcutsSuppressed,
   tabDigitShortcutPrefix, panelDigitShortcutPrefix, formatDigitShortcut, formatKeyBinding,
+  digitModifierCollides, isRebinding, setRebinding,
 } from './useKeyboardShortcuts'
 import { DEFAULT_KEYBOARD } from '../types/settings'
 import type { KeyboardSettings } from '../types/settings'
@@ -92,6 +93,16 @@ describe('useKeyboardShortcuts — maximize panel', () => {
     expect(maximizePanel).toHaveBeenCalledTimes(2)
     onGlobalKeydown(fakeKey({ key: 'Enter' }))
     expect(maximizePanel).toHaveBeenCalledTimes(2) // bare Enter → unharmed
+  })
+})
+
+describe('rebinding flag', () => {
+  it('toggles so runtime handlers can stand down while capturing keys', () => {
+    expect(isRebinding()).toBe(false)
+    setRebinding(true)
+    expect(isRebinding()).toBe(true)
+    setRebinding(false)
+    expect(isRebinding()).toBe(false)
   })
 })
 
@@ -193,6 +204,36 @@ describe('panelDigitShortcutsSuppressed — panel modifier collisions', () => {
   it('is false for distinct combos and the default Alt binding', () => {
     expect(panelDigitShortcutsSuppressed(undefined, undefined)).toBe(false)
     expect(panelDigitShortcutsSuppressed(undefined, ctrlShift)).toBe(false)
+  })
+})
+
+describe('digitModifierCollides — mutual exclusion of the two digit families', () => {
+  const ctrl = { ctrl: true, shift: false, alt: false, key: '' }
+  const ctrlShift = { ctrl: true, shift: true, alt: false, key: '' }
+  const alt = { ctrl: false, shift: false, alt: true, key: '' }
+  const none = { ctrl: false, shift: false, alt: false, key: '' }
+  // Platform defaults: tabs = Ctrl/Cmd, panels = Alt/Option.
+  const tabDefault = { ctrl: true, shift: false, alt: false, key: '' }
+  const panelDefault = { ctrl: false, shift: false, alt: true, key: '' }
+
+  it('an unset other family counts as its own platform default', () => {
+    // Setting panels to Ctrl collides with the tabs' Ctrl/Cmd default…
+    expect(digitModifierCollides(undefined, tabDefault, ctrl)).toBe(true)
+    // …but setting tabs to Ctrl does NOT collide with the panels' Alt default.
+    expect(digitModifierCollides(undefined, panelDefault, ctrl)).toBe(false)
+    // Setting tabs to Alt collides with the panels' Alt default…
+    expect(digitModifierCollides(undefined, panelDefault, alt)).toBe(true)
+    // …while setting panels to Alt does not collide with the tabs' default.
+    expect(digitModifierCollides(undefined, tabDefault, alt)).toBe(false)
+  })
+
+  it('a configured other family collides only on equal flags', () => {
+    expect(digitModifierCollides(alt, tabDefault, alt)).toBe(true)
+    expect(digitModifierCollides(ctrlShift, panelDefault, ctrl)).toBe(false)
+  })
+
+  it('a disabled (cleared) other family never collides', () => {
+    expect(digitModifierCollides(none, tabDefault, ctrl)).toBe(false)
   })
 })
 
