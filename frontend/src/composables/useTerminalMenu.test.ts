@@ -49,6 +49,7 @@ vi.mock('../stores/settingsStore', () => ({
 }))
 
 import { useTerminalMenu } from './useTerminalMenu'
+import { Clipboard } from '@wailsio/runtime'
 
 function buildMenu(getSelection: () => string) {
   return useTerminalMenu({ getSelection, onPaste: vi.fn() })
@@ -108,6 +109,23 @@ describe('useTerminalMenu.writeClipboard', () => {
     mockSettingsStore.settings.terminal.rightClickAction = 'paste'
     const m = buildMenu(() => '')
     m.onContextMenu(new FakeMouseEvent() as any)
+    expect(m.menuVisible.value).toBe(false)
+  })
+
+  // Regression: the Wails Clipboard import was dropped from useTerminalMenu,
+  // so the bare `Clipboard` reference resolved to the DOM global (the Clipboard
+  // API interface) and Clipboard.Text() threw inside the swallowed try/catch —
+  // right-click paste did nothing while every test still stayed green. The
+  // paste dispatch must actually reach onPaste through the Wails runtime.
+  it('pastes clipboard text via onPaste when rightClickAction is "paste"', async () => {
+    mockSettingsStore.settings.terminal.rightClickAction = 'paste'
+    const paste = vi.fn()
+    const m = useTerminalMenu({ getSelection: () => '', onPaste: paste })
+    vi.mocked(Clipboard.Text).mockResolvedValueOnce('clipboard-content')
+    m.onContextMenu(new FakeMouseEvent() as any)
+    await flushAsync()
+    expect(Clipboard.Text).toHaveBeenCalled()
+    expect(paste).toHaveBeenCalledWith('clipboard-content')
     expect(m.menuVisible.value).toBe(false)
   })
 
