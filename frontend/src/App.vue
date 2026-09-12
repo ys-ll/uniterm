@@ -208,7 +208,7 @@ import { useSyncStore } from './stores/syncStore'
 import { useCredentialStore } from './stores/credentialStore'
 import { disposeSessionStore } from './stores/sessionStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
-import { loadKeybindings, installGlobalListener, uninstallGlobalListener } from './composables/useKeyboardShortcuts'
+import { loadKeybindings, installGlobalListener, uninstallGlobalListener, matchDigitShortcut } from './composables/useKeyboardShortcuts'
 import { focusPanelTerminal, installTerminalFocusRestore } from './composables/useFocusTerminal'
 import { useDuplicateSession } from './composables/useDuplicateSession'
 import type { ShortcutAction } from './types/settings'
@@ -747,7 +747,9 @@ function onWheel(e: WheelEvent) {
 
 // Platform digit shortcuts: macOS uses Cmd/Option, Windows and Linux use
 // Ctrl/Alt. Cmd/Ctrl+1…9 switches tabs, Alt/Option+1…9 switches workspace
-// panels; Ctrl/Cmd+Shift+Enter maximizes the active panel.
+// panels; Ctrl/Cmd+Shift+Enter maximizes the active panel. The tab-switch
+// modifier is user-configurable (keyboard.tabSwitchModifier); when it claims
+// the Alt-only combo the panel shortcuts step aside and their badges hide.
 let isMac = false
 function onPlatformSystemShortcut(e: KeyboardEvent) {
   if (e.defaultPrevented) return
@@ -766,29 +768,27 @@ function onPlatformSystemShortcut(e: KeyboardEvent) {
     return
   }
   const digitMatch = e.code.match(/^Digit([1-9])$/)
-  const workspaceModifier = e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey
-  if (workspaceModifier && digitMatch) {
-    const tab = tabStore.activeTab
-    if (!tab || tab.type !== 'workspace') return
-    const panelId = tab.panelIds[Number(digitMatch[1]) - 1]
-    if (!panelId) return
-    e.preventDefault()
-    e.stopImmediatePropagation()
-    tabStore.setActivePanel(tab.id, panelId)
-    nextTick(() => focusPanelTerminal(panelId))
-    return
-  }
-  const tabModifier = !e.altKey && !e.shiftKey && (
-    (isMac && e.metaKey && !e.ctrlKey) ||
-    (!isMac && e.ctrlKey && !e.metaKey)
-  )
-  if (tabModifier && digitMatch) {
-    const tab = tabStore.tabs[Number(digitMatch[1]) - 1]
-    if (!tab) return
-    e.preventDefault()
-    e.stopImmediatePropagation()
-    tabStore.setActiveTab(tab.id)
-    return
+  if (digitMatch) {
+    const target = matchDigitShortcut(e, isMac, settingsStore.settings.keyboard.tabSwitchModifier)
+    if (target === 'panel') {
+      const tab = tabStore.activeTab
+      if (!tab || tab.type !== 'workspace') return
+      const panelId = tab.panelIds[Number(digitMatch[1]) - 1]
+      if (!panelId) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      tabStore.setActivePanel(tab.id, panelId)
+      nextTick(() => focusPanelTerminal(panelId))
+      return
+    }
+    if (target === 'tab') {
+      const tab = tabStore.tabs[Number(digitMatch[1]) - 1]
+      if (!tab) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      tabStore.setActiveTab(tab.id)
+      return
+    }
   }
   if (!isMac || !e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
   const key = e.key.toLowerCase()

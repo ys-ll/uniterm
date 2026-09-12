@@ -165,10 +165,16 @@ export interface KeyBinding {
   key: string
 }
 
-// Digit shortcuts are fixed platform bindings, not configurable per-action
-// entries: Ctrl/Cmd + 1…9 switches tabs and Alt/Option + 1…9 switches
-// workspace panels (see onPlatformSystemShortcut in App.vue).
-export type KeyboardSettings = Partial<Record<ShortcutAction, KeyBinding>>
+// tabSwitchModifier is not a per-action binding: only its modifier flags
+// (ctrl/meta/shift/alt) are read, its `key` stays empty. The configured combo
+// held together with a digit key (1-9) switches to that tab, handled by
+// onPlatformSystemShortcut in App.vue alongside the fixed workspace-panel
+// digit shortcuts. Unset = platform default (Ctrl on Windows/Linux, Cmd on
+// macOS) with Alt/Option left to the workspace-panel shortcuts; an entry
+// with no modifier set disables digit tab switching entirely.
+export type KeyboardSettings = Partial<Record<ShortcutAction, KeyBinding>> & {
+  tabSwitchModifier?: KeyBinding
+}
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   newConnection: 'shortcut.newConnection',

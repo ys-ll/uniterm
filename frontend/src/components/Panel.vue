@@ -142,7 +142,7 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { formatKeyBinding } from '../composables/useKeyboardShortcuts'
+import { formatKeyBinding, panelDigitShortcutsSuppressed } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../types/settings'
 import {
   CreateSession,
@@ -201,7 +201,10 @@ const settingsStore = useSettingsStore()
 const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
 const panelShortcut = computed(() => {
   if (!props.shortcutIndex || props.shortcutIndex > 9) return ''
-  // Fixed platform digit shortcuts: Option+N on macOS, Alt+N elsewhere.
+  // Fixed platform digit shortcuts: Option+N on macOS, Alt+N elsewhere —
+  // hidden while the configured tab-switch modifier claims the same combo,
+  // so a badge never advertises a binding that tab switching swallowed.
+  if (panelDigitShortcutsSuppressed(settingsStore.settings.keyboard.tabSwitchModifier)) return ''
   if (isMac) return `⌥${props.shortcutIndex}`
   return `Alt+${props.shortcutIndex}`
 })

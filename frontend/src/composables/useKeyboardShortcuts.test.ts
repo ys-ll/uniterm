@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { loadKeybindings, onGlobalKeydown } from './useKeyboardShortcuts'
+import { loadKeybindings, onGlobalKeydown, matchDigitShortcut, panelDigitShortcutsSuppressed, tabDigitShortcutPrefix } from './useKeyboardShortcuts'
 import type { KeyboardSettings } from '../types/settings'
 
 function fakeKey(partial: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean; key: string; isComposing: boolean; keyCode: number }>): KeyboardEvent {
@@ -69,5 +69,52 @@ describe('useKeyboardShortcuts — quick commands', () => {
     onGlobalKeydown(fakeKey({ ctrlKey: true, key: 'k' }))
 
     expect(openQuickCommands).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('matchDigitShortcut — configurable tab-switch modifier', () => {
+  const alt = { ctrl: false, meta: false, shift: false, alt: true, key: '' }
+  const ctrlAlt = { ctrl: true, meta: false, shift: false, alt: true, key: '' }
+  const none = { ctrl: false, meta: false, shift: false, alt: false, key: '' }
+
+  it('keeps the fixed platform bindings when unset', () => {
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, key: '1' }), false, undefined)).toBe('tab')
+    expect(matchDigitShortcut(fakeKey({ metaKey: true, key: '1' }), true, undefined)).toBe('tab')
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '2' }), false, undefined)).toBe('panel')
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '2' }), true, undefined)).toBe('panel')
+  })
+
+  it('moves tab switching to the configured modifier (Alt)', () => {
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '3' }), false, alt)).toBe('tab')
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, key: '3' }), false, alt)).toBe(null)
+  })
+
+  it('suppresses workspace panels only for the plain Alt combo', () => {
+    expect(panelDigitShortcutsSuppressed(alt)).toBe(true)
+    expect(panelDigitShortcutsSuppressed(undefined)).toBe(false)
+    expect(panelDigitShortcutsSuppressed(none)).toBe(false)
+    // Ctrl+Alt+digits for tabs leaves plain Alt+digits to the panels.
+    expect(panelDigitShortcutsSuppressed(ctrlAlt)).toBe(false)
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '2' }), false, ctrlAlt)).toBe('panel')
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, altKey: true, key: '2' }), false, ctrlAlt)).toBe('tab')
+  })
+
+  it('a cleared modifier disables digit tab switching entirely', () => {
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, key: '1' }), false, none)).toBe(null)
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '1' }), false, none)).toBe('panel')
+  })
+
+  it('requires the modifiers to match exactly', () => {
+    expect(matchDigitShortcut(fakeKey({ altKey: true, shiftKey: true, key: '1' }), false, alt)).toBe(null)
+    expect(matchDigitShortcut(fakeKey({ altKey: true, ctrlKey: true, key: '1' }), false, alt)).toBe(null)
+  })
+
+  it('badges follow the configured modifier and hide suppressed panels', () => {
+    expect(tabDigitShortcutPrefix(false, undefined)).toBe('Ctrl')
+    expect(tabDigitShortcutPrefix(true, undefined)).toBe('⌘')
+    expect(tabDigitShortcutPrefix(false, alt)).toBe('Alt')
+    expect(tabDigitShortcutPrefix(true, alt)).toBe('⌥')
+    expect(tabDigitShortcutPrefix(false, ctrlAlt)).toBe('Ctrl+Alt')
+    expect(tabDigitShortcutPrefix(false, none)).toBe('')
   })
 })
