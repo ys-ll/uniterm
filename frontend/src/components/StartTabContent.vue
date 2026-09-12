@@ -443,6 +443,7 @@ import { useI18n } from '../i18n'
 import { GetRecentConnections } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { formatConnSubtitle, getConnectionTypeKey, getTypeCategory, formatTypeFilterLabel, getTypeFilterCatalog, isWindows } from '../utils/quickConnect'
 import { connectFileMenuKey } from '../utils/fileTransferUtils'
+import { getShellLabel as getShellLabelBase } from '../utils/shellLabel'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuSubmenu from './MenuSubmenu.vue'
@@ -602,21 +603,7 @@ function onFilterSelect(val: string) {
 
 // ── Shell label helper ──
 function getShellLabel(path: string): string {
-  if (!path) return 'Local'
-  const lower = path.toLowerCase()
-  if (lower.startsWith('admin://')) {
-    const inner = getShellLabel(path.slice(8))
-    return inner.endsWith(' (Admin)') ? inner : `${inner} (Admin)`
-  }
-  if (lower.startsWith('wsl://')) {
-    const distro = path.slice(6)
-    return distro ? `WSL - ${distro}` : 'WSL'
-  }
-  if (lower.includes('pwsh')) return 'PowerShell'
-  if (lower.includes('powershell')) return 'Windows PowerShell'
-  if (lower.includes('bash')) return 'Git Bash'
-  if (lower.includes('cmd')) return 'Command Prompt'
-  return path.split(/[\\/]/).pop() || path
+  return getShellLabelBase(path, 'Local')
 }
 
 // ── Recent connections ──

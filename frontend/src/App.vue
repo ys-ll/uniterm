@@ -219,6 +219,7 @@ import { msg } from './services/message'
 import type { ConnectionConfig } from './types/session'
 import { Application, Clipboard, Events } from '@wailsio/runtime'
 import { parseQuickConnect } from './utils/quickConnect'
+import { getShellLabel as getShellLabelBase } from './utils/shellLabel'
 import { fileTransferProto } from './utils/fileTransferUtils'
 import { reconnectFileTransferPanel } from './composables/usePanelReconnect'
 
@@ -1447,21 +1448,7 @@ async function onConnect(config: ConnectionConfig, keepOpen?: boolean, wasEdit?:
 }
 
 function getShellLabel(path: string): string {
-  if (!path) return 'Local'
-  const lower = path.toLowerCase()
-  if (lower.startsWith('admin://')) {
-    const inner = getShellLabel(path.slice(8))
-    return inner.endsWith(' (Admin)') ? inner : `${inner} (Admin)`
-  }
-  if (lower.startsWith('wsl://')) {
-    const distro = path.slice(6)
-    return distro ? `WSL - ${distro}` : 'WSL'
-  }
-  if (lower.includes('pwsh')) return 'PowerShell'
-  if (lower.includes('powershell')) return 'Windows PowerShell'
-  if (lower.includes('bash')) return 'Git Bash'
-  if (lower.includes('cmd')) return 'Command Prompt'
-  return path.replace(/\\/g, '/').split('/').pop() || 'Local'
+  return getShellLabelBase(path, 'Local')
 }
 
 async function createLocalTerminalWithShell(shellPath: string, keepOpen?: boolean) {

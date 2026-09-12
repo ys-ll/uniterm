@@ -1218,6 +1218,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { FONT_OPTIONS, FONT_WEIGHT_OPTIONS, LANGUAGE_OPTIONS, DEFAULT_KEYBOARD, SHORTCUT_LABELS, USER_AGENT_PRESETS, FOLLOW_APP_THEME, CURSOR_STYLES, TIMESTAMP_FORMATS, SIDEBAR_TAB_ORDER, SIDEBAR_TAB_DEFAULTS } from '../types/settings'
 import { formatFontFamily, normalizeFontFamilyValue } from '../utils/formatFontFamily'
 import { backendErrorText } from '../utils/backendError'
+import { getShellLabel as getShellLabelBase } from '../utils/shellLabel'
 import SkillsManager from './SkillsManager.vue'
 import CommandsManager from './CommandsManager.vue'
 import type { AIModelConfig, ShortcutAction, KeyBinding, KeyboardSettings } from '../types/settings'
@@ -1972,17 +1973,7 @@ async function testConnection() {
 }
 
 function getShellLabel(path: string): string {
-  if (!path) return 'Local'
-  const lower = path.toLowerCase()
-  if (lower.startsWith('wsl://')) {
-    const distro = path.slice(6)
-    return distro ? `WSL - ${distro}` : 'WSL'
-  }
-  if (lower.includes('pwsh')) return 'PowerShell'
-  if (lower.includes('powershell')) return 'Windows PowerShell'
-  if (lower.includes('bash')) return 'Git Bash'
-  if (lower.includes('cmd')) return 'Command Prompt'
-  return path.split(/[\\/]/).pop() || path
+  return getShellLabelBase(path, 'Local')
 }
 
 const bgPreview = ref('')

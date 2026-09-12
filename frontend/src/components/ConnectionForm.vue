@@ -687,6 +687,7 @@ import type { K8sContextInfo } from '../types/k8s'
 import IdentityEditDialog from './IdentityEditDialog.vue'
 import ProxyEditDialog from './ProxyEditDialog.vue'
 import { isSqlDbType } from '../utils/quickConnect'
+import { getShellLabel as getShellLabelBase } from '../utils/shellLabel'
 import { backendErrorText } from '../utils/backendError'
 import type { Identity } from '../types/identity'
 import type { Proxy } from '../types/proxy'
@@ -815,21 +816,7 @@ function onCategorySelect(catKey: string) {
 }
 
 function getShellLabel(path: string): string {
-  if (!path) return ''
-  const lower = path.toLowerCase()
-  if (lower.startsWith('admin://')) {
-    const inner = getShellLabel(path.slice(8))
-    return inner.endsWith(' (Admin)') ? inner : `${inner} (Admin)`
-  }
-  if (lower.startsWith('wsl://')) {
-    const distro = path.slice(6)
-    return distro ? `WSL - ${distro}` : 'WSL'
-  }
-  if (lower.includes('pwsh')) return 'PowerShell'
-  if (lower.includes('powershell')) return 'Windows PowerShell'
-  if (lower.includes('bash')) return 'Git Bash'
-  if (lower.includes('cmd')) return 'Command Prompt'
-  return path.split(/[\\/]/).pop() || path
+  return getShellLabelBase(path)
 }
 
 // Local-shell options exclude WSL entries: the ordinary local terminal type

@@ -480,6 +480,22 @@ func shellName(path string) string {
 	}
 	base := filepath.Base(path)
 	base = strings.TrimSuffix(base, ".exe")
+	// Disambiguate bash flavors by install path: Git for Windows, Cygwin and
+	// MSYS2 all ship a bash.exe, and a bare "bash" title tells the user
+	// nothing. Mirrors the frontend getShellLabel rules.
+	if strings.EqualFold(base, "bash") {
+		lower := strings.ToLower(path)
+		if strings.Contains(lower, `\git\`) || strings.Contains(lower, `/git/`) ||
+			strings.Contains(lower, "chocolatey") {
+			return "Git Bash"
+		}
+		if strings.Contains(lower, "cygwin") {
+			return "Cygwin bash"
+		}
+		if strings.Contains(lower, "msys") {
+			return "MSYS2 bash"
+		}
+	}
 	return base
 }
 

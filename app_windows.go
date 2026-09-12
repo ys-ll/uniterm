@@ -13,6 +13,7 @@ import (
 
 	"github.com/ys-ll/uniterm/backend/session"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 func (a *App) GetAvailableShells() []string {
@@ -54,6 +55,19 @@ func (a *App) GetAvailableShells() []string {
 	} {
 		add(p)
 	}
+	// Third-party shells (Cygwin, MSYS2, Nushell): probe well-known install
+	// locations and the registry so they are offered automatically, without
+	// any user configuration. Added after the built-ins and before the
+	// generic PATH bash.exe fallback, whose System32 hit they preempt when a
+	// real bash exists.
+	for _, sh := range detectThirdPartyShells(probeCygwinRootdir(),
+		func(p string) bool {
+			_, err := os.Stat(p)
+			return err == nil
+		},
+		exec.LookPath) {
+		add(sh)
+	}
 	if !hasShell("bash.exe") {
 		add("bash.exe")
 	}
@@ -75,6 +89,82 @@ func (a *App) GetAvailableShells() []string {
 		}
 	}
 	return shells
+}
+
+// detectThirdPartyShells probes well-known third-party shell installs that
+// should be offered alongside the built-in shells: Cygwin bash, MSYS2 bash
+// and Nushell. cygwinRegRoot is the Cygwin setup registry probe result (""
+// when absent). Only paths that actually exist are returned; duplicates are
+// removed case-insensitively.
+func detectThirdPartyShells(cygwinRegRoot string, exists func(string) bool, lookPath func(string) (string, error)) []string {
+	var out []string
+	seen := make(map[string]bool)
+	add := func(path string) {
+		if path == "" {
+			return
+		}
+		key := strings.ToLower(path)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, path)
+	}
+
+	// Cygwin: setup.exe records the install root in the registry; also probe
+	// the conventional install dirs.
+	cygwinRoots := []string{`C:\cygwin64`, `C:\cygwin`, `C:\tools\cygwin64`, `C:\tools\cygwin`}
+	if cygwinRegRoot != "" {
+		cygwinRoots = append([]string{cygwinRegRoot}, cygwinRoots...)
+	}
+	for _, root := range cygwinRoots {
+		bash := filepath.Join(root, "bin", "bash.exe")
+		if exists(bash) {
+			add(bash)
+		}
+	}
+
+	// MSYS2: bash lives under usr\bin and there is no registry entry.
+	msysRoots := []string{`C:\msys64`, `C:\msys32`, `C:\tools\msys64`, `C:\tools\msys32`}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		msysRoots = append(msysRoots, filepath.Join(home, "msys64"), filepath.Join(home, "msys32"))
+	}
+	for _, root := range msysRoots {
+		bash := filepath.Join(root, "usr", "bin", "bash.exe")
+		if exists(bash) {
+			add(bash)
+		}
+	}
+
+	// Nushell: usually on PATH (scoop/choco/winget shims).
+	if nu, err := lookPath("nu.exe"); err == nil && nu != "" {
+		add(nu)
+	}
+
+	return out
+}
+
+// probeCygwinRootdir reads the Cygwin setup install root from the registry.
+// Returns "" when Cygwin is absent or the key cannot be read.
+func probeCygwinRootdir() string {
+	keys := []string{
+		`SOFTWARE\Cygwin\setup`,
+		`SOFTWARE\WOW6432Node\Cygwin\setup`,
+	}
+	for _, k := range keys {
+		for _, root := range []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER} {
+			key, err := registry.OpenKey(root, k, registry.QUERY_VALUE)
+			if err != nil {
+				continue
+			}
+			rootdir, _, err := key.GetStringValue("rootdir")
+			key.Close()
+			if err == nil && rootdir != "" {
+				return rootdir
+			}
+		}
+	}
+	return ""
 }
 
 func listWSLDistros() ([]string, error) {
