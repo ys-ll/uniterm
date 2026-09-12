@@ -147,6 +147,7 @@ export type ShortcutAction =
   | 'focusAI' | 'focusTerminal' | 'lockAI'
   | 'closePanel'
   | 'navigatePrev' | 'navigateNext'
+  | 'maximizePanel'
   | 'duplicateSession'
   | 'terminalSearch'
   | 'openSettings'
@@ -182,6 +183,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   prevTab: 'shortcut.prevTab',
   navigatePrev: 'shortcut.navigatePrev',
   navigateNext: 'shortcut.navigateNext',
+  maximizePanel: 'shortcut.maximizePanel',
   closePanel: 'shortcut.closePanel',
   toggleSidebar: 'shortcut.toggleSidebar',
   openQuickCommands: 'shortcut.openQuickCommands',
@@ -210,6 +212,9 @@ export const DEFAULT_KEYBOARD: KeyboardSettings = {
   closePanel: { ctrl: true, shift: true, alt: false, key: 'q' },
   navigatePrev: { ctrl: false, shift: false, alt: true, key: 'arrowleft' },
   navigateNext: { ctrl: false, shift: false, alt: true, key: 'arrowright' },
+  // loadKeybindings aliases Ctrl+→Meta+ for macOS, so the default covers
+  // Cmd+Shift+Enter on Mac and Ctrl+Shift+Enter elsewhere.
+  maximizePanel: { ctrl: true, shift: true, alt: false, key: 'enter' },
   lockAI: { ctrl: true, shift: true, alt: false, key: 'l' },
   duplicateSession: { ctrl: true, shift: true, alt: false, key: 'd' },
   terminalSearch: { ctrl: true, shift: true, alt: false, key: 'f' },

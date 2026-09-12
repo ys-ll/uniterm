@@ -1128,6 +1128,7 @@
   "shortcut.prevTab": "上一個標籤",
   "shortcut.navigatePrev": "前一個面板",
   "shortcut.navigateNext": "後一個面板",
+  "shortcut.maximizePanel": "最大化面板",
   "shortcut.closePanel": "關閉面板/標籤",
   "shortcut.toggleSidebar": "開/關連線邊欄並搜尋",
   "shortcut.openQuickCommands": "開啟快速命令並搜尋",

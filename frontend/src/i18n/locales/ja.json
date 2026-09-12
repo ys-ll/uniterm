@@ -1121,6 +1121,7 @@
   "shortcut.prevTab": "前のタブ",
   "shortcut.navigatePrev": "前のパネル",
   "shortcut.navigateNext": "次のパネル",
+  "shortcut.maximizePanel": "パネルを最大化",
   "shortcut.closePanel": "パネル/タブを閉じる",
   "shortcut.toggleSidebar": "接続サイドバーの切り替え",
   "shortcut.openQuickCommands": "クイックコマンドを開く",

@@ -1121,6 +1121,7 @@
   "shortcut.prevTab": "Pestaña anterior",
   "shortcut.navigatePrev": "Panel anterior",
   "shortcut.navigateNext": "Panel siguiente",
+  "shortcut.maximizePanel": "Maximizar panel",
   "shortcut.closePanel": "Cerrar panel/pestaña",
   "shortcut.toggleSidebar": "Mostrar/ocultar barra lateral",
   "shortcut.openQuickCommands": "Abrir comandos rápidos",

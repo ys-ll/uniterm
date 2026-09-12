@@ -1128,6 +1128,7 @@
   "shortcut.prevTab": "Previous Tab",
   "shortcut.navigatePrev": "Previous Panel",
   "shortcut.navigateNext": "Next Panel",
+  "shortcut.maximizePanel": "Maximize Panel",
   "shortcut.closePanel": "Close Panel/Tab",
   "shortcut.toggleSidebar": "Toggle Connection Sidebar",
   "shortcut.openQuickCommands": "Open Quick Commands",

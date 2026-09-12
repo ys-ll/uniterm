@@ -1121,6 +1121,7 @@
   "shortcut.prevTab": "이전 탭",
   "shortcut.navigatePrev": "이전 패널",
   "shortcut.navigateNext": "다음 패널",
+  "shortcut.maximizePanel": "패널 최대화",
   "shortcut.closePanel": "패널/탭 닫기",
   "shortcut.toggleSidebar": "연결 사이드바 전환",
   "shortcut.openQuickCommands": "빠른 명령 열기",

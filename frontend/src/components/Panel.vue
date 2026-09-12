@@ -212,7 +212,10 @@ const workspaceTab = computed(() =>
   props.workspaceId ? tabStore.tabs.find(tab => tab.id === props.workspaceId && tab.type === 'workspace') : undefined
 )
 const isMaximized = computed(() => workspaceTab.value?.maximizedPanelId === props.panel.id)
-const maximizeShortcut = computed(() => isMac ? '⌘⇧↩' : 'Ctrl+Shift+Enter')
+// Panel maximize is a configurable shortcut; the tooltip must reflect the
+// current binding (and hide when the user cleared it) instead of hardcoding
+// Ctrl+Shift+Enter.
+const maximizeShortcut = computed(() => menuShortcut('maximizePanel'))
 const maximizeTitle = computed(() => {
   const label = t(isMaximized.value ? 'workspace.restorePanel' : 'workspace.maximizePanel')
   return maximizeShortcut.value ? `${label} (${maximizeShortcut.value})` : label

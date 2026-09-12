@@ -1118,6 +1118,7 @@
   "shortcut.prevTab": "Onglet précédent",
   "shortcut.navigatePrev": "Panneau précédent",
   "shortcut.navigateNext": "Panneau suivant",
+  "shortcut.maximizePanel": "Agrandir le panneau",
   "shortcut.closePanel": "Fermer le panneau/l'onglet",
   "shortcut.toggleSidebar": "Afficher/masquer la barre latérale",
   "shortcut.openQuickCommands": "Ouvrir les commandes rapides",

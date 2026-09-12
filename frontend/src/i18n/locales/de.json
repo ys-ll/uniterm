@@ -1121,6 +1121,7 @@
   "shortcut.prevTab": "Vorheriger Tab",
   "shortcut.navigatePrev": "Vorheriges Panel",
   "shortcut.navigateNext": "Nächstes Panel",
+  "shortcut.maximizePanel": "Bereich maximieren",
   "shortcut.closePanel": "Panel/Tab schließen",
   "shortcut.toggleSidebar": "Verbindungsseitenleiste umschalten",
   "shortcut.openQuickCommands": "Schnellbefehle öffnen",

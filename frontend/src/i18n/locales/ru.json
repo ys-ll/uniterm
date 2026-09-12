@@ -1121,6 +1121,7 @@
   "shortcut.prevTab": "Предыдущая вкладка",
   "shortcut.navigatePrev": "Предыдущая панель",
   "shortcut.navigateNext": "Следующая панель",
+  "shortcut.maximizePanel": "Развернуть панель",
   "shortcut.closePanel": "Закрыть панель/вкладку",
   "shortcut.toggleSidebar": "Переключить боковую панель",
   "shortcut.openQuickCommands": "Открыть быстрые команды",
