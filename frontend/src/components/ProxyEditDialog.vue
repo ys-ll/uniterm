@@ -12,8 +12,8 @@
       </el-form-item>
       <el-form-item :label="t('conn.proxyType')">
         <el-radio-group v-model="form.kind">
-          <el-radio-button label="socks5">SOCKS5</el-radio-button>
-          <el-radio-button label="http">HTTP</el-radio-button>
+          <el-radio-button value="socks5">SOCKS5</el-radio-button>
+          <el-radio-button value="http">HTTP</el-radio-button>
         </el-radio-group>
       </el-form-item>
       <el-form-item :label="t('conn.host')">

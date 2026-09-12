@@ -997,7 +997,7 @@
             <div class="model-main">
               <el-radio
                 :model-value="settingsStore.settings.ai.activeModelId"
-                :label="model.id"
+                :value="model.id"
                 @change="settingsStore.setActiveModel(model.id)"
               >
                 <span class="model-name">{{ model.name }}</span>

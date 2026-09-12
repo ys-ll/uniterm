@@ -307,7 +307,7 @@
     </Menu>
 
     <!-- Connection context menu -->
-    <Menu ref="menuRef" v-model:visible="menuVisible" @contextmenu.stop>
+    <Menu ref="menuRef" v-model:visible="menuVisible">
       <!-- Terminal -->
       <MenuItem v-if="selectedConn && selectedConn.type === 'ssh'" @click="doConnect">{{ t('sidebar.connectSSH') }}</MenuItem>
       <MenuSubmenu
@@ -353,7 +353,7 @@
     </Menu>
 
     <!-- Group context menu -->
-    <Menu ref="groupMenuRef" v-model:visible="groupMenuVisible" @contextmenu.stop>
+    <Menu ref="groupMenuRef" v-model:visible="groupMenuVisible">
       <MenuItem @click="doNewGroup(selectedGroupParentId())">{{ t('conn.newGroupTitle') }}</MenuItem>
       <MenuItem @click="doNewConnInGroup">{{ t('sidebar.newConnection') }}</MenuItem>
       <template v-if="selectedGroup && selectedGroup.id !== '__ungrouped__'">
@@ -366,7 +366,7 @@
     </Menu>
 
     <!-- Empty area context menu -->
-    <Menu ref="emptyAreaMenuRef" v-model:visible="emptyAreaMenuVisible" @contextmenu.stop>
+    <Menu ref="emptyAreaMenuRef" v-model:visible="emptyAreaMenuVisible">
       <MenuItem @click="doNewGroup()">{{ t('conn.newGroupTitle') }}</MenuItem>
     </Menu>
 

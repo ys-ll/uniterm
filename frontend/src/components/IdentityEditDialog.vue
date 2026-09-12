@@ -12,9 +12,9 @@
       </el-form-item>
       <el-form-item :label="t('conn.authType')">
         <el-radio-group v-model="form.authType">
-          <el-radio-button label="password">{{ t('conn.password') }}</el-radio-button>
-          <el-radio-button label="key">{{ t('conn.keyPath') }}</el-radio-button>
-          <el-radio-button label="keyText">{{ t('conn.keyText') }}</el-radio-button>
+          <el-radio-button value="password">{{ t('conn.password') }}</el-radio-button>
+          <el-radio-button value="key">{{ t('conn.keyPath') }}</el-radio-button>
+          <el-radio-button value="keyText">{{ t('conn.keyText') }}</el-radio-button>
         </el-radio-group>
       </el-form-item>
       <el-form-item :label="t('conn.user')">

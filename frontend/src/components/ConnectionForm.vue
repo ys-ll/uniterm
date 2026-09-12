@@ -53,8 +53,8 @@
             </el-form-item>
             <el-form-item v-if="form.type === 'database' && form.dbType === 'redis'" :label="t('conn.redisMode')">
               <el-radio-group v-model="form.redisMode">
-                <el-radio-button label="standalone">{{ t('conn.redisModeStandalone') }}</el-radio-button>
-                <el-radio-button label="sentinel">{{ t('conn.redisModeSentinel') }}</el-radio-button>
+                <el-radio-button value="standalone">{{ t('conn.redisModeStandalone') }}</el-radio-button>
+                <el-radio-button value="sentinel">{{ t('conn.redisModeSentinel') }}</el-radio-button>
               </el-radio-group>
             </el-form-item>
             <template v-if="isRedisSentinel">
@@ -76,13 +76,13 @@
             </el-form-item>
             <el-form-item v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop' || isElasticsearch" :label="t('conn.authType')">
               <el-radio-group v-model="form.authType">
-                <el-radio-button label="password">{{ t('conn.password') }}</el-radio-button>
-                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" label="key">{{ t('conn.keyPath') }}</el-radio-button>
-                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" label="keyText">{{ t('conn.keyText') }}</el-radio-button>
-                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" label="identity">{{ t('conn.identity') }}</el-radio-button>
-                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" label="kerberos">{{ t('conn.kerberos') }}</el-radio-button>
-                <el-radio-button v-if="(isWindows || isMac) && (form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop')" label="agent">{{ t('conn.sshAgent') }}</el-radio-button>
-                <el-radio-button v-if="isElasticsearch" label="apikey">{{ t('conn.esAuthApiKey') }}</el-radio-button>
+                <el-radio-button value="password">{{ t('conn.password') }}</el-radio-button>
+                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="key">{{ t('conn.keyPath') }}</el-radio-button>
+                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="keyText">{{ t('conn.keyText') }}</el-radio-button>
+                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="identity">{{ t('conn.identity') }}</el-radio-button>
+                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="kerberos">{{ t('conn.kerberos') }}</el-radio-button>
+                <el-radio-button v-if="(isWindows || isMac) && (form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop')" value="agent">{{ t('conn.sshAgent') }}</el-radio-button>
+                <el-radio-button v-if="isElasticsearch" value="apikey">{{ t('conn.esAuthApiKey') }}</el-radio-button>
               </el-radio-group>
             </el-form-item>
             <el-form-item v-if="form.authType !== 'identity' && form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && form.type !== 'local' && form.type !== 'wsl' && form.type !== 'serial' && form.type !== 'tcp' && form.type !== 'k8s' && form.type !== 'container' && !isEsApiKey" :label="form.type === 's3' ? 'Access Key' : t('conn.user')">
@@ -194,8 +194,8 @@
             </el-form-item>
             <el-form-item v-if="form.type === 'ssh'" :label="t('conn.fileTransferProto')">
               <el-radio-group v-model="form.fileTransferProto">
-                <el-radio-button label="sftp">SFTP</el-radio-button>
-                <el-radio-button label="scp">SCP</el-radio-button>
+                <el-radio-button value="sftp">SFTP</el-radio-button>
+                <el-radio-button value="scp">SCP</el-radio-button>
               </el-radio-group>
             </el-form-item>
             <el-form-item v-if="form.type === 'database' && form.dbType !== 'rqlite' && form.dbType !== 'redis' && form.dbType !== 'elasticsearch'" :label="t('db.databases')" :required="form.dbType === 'postgres'">
@@ -280,8 +280,8 @@
             <template v-if="form.type === 'k8s'">
               <el-form-item :label="t('conn.k8sConfigSource')">
                 <el-radio-group v-model="k8sSourceMode">
-                  <el-radio-button label="inline">{{ t('conn.k8sConfigSourceInline') }}</el-radio-button>
-                  <el-radio-button label="file">{{ t('conn.k8sConfigSourceFile') }}</el-radio-button>
+                  <el-radio-button value="inline">{{ t('conn.k8sConfigSourceInline') }}</el-radio-button>
+                  <el-radio-button value="file">{{ t('conn.k8sConfigSourceFile') }}</el-radio-button>
                 </el-radio-group>
               </el-form-item>
 
@@ -334,8 +334,8 @@
             <template v-if="form.type === 'container'">
               <el-form-item :label="t('conn.containerTransport')">
                 <el-radio-group v-model="form.containerTransport">
-                  <el-radio-button label="ssh">{{ t('conn.transportSSH') }}</el-radio-button>
-                  <el-radio-button label="local">{{ t('conn.transportLocal') }}</el-radio-button>
+                  <el-radio-button value="ssh">{{ t('conn.transportSSH') }}</el-radio-button>
+                  <el-radio-button value="local">{{ t('conn.transportLocal') }}</el-radio-button>
                 </el-radio-group>
               </el-form-item>
               <el-form-item v-if="form.containerTransport === 'ssh'" :label="t('conn.containerSSHRef')" required>
@@ -417,8 +417,8 @@
             <el-form-item v-if="form.type === 'ssh' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'wsl'" :label="t('conn.postLoginScript')">
               <div class="post-login-config">
                 <el-radio-group v-model="postLoginMode" size="small">
-                  <el-radio-button label="script">{{ t('conn.postLoginModeScript') }}</el-radio-button>
-                  <el-radio-button label="expect" :disabled="form.type !== 'ssh'">{{ t('conn.postLoginModeExpect') }}</el-radio-button>
+                  <el-radio-button value="script">{{ t('conn.postLoginModeScript') }}</el-radio-button>
+                  <el-radio-button value="expect" :disabled="form.type !== 'ssh'">{{ t('conn.postLoginModeExpect') }}</el-radio-button>
                 </el-radio-group>
                 <el-input
                   v-if="postLoginMode === 'script'"
@@ -914,11 +914,25 @@ const emit = defineEmits<{
   save: [config: ConnectionConfig]
   connect: [config: ConnectionConfig]
   connectOnly: [config: ConnectionConfig]
+  cancel: []
 }>()
 
 const visible = computed({
   get: () => props.modelValue,
   set: (v) => emit('update:modelValue', v)
+})
+
+// Dismissal bookkeeping: close routed through save/connect/connectOnly is
+// "handled" (the host already cleared its state); any other close — cancel
+// button, X, Esc, overlay click — reports `cancel` so the host can reset the
+// edited config. Reset on every open.
+let handled = false
+watch(visible, (v) => {
+  if (v) {
+    handled = false
+  } else if (!handled) {
+    emit('cancel')
+  }
 })
 
 const hostInputRef = ref<InstanceType<typeof ElInput> | null>(null)
@@ -1691,6 +1705,7 @@ function onSave() {
   if (!validateX11Desktop()) return
   try {
     const config = normalizeForm()
+    handled = true
     emit('save', config)
     visible.value = false
     if (!props.editConfig) {
@@ -1707,6 +1722,7 @@ function onConnectOnly() {
   if (!validateX11Desktop()) return
   try {
     const config = normalizeForm()
+    handled = true
     emit('connectOnly', config)
     visible.value = false
     if (!props.editConfig) {
@@ -1723,6 +1739,7 @@ function onConnect() {
   if (!validateX11Desktop()) return
   try {
     const config = normalizeForm()
+    handled = true
     emit('connect', config)
     visible.value = false
     if (!props.editConfig) {
