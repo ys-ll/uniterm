@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"unsafe"
 
 	"github.com/ys-ll/uniterm/backend/log"
 )
@@ -140,3 +141,7 @@ func (a *App) configureMacKeyRepeat() {
 		log.Writef("configureMacKeyRepeat: disabled ApplePressAndHoldEnabled for %s (key-repeat enabled)", macBundleID)
 	}()
 }
+
+// applyRoundedCorners is a no-op on macOS: window corners are handled by the
+// platform (the Windows build asks DWM for Win11 rounded corners instead).
+func applyRoundedCorners(unsafe.Pointer) {}
