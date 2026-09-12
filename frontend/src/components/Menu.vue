@@ -8,6 +8,7 @@
       :style="menuStyle"
       @mouseover="onInnerMouseOver"
       @mouseleave="submenu.active = ''"
+      @contextmenu.stop
     >
       <slot :current="current" />
     </div>

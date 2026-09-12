@@ -147,7 +147,7 @@
       <span v-if="selectionStats.size > 0">{{ formatSize(selectionStats.size) }}</span>
     </div>
 
-    <Menu ref="ctxMenuRef" v-model:visible="ctxMenuVisible" @contextmenu.stop v-slot="{ current }">
+    <Menu ref="ctxMenuRef" v-model:visible="ctxMenuVisible" v-slot="{ current }">
         <template v-if="menuType === 'file'">
           <MenuItem @click="doEdit">{{ t('sftp.edit') }}</MenuItem>
           <MenuItem @click="doEditExternal">{{ t('sftp.editExternal') }}</MenuItem>

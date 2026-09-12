@@ -17,11 +17,10 @@ export default defineConfig({
   esbuild: {
     target: 'esnext'
   },
-  optimizeDeps: {
-    esbuildOptions: {
-      target: 'esnext'
-    }
-  },
+  // NOTE: no optimizeDeps target needed on Vite 8 (rolldown pre-bundling does
+  // no syntax downleveling, so TLA in deps passes through untouched; the old
+  // optimizeDeps.esbuildOptions.target is deprecated and has no rolldown
+  // equivalent).
   server: {
     port: 34115,
     strictPort: true

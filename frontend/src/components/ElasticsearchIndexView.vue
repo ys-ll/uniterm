@@ -18,8 +18,8 @@
       <div class="editor-top" :style="{ height: topHeight + 'px' }">
         <div class="editor-toolbar">
           <el-radio-group v-model="queryMode" size="small">
-            <el-radio-button label="simple">{{ t('es.querySimple') }}</el-radio-button>
-            <el-radio-button label="dsl">{{ t('es.queryDsl') }}</el-radio-button>
+            <el-radio-button value="simple">{{ t('es.querySimple') }}</el-radio-button>
+            <el-radio-button value="dsl">{{ t('es.queryDsl') }}</el-radio-button>
           </el-radio-group>
           <button class="btn btn-primary btn-sm search-btn" title="Ctrl+Enter" @click="runSearch">{{ t('es.search') }}</button>
         </div>

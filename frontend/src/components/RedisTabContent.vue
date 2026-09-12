@@ -215,11 +215,11 @@
         </el-form-item>
         <el-form-item :label="t('redis.type')">
           <el-radio-group v-model="newKeyType" @change="onNewKeyTypeChange">
-            <el-radio-button label="string">String</el-radio-button>
-            <el-radio-button label="hash">Hash</el-radio-button>
-            <el-radio-button label="list">List</el-radio-button>
-            <el-radio-button label="set">Set</el-radio-button>
-            <el-radio-button label="zset">ZSet</el-radio-button>
+            <el-radio-button value="string">String</el-radio-button>
+            <el-radio-button value="hash">Hash</el-radio-button>
+            <el-radio-button value="list">List</el-radio-button>
+            <el-radio-button value="set">Set</el-radio-button>
+            <el-radio-button value="zset">ZSet</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <!-- String: value -->
