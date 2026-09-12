@@ -748,26 +748,13 @@ function onWheel(e: WheelEvent) {
 
 // Platform digit shortcuts: macOS uses Cmd/Option, Windows and Linux use
 // Ctrl/Alt. Cmd/Ctrl+1…9 switches tabs, Alt/Option+1…9 switches workspace
-// panels; Ctrl/Cmd+Shift+Enter maximizes the active panel. The tab-switch
-// modifier is user-configurable (keyboard.tabSwitchModifier); when it claims
-// the Alt-only combo the panel shortcuts step aside and their badges hide.
+// panels. The tab-switch modifier is user-configurable
+// (keyboard.tabSwitchModifier); when it claims the Alt-only combo the panel
+// shortcuts step aside and their badges hide. (Panel maximize moved into the
+// configurable shortcut system.)
 let isMac = false
 function onPlatformSystemShortcut(e: KeyboardEvent) {
   if (e.defaultPrevented) return
-  const workspaceMaximizeShortcut = e.shiftKey && !e.altKey && (
-    (isMac && e.metaKey && !e.ctrlKey) ||
-    (!isMac && e.ctrlKey && !e.metaKey)
-  )
-  if (workspaceMaximizeShortcut && e.code === 'Enter') {
-    const tab = tabStore.activeTab
-    if (!tab || tab.type !== 'workspace' || !tab.activePanelId) return
-    e.preventDefault()
-    e.stopImmediatePropagation()
-    const panelId = tab.activePanelId
-    tabStore.toggleWorkspacePanelMaximize(tab.id)
-    nextTick(() => focusPanelTerminal(panelId))
-    return
-  }
   const digitMatch = e.code.match(/^Digit([1-9])$/)
   if (digitMatch) {
     const target = matchDigitShortcut(e, isMac, settingsStore.settings.keyboard.tabSwitchModifier)
@@ -1031,6 +1018,13 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   },
   navigatePrev: () => navigatePanel(-1),
   navigateNext: () => navigatePanel(1),
+  maximizePanel: () => {
+    const tab = tabStore.activeTab
+    if (!tab || tab.type !== 'workspace' || !tab.activePanelId) return
+    const panelId = tab.activePanelId
+    tabStore.toggleWorkspacePanelMaximize(tab.id)
+    nextTick(() => focusPanelTerminal(panelId))
+  },
   openSettings: () => openSettings(),
   duplicateSession: () => {
     // Same logic as the tab context menu's "复制会话": delegate to the shared

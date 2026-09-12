@@ -76,10 +76,10 @@
             </el-form-item>
             <el-form-item v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop' || isElasticsearch" :label="t('conn.authType')">
               <el-radio-group v-model="form.authType">
+                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="identity">{{ t('conn.identity') }}</el-radio-button>
                 <el-radio-button value="password">{{ t('conn.password') }}</el-radio-button>
                 <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="key">{{ t('conn.keyPath') }}</el-radio-button>
                 <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="keyText">{{ t('conn.keyText') }}</el-radio-button>
-                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="identity">{{ t('conn.identity') }}</el-radio-button>
                 <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="kerberos">{{ t('conn.kerberos') }}</el-radio-button>
                 <el-radio-button v-if="(isWindows || isMac) && (form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop')" value="agent">{{ t('conn.sshAgent') }}</el-radio-button>
                 <el-radio-button v-if="isElasticsearch" value="apikey">{{ t('conn.esAuthApiKey') }}</el-radio-button>
@@ -1013,7 +1013,7 @@ const form = reactive<ConnectionConfig>({
   groupId: undefined,
   rdpFixedWidth: -1,
   rdpFixedHeight: -1,
-  rdpSmartSizing: true,
+  rdpSmartSizing: false,
   rdpEnableNLA: true,
   rdpDomain: '',
   rdpAdminSession: false,
@@ -1317,10 +1317,12 @@ watch(() => form.type, (newType) => {
   if (REMOTE_TYPES.includes(newType) || newType === 'database') {
     form.authType = 'password'
   }
-  if (newType === 'local' && !form.shellPath && localShellOptions.value.length > 0) {
+  // The shell ("terminal type") is specific to local/wsl; always reset to the
+  // new type's default instead of inheriting the previous type's shell path.
+  if (newType === 'local' && localShellOptions.value.length > 0) {
     form.shellPath = localShellOptions.value[0].value
   }
-  if (newType === 'wsl' && !form.shellPath && wslShellOptions.value.length > 0) {
+  if (newType === 'wsl' && wslShellOptions.value.length > 0) {
     form.shellPath = wslShellOptions.value[0].value
   }
   if (newType === 'serial') {
@@ -1345,9 +1347,19 @@ watch(() => form.dbType, (newType) => {
   }
 })
 
-// Clear the identity reference when switching away from the identity auth type.
+// Clear the identity reference when switching away from the identity auth
+// type, and don't carry credentials (username, password/passphrase, key path,
+// key content, kerberos realm) across an auth type switch — each type owns its
+// own fields. Skip while hydrating the form from an existing config, or
+// opening the edit dialog would wipe the stored credentials.
 watch(() => form.authType, (val) => {
+  if (hydrating.value) return
   if (val !== 'identity') form.identityId = ''
+  if (val !== 'kerberos') form.kerberosRealm = ''
+  form.user = ''
+  form.password = ''
+  form.keyPath = ''
+  form.keyContent = ''
 })
 
 function resetForm() {
@@ -1370,7 +1382,7 @@ function resetForm() {
   form.groupId = undefined
   form.rdpFixedWidth = -1
   form.rdpFixedHeight = -1
-  form.rdpSmartSizing = true
+  form.rdpSmartSizing = false
   form.rdpEnableNLA = true
   form.rdpDomain = ''
   form.rdpAdminSession = false
@@ -1843,9 +1855,9 @@ function onConnect() {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  width: 72px;
+  min-width: 64px;
   height: 52px;
-  padding: 4px;
+  padding: 4px 8px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: transparent;
