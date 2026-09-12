@@ -113,7 +113,7 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { formatKeyBinding } from '../composables/useKeyboardShortcuts'
+import { formatKeyBinding, tabDigitShortcutPrefix } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../types/settings'
 import { useK8sStore } from '../stores/k8sStore'
 import { useContainerStore } from '../stores/containerStore'
@@ -163,9 +163,10 @@ const { t } = useI18n()
 const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
 const tabShortcut = computed(() => {
   if (!props.shortcutIndex || props.shortcutIndex > 9) return ''
-  // Fixed platform digit shortcuts: Cmd+N on macOS, Ctrl+N elsewhere.
-  if (isMac) return `⌘${props.shortcutIndex}`
-  return `Ctrl+${props.shortcutIndex}`
+  // Cmd+N on macOS / Ctrl+N elsewhere by default, or the user-configured
+  // keyboard.tabSwitchModifier combo — always the real binding.
+  const prefix = tabDigitShortcutPrefix(isMac, settingsStore.settings.keyboard.tabSwitchModifier)
+  return `${prefix}${props.shortcutIndex}`
 })
 
 // Human-readable keybinding for a shortcut action ('' when unset), shown as a

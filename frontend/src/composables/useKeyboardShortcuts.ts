@@ -97,6 +97,78 @@ export function onTerminalKey(e: KeyboardEvent): boolean {
   return true
 }
 
+// ── Configurable digit tab switching (tabSwitchModifier) ──
+//
+// Digit shortcuts live in onPlatformSystemShortcut (App.vue): by default
+// Ctrl/Cmd+1…9 switches tabs and Alt/Option+1…9 switches workspace panels.
+// The optional keyboard.tabSwitchModifier setting moves the tab-switch combo
+// to any modifier the user prefers (e.g. Alt). The helpers below are the
+// pure decision logic, shared by the runtime handler and the tab/panel
+// shortcut badges so the UI can never show a combo that doesn't work.
+
+function flagsMatch(e: KeyboardEvent, mod: KeyBinding): boolean {
+  return e.ctrlKey === !!mod.ctrl && e.metaKey === !!mod.meta
+    && e.shiftKey === !!mod.shift && e.altKey === !!mod.alt
+}
+
+function hasAnyFlag(mod: KeyBinding | undefined): boolean {
+  return !!mod && !!(mod.ctrl || mod.meta || mod.shift || mod.alt)
+}
+
+// True when the custom modifier claims the alt-only combo, i.e. the
+// workspace-panel digit shortcuts would collide with tab switching and must
+// be suppressed (runtime handler skips them, badges hide the hint).
+export function panelDigitShortcutsSuppressed(mod?: KeyBinding): boolean {
+  return !!mod && !!mod.alt && !mod.ctrl && !mod.meta && !mod.shift
+}
+
+/**
+ * Resolve which target a digit keydown addresses, or null when it belongs to
+ * nobody. `mod` is the configured tabSwitchModifier: undefined falls back to
+ * the fixed platform bindings (Ctrl/Cmd tabs, Alt/Option panels); a binding
+ * with no modifier set disables digit tab switching entirely; a configured
+ * combo moves tab switching to it and steals the digits from the panels only
+ * when it is the plain Alt/Option combo.
+ */
+export function matchDigitShortcut(
+  e: KeyboardEvent,
+  isMac: boolean,
+  mod?: KeyBinding,
+): 'tab' | 'panel' | null {
+  const altOnly = e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey
+  if (altOnly && !panelDigitShortcutsSuppressed(mod)) return 'panel'
+  if (mod === undefined) {
+    if (isMac) return e.metaKey && !e.ctrlKey && !e.shiftKey ? 'tab' : null
+    return e.ctrlKey && !e.metaKey && !e.shiftKey ? 'tab' : null
+  }
+  if (!hasAnyFlag(mod)) return null
+  return flagsMatch(e, mod) ? 'tab' : null
+}
+
+/**
+ * Badge prefix for the tab digit shortcut ('1'…'9' is appended by callers):
+ * platform symbols for the default binding, plain modifier text for a
+ * configured one. '' when digit tab switching is disabled.
+ */
+export function tabDigitShortcutPrefix(isMac: boolean, mod?: KeyBinding): string {
+  if (mod === undefined) return isMac ? '⌘' : 'Ctrl'
+  if (!hasAnyFlag(mod)) return ''
+  if (isMac) {
+    let s = ''
+    if (mod.ctrl) s += '⌃'
+    if (mod.meta) s += '⌘'
+    if (mod.shift) s += '⇧'
+    if (mod.alt) s += '⌥'
+    return s
+  }
+  const parts: string[] = []
+  if (mod.ctrl) parts.push('Ctrl')
+  if (mod.meta) parts.push('Meta')
+  if (mod.shift) parts.push('Shift')
+  if (mod.alt) parts.push('Alt')
+  return parts.join('+')
+}
+
 let registered = false
 
 export function installGlobalListener() {
