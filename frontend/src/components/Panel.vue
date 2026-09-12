@@ -71,7 +71,7 @@
           >
             <MoreHorizontal :size="14" />
           </button>
-          <Menu ref="moreMenuRef" align="end" root-class="right-shortcuts" v-model:visible="moreMenuVisible">
+          <Menu ref="moreMenuRef" align="end" v-model:visible="moreMenuVisible">
             <!-- ① 面板操作 -->
             <MenuItem :shortcut="menuShortcut('duplicateSession')" @click="emit('duplicate', panel.id); moreMenuVisible = false">
               {{ t('tab.duplicate') }}
@@ -142,7 +142,7 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { formatKeyBinding, panelDigitShortcutsSuppressed } from '../composables/useKeyboardShortcuts'
+import { formatKeyBinding, panelDigitShortcutsSuppressed, panelDigitShortcutPrefix, formatDigitShortcut } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../types/settings'
 import {
   CreateSession,
@@ -201,24 +201,25 @@ const settingsStore = useSettingsStore()
 const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
 const panelShortcut = computed(() => {
   if (!props.shortcutIndex || props.shortcutIndex > 9) return ''
-  // Fixed platform digit shortcuts: Option+N on macOS, Alt+N elsewhere —
-  // hidden while the configured tab-switch modifier claims the same combo,
-  // so a badge never advertises a binding that tab switching swallowed.
-  if (panelDigitShortcutsSuppressed(settingsStore.settings.keyboard.tabSwitchModifier)) return ''
-  if (isMac) return `⌥${props.shortcutIndex}`
-  return `Alt+${props.shortcutIndex}`
+  // Option+N on macOS / Alt+N elsewhere by default, or the user-configured
+  // keyboard.panelSwitchModifier combo — hidden while the tab-switch modifier
+  // claims the same combo or the user cleared the panel modifier, so a badge
+  // never advertises a binding that does nothing.
+  const kb = settingsStore.settings.keyboard
+  if (panelDigitShortcutsSuppressed(kb.tabSwitchModifier, kb.panelSwitchModifier)) return ''
+  const prefix = panelDigitShortcutPrefix(isMac, kb.panelSwitchModifier)
+  return formatDigitShortcut(prefix, props.shortcutIndex, isMac)
 })
 const workspaceTab = computed(() =>
   props.workspaceId ? tabStore.tabs.find(tab => tab.id === props.workspaceId && tab.type === 'workspace') : undefined
 )
 const isMaximized = computed(() => workspaceTab.value?.maximizedPanelId === props.panel.id)
-// Panel maximize is a configurable shortcut; the tooltip must reflect the
-// current binding (and hide when the user cleared it) instead of hardcoding
-// Ctrl+Shift+Enter.
-const maximizeShortcut = computed(() => menuShortcut('maximizePanel'))
 const maximizeTitle = computed(() => {
   const label = t(isMaximized.value ? 'workspace.restorePanel' : 'workspace.maximizePanel')
-  return maximizeShortcut.value ? `${label} (${maximizeShortcut.value})` : label
+  // Reactive via settingsStore, so the hint follows the user's rebind.
+  const b = settingsStore.settings.keyboard.maximizePanel
+  const shortcut = b ? formatKeyBinding(b, isMac) : ''
+  return shortcut ? `${label} (${shortcut})` : label
 })
 
 function toggleMaximize() {

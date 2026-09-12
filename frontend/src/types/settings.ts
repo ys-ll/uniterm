@@ -145,9 +145,9 @@ export type ShortcutAction =
   | 'nextTab' | 'prevTab'
   | 'newConnection' | 'toggleSidebar' | 'openQuickCommands'
   | 'focusAI' | 'focusTerminal' | 'lockAI'
+  | 'maximizePanel'
   | 'closePanel'
   | 'navigatePrev' | 'navigateNext'
-  | 'maximizePanel'
   | 'duplicateSession'
   | 'terminalSearch'
   | 'openSettings'
@@ -158,23 +158,28 @@ export type ShortcutAction =
   | 'zoomFontIn'
   | 'zoomFontOut'
 
+// User-facing bindings only use ctrl/shift/alt. On macOS the runtime mirrors
+// every ctrl combo to Cmd (per-action shortcuts register both; the digit
+// shortcuts treat Ctrl and Cmd as one modifier), so Cmd is always covered by
+// ctrl. Alt bindings answer to the Option key (same key event).
 export interface KeyBinding {
   ctrl: boolean
-  meta?: boolean
   shift: boolean
   alt: boolean
   key: string
 }
 
-// tabSwitchModifier is not a per-action binding: only its modifier flags
-// (ctrl/meta/shift/alt) are read, its `key` stays empty. The configured combo
-// held together with a digit key (1-9) switches to that tab, handled by
-// onPlatformSystemShortcut in App.vue alongside the fixed workspace-panel
-// digit shortcuts. Unset = platform default (Ctrl on Windows/Linux, Cmd on
-// macOS) with Alt/Option left to the workspace-panel shortcuts; an entry
-// with no modifier set disables digit tab switching entirely.
+// tabSwitchModifier / panelSwitchModifier are not per-action bindings: only
+// their modifier flags (ctrl/meta/shift/alt) are read, their `key` stays
+// empty. The configured combo held together with a digit key (1-9) switches
+// to that tab / workspace panel, handled by onPlatformSystemShortcut in
+// App.vue. Unset = platform default (tabs: Ctrl on Windows/Linux, Cmd on
+// macOS; panels: Alt/Option); an entry with no modifier set disables that
+// digit family entirely. When both resolve to the same combo, tab switching
+// wins and the panel digit shortcuts are suppressed.
 export type KeyboardSettings = Partial<Record<ShortcutAction, KeyBinding>> & {
   tabSwitchModifier?: KeyBinding
+  panelSwitchModifier?: KeyBinding
 }
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
@@ -206,15 +211,13 @@ export const DEFAULT_KEYBOARD: KeyboardSettings = {
   prevTab: { ctrl: true, shift: true, alt: false, key: 'tab' },
   newConnection: { ctrl: true, shift: true, alt: false, key: 'n' },
   toggleSidebar: { ctrl: true, shift: true, alt: false, key: 'h' },
-  openQuickCommands: { ctrl: false, meta: true, shift: false, alt: false, key: 'k' },
+  openQuickCommands: { ctrl: true, shift: true, alt: false, key: 'm' },
   focusTerminal: { ctrl: true, shift: true, alt: false, key: 'j' },
   focusAI: { ctrl: true, shift: true, alt: false, key: 'k' },
   closePanel: { ctrl: true, shift: true, alt: false, key: 'q' },
+  maximizePanel: { ctrl: true, shift: true, alt: false, key: 'enter' },
   navigatePrev: { ctrl: false, shift: false, alt: true, key: 'arrowleft' },
   navigateNext: { ctrl: false, shift: false, alt: true, key: 'arrowright' },
-  // loadKeybindings aliases Ctrl+→Meta+ for macOS, so the default covers
-  // Cmd+Shift+Enter on Mac and Ctrl+Shift+Enter elsewhere.
-  maximizePanel: { ctrl: true, shift: true, alt: false, key: 'enter' },
   lockAI: { ctrl: true, shift: true, alt: false, key: 'l' },
   duplicateSession: { ctrl: true, shift: true, alt: false, key: 'd' },
   terminalSearch: { ctrl: true, shift: true, alt: false, key: 'f' },
@@ -225,6 +228,23 @@ export const DEFAULT_KEYBOARD: KeyboardSettings = {
   toggleTimestamps: { ctrl: true, shift: true, alt: false, key: 't' },
   zoomFontIn: { ctrl: true, shift: false, alt: false, key: '=' },
   zoomFontOut: { ctrl: true, shift: false, alt: false, key: '-' },
+}
+
+// Older settings.json files may carry a `meta` flag on bindings. Ctrl now
+// covers Cmd on macOS, so legacy meta-only bindings migrate to ctrl and the
+// flag itself is dropped; untouched actions fall back to their platform
+// defaults.
+export function normalizeKeyBindings(kb: KeyboardSettings): KeyboardSettings {
+  const out = { ...DEFAULT_KEYBOARD, ...kb } as KeyboardSettings & Record<string, KeyBinding | undefined>
+  for (const key of Object.keys(out)) {
+    const b = out[key] as (KeyBinding & { meta?: boolean }) | undefined
+    if (b && b.meta) {
+      const migrated = { ...b, ctrl: true }
+      delete migrated.meta
+      out[key] = migrated
+    }
+  }
+  return out
 }
 
 export interface SFTPBookmarks {

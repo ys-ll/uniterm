@@ -5,7 +5,7 @@
        `shortcut` renders a muted trailing hint (keyboard shortcut / aux text);
        the `#trailing` slot hosts right-aligned content that fades in on row
        hover (e.g. a delete button) without the host hand-rolling the reveal. -->
-  <div class="menu-item" :class="{ 'has-trailing': !!$slots.trailing, iconic }">
+  <div class="menu-item" :class="{ 'has-trailing': !!$slots.trailing, 'has-shortcut': !!shortcut, iconic }">
     <component
       v-if="icon"
       :is="icon"
@@ -32,7 +32,7 @@ defineProps<{
   /** Icon + label (and a trailing slot) laid out on one flex line. */
   iconic?: boolean
   /** Optional muted trailing hint (usually a keyboard shortcut). Shown only
-   *  when non-empty and right-aligned by the container's .right-shortcuts. */
+   *  when non-empty; always right-aligned (.has-shortcut below). */
   shortcut?: string
 }>()
 </script>
@@ -42,8 +42,17 @@ defineProps<{
   flex-shrink: 0;
   color: inherit;
 }
+/* Rows with a shortcut hint turn flex so the hint ("Ctrl+C" etc.) hugs the
+   right edge instead of sitting after the label. Rows without one keep the
+   plain block layout (the class is absent, so this no-ops). */
+.menu-item.has-shortcut {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
 .menu-shortcut {
   flex-shrink: 0;
+  margin-left: auto;
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-muted, var(--text-disabled));

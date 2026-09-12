@@ -183,7 +183,7 @@
 
           </div>
 
-        <h2 class="section-title" style="margin-top: 28px">{{ t('settings.interaction') }}</h2>
+        <h2 class="section-title">{{ t('settings.interaction') }}</h2>
         <div class="settings-group">
           <div class="setting-card">
             <div class="setting-info">
@@ -230,7 +230,7 @@
           </div>
         </div>
 
-        <h2 class="section-title" style="margin-top: 28px">{{ t('settings.storageSecurity') }}</h2>
+        <h2 class="section-title">{{ t('settings.storageSecurity') }}</h2>
         <div class="settings-group">
           <div class="setting-card">
             <div class="setting-info">
@@ -478,7 +478,7 @@
           </div>
         </div>
 
-        <h2 class="section-title" style="margin-top: 28px">{{ t('settings.interaction') }}</h2>
+        <h2 class="section-title">{{ t('settings.interaction') }}</h2>
         <div class="settings-group">
           <div class="setting-card">
             <div class="setting-info">
@@ -577,7 +577,7 @@
           </div>
         </div>
 
-        <h2 class="section-title" style="margin-top: 28px">{{ t('settings.session') }}</h2>
+        <h2 class="section-title">{{ t('settings.session') }}</h2>
         <div class="settings-group">
           <div class="setting-card">
             <div class="setting-info">
@@ -658,7 +658,7 @@
         <h2 class="section-title">{{ t('settings.skills') }}</h2>
         <p class="section-desc">{{ t('settings.skillsDesc') }}</p>
         <SkillsManager />
-        <h2 class="section-title" style="margin-top: 28px">{{ t('settings.commands') }}</h2>
+        <h2 class="section-title">{{ t('settings.commands') }}</h2>
         <p class="section-desc">{{ t('settings.commandsDesc') }}</p>
         <CommandsManager />
       </div>
@@ -890,92 +890,126 @@
 
       <!-- 快捷键设置 -->
       <div v-if="settingsStore.activeCategory === 'keyboard'" class="settings-section">
-        <h2 class="section-title">{{ t('shortcut.title') }}</h2>
-        <table class="kb-table">
-          <thead>
-            <tr>
-              <th>{{ t('shortcut.colFunction') }}</th>
-              <th>{{ t('shortcut.colBinding') }}</th>
-              <th style="width:190px;">{{ t('shortcut.colActions') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                {{ t('shortcut.switchToTabByIndex') }}
-                <div class="kb-hint">{{ t('shortcut.switchToTabByIndexHint') }}</div>
-              </td>
-              <td><kbd class="kb-key">{{ tabSwitchBindingDisplay() }}</kbd></td>
-              <td class="kb-actions">
-                <el-button
-                  :type="rebindingTabSwitch ? 'warning' : 'default'"
-                  @click="startRebindTabSwitch()"
-                >
-                  {{ rebindingTabSwitch ? t('shortcut.pressModifier') : t('shortcut.edit') }}
-                </el-button>
-                <el-button
-                  v-if="rebindingTabSwitch"
-                  @click="stopRebind()"
-                >
-                  {{ t('shortcut.cancel') }}
-                </el-button>
-                <el-button
-                  v-if="rebindingTabSwitch"
-                  type="danger"
-                  @click="clearTabSwitchModifier()"
-                >
-                  {{ t('shortcut.clear') }}
-                </el-button>
-                <el-button
-                  v-if="!isTabSwitchModifierUnset() && !rebindingTabSwitch"
-                  type="danger"
-                  @click="resetTabSwitchModifier()"
-                >
-                  {{ t('shortcut.reset') }}
-                </el-button>
-              </td>
-            </tr>
-            <tr
-              v-for="action in (Object.keys(SHORTCUT_LABELS) as ShortcutAction[])"
-              :key="action"
-            >
-              <td>{{ t(SHORTCUT_LABELS[action] || action) }}</td>
-              <td><kbd class="kb-key">{{ bindingDisplay(action) }}</kbd></td>
-              <td class="kb-actions">
-                <el-button
-                 
-                  :type="rebindingAction === action ? 'warning' : 'default'"
-                  @click="startRebind(action)"
-                >
-                  {{ rebindingAction === action ? t('shortcut.pressKey') : t('shortcut.edit') }}
-                </el-button>
-                <el-button
-                  v-if="rebindingAction === action"
-                 
-                  @click="stopRebind()"
-                >
-                  {{ t('shortcut.cancel') }}
-                </el-button>
-                <el-button
-                  v-if="rebindingAction === action"
-                 
-                  type="danger"
-                  @click="clearBinding(action)"
-                >
-                  {{ t('shortcut.clear') }}
-                </el-button>
-                <el-button
-                  v-if="!isDefaultBinding(action) && rebindingAction !== action"
-                 
-                  type="danger"
-                  @click="resetBinding(action)"
-                >
-                  {{ t('shortcut.reset') }}
-                </el-button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <p v-if="isMac" class="kb-hint kb-modifier-note">{{ t('shortcut.modifierNote') }}</p>
+        <template v-for="cat in shortcutCategories" :key="cat.key">
+          <h2 class="section-title">{{ t(cat.label) }}</h2>
+          <table class="kb-table">
+            <thead>
+              <tr>
+                <th>{{ t('shortcut.colFunction') }}</th>
+                <th>{{ t('shortcut.colBinding') }}</th>
+                <th style="width:190px;">{{ t('shortcut.colActions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-if="cat.key === 'tabs'">
+                <tr>
+                  <td>{{ t('shortcut.switchToTabByIndex') }}</td>
+                  <td><kbd class="kb-key">{{ tabSwitchBindingDisplay() }}</kbd></td>
+                  <td class="kb-actions">
+                    <el-button
+                      :type="rebindingTabSwitch ? 'warning' : 'default'"
+                      @click="startRebindTabSwitch()"
+                    >
+                      {{ rebindingTabSwitch ? t('shortcut.pressModifier') : t('shortcut.edit') }}
+                    </el-button>
+                    <el-button
+                      v-if="rebindingTabSwitch"
+                      @click="stopRebind()"
+                    >
+                      {{ t('shortcut.cancel') }}
+                    </el-button>
+                    <el-button
+                      v-if="rebindingTabSwitch"
+                      type="danger"
+                      @click="clearTabSwitchModifier()"
+                    >
+                      {{ t('shortcut.clear') }}
+                    </el-button>
+                    <el-button
+                      v-if="!isTabSwitchModifierUnset() && !rebindingTabSwitch"
+                      type="danger"
+                      @click="resetTabSwitchModifier()"
+                    >
+                      {{ t('shortcut.reset') }}
+                    </el-button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>{{ t('shortcut.switchToPanelByIndex') }}</td>
+                  <td><kbd class="kb-key">{{ panelSwitchBindingDisplay() }}</kbd></td>
+                  <td class="kb-actions">
+                    <el-button
+                      :type="rebindingPanelSwitch ? 'warning' : 'default'"
+                      @click="startRebindPanelSwitch()"
+                    >
+                      {{ rebindingPanelSwitch ? t('shortcut.pressModifier') : t('shortcut.edit') }}
+                    </el-button>
+                    <el-button
+                      v-if="rebindingPanelSwitch"
+                      @click="stopRebind()"
+                    >
+                      {{ t('shortcut.cancel') }}
+                    </el-button>
+                    <el-button
+                      v-if="rebindingPanelSwitch"
+                      type="danger"
+                      @click="clearPanelSwitchModifier()"
+                    >
+                      {{ t('shortcut.clear') }}
+                    </el-button>
+                    <el-button
+                      v-if="!isPanelSwitchModifierUnset() && !rebindingPanelSwitch"
+                      type="danger"
+                      @click="resetPanelSwitchModifier()"
+                    >
+                      {{ t('shortcut.reset') }}
+                    </el-button>
+                  </td>
+                </tr>
+              </template>
+              <tr
+                v-for="action in cat.actions"
+                :key="action"
+              >
+                <td>{{ t(SHORTCUT_LABELS[action] || action) }}</td>
+                <td><kbd class="kb-key">{{ bindingDisplay(action) }}</kbd></td>
+                <td class="kb-actions">
+                  <el-button
+
+                    :type="rebindingAction === action ? 'warning' : 'default'"
+                    @click="startRebind(action)"
+                  >
+                    {{ rebindingAction === action ? t('shortcut.pressKey') : t('shortcut.edit') }}
+                  </el-button>
+                  <el-button
+                    v-if="rebindingAction === action"
+
+                    @click="stopRebind()"
+                  >
+                    {{ t('shortcut.cancel') }}
+                  </el-button>
+                  <el-button
+                    v-if="rebindingAction === action"
+
+                    type="danger"
+                    @click="clearBinding(action)"
+                  >
+                    {{ t('shortcut.clear') }}
+                  </el-button>
+                  <el-button
+                    v-if="!isDefaultBinding(action) && rebindingAction !== action"
+
+                    type="danger"
+                    @click="resetBinding(action)"
+                  >
+                    {{ t('shortcut.reset') }}
+                  </el-button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
       </div>
 
       <!-- AI助理设置 -->
@@ -1527,9 +1561,33 @@ watch(() => settingsStore.openCategory, (cat) => {
 // ── Keyboard rebinding ──
 const rebindingAction = ref<ShortcutAction | null>(null)
 
-// Capture mode for the modifier+digit tab-switch row: unlike per-action
-// bindings, only the modifier flags are stored and `key` stays empty.
+// Capture mode for the modifier+digit tab/panel-switch rows: unlike
+// per-action bindings, only the modifier flags are stored and `key` stays
+// empty.
 const rebindingTabSwitch = ref(false)
+const rebindingPanelSwitch = ref(false)
+
+// Display grouping for the keyboard settings table: related shortcuts share
+// a sub-heading so the long list stays scannable. The two digit-modifier
+// rows are hardcoded in the 'tabs' section (custom edit/clear controls).
+// Every ShortcutAction must appear exactly once.
+const shortcutCategories: { key: string; label: string; actions: ShortcutAction[] }[] = [
+  {
+    key: 'tabs',
+    label: 'shortcut.catTabs',
+    actions: ['newConnection', 'nextTab', 'prevTab', 'navigatePrev', 'navigateNext', 'closePanel', 'duplicateSession', 'maximizePanel', 'lockAI'],
+  },
+  {
+    key: 'sidebar',
+    label: 'shortcut.catSidebar',
+    actions: ['toggleSidebar', 'openQuickCommands', 'focusAI', 'openSettings'],
+  },
+  {
+    key: 'terminal',
+    label: 'shortcut.catTerminal',
+    actions: ['focusTerminal', 'copy', 'paste', 'terminalSearch', 'zoomFontIn', 'zoomFontOut', 'toggleLineNumbers', 'toggleTimestamps'],
+  },
+]
 
 function bindingDisplay(action: ShortcutAction): string {
   const b = settingsStore.settings.keyboard[action]
@@ -1542,7 +1600,6 @@ function isDefaultBinding(action: ShortcutAction): boolean {
   const def = DEFAULT_KEYBOARD[action]
   if (!current || !def) return true
   return current.ctrl === def.ctrl && current.shift === def.shift
-    && (current.meta || false) === (def.meta || false)
     && current.alt === def.alt && current.key === def.key
 }
 
@@ -1574,13 +1631,14 @@ function stopRebind() {
   }
   rebindingAction.value = null
   rebindingTabSwitch.value = false
+  rebindingPanelSwitch.value = false
   installGlobalListener()
 }
 
 function clearBinding(action: ShortcutAction) {
   settingsStore.settings.keyboard = {
     ...settingsStore.settings.keyboard,
-    [action]: { ctrl: false, meta: false, shift: false, alt: false, key: '' }
+    [action]: { ctrl: false, shift: false, alt: false, key: '' }
   }
   settingsStore.save()
   stopRebind()
@@ -1588,6 +1646,7 @@ function clearBinding(action: ShortcutAction) {
 
 function onRebindKeydown(e: KeyboardEvent) {
   if (rebindingTabSwitch.value) return onRebindTabSwitchKeydown(e)
+  if (rebindingPanelSwitch.value) return onRebindPanelSwitchKeydown(e)
   if (!rebindingAction.value) return stopRebind()
   e.preventDefault()
   e.stopPropagation()
@@ -1596,8 +1655,8 @@ function onRebindKeydown(e: KeyboardEvent) {
   if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') return
 
   const binding: KeyBinding = {
-    ctrl: e.ctrlKey,
-    meta: e.metaKey,
+    // macOS: Cmd is recorded as ctrl — ctrl combos mirror to Cmd at runtime.
+    ctrl: e.ctrlKey || e.metaKey,
     shift: e.shiftKey,
     alt: e.altKey,
     key: key.toLowerCase(),
@@ -1627,70 +1686,114 @@ function findConflict(binding: KeyBinding): ShortcutAction | null {
 }
 
 function bindingKey(binding: KeyBinding): string {
-  return `${binding.ctrl ? 'ctrl+' : ''}${binding.meta ? 'meta+' : ''}${binding.shift ? 'shift+' : ''}${binding.alt ? 'alt+' : ''}${binding.key.toLowerCase()}`
+  return `${binding.ctrl ? 'ctrl+' : ''}${binding.shift ? 'shift+' : ''}${binding.alt ? 'alt+' : ''}${binding.key.toLowerCase()}`
 }
 
-// ── Configurable digit tab switching (tabSwitchModifier) ──
+// ── Configurable digit modifiers (tab/panel switching) ──
 //
 // Only the modifier flags are stored (`key` stays empty). Unset = platform
-// default (Ctrl on Windows/Linux, Cmd on macOS) with Alt/Option left to the
-// workspace-panel digit shortcuts; cleared (no modifier) disables digit tab
-// switching; any configured combo moves tab switching to it, and when it is
-// Alt-only the workspace-panel digit shortcuts are suppressed (their badges
+// default (tabs: Ctrl on Windows/Linux, Cmd on macOS; panels: Alt/Option);
+// cleared (no modifier) disables that digit family; any configured combo
+// moves it there. When both families resolve to the same combo, tab
+// switching wins and the panel digit shortcuts are suppressed (their badges
 // hide too — see panelDigitShortcutsSuppressed).
 
-function tabSwitchBindingDisplay(): string {
-  const b = settingsStore.settings.keyboard.tabSwitchModifier
-  if (!b || (!b.ctrl && !b.meta && !b.shift && !b.alt)) {
+type DigitModifierKey = 'tabSwitchModifier' | 'panelSwitchModifier'
+
+function digitModifierBindingDisplay(key: DigitModifierKey, defaultMods: string): string {
+  const b = settingsStore.settings.keyboard[key]
+  if (!b) {
     // Effective platform default, shown so the row never reads as "off".
-    const defaultMods = isMac.value ? 'Cmd' : 'Ctrl'
     return `${defaultMods} + ${t('shortcut.digitKeys')}`
   }
+  if (!b.ctrl && !b.shift && !b.alt) {
+    // Cleared = the family is disabled; show an empty binding.
+    return ''
+  }
   // formatKeyBinding pushes the (empty) key too, leaving a trailing '+'
-  const mods = formatKeyBinding({ ctrl: !!b.ctrl, meta: b.meta, shift: !!b.shift, alt: !!b.alt, key: '' }, isMac.value).replace(/\++$/, '')
+  const mods = formatKeyBinding({ ctrl: !!b.ctrl, shift: !!b.shift, alt: !!b.alt, key: '' }, isMac.value).replace(/\++$/, '')
   return `${mods} + ${t('shortcut.digitKeys')}`
 }
 
-function isTabSwitchModifierUnset(): boolean {
-  const cur = settingsStore.settings.keyboard.tabSwitchModifier
-  return !cur || (!cur.ctrl && !cur.meta && !cur.shift && !cur.alt)
+function tabSwitchBindingDisplay(): string {
+  return digitModifierBindingDisplay('tabSwitchModifier', isMac.value ? 'Cmd' : 'Ctrl')
 }
 
-function setTabSwitchModifier(binding: KeyBinding | null) {
+function panelSwitchBindingDisplay(): string {
+  return digitModifierBindingDisplay('panelSwitchModifier', isMac.value ? 'Option' : 'Alt')
+}
+
+function isTabSwitchModifierUnset(): boolean {
+  return !settingsStore.settings.keyboard.tabSwitchModifier
+}
+
+function isPanelSwitchModifierUnset(): boolean {
+  return !settingsStore.settings.keyboard.panelSwitchModifier
+}
+
+function digitModifierFlagsEqual(a: KeyBinding, b: KeyBinding): boolean {
+  return !!a.ctrl === !!b.ctrl && !!a.shift === !!b.shift && !!a.alt === !!b.alt
+}
+
+function setDigitModifier(key: DigitModifierKey, binding: KeyBinding | null) {
   const kb: KeyboardSettings = { ...settingsStore.settings.keyboard }
   if (binding) {
-    kb.tabSwitchModifier = binding
-  } else {
-    delete kb.tabSwitchModifier
-  }
-  // Mirror the per-action conflict rule: an action explicitly bound to the
-  // same combo with a digit key would shadow the family for that digit (the
-  // global keybinding listener runs before the platform handler), so clear
-  // it like findConflict does for regular rebinds.
-  if (binding) {
+    kb[key] = binding
+    // The two digit families are mutually exclusive: assigning one clears the
+    // other when it claims the same combo (the runtime would otherwise let
+    // tab switching silently win and the panel row would advertise a dead
+    // binding).
+    const otherKey: DigitModifierKey = key === 'tabSwitchModifier' ? 'panelSwitchModifier' : 'tabSwitchModifier'
+    const other = kb[otherKey]
+    if (other && (other.ctrl || other.shift || other.alt) && digitModifierFlagsEqual(other, binding)) {
+      kb[otherKey] = { ctrl: false, shift: false, alt: false, key: '' }
+    }
+    // Mirror the per-action conflict rule: an action explicitly bound to the
+    // same combo with a digit key would shadow the family for that digit (the
+    // global keybinding listener runs before the platform handler), so clear
+    // it like findConflict does for regular rebinds.
     for (const [action, b] of Object.entries(kb) as [ShortcutAction, KeyBinding][]) {
-      if (action === ('tabSwitchModifier' as ShortcutAction)) continue
-      if (!b.key || !/^[1-9]$/.test(b.key)) continue
-      if (!!b.ctrl === !!binding.ctrl && !!b.meta === !!binding.meta
-        && !!b.shift === !!binding.shift && !!b.alt === !!binding.alt) {
-        kb[action] = { ctrl: false, meta: false, shift: false, alt: false, key: '' }
+      if ((action as string) === key) continue
+      if (!b || !b.key || !/^[1-9]$/.test(b.key)) continue
+      if (digitModifierFlagsEqual(b, binding)) {
+        kb[action] = { ctrl: false, shift: false, alt: false, key: '' }
       }
     }
+  } else {
+    delete kb[key]
   }
   settingsStore.settings.keyboard = kb
   settingsStore.save()
 }
 
+function setTabSwitchModifier(binding: KeyBinding | null) {
+  setDigitModifier('tabSwitchModifier', binding)
+}
+
+function setPanelSwitchModifier(binding: KeyBinding | null) {
+  setDigitModifier('panelSwitchModifier', binding)
+}
+
 function resetTabSwitchModifier() {
   // Back to unset = platform default (Ctrl/Cmd+digit tabs, Alt/Option+digit
   // workspace panels).
-  setTabSwitchModifier(null)
+  setDigitModifier('tabSwitchModifier', null)
+}
+
+function resetPanelSwitchModifier() {
+  // Back to unset = platform default (Alt/Option+digit workspace panels).
+  setDigitModifier('panelSwitchModifier', null)
 }
 
 function clearTabSwitchModifier() {
-  // All flags off = digit tab switching disabled; workspace panels keep
-  // their Alt/Option digits.
-  setTabSwitchModifier({ ctrl: false, meta: false, shift: false, alt: false, key: '' })
+  // All flags off = digit tab switching disabled; panels keep their digits.
+  setDigitModifier('tabSwitchModifier', { ctrl: false, shift: false, alt: false, key: '' })
+  stopRebind()
+}
+
+function clearPanelSwitchModifier() {
+  // All flags off = panel digit switching disabled; tabs keep their digits.
+  setDigitModifier('panelSwitchModifier', { ctrl: false, shift: false, alt: false, key: '' })
   stopRebind()
 }
 
@@ -1704,17 +1807,36 @@ function startRebindTabSwitch() {
   }
 }
 
+function startRebindPanelSwitch() {
+  rebindingPanelSwitch.value = true
+  uninstallGlobalListener()
+  if (!rebindListenerActive) {
+    rebindListenerActive = true
+    document.addEventListener('keydown', onRebindKeydown, true)
+    window.addEventListener('blur', onRebindBlur)
+  }
+}
+
 // Modifier-only capture: bare modifier presses are ignored so the user can
 // build the combo (e.g. Ctrl+Alt); the next non-modifier key press confirms
 // the held modifiers — its own key is discarded.
-function onRebindTabSwitchKeydown(e: KeyboardEvent) {
+function onRebindModifierKeydown(e: KeyboardEvent, apply: (binding: KeyBinding) => void) {
   e.preventDefault()
   e.stopPropagation()
   if (e.key === 'Escape') return stopRebind()
   if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta') return
   if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) return
-  setTabSwitchModifier({ ctrl: e.ctrlKey, meta: e.metaKey, shift: e.shiftKey, alt: e.altKey, key: '' })
+  // macOS: Cmd is recorded as ctrl — ctrl combos mirror to Cmd at runtime.
+  apply({ ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey, alt: e.altKey, key: '' })
   stopRebind()
+}
+
+function onRebindTabSwitchKeydown(e: KeyboardEvent) {
+  onRebindModifierKeydown(e, setTabSwitchModifier)
+}
+
+function onRebindPanelSwitchKeydown(e: KeyboardEvent) {
+  onRebindModifierKeydown(e, setPanelSwitchModifier)
 }
 
 function onRebindBlur() {
@@ -2092,7 +2214,7 @@ async function onToggleSystemTitleBar(v: boolean) {
   font-size: 18px;
   font-weight: 600;
   font-family: var(--font-ui);
-  margin: 0 0 20px 0;
+  margin: 20px 0 20px 0;
   color: var(--text-primary);
 }
 
@@ -2533,6 +2655,10 @@ async function onToggleSystemTitleBar(v: boolean) {
   margin-top: 2px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.kb-modifier-note {
+  margin: 0 0 10px;
 }
 
 .kb-actions {

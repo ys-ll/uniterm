@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { loadKeybindings, onGlobalKeydown, matchDigitShortcut, panelDigitShortcutsSuppressed, tabDigitShortcutPrefix } from './useKeyboardShortcuts'
+import {
+  loadKeybindings, onGlobalKeydown, matchDigitShortcut, panelDigitShortcutsSuppressed,
+  tabDigitShortcutPrefix, panelDigitShortcutPrefix, formatDigitShortcut, formatKeyBinding,
+} from './useKeyboardShortcuts'
+import { DEFAULT_KEYBOARD } from '../types/settings'
 import type { KeyboardSettings } from '../types/settings'
 
 function fakeKey(partial: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean; key: string; isComposing: boolean; keyCode: number }>): KeyboardEvent {
@@ -58,24 +62,43 @@ describe('useKeyboardShortcuts — font zoom bindings', () => {
 type Particle<T> = Partial<{ [K in keyof T]?: T[K] }>
 
 describe('useKeyboardShortcuts — quick commands', () => {
-  it('fires the quick-command handler on Meta+K only', () => {
+  it('fires the quick-command handler on Ctrl+Shift+M and mirrors it to Cmd on mac', () => {
     const openQuickCommands = vi.fn()
     loadKeybindings(
-      { openQuickCommands: { ctrl: false, meta: true, shift: false, alt: false, key: 'k' } },
+      DEFAULT_KEYBOARD,
       { openQuickCommands } as any,
     )
 
-    onGlobalKeydown(fakeKey({ metaKey: true, key: 'k' }))
-    onGlobalKeydown(fakeKey({ ctrlKey: true, key: 'k' }))
-
+    onGlobalKeydown(fakeKey({ ctrlKey: true, shiftKey: true, key: 'm' }))
     expect(openQuickCommands).toHaveBeenCalledTimes(1)
+    onGlobalKeydown(fakeKey({ metaKey: true, shiftKey: true, key: 'm' }))
+    expect(openQuickCommands).toHaveBeenCalledTimes(2)
+    onGlobalKeydown(fakeKey({ key: 'm' }))
+    expect(openQuickCommands).toHaveBeenCalledTimes(2) // bare key → unharmed
+  })
+})
+
+describe('useKeyboardShortcuts — maximize panel', () => {
+  it('fires the maximize handler on Ctrl+Shift+Enter (default) and mirrors it to Cmd on mac', () => {
+    const maximizePanel = vi.fn()
+    loadKeybindings(
+      DEFAULT_KEYBOARD,
+      { maximizePanel } as any,
+    )
+
+    onGlobalKeydown(fakeKey({ ctrlKey: true, shiftKey: true, key: 'Enter' }))
+    expect(maximizePanel).toHaveBeenCalledTimes(1)
+    onGlobalKeydown(fakeKey({ metaKey: true, shiftKey: true, key: 'Enter' }))
+    expect(maximizePanel).toHaveBeenCalledTimes(2)
+    onGlobalKeydown(fakeKey({ key: 'Enter' }))
+    expect(maximizePanel).toHaveBeenCalledTimes(2) // bare Enter → unharmed
   })
 })
 
 describe('matchDigitShortcut — configurable tab-switch modifier', () => {
-  const alt = { ctrl: false, meta: false, shift: false, alt: true, key: '' }
-  const ctrlAlt = { ctrl: true, meta: false, shift: false, alt: true, key: '' }
-  const none = { ctrl: false, meta: false, shift: false, alt: false, key: '' }
+  const alt = { ctrl: false, shift: false, alt: true, key: '' }
+  const ctrlAlt = { ctrl: true, shift: false, alt: true, key: '' }
+  const none = { ctrl: false, shift: false, alt: false, key: '' }
 
   it('keeps the fixed platform bindings when unset', () => {
     expect(matchDigitShortcut(fakeKey({ ctrlKey: true, key: '1' }), false, undefined)).toBe('tab')
@@ -116,5 +139,113 @@ describe('matchDigitShortcut — configurable tab-switch modifier', () => {
     expect(tabDigitShortcutPrefix(true, alt)).toBe('⌥')
     expect(tabDigitShortcutPrefix(false, ctrlAlt)).toBe('Ctrl+Alt')
     expect(tabDigitShortcutPrefix(false, none)).toBe('')
+  })
+})
+
+describe('matchDigitShortcut — configurable panel-switch modifier', () => {
+  const ctrl = { ctrl: true, shift: false, alt: false, key: '' }
+  const ctrlShift = { ctrl: true, shift: true, alt: false, key: '' }
+  const none = { ctrl: false, shift: false, alt: false, key: '' }
+
+  it('keeps the fixed Alt/Option binding when unset', () => {
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '2' }), false, undefined, undefined)).toBe('panel')
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '2' }), true, undefined, undefined)).toBe('panel')
+  })
+
+  it('moves panel switching to the configured modifier', () => {
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, shiftKey: true, key: '4' }), false, undefined, ctrlShift)).toBe('panel')
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '4' }), false, undefined, ctrlShift)).toBe(null)
+  })
+
+  it('the tab-switch modifier wins when both target the same combo', () => {
+    // The default tab combo is Ctrl/Cmd, so a Ctrl-only panel modifier collides.
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, key: '5' }), false, undefined, ctrl)).toBe('tab')
+    // Clearing the tab modifier hands Ctrl+digits to the panels.
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, key: '5' }), false, none, ctrl)).toBe('panel')
+  })
+
+  it('a cleared panel modifier disables panel digit switching entirely', () => {
+    expect(matchDigitShortcut(fakeKey({ altKey: true, key: '2' }), false, undefined, none)).toBe(null)
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, key: '2' }), false, undefined, none)).toBe('tab')
+  })
+
+  it('treats Ctrl and Cmd as the same modifier on macOS', () => {
+    // Default: Cmd+1 and Ctrl+1 both switch tabs on mac.
+    expect(matchDigitShortcut(fakeKey({ metaKey: true, key: '1' }), true, undefined, undefined)).toBe('tab')
+    expect(matchDigitShortcut(fakeKey({ ctrlKey: true, key: '1' }), true, undefined, undefined)).toBe('tab')
+    // A configured Ctrl combo also answers to Cmd on mac.
+    expect(matchDigitShortcut(fakeKey({ metaKey: true, shiftKey: true, key: '4' }), true, undefined, ctrlShift)).toBe('panel')
+    // …and a Ctrl-only panel modifier collides with the mac default tabs too.
+    expect(matchDigitShortcut(fakeKey({ metaKey: true, key: '5' }), true, undefined, ctrl)).toBe('tab')
+  })
+})
+
+describe('panelDigitShortcutsSuppressed — panel modifier collisions', () => {
+  const ctrl = { ctrl: true, shift: false, alt: false, key: '' }
+  const ctrlShift = { ctrl: true, shift: true, alt: false, key: '' }
+
+  it('is true when the panel modifier equals the effective tab combo', () => {
+    // The default tab combo is Ctrl/Cmd (unified on mac), so a Ctrl-only
+    // panel modifier collides on every platform.
+    expect(panelDigitShortcutsSuppressed(undefined, ctrl)).toBe(true)
+  })
+
+  it('is false for distinct combos and the default Alt binding', () => {
+    expect(panelDigitShortcutsSuppressed(undefined, undefined)).toBe(false)
+    expect(panelDigitShortcutsSuppressed(undefined, ctrlShift)).toBe(false)
+  })
+})
+
+describe('digit shortcut badges', () => {
+  const ctrl = { ctrl: true, shift: false, alt: false, key: '' }
+  const none = { ctrl: false, shift: false, alt: false, key: '' }
+
+  it('panel badge follows the configured modifier', () => {
+    expect(panelDigitShortcutPrefix(false, undefined)).toBe('Alt')
+    expect(panelDigitShortcutPrefix(true, undefined)).toBe('⌥')
+    expect(panelDigitShortcutPrefix(false, ctrl)).toBe('Ctrl')
+    expect(panelDigitShortcutPrefix(true, ctrl)).toBe('⌘')
+    expect(panelDigitShortcutPrefix(false, none)).toBe('')
+  })
+
+  it('renders word prefixes with a separating plus, mac symbols without', () => {
+    expect(formatDigitShortcut('Ctrl', 1, false)).toBe('Ctrl+1')
+    expect(formatDigitShortcut('Ctrl+Alt', 3, false)).toBe('Ctrl+Alt+3')
+    expect(formatDigitShortcut('⌘', 1, true)).toBe('⌘1')
+    expect(formatDigitShortcut('⌃⌥', 2, true)).toBe('⌃⌥2')
+    expect(formatDigitShortcut('', 1, false)).toBe('')
+  })
+
+  it('defaults openQuickCommands to Ctrl+Shift+M', () => {
+    expect(DEFAULT_KEYBOARD.openQuickCommands).toEqual({ ctrl: true, shift: true, alt: false, key: 'm' })
+  })
+})
+
+describe('formatKeyBinding — macOS symbol display', () => {
+  it('renders mac symbols for modifiers and keys on macOS, ctrl shown as ⌘ (the Cmd mirror)', () => {
+    expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: 'm' }, true)).toBe('⌘⇧M')
+    expect(formatKeyBinding({ ctrl: true, shift: false, alt: true, key: 'arrowleft' }, true)).toBe('⌘⌥←')
+    expect(formatKeyBinding({ ctrl: false, shift: false, alt: true, key: '2' }, true)).toBe('⌥2')
+    expect(formatKeyBinding({ ctrl: true, shift: false, alt: false, key: ',' }, true)).toBe('⌘,')
+    expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: 'enter' }, true)).toBe('⌘⇧↩')
+  })
+
+  it('capitalizes key names on Windows/Linux', () => {
+    expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: 'm' }, false)).toBe('Ctrl+Shift+M')
+    expect(formatKeyBinding({ ctrl: false, shift: false, alt: true, key: 'arrowleft' }, false)).toBe('Alt+ArrowLeft')
+    expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: 'enter' }, false)).toBe('Ctrl+Shift+Enter')
+    expect(formatKeyBinding({ ctrl: true, shift: false, alt: false, key: 'space' }, false)).toBe('Ctrl+Space')
+    expect(formatKeyBinding({ ctrl: true, shift: false, alt: false, key: 'tab' }, false)).toBe('Ctrl+Tab')
+  })
+
+  it('displays the literal space character (e.key of the spacebar) as Space', () => {
+    // The rebind capture stores the raw e.key, which for the spacebar is ' '.
+    expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: ' ' }, false)).toBe('Ctrl+Shift+Space')
+    expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: ' ' }, true)).toBe('⌘⇧␣')
+  })
+
+  it('handles a modifier-only binding (empty key) for the digit settings rows', () => {
+    expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: '' }, true)).toBe('⌘⇧')
+    expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: '' }, false)).toBe('Ctrl+Shift+')
   })
 })

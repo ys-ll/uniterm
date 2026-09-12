@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { AppSettings, AIModelConfig, CustomTerminalTheme } from '../types/settings'
-import { DEFAULT_SETTINGS, DEFAULT_KEYBOARD } from '../types/settings'
+import { DEFAULT_SETTINGS, normalizeKeyBindings } from '../types/settings'
 import { SaveSettings, LoadSettings, GetAvailableShells, SetDefaultSessionLogDir } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { Events } from '@wailsio/runtime'
 import { setLocale } from '../i18n'
@@ -287,10 +287,7 @@ function mergeSettings(loaded: AppSettings): AppSettings {
       models: loaded.ai?.models?.length ? loaded.ai.models : DEFAULT_SETTINGS.ai.models,
       activeModelId: loaded.ai?.activeModelId || DEFAULT_SETTINGS.ai.activeModelId
     },
-    keyboard: {
-      ...DEFAULT_KEYBOARD,
-      ...(loaded.keyboard || {})
-    },
+    keyboard: normalizeKeyBindings(loaded.keyboard || {}),
     autoCheckUpdate: loaded.autoCheckUpdate ?? DEFAULT_SETTINGS.autoCheckUpdate,
     updateSource: loaded.updateSource ?? DEFAULT_SETTINGS.updateSource,
     closeTabPrompt: loaded.closeTabPrompt ?? DEFAULT_SETTINGS.closeTabPrompt,

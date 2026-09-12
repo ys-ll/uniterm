@@ -2,19 +2,84 @@ import type { KeyboardSettings, KeyBinding, ShortcutAction } from '../types/sett
 
 type ActionHandlers = Record<ShortcutAction, () => void>
 
+// Symbols for special key names in the macOS display style (⌃⌥2, ⇧↩ …).
+const MAC_KEY_SYMBOLS: Record<string, string> = {
+  tab: '⇥',
+  enter: '↩',
+  escape: '⎋',
+  space: '␣',
+  backspace: '⌫',
+  delete: '⌦',
+  arrowleft: '←',
+  arrowright: '→',
+  arrowup: '↑',
+  arrowdown: '↓',
+}
+
+// Proper display labels for multi-character key names on Windows/Linux
+// (bindings store the lowercase e.key form, e.g. 'arrowleft').
+const KEY_LABELS: Record<string, string> = {
+  enter: 'Enter',
+  tab: 'Tab',
+  escape: 'Escape',
+  space: 'Space',
+  backspace: 'Backspace',
+  delete: 'Delete',
+  insert: 'Insert',
+  home: 'Home',
+  end: 'End',
+  pageup: 'PageUp',
+  pagedown: 'PageDown',
+  arrowleft: 'ArrowLeft',
+  arrowright: 'ArrowRight',
+  arrowup: 'ArrowUp',
+  arrowdown: 'ArrowDown',
+}
+
+// macOS-style key label: symbols for special keys, uppercase for single
+// characters, the raw name for anything else.
+function macKeyLabel(key: string): string {
+  const k = key.toLowerCase()
+  if (MAC_KEY_SYMBOLS[k]) return MAC_KEY_SYMBOLS[k]
+  // The spacebar's e.key is a literal space; show the symbol, not a blank.
+  if (k === ' ') return MAC_KEY_SYMBOLS.space
+  return k.length === 1 ? k.toUpperCase() : k
+}
+
+// Windows/Linux key label: mapped names when known, capitalized for single
+// characters (Ctrl+M) and first-letter-capitalized for anything else.
+function keyLabel(key: string): string {
+  const k = key.toLowerCase()
+  if (KEY_LABELS[k]) return KEY_LABELS[k]
+  // The spacebar's e.key is a literal space; show the name, not a blank.
+  if (k === ' ') return KEY_LABELS.space
+  if (/^f([1-9]|1[0-9]|2[0-4])$/.test(k)) return k.toUpperCase()
+  return k.length === 1 ? k.toUpperCase() : k.charAt(0).toUpperCase() + k.slice(1)
+}
+
 /**
- * Render a KeyBinding as a human-readable combo, e.g. Ctrl+Shift+C.
- * Shared by the settings UI and the terminal context-menu shortcut hints so
- * both show the same format (Cmd on macOS, Meta elsewhere).
+ * Render a KeyBinding as a human-readable combo. Shared by the settings UI
+ * and the terminal context-menu shortcut hints so both show the same format:
+ * mac symbols concatenated without separators on macOS (⌃⇧M), words joined
+ * with '+' elsewhere (Ctrl+Shift+M). An empty `key` (modifier-only bindings
+ * of the digit settings rows) renders just the modifiers.
  */
 export function formatKeyBinding(b: KeyBinding, isMac: boolean): string {
   if (!b) return ''
+  if (isMac) {
+    let s = ''
+    // ctrl combos fire on Cmd on macOS (the physical Ctrl works too), so
+    // display the natural Cmd symbol.
+    if (b.ctrl) s += '⌘'
+    if (b.alt) s += '⌥'
+    if (b.shift) s += '⇧'
+    return s + macKeyLabel(b.key)
+  }
   const parts: string[] = []
   if (b.ctrl) parts.push('Ctrl')
-  if (b.meta) parts.push(isMac ? 'Cmd' : 'Meta')
   if (b.shift) parts.push('Shift')
   if (b.alt) parts.push('Alt')
-  parts.push(b.key)
+  parts.push(keyLabel(b.key))
   return parts.join('+')
 }
 
@@ -22,7 +87,6 @@ function bindingKey(b: KeyBinding): string {
   if (!b.key) return ''
   let k = ''
   if (b.ctrl) k += 'ctrl+'
-  if (b.meta) k += 'meta+'
   if (b.shift) k += 'shift+'
   if (b.alt) k += 'alt+'
   k += b.key.toLowerCase()
@@ -65,7 +129,8 @@ export function loadKeybindings(
     if (handler) {
       const target = TERMINAL_SCOPED_ACTIONS.includes(action) ? terminalShortcutMap : shortcutMap
       target.set(key, handler)
-      if (!b.meta && b.ctrl) {
+      // macOS: ctrl combos also answer to Cmd.
+      if (b.ctrl) {
         target.set(key.replace(/^ctrl\+/, 'meta+'), handler)
       }
       actionKeyMap.set(action, key)
@@ -97,76 +162,131 @@ export function onTerminalKey(e: KeyboardEvent): boolean {
   return true
 }
 
-// ── Configurable digit tab switching (tabSwitchModifier) ──
+// ── Configurable digit tab/panel switching ──
 //
 // Digit shortcuts live in onPlatformSystemShortcut (App.vue): by default
 // Ctrl/Cmd+1…9 switches tabs and Alt/Option+1…9 switches workspace panels.
-// The optional keyboard.tabSwitchModifier setting moves the tab-switch combo
-// to any modifier the user prefers (e.g. Alt). The helpers below are the
-// pure decision logic, shared by the runtime handler and the tab/panel
-// shortcut badges so the UI can never show a combo that doesn't work.
-
-function flagsMatch(e: KeyboardEvent, mod: KeyBinding): boolean {
-  return e.ctrlKey === !!mod.ctrl && e.metaKey === !!mod.meta
-    && e.shiftKey === !!mod.shift && e.altKey === !!mod.alt
-}
+// The optional keyboard.tabSwitchModifier / keyboard.panelSwitchModifier
+// settings move either combo to any modifier the user prefers. The helpers
+// below are the pure decision logic, shared by the runtime handler and the
+// tab/panel shortcut badges so the UI can never show a combo that doesn't
+// work. When both settings resolve to the same combo, tab switching wins and
+// the panel shortcuts are suppressed.
 
 function hasAnyFlag(mod: KeyBinding | undefined): boolean {
-  return !!mod && !!(mod.ctrl || mod.meta || mod.shift || mod.alt)
+  return !!mod && !!(mod.ctrl || mod.shift || mod.alt)
 }
 
-// True when the custom modifier claims the alt-only combo, i.e. the
-// workspace-panel digit shortcuts would collide with tab switching and must
-// be suppressed (runtime handler skips them, badges hide the hint).
-export function panelDigitShortcutsSuppressed(mod?: KeyBinding): boolean {
-  return !!mod && !!mod.alt && !mod.ctrl && !mod.meta && !mod.shift
+function comboSigOf(ctrl: boolean, shift: boolean, alt: boolean): string {
+  const parts: string[] = []
+  if (ctrl) parts.push('ctrl')
+  if (shift) parts.push('shift')
+  if (alt) parts.push('alt')
+  return parts.join('+')
+}
+
+// On macOS Cmd is treated as Ctrl for the digit shortcuts, mirroring the
+// per-action ctrl→Cmd registration, so a configured Ctrl combo answers to
+// both keys.
+function eventSigOf(e: KeyboardEvent, isMac: boolean): string {
+  return comboSigOf(isMac ? (e.ctrlKey || e.metaKey) : e.ctrlKey, e.shiftKey, e.altKey)
+}
+
+/**
+ * Effective modifier combo as a signature string. `mod` undefined falls back
+ * to the fixed platform default; a binding with no modifier set disables the
+ * family (null); otherwise the exact configured combo.
+ */
+function effectiveComboSig(mod: KeyBinding | undefined, fallback: string): string | null {
+  if (mod === undefined) return fallback
+  if (!hasAnyFlag(mod)) return null
+  return comboSigOf(!!mod.ctrl, !!mod.shift, !!mod.alt)
+}
+
+// True when the tab-switch combo claims the same combo as the panel digit
+// shortcuts, i.e. the panels must be suppressed (runtime handler skips them,
+// badges hide the hint). The default tab combo is Ctrl/Cmd (unified on mac),
+// so a Ctrl-only panel modifier collides on every platform.
+export function panelDigitShortcutsSuppressed(
+  tabMod?: KeyBinding,
+  panelMod?: KeyBinding,
+): boolean {
+  const tabSig = effectiveComboSig(tabMod, 'ctrl')
+  if (tabSig === null) return false
+  const panelSig = effectiveComboSig(panelMod, 'alt')
+  return panelSig !== null && tabSig === panelSig
 }
 
 /**
  * Resolve which target a digit keydown addresses, or null when it belongs to
- * nobody. `mod` is the configured tabSwitchModifier: undefined falls back to
- * the fixed platform bindings (Ctrl/Cmd tabs, Alt/Option panels); a binding
- * with no modifier set disables digit tab switching entirely; a configured
- * combo moves tab switching to it and steals the digits from the panels only
- * when it is the plain Alt/Option combo.
+ * nobody. `tabMod` / `panelMod` are the configured tabSwitchModifier /
+ * panelSwitchModifier: undefined falls back to the fixed platform bindings
+ * (Ctrl/Cmd tabs, Alt/Option panels); a binding with no modifier set disables
+ * that family entirely; a configured combo moves it there. Tab switching wins
+ * when both resolve to the same combo.
  */
 export function matchDigitShortcut(
   e: KeyboardEvent,
   isMac: boolean,
-  mod?: KeyBinding,
+  tabMod?: KeyBinding,
+  panelMod?: KeyBinding,
 ): 'tab' | 'panel' | null {
-  const altOnly = e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey
-  if (altOnly && !panelDigitShortcutsSuppressed(mod)) return 'panel'
-  if (mod === undefined) {
-    if (isMac) return e.metaKey && !e.ctrlKey && !e.shiftKey ? 'tab' : null
-    return e.ctrlKey && !e.metaKey && !e.shiftKey ? 'tab' : null
-  }
-  if (!hasAnyFlag(mod)) return null
-  return flagsMatch(e, mod) ? 'tab' : null
+  const sig = eventSigOf(e, isMac)
+  const tabSig = effectiveComboSig(tabMod, 'ctrl')
+  if (tabSig !== null && sig === tabSig) return 'tab'
+  const panelSig = effectiveComboSig(panelMod, 'alt')
+  if (panelSig !== null && sig === panelSig) return 'panel'
+  return null
 }
 
-/**
- * Badge prefix for the tab digit shortcut ('1'…'9' is appended by callers):
- * platform symbols for the default binding, plain modifier text for a
- * configured one. '' when digit tab switching is disabled.
- */
-export function tabDigitShortcutPrefix(isMac: boolean, mod?: KeyBinding): string {
-  if (mod === undefined) return isMac ? '⌘' : 'Ctrl'
-  if (!hasAnyFlag(mod)) return ''
+// Modifier text for the digit shortcut badges, same style as
+// formatKeyBinding: mac symbols on macOS (ctrl shown as ⌘ — the Cmd mirror),
+// words elsewhere.
+function modifierText(mod: KeyBinding, isMac: boolean): string {
   if (isMac) {
     let s = ''
-    if (mod.ctrl) s += '⌃'
-    if (mod.meta) s += '⌘'
-    if (mod.shift) s += '⇧'
+    if (mod.ctrl) s += '⌘'
     if (mod.alt) s += '⌥'
+    if (mod.shift) s += '⇧'
     return s
   }
   const parts: string[] = []
   if (mod.ctrl) parts.push('Ctrl')
-  if (mod.meta) parts.push('Meta')
   if (mod.shift) parts.push('Shift')
   if (mod.alt) parts.push('Alt')
   return parts.join('+')
+}
+
+/**
+ * Badge prefix for the tab digit shortcut (the digit is appended by callers
+ * via formatDigitShortcut): platform symbols for the default binding, plain
+ * modifier text for a configured one. '' when digit tab switching is
+ * disabled.
+ */
+export function tabDigitShortcutPrefix(isMac: boolean, tabMod?: KeyBinding): string {
+  if (tabMod === undefined) return isMac ? '⌘' : 'Ctrl'
+  if (!hasAnyFlag(tabMod)) return ''
+  return modifierText(tabMod, isMac)
+}
+
+/**
+ * Badge prefix for the panel digit shortcut, mirroring tabDigitShortcutPrefix
+ * with the panel default (Alt/Option).
+ */
+export function panelDigitShortcutPrefix(isMac: boolean, panelMod?: KeyBinding): string {
+  if (panelMod === undefined) return isMac ? '⌥' : 'Alt'
+  if (!hasAnyFlag(panelMod)) return ''
+  return modifierText(panelMod, isMac)
+}
+
+/**
+ * Render a digit shortcut badge: word prefixes get a separating plus
+ * ('Ctrl+1'), macOS symbol prefixes stay compact ('⌘1'). '' when the family
+ * is disabled (empty prefix).
+ */
+export function formatDigitShortcut(prefix: string, index: number, isMac: boolean): string {
+  if (!prefix) return ''
+  return isMac ? `${prefix}${index}` : `${prefix}+${index}`
 }
 
 let registered = false

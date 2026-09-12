@@ -638,6 +638,9 @@ const selectedTypeFilter = ref('all')
 const focusedId = ref<string | null>(null)
 
 function focusSearch() {
+  // The search input only exists in the connections view; switch back first
+  // so the shortcut works no matter which view the sidebar was left in.
+  activeView.value = 'connections'
   nextTick(() => {
     const el = searchInputRef.value?.$el?.querySelector('input')
     if (el instanceof HTMLInputElement) {
