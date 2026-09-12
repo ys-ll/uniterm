@@ -57,7 +57,7 @@
       :class="{ 'tab-close-right-ghost': !hovered || tab.locked }"
       @click.stop="$emit('close', tab.id)"
     ><X /></button>
-    <Menu ref="ctxMenuRef" root-class="right-shortcuts" v-model:visible="ctxMenuVisible" v-slot="{ current }">
+    <Menu ref="ctxMenuRef" v-model:visible="ctxMenuVisible" v-slot="{ current }">
       <!-- ① 标签类操作 -->
       <MenuItem v-if="canDuplicate" :shortcut="menuShortcut('duplicateSession')" @click="onDuplicate">
         {{ t('tab.duplicate') }}
@@ -113,7 +113,7 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { formatKeyBinding, tabDigitShortcutPrefix } from '../composables/useKeyboardShortcuts'
+import { formatKeyBinding, tabDigitShortcutPrefix, formatDigitShortcut } from '../composables/useKeyboardShortcuts'
 import type { ShortcutAction } from '../types/settings'
 import { useK8sStore } from '../stores/k8sStore'
 import { useContainerStore } from '../stores/containerStore'
@@ -166,7 +166,7 @@ const tabShortcut = computed(() => {
   // Cmd+N on macOS / Ctrl+N elsewhere by default, or the user-configured
   // keyboard.tabSwitchModifier combo — always the real binding.
   const prefix = tabDigitShortcutPrefix(isMac, settingsStore.settings.keyboard.tabSwitchModifier)
-  return `${prefix}${props.shortcutIndex}`
+  return formatDigitShortcut(prefix, props.shortcutIndex, isMac)
 })
 
 // Human-readable keybinding for a shortcut action ('' when unset), shown as a

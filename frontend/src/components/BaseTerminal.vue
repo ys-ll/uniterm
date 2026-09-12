@@ -47,7 +47,7 @@
     </div>
 
     <!-- Terminal context menu -->
-    <Menu ref="terminalMenuRef" v-model:visible="terminalMenuVisible" root-class="right-shortcuts">
+    <Menu ref="terminalMenuRef" v-model:visible="terminalMenuVisible">
       <!-- ① 剪贴板 -->
       <MenuItem :class="{ disabled: !menu.hasSelection.value }" :shortcut="menuShortcut('copy')" @click="menu.copySelection">
         {{ t('terminal.copy') }}
@@ -89,7 +89,7 @@
     </Menu>
 
     <!-- Gutter context menu — right-click on the line-number/time columns -->
-    <Menu ref="gutterMenuRef" v-model:visible="gutterMenuVisible" root-class="right-shortcuts">
+    <Menu ref="gutterMenuRef" v-model:visible="gutterMenuVisible">
       <MenuItem :shortcut="menuShortcut('toggleLineNumbers')" @click="toggleLineNumbers">
         {{ showLineNumbers ? t('settings.hideLineNumbers') : t('settings.showLineNumbers') }}
       </MenuItem>

@@ -30,7 +30,7 @@
 
     <!-- Settings button opens a dropdown menu with common settings items -->
     <div class="settings-wrap">
-      <button ref="settingsBtnRef" class="header-btn" @click.stop="toggleSettingsMenu" :title="t('header.menu') + shortcutSuffix('openSettings')">
+      <button ref="settingsBtnRef" class="header-btn" @click.stop="toggleSettingsMenu" :title="t('header.menu')">
         <el-icon><MenuIcon :size="14" /></el-icon>
       </button>
 
@@ -77,7 +77,7 @@
         <MenuDivider />
 
         <!-- 设置 / 关于 / 检查更新 -->
-        <MenuItem @click="openCategory('basic')">{{ t('settings.title') }}</MenuItem>
+        <MenuItem :shortcut="menuShortcut('openSettings')" @click="openCategory('basic')">{{ t('settings.title') }}</MenuItem>
         <MenuItem @click="openCategory('about')">{{ t('settings.about') }}</MenuItem>
         <MenuItem @click="checkUpdate">{{ t('settings.checkUpdate') }}</MenuItem>
       </Menu>
@@ -110,7 +110,7 @@ import { formatKeyBinding } from '../composables/useKeyboardShortcuts'
 import { useLocalStateStore } from '../stores/localStateStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { LANGUAGE_OPTIONS } from '../types/settings'
-import type { AppSettings } from '../types/settings'
+import type { AppSettings, ShortcutAction } from '../types/settings'
 import WindowControls from './WindowControls.vue'
 import TabsList from './TabsList.vue'
 import ImportDialog from './ImportDialog.vue'
@@ -188,11 +188,19 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
 
 // " (Ctrl+Shift+K)" suffix for a shortcut action's tooltip, '' when unset.
 // Reactive via settingsStore, so tooltips update when the user rebinds keys.
-function shortcutSuffix(action: 'focusAI' | 'toggleSidebar' | 'openSettings'): string {
+function shortcutSuffix(action: 'focusAI' | 'toggleSidebar'): string {
   const b = settingsStore.settings.keyboard[action]
   if (!b) return ''
   const key = formatKeyBinding(b, isMac)
   return key ? ` (${key})` : ''
+}
+
+// Right-aligned keybinding hint for a menu item, '' when unset. Reactive via
+// settingsStore, so hints follow the user's rebinds.
+function menuShortcut(action: ShortcutAction): string {
+  const b = settingsStore.settings.keyboard[action]
+  if (!b) return ''
+  return formatKeyBinding(b, isMac)
 }
 
 const hasActiveConnections = computed(() =>

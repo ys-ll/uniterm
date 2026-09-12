@@ -108,7 +108,7 @@ const props = defineProps<{
   visible: boolean
   align?: 'start' | 'end'
   /** Extra class(es) merged onto the teleported root; lets hosts keep
-   *  per-menu skin modifiers (e.g. `right-shortcuts` for shortcut hints). */
+   *  per-menu skin modifiers. */
   rootClass?: string
 }>()
 const emit = defineEmits<{
@@ -283,16 +283,6 @@ watch(() => props.visible, (v) => {
   min-width: 140px;
   padding: 4px;
   backdrop-filter: blur(8px);
-}
-/* Shortcut hints right-aligned: turns affected rows into flex so the hint
-   ("Ctrl+C" etc.) hugs the right edge instead of sitting after the label.
-   Apply on the container; rows without a hint are single children and are
-   unaffected (space-between no-ops on one child). */
-.conn-context-menu.right-shortcuts .menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
 }
 .conn-context-menu.anchored {
   position: absolute;

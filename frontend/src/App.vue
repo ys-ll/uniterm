@@ -208,7 +208,7 @@ import { useSyncStore } from './stores/syncStore'
 import { useCredentialStore } from './stores/credentialStore'
 import { disposeSessionStore } from './stores/sessionStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
-import { loadKeybindings, installGlobalListener, uninstallGlobalListener, matchDigitShortcut } from './composables/useKeyboardShortcuts'
+import { loadKeybindings, installGlobalListener, uninstallGlobalListener, matchDigitShortcut, isRebinding } from './composables/useKeyboardShortcuts'
 import { focusPanelTerminal, installTerminalFocusRestore } from './composables/useFocusTerminal'
 import { useDuplicateSession } from './composables/useDuplicateSession'
 import type { ShortcutAction } from './types/settings'
@@ -748,16 +748,20 @@ function onWheel(e: WheelEvent) {
 
 // Platform digit shortcuts: macOS uses Cmd/Option, Windows and Linux use
 // Ctrl/Alt. Cmd/Ctrl+1…9 switches tabs, Alt/Option+1…9 switches workspace
-// panels. The tab-switch modifier is user-configurable
-// (keyboard.tabSwitchModifier); when it claims the Alt-only combo the panel
-// shortcuts step aside and their badges hide. (Panel maximize moved into the
-// configurable shortcut system.)
+// panels. Both digit families are user-configurable
+// (keyboard.tabSwitchModifier / keyboard.panelSwitchModifier); when they
+// resolve to the same combo the panel shortcuts step aside and their badges
+// hide. Panel maximizing moved to the configurable keyboard settings
+// (maximizePanel action).
 let isMac = false
 function onPlatformSystemShortcut(e: KeyboardEvent) {
-  if (e.defaultPrevented) return
+  // Stand down while the settings page captures a rebind — otherwise
+  // recording e.g. Ctrl+1 would switch tabs (and Cmd+Q would quit on mac).
+  if (e.defaultPrevented || isRebinding()) return
   const digitMatch = e.code.match(/^Digit([1-9])$/)
   if (digitMatch) {
-    const target = matchDigitShortcut(e, isMac, settingsStore.settings.keyboard.tabSwitchModifier)
+    const kb = settingsStore.settings.keyboard
+    const target = matchDigitShortcut(e, isMac, kb.tabSwitchModifier, kb.panelSwitchModifier)
     if (target === 'panel') {
       const tab = tabStore.activeTab
       if (!tab || tab.type !== 'workspace') return
@@ -949,6 +953,13 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
     const pid = tabStore.getActivePanelId()
     if (pid) focusPanelTerminal(pid)
   },
+  maximizePanel: () => {
+    const tab = tabStore.activeTab
+    if (!tab || tab.type !== 'workspace' || !tab.activePanelId) return
+    const panelId = tab.activePanelId
+    tabStore.toggleWorkspacePanelMaximize(tab.id)
+    nextTick(() => focusPanelTerminal(panelId))
+  },
   lockAI: () => {
     const t = tabStore.activeTab
     if (!t) return
@@ -1018,13 +1029,6 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   },
   navigatePrev: () => navigatePanel(-1),
   navigateNext: () => navigatePanel(1),
-  maximizePanel: () => {
-    const tab = tabStore.activeTab
-    if (!tab || tab.type !== 'workspace' || !tab.activePanelId) return
-    const panelId = tab.activePanelId
-    tabStore.toggleWorkspacePanelMaximize(tab.id)
-    nextTick(() => focusPanelTerminal(panelId))
-  },
   openSettings: () => openSettings(),
   duplicateSession: () => {
     // Same logic as the tab context menu's "复制会话": delegate to the shared
