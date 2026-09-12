@@ -68,10 +68,14 @@ func serveLocalPtyBroker(pipeName string) int {
 	if cols <= 0 || rows <= 0 {
 		cols, rows = 80, 24
 	}
+	env := os.Environ()
+	if len(spec.Env) > 0 {
+		env = append(env, spec.Env...)
+	}
 	cpty, err := conpty.Start(spec.CommandLine,
 		conpty.ConPtyDimensions(cols, rows),
 		conpty.ConPtyWorkDir(spec.WorkDir),
-		conpty.ConPtyEnv(os.Environ()))
+		conpty.ConPtyEnv(env))
 	if err != nil {
 		noteAndClose(pipe, fmt.Sprintf("start shell: %v", err))
 		return 1
