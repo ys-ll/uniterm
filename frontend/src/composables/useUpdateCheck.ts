@@ -4,7 +4,7 @@ import { msg } from '../services/message'
 import { CheckForUpdate, GetAppInfo, DownloadUpdate, ApplyUpdate, GetUpdateChannel } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useI18n, locale } from '../i18n'
 import { useSettingsStore } from '../stores/settingsStore'
-import { Browser, Events } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
 import type { UpdateInfo } from '../types/settings'
 
 const CHECK_TIMEOUT = 15000
@@ -109,15 +109,7 @@ function showUpdateNotification(info: UpdateInfo) {
   const linkStyle = { color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }
   ElMessage({
     message: h('div', null, [
-      h('span', null, `${t('settings.foundNewVersion')}: ${info.latest} `),
-      h('a', {
-        href: '#',
-        style: linkStyle,
-        onClick: (e: Event) => {
-          e.preventDefault()
-          Browser.OpenURL(info.releaseUrl)
-        },
-      }, t('settings.openRelease')),
+      h('span', null, `${t('settings.foundNewVersion')}: ${info.latest}`),
       canInstall ? h('span', null, ' · ') : null,
       canInstall ? h('a', {
         href: '#',

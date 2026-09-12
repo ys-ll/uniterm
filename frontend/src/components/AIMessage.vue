@@ -134,6 +134,7 @@ import { ref, computed } from 'vue'
 import { Copy, Check, BookOpen, Terminal } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useI18n } from '../i18n'
+import { sanitizeRenderedHtml } from '../utils/markdown'
 import type { AIMessage } from '../types/ai'
 
 const props = defineProps<{ message: AIMessage; searchText?: string }>()
@@ -639,30 +640,8 @@ function escapeHtml(text: string): string {
     .replace(/\n/g, '<br>')
 }
 
-// Sanitize markdown-produced HTML before it's assigned to v-html.
-// Conservative strip-list: anything outside this allowlist is removed.
-// Addresses FE-01 (XSS via model output).
-function sanitizeRenderedHtml(html: string): string {
-  // Drop dangerous tags entirely (including their content).
-  const dangerousTags = [
-    'script', 'iframe', 'object', 'embed', 'style', 'form',
-    'link', 'meta', 'base', 'svg', 'math',
-  ]
-  for (const tag of dangerousTags) {
-    const re = new RegExp(`<${tag}\\b[\\s\\S]*?<\\/${tag}>`, 'gi')
-    html = html.replace(re, '')
-    const reSelf = new RegExp(`<${tag}\\b[^>]*\\/?>`, 'gi')
-    html = html.replace(reSelf, '')
-  }
-  // Strip on*="..." event-handler attributes (any attribute starting with on).
-  html = html.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-  // Strip javascript:/data:/vbscript: URL schemes in href/src.
-  html = html.replace(
-    /\s+(href|src|action|formaction|xlink:href)\s*=\s*("\s*(?:javascript|data|vbscript):[^"]*"|'\s*(?:javascript|data|vbscript):[^']*'|(?:javascript|data|vbscript):[^\s>]+)/gi,
-    '',
-  )
-  return html
-}
+// sanitizeRenderedHtml lives in utils/markdown.ts so other v-html surfaces
+// (e.g. the update changelog) share the same allowlist.
 </script>
 
 <style scoped>
