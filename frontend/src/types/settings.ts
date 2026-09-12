@@ -308,7 +308,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
   ai: {
     maxTurns: 20,
-    fontSize: 15,
+    fontSize: 12,
     models: [
       {
         id: 'model-default',

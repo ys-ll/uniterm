@@ -486,7 +486,7 @@
   "settings.browse": "瀏覽…",
   "settings.maxTurns": "AI 自主互動最大輪次",
   "settings.aiFontSize": "AI 字體大小",
-  "settings.aiFontSizeDesc": "AI 對話正文和輸入框的字體大小，預設 15",
+  "settings.aiFontSizeDesc": "AI 對話正文和輸入框的字體大小，預設 12",
   "settings.maxTurnsDesc": "AI 自主執行命令與回饋的對話輪數上限。設為 0 表示不限制。預設 20。",
   "settings.modelList": "模型列表",
   "settings.modelListDesc": "設定和管理 AI 模型",

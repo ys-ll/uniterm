@@ -1395,7 +1395,7 @@
   "settings.storageSecurity": "Stockage et sécurité",
   "settings.appearance": "Apparence",
   "settings.aiFontSize": "Taille de police de l’IA",
-  "settings.aiFontSizeDesc": "Taille de police des messages de l’IA et de l’éditeur de saisie. Valeur par défaut : 15.",
+  "settings.aiFontSizeDesc": "Taille de police des messages de l’IA et de l’éditeur de saisie. Valeur par défaut : 12.",
   "settings.interaction": "Interaction",
   "settings.session": "Session",
   "conn.esAuthType": "ES Auth",

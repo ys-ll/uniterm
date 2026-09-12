@@ -1400,7 +1400,7 @@
   "settings.storageSecurity": "Хранилище и безопасность",
   "settings.appearance": "Внешний вид",
   "settings.aiFontSize": "Размер шрифта ИИ",
-  "settings.aiFontSizeDesc": "Размер шрифта сообщений ИИ и редактора ввода. По умолчанию: 15.",
+  "settings.aiFontSizeDesc": "Размер шрифта сообщений ИИ и редактора ввода. По умолчанию: 12.",
   "settings.interaction": "Взаимодействие",
   "settings.session": "Сеанс",
   "conn.esAuthType": "ES Auth",

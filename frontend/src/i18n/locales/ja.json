@@ -1400,7 +1400,7 @@
   "settings.storageSecurity": "ストレージとセキュリティ",
   "settings.appearance": "外観",
   "settings.aiFontSize": "AIフォントサイズ",
-  "settings.aiFontSizeDesc": "AIメッセージと入力エディターのフォントサイズです。既定値は15です。",
+  "settings.aiFontSizeDesc": "AIメッセージと入力エディターのフォントサイズです。既定値は12です。",
   "settings.interaction": "操作",
   "settings.session": "セッション",
   "conn.esAuthType": "ES Auth",

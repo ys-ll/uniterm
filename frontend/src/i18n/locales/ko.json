@@ -1400,7 +1400,7 @@
   "settings.storageSecurity": "저장소 및 보안",
   "settings.appearance": "외관",
   "settings.aiFontSize": "AI 글꼴 크기",
-  "settings.aiFontSizeDesc": "AI 메시지와 입력 편집기의 글꼴 크기입니다. 기본값은 15입니다.",
+  "settings.aiFontSizeDesc": "AI 메시지와 입력 편집기의 글꼴 크기입니다. 기본값은 12입니다.",
   "settings.interaction": "상호작용",
   "settings.session": "세션",
   "conn.esAuthType": "ES Auth",
