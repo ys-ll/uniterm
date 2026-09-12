@@ -353,3 +353,34 @@ func detectExternalEditors() []ExternalEditorOption {
 
 	return out
 }
+
+// Win11 rounds the corners of top-level windows whose DWM frame is intact.
+// Wails' frameless windows keep WS_THICKFRAME, but Wails only extends the DWM
+// frame (DwmExtendFrameIntoClientArea) from its WM_ACTIVATE handler, and the
+// window's first activation happens inside CreateWindowEx (WS_VISIBLE) before
+// Wails' WndProc is hooked — so that first extension is missed. A freshly
+// launched binary then shows square corners until the next activation
+// (minimise/restore, alt-tab) reapplies it. Asking DWM directly for rounded
+// corners makes the first paint correct regardless of activation timing; on
+// pre-Win11 systems the unsupported attribute call fails silently, which is
+// fine.
+const (
+	dwmwaWindowCornerPreference = 33
+	dwmwcpRound                 = 2
+)
+
+var procDwmSetWindowAttribute = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmSetWindowAttribute")
+
+// applyRoundedCorners sets DWMWCP_ROUND on the given HWND.
+func applyRoundedCorners(hwnd unsafe.Pointer) {
+	if hwnd == nil {
+		return
+	}
+	preference := uint32(dwmwcpRound)
+	_, _, _ = procDwmSetWindowAttribute.Call(
+		uintptr(hwnd),
+		dwmwaWindowCornerPreference,
+		uintptr(unsafe.Pointer(&preference)),
+		unsafe.Sizeof(preference),
+	)
+}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"unsafe"
 )
 
 func (a *App) findMainWindow() uintptr { return 0 }
@@ -96,3 +97,7 @@ func detectExternalEditors() []ExternalEditorOption {
 
 	return out
 }
+
+// applyRoundedCorners is a no-op on Linux: window corners are handled by the
+// platform (the Windows build asks DWM for Win11 rounded corners instead).
+func applyRoundedCorners(unsafe.Pointer) {}

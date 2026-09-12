@@ -205,6 +205,19 @@ func main() {
 		},
 	})
 
+	// Win11 rounded corners: Wails only extends the DWM frame from its
+	// WM_ACTIVATE handler, whose first firing (inside CreateWindowEx, before
+	// its WndProc is hooked) is missed — so a production binary starts with
+	// square corners until the next activation (minimise/restore). Ask DWM
+	// for rounded corners on first show instead; see win11_corners_windows.go.
+	// WindowShow reliably fires after WebView2 navigation completes, when the
+	// native window exists. Idempotent; a no-op on pre-Win11 and other OSes.
+	if runtime.GOOS == "windows" {
+		window.OnWindowEvent(events.Windows.WindowShow, func(*application.WindowEvent) {
+			applyRoundedCorners(window.NativeWindow())
+		})
+	}
+
 	// Wails v3 delivers OS file drops to Go-side window-event listeners rather
 	// than (as v2 did) auto-forwarding them to the frontend. Re-emit the dropped
 	// absolute paths under the original v2 event name so `Events.On(...)` pickers
