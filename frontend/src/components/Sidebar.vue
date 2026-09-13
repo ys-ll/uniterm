@@ -477,6 +477,7 @@ import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide } from 
 import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Terminal, FolderUp, Folders, FileUp, HardDrive, Cloud, Globe, Monitor, MonitorCloud, MonitorSmartphone, Database, DatabaseZap, Layers, DatabaseSearch, Activity, Laptop, LaptopMinimal, Cable, Pencil, MoreHorizontal, FolderTree, ShipWheel, Boxes, AppWindow, ArrowLeftRight, ArrowRightLeft } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { msg } from '../services/message'
+import { getShellLabel as getShellLabelBase } from '../utils/shellLabel'
 import { useConnectionStore } from '../stores/connectionStore'
 import type { GroupTreeNode } from '../stores/connectionStore'
 import { usePanelStore } from '../stores/panelStore'
@@ -1876,24 +1877,10 @@ function onNewConnCommand(cmd: string) {
 
 
 function getShellLabel(path: string): string {
-  if (!path) return 'Local'
-  const lower = path.toLowerCase()
-  if (lower.startsWith('admin://')) {
-    const inner = getShellLabel(path.slice(8))
-    return inner.endsWith(' (Admin)') ? inner : `${inner} (Admin)`
-  }
-  if (lower.startsWith('clink://')) {
-    return 'Command Prompt (Clink)'
-  }
-  if (lower.startsWith('wsl://')) {
-    const distro = path.slice(6)
-    return distro ? `WSL - ${distro}` : 'WSL'
-  }
-  if (lower.includes('pwsh')) return 'PowerShell'
-  if (lower.includes('powershell')) return 'Windows PowerShell'
-  if (lower.includes('bash')) return 'Git Bash'
-  if (lower.includes('cmd')) return 'Command Prompt'
-  return path.split(/[\\/]/).pop() || path
+  // Shared helper (utils/shellLabel.ts): same labels as the start-page
+  // dropdown, connection form and settings, including the Cygwin/MSYS2
+  // bash.exe disambiguation the inline copy here was missing.
+  return getShellLabelBase(path, 'Local')
 }
 
 function getSubtitle(conn: ConnectionConfig): string {
