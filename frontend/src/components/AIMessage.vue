@@ -134,7 +134,7 @@ import { ref, computed } from 'vue'
 import { Copy, Check, BookOpen, Terminal } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useI18n } from '../i18n'
-import { sanitizeRenderedHtml } from '../utils/markdown'
+import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
 import type { AIMessage } from '../types/ai'
 
 const props = defineProps<{ message: AIMessage; searchText?: string }>()
@@ -343,10 +343,11 @@ function getToolResult(toolCallId: string): AIMessage | undefined {
 }
 
 function renderMarkdown(text: string): string {
-  let html = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  // escapeHtmlBase escapes & < > and quotes — the quote escape matters here:
+  // without it a markdown link like [x](x"/onerror="alert(1)) breaks out of
+  // href="..." via the slash attribute separator, and sanitizeRenderedHtml
+  // only strips on*= handlers preceded by whitespace (FE-01 follow-up).
+  let html = escapeHtmlBase(text)
 
   // Protect fenced code blocks and inline code from further markdown processing
   const protectedBlocks: string[] = []
@@ -633,11 +634,7 @@ const renderedContent = computed(() => {
 })
 
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>')
+  return escapeHtmlBase(text).replace(/\n/g, '<br>')
 }
 
 // sanitizeRenderedHtml lives in utils/markdown.ts so other v-html surfaces
