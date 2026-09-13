@@ -3,9 +3,11 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -101,3 +103,19 @@ func detectExternalEditors() []ExternalEditorOption {
 // applyRoundedCorners is a no-op on Linux: window corners are handled by the
 // platform (the Windows build asks DWM for Win11 rounded corners instead).
 func applyRoundedCorners(unsafe.Pointer) {}
+
+// systemPrefersDark reports whether the Linux desktop prefers a dark colour
+// scheme, queried from the freedesktop colour-scheme setting — the same value
+// WebKitGTK maps to the CSS prefers-color-scheme media query. Read failures
+// (no gsettings, minimal WMs) default to dark. Needed because v3's
+// IsDarkMode() is unavailable before Run() (see main.go windowBackgroundColour).
+func systemPrefersDark() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "gsettings", "get",
+		"org.gnome.desktop.interface", "color-scheme").Output()
+	if err != nil {
+		return true
+	}
+	return !strings.Contains(strings.ToLower(string(out)), "light")
+}

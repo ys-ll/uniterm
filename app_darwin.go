@@ -3,9 +3,11 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/ys-ll/uniterm/backend/log"
@@ -145,3 +147,15 @@ func (a *App) configureMacKeyRepeat() {
 // applyRoundedCorners is a no-op on macOS: window corners are handled by the
 // platform (the Windows build asks DWM for Win11 rounded corners instead).
 func applyRoundedCorners(unsafe.Pointer) {}
+
+// systemPrefersDark reports whether macOS is in dark mode via the same global
+// preference (`AppleInterfaceStyle`) WKWebView consults for the CSS
+// prefers-color-scheme media query. The key only exists when a dark variant
+// is active, so a read error means light mode. Needed because v3's
+// IsDarkMode() is unavailable before Run() (see main.go windowBackgroundColour).
+func systemPrefersDark() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "defaults", "read", "-g", "AppleInterfaceStyle").Output()
+	return err == nil && len(out) > 0
+}

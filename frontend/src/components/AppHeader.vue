@@ -4,8 +4,15 @@
     :class="`platform-${platform}`"
     @dblclick="onDblClick"
   >
-    <!-- macOS: spacer for native traffic lights -->
-    <div v-if="platform === 'darwin' && !localStateStore.state.systemTitleBar" class="mac-traffic-light-spacer" />
+    <!-- macOS: custom traffic lights (Wails frameless hides the native ones) -->
+    <WindowControls
+      v-if="showWindowControls && platform === 'darwin'"
+      variant="mac"
+      :is-maximised="isMaximised"
+      @minimise="onMinimise"
+      @maximise="onMaximise"
+      @close="onClose"
+    />
 
     <!-- Connections button (icon only, leftmost) -->
     <button class="header-btn" @click="emit('toggle-sidebar')" :title="t('header.connections') + shortcutSuffix('toggleSidebar')">
@@ -86,9 +93,9 @@
       <ExportDialog v-model:visible="showExportDialog" />
     </div>
 
-    <!-- Windows/Linux: window controls right (hidden when using system title bar) -->
+    <!-- Windows/Linux: window controls right -->
     <WindowControls
-      v-if="showWindowControls"
+      v-if="showWindowControls && platform !== 'darwin'"
       :is-maximised="isMaximised"
       @minimise="onMinimise"
       @maximise="onMaximise"
@@ -236,11 +243,10 @@ function detectPlatformSync(): 'windows' | 'darwin' | 'linux' {
 const platform = ref<'windows' | 'darwin' | 'linux'>(detectPlatformSync())
 const isMaximised = ref(false)
 
-// On Windows/Linux the app draws its own window controls — but not when the
-// user opted into the OS native title bar, which already provides them.
-const showWindowControls = computed(
-  () => platform.value !== 'darwin' && !localStateStore.state.systemTitleBar
-)
+// The app draws its own window controls on every platform — but not when the
+// user opted into the OS native title bar, which already provides them. On
+// macOS they render as traffic lights on the left (see template).
+const showWindowControls = computed(() => !localStateStore.state.systemTitleBar)
 
 async function updateMaximisedState() {
   try {
@@ -385,12 +391,6 @@ onUnmounted(() => {
   --wails-draggable: drag;
 }
 
-.app-header.platform-darwin {
-  height: 52px;
-  padding: 0 10px;
-  gap: 8px;
-}
-
 .app-header::after {
   content: '';
   position: absolute;
@@ -472,18 +472,8 @@ onUnmounted(() => {
   );
 }
 
-.mac-traffic-light-spacer {
-  width: 72px;
-  height: 1px;
-  flex-shrink: 0;
-}
-
 .app-header :deep(.window-controls) {
   --wails-draggable: no-drag;
-}
-
-.app-header.platform-darwin :deep(.window-controls) {
-  align-self: center;
 }
 
 /* ── Settings dropdown menu ── */

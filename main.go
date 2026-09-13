@@ -65,23 +65,29 @@ func main() {
 
 	app := NewApp(webviewDataPath)
 
-	// Linux multi-monitor maximize workaround:
-	// Wails sets default max size to primary display, which can clamp
-	// maximize on secondary monitors. Set to large values to disable.
-	// See: https://github.com/wailsapp/wails/issues/2431
-	maxW, maxH := 0, 0
-	if runtime.GOOS == "linux" {
-		maxW, maxH = 9999, 9999
-	}
-
-	// Read persisted window geometry before creating the window — it's fixed at
-	// creation in v3 (services start before the window exists, so ServiceStartup
-	// can't position it). Race the load against a short timeout so a slow disk
-	// doesn't delay first paint.
+	// Read persisted window geometry and theme before creating the window —
+	// both are fixed at creation in v3 (services start before the window
+	// exists, so ServiceStartup can't position it). Race the loads against a
+	// short deadline so a slow disk doesn't delay first paint; on timeout the
+	// defaults (1200x800 centered, dark background) are used instead.
+	//
+	// Geometry comes from localState.json. The theme comes from settings.json,
+	// whose store normally starts later in ServiceStartup, so it is loaded
+	// directly here via the data-dir bootstrap (loadSavedTheme). Both loads
+	// run in parallel against the same deadline.
 	systemTitleBar := false
 	winW, winH := 1200, 800 // fallback before any saved geometry is applied
 	savedX, savedY := 0, 0
 	savedMaxed := false
+	savedTheme := ""
+
+	deadline := time.After(100 * time.Millisecond)
+
+	themeCh := make(chan string, 1)
+	go func() {
+		themeCh <- loadSavedTheme()
+	}()
+
 	if configDir, err := os.UserConfigDir(); err == nil {
 		ls := store.NewLocalStateStore(filepath.Join(configDir, "uniTerm"))
 		done := make(chan store.LocalState, 1)
@@ -100,11 +106,17 @@ func main() {
 			}
 			savedX, savedY = state.WindowX, state.WindowY
 			savedMaxed = state.WindowMaximised
-		case <-time.After(100 * time.Millisecond):
+		case <-deadline:
 			// Slow disk — paint the defaults. The goroutine continues to load
 			// in the background; its result is discarded because the window
 			// geometry options are fixed at startup.
 		}
+	}
+
+	select {
+	case savedTheme = <-themeCh:
+	case <-deadline:
+		// Too slow — windowBackgroundColour falls back to the dark default.
 	}
 
 	// Restore a saved position only when one actually exists; otherwise keep v3's
@@ -116,11 +128,6 @@ func main() {
 	startState := application.WindowStateNormal
 	if savedMaxed {
 		startState = application.WindowStateMaximised
-	}
-
-	macTitleBar := application.MacTitleBarHiddenInset
-	if systemTitleBar {
-		macTitleBar = application.MacTitleBarDefault
 	}
 
 	// Clean external-edit scratch dirs left behind by previous runs that
@@ -182,15 +189,11 @@ func main() {
 		StartState:      startState,
 		MinWidth:        700,
 		MinHeight:       450,
-		MaxWidth:        maxW,
-		MaxHeight:       maxH,
 		// Headless local update e2e runs must not flash a window.
-		Hidden:    os.Getenv("UNITERM_UPDATE_AUTOTEST") == "1",
-		Frameless: runtime.GOOS != "darwin" && !systemTitleBar,
-		BackgroundColour: application.RGBA{
-			Red: 27, Green: 38, Blue: 54, Alpha: 1,
-		},
-		EnableFileDrop: true,
+		Hidden:           os.Getenv("UNITERM_UPDATE_AUTOTEST") == "1",
+		Frameless:        !systemTitleBar,
+		BackgroundColour: windowBackgroundColour(savedTheme),
+		EnableFileDrop:   true,
 		// Open the WebView2 inspector when the window is first shown. Wails
 		// disables browser accelerator keys on Windows (F12 / Ctrl+Shift+I
 		// never reach us), and the app's custom context menus hide the
@@ -200,9 +203,6 @@ func main() {
 		// (Deliberately NOT a window KeyBinding for F12: that would be
 		// window-global and could swallow F12 from TUI apps.)
 		OpenInspectorOnStartup: true,
-		Mac: application.MacWindow{
-			TitleBar: macTitleBar,
-		},
 	})
 
 	// Win11 rounded corners: Wails only extends the DWM frame from its
@@ -270,6 +270,56 @@ func main() {
 	err := w3app.Run()
 	if err != nil {
 		log.Writef("Wails run error: %v", err)
+	}
+}
+
+// loadSavedTheme reads the persisted app theme so the window can be created
+// with a background colour matching it (see windowBackgroundColour). The
+// settings store normally initializes later in ServiceStartup, so this goes
+// through the data-dir bootstrap directly. Returns "" when unavailable
+// (first run / read error) — the caller maps that to the dark default.
+func loadSavedTheme() string {
+	dd, err := store.ResolveDataDir()
+	if err != nil || dd.FirstRun || dd.Path == "" {
+		return ""
+	}
+	// ResolveDataDir only returns paths that exist (bootstrap paths are
+	// validated, the upgrade path is checked for config files), so
+	// NewSettingsStore's MkdirAll is a no-op here.
+	ss, err := store.NewSettingsStore(dd.Path)
+	if err != nil {
+		return ""
+	}
+	settings, err := ss.Load()
+	if err != nil {
+		return ""
+	}
+	return settings.Theme
+}
+
+// windowBackgroundColour maps the persisted app theme to the native window
+// background colour. That colour is only visible before the webview's first
+// paint, so it is matched to the TOP colour of each theme's body gradient in
+// frontend/src/style.css — the seam that would otherwise flash in the wrong
+// colour on startup. 'system' is resolved from the OS the same way the
+// webview engine does (systemtheme_*.go); v3's IsDarkMode() can't be used
+// because it reports false before Run().
+func windowBackgroundColour(theme string) application.RGBA {
+	resolved := theme
+	if theme == "" || theme == "system" {
+		if systemPrefersDark() {
+			resolved = "dark"
+		} else {
+			resolved = "light"
+		}
+	}
+	switch resolved {
+	case "deep-blue":
+		return application.RGBA{Red: 16, Green: 23, Blue: 40, Alpha: 255} // #101728
+	case "light":
+		return application.RGBA{Red: 255, Green: 255, Blue: 255, Alpha: 255} // #ffffff
+	default:
+		return application.RGBA{Red: 27, Green: 31, Blue: 39, Alpha: 255} // #1b1f27
 	}
 }
 
