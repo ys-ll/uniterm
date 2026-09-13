@@ -528,3 +528,22 @@ func applyRoundedCorners(hwnd unsafe.Pointer) {
 		unsafe.Sizeof(preference),
 	)
 }
+
+// systemPrefersDark reports whether Windows is in app dark mode, reading the
+// same Personalization registry value the WebView2 engine maps to the CSS
+// prefers-color-scheme media query. Needed because v3's IsDarkMode() is
+// unavailable before Run() and the startup background colour must be resolved
+// at window creation. Any failure defaults to dark.
+func systemPrefersDark() bool {
+	k, err := registry.OpenKey(registry.CURRENT_USER,
+		`Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`, registry.QUERY_VALUE)
+	if err != nil {
+		return true
+	}
+	defer k.Close()
+	val, _, err := k.GetIntegerValue("AppsUseLightTheme")
+	if err != nil {
+		return true
+	}
+	return val == 0
+}
