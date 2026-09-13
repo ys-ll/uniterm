@@ -1300,6 +1300,8 @@
   "tunnels.hint.remote": "SSH サーバー上のポートで待ち受け、お使いのマシンから到達できるサービスにマッピングします。0.0.0.0 へのバインドにはサーバー側で GatewayPorts が必要です。",
   "tunnels.hint.dynamic": "ローカルで SOCKS5 プロキシを起動し、任意の宛先へのトラフィックをこの SSH 接続経由で動的に転送します。",
   "tunnels.autoStart": "起動時にこのトンネルを自動的に開始する",
+  "tunnels.startFailed": "トンネル「{name}」の起動に失敗しました",
+  "tunnels.disconnected": "トンネル「{name}」の接続が切断されました",
   "tunnels.errName": "名前を入力してください",
   "tunnels.errConn": "SSH 接続を選択してください",
   "tunnels.errListenPort": "待ち受けポートを入力してください",

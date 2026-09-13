@@ -1297,6 +1297,8 @@
   "tunnels.hint.remote": "Écouter sur un port du serveur SSH et le rediriger vers un service accessible depuis votre machine. La liaison sur 0.0.0.0 nécessite GatewayPorts sur le serveur.",
   "tunnels.hint.dynamic": "Démarrer un proxy SOCKS5 localement ; le trafic vers toute destination est redirigé dynamiquement via cette connexion SSH.",
   "tunnels.autoStart": "Démarrer ce tunnel automatiquement au lancement",
+  "tunnels.startFailed": "Échec du démarrage du tunnel \"{name}\"",
+  "tunnels.disconnected": "Tunnel \"{name}\" déconnecté",
   "tunnels.errName": "Veuillez saisir un nom",
   "tunnels.errConn": "Veuillez sélectionner une connexion SSH",
   "tunnels.errListenPort": "Veuillez saisir un port d'écoute",

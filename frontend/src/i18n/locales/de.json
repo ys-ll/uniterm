@@ -1300,6 +1300,8 @@
   "tunnels.hint.remote": "Lauscht auf einem Port auf dem SSH-Server und leitet ihn zurück zu einem von Ihrem Rechner erreichbaren Dienst. Die Bindung an 0.0.0.0 erfordert GatewayPorts auf dem Server.",
   "tunnels.hint.dynamic": "Startet lokal einen SOCKS5-Proxy; Datenverkehr zu jedem Ziel wird dynamisch über diese SSH-Verbindung weitergeleitet.",
   "tunnels.autoStart": "Diesen Tunnel beim Start automatisch starten",
+  "tunnels.startFailed": "Tunnel \"{name}\" konnte nicht gestartet werden",
+  "tunnels.disconnected": "Tunnel \"{name}\" wurde getrennt",
   "tunnels.errName": "Bitte einen Namen eingeben",
   "tunnels.errConn": "Bitte eine SSH-Verbindung auswählen",
   "tunnels.errListenPort": "Bitte einen Lausch-Port eingeben",

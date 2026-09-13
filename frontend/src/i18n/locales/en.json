@@ -1307,6 +1307,8 @@
   "tunnels.hint.remote": "Listen on a port on the SSH server and map it back to a service reachable from your machine. Binding 0.0.0.0 requires GatewayPorts on the server.",
   "tunnels.hint.dynamic": "Start a SOCKS5 proxy locally; traffic to any destination is dynamically forwarded through this SSH connection.",
   "tunnels.autoStart": "Start this tunnel automatically on launch",
+  "tunnels.startFailed": "Tunnel \"{name}\" failed to start",
+  "tunnels.disconnected": "Tunnel \"{name}\" disconnected",
   "tunnels.errName": "Please enter a name",
   "tunnels.errConn": "Please select an SSH connection",
   "tunnels.errListenPort": "Please enter a listen port",

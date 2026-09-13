@@ -5,6 +5,7 @@ import {
   LoadTunnels, SaveTunnels, StartTunnel, StopTunnel, ListTunnelStates,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
+import { t } from '../i18n'
 // Module-level un-subscribers for tunnel:state / store:tunnels:changed listeners.
 // Tracked at module scope so re-imports under HMR can detach the previous
 // listener before re-subscribing (FE-03).
@@ -80,13 +81,21 @@ export const useTunnelStore = defineStore('tunnels', () => {
       console.error('Failed to list tunnel states:', e)
     }
     // Live state pushes. Errors are toasted here — one place covers manual
-    // starts, auto-start failures at app boot and mid-run disconnects.
+    // starts, auto-start failures at app boot and mid-run disconnects. The
+    // bare backend error (e.g. "ssh handshake 10.x.x.x:22: ...") carries no
+    // tunnel identity, so the toast prefixes the localized tunnel name; the
+    // mid-run disconnect gets its own wording instead of "failed to start".
     let lastToastError = ''
     unsubTunnelState?.()
     unsubTunnelState =Events.On('tunnel:state', (ev) => { const st: TunnelState = ev.data;
       if (st.status === 'error' && st.error && st.error !== lastToastError) {
         lastToastError = st.error
-        msg.error(st.error)
+        const name = tunnels.value.find(x => x.id === st.id)?.name || st.id
+        if (st.error === 'ssh chain disconnected') {
+          msg.error(t('tunnels.disconnected', { name }))
+        } else {
+          msg.error(`${t('tunnels.startFailed', { name })}: ${st.error}`)
+        }
       }
       states.value = { ...states.value, [st.id]: st }
      })

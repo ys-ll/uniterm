@@ -1300,6 +1300,8 @@
   "tunnels.hint.remote": "SSH 서버의 포트에서 수신 대기하며, 사용자 머신에서 접근 가능한 서비스로 매핑합니다. 0.0.0.0 바인딩은 서버에서 GatewayPorts가 필요합니다.",
   "tunnels.hint.dynamic": "로컬에서 SOCKS5 프록시를 시작하며, 모든 대상으로의 트래픽이 이 SSH 연결을 통해 동적으로 전달됩니다.",
   "tunnels.autoStart": "시작 시 이 터널 자동 실행",
+  "tunnels.startFailed": "터널 \"{name}\" 시작 실패",
+  "tunnels.disconnected": "터널 \"{name}\" 연결이 끊어졌습니다",
   "tunnels.errName": "이름을 입력하세요",
   "tunnels.errConn": "SSH 연결을 선택하세요",
   "tunnels.errListenPort": "수신 포트를 입력하세요",
