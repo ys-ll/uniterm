@@ -1300,6 +1300,8 @@
   "tunnels.hint.remote": "Escucha en un puerto del servidor SSH y lo asigna a un servicio accesible desde su máquina. Vincular 0.0.0.0 requiere GatewayPorts en el servidor.",
   "tunnels.hint.dynamic": "Inicia un proxy SOCKS5 localmente; el tráfico a cualquier destino se reenvía dinámicamente a través de esta conexión SSH.",
   "tunnels.autoStart": "Iniciar este túnel automáticamente al arrancar",
+  "tunnels.startFailed": "Error al iniciar el túnel \"{name}\"",
+  "tunnels.disconnected": "Túnel \"{name}\" desconectado",
   "tunnels.errName": "Introduzca un nombre",
   "tunnels.errConn": "Seleccione una conexión SSH",
   "tunnels.errListenPort": "Introduzca un puerto de escucha",

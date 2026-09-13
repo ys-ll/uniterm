@@ -1307,6 +1307,8 @@
   "tunnels.hint.remote": "在 SSH 服务器上监听一个端口，反向映射回本机可达的服务。绑定 0.0.0.0 需服务器开启 GatewayPorts。",
   "tunnels.hint.dynamic": "在本机启动一个 SOCKS5 代理，任意目标地址都会动态经这条 SSH 连接转发。",
   "tunnels.autoStart": "应用启动时自动开启此隧道",
+  "tunnels.startFailed": "隧道「{name}」启动失败",
+  "tunnels.disconnected": "隧道「{name}」连接已断开",
   "tunnels.errName": "请填写隧道名称",
   "tunnels.errConn": "请选择 SSH 连接",
   "tunnels.errListenPort": "请填写监听端口",
