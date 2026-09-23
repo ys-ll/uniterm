@@ -5,6 +5,7 @@
     <AppHeader
       @toggle-ai="aiStore.toggle"
       @toggle-sidebar="sidebarVisible = !sidebarVisible"
+      @toggle-bottom-bar="bottomBarVisible = !bottomBarVisible"
       @open-settings="openSettings"
       @close-tab="closeTab"
       @close-tab-batch="closeTabBatch"
@@ -120,6 +121,19 @@
             />
           </KeepAlive>
         </template>
+        <!-- Bottom bar: a second, resizable panel area bound to the same view set
+             as the left sidebar (its tabs are picked in Settings → basic). It
+             lives inside .tab-area so it spans exactly the space between the two
+             sidebars, never widening past them. Desktop only — the phone
+             soft-keyboard bar owns the bottom edge there. -->
+        <BottomBar
+          v-if="!isMobile && bottomBarVisible"
+          class="bottom-slot"
+          @connect="onSidebarConnect"
+          @connect-to-workspace="({ config, workspaceId }: any) => onConnect(config, undefined, undefined, true, workspaceId)"
+          @create-workspace="(configs: any) => onCreateWorkspaceFromConfigs(configs)"
+          @connect-only="onConnectOnly"
+        />
       </div>
       <AISidebar ref="aiSidebarRef" @open-settings="openSettings" />
     </div>
@@ -166,6 +180,7 @@ import fr from 'element-plus/es/locale/lang/fr'
 import ru from 'element-plus/es/locale/lang/ru'
 import AppHeader from './components/AppHeader.vue'
 import Sidebar from './components/Sidebar.vue'
+import BottomBar from './components/BottomBar.vue'
 import TerminalTabContent from './components/TerminalTabContent.vue'
 import MobileKeyBar from './components/MobileKeyBar.vue'
 import { isMobilePlatform } from './utils/platform'
@@ -576,6 +591,9 @@ function RDPShowForOverlay() {
 
 const showConnectionForm = ref(false)
 const sidebarVisible = ref(false)
+// Whether the bottom bar is shown at all (AppHeader's toggle button). The
+// bar's own collapse state is separate and lives inside BottomBar.
+const bottomBarVisible = ref(true)
 const sidebarRef = ref<any>(null)
 const aiSidebarRef = ref<any>(null)
 
@@ -920,6 +938,8 @@ onMounted(async () => {
   await localStateStore.init()
   await loadBackgroundImage()
   sidebarVisible.value = localStateStore.state.sidebarVisible ?? false
+  // Missing in local_state.json written before the bottom bar existed → shown.
+  bottomBarVisible.value = localStateStore.state.bottomBarVisible ?? true
   // Pre-load quick commands so suggestions can read them immediately
   useQuickCommandStore().load()
   // Pre-load tunnels so auto-start state and the panel are ready
@@ -1162,6 +1182,12 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   paste: () => {
     const pid = tabStore.getActivePanelId()
     if (pid) window.dispatchEvent(new CustomEvent('terminal:paste', { detail: { panelId: pid } }))
+  },
+  terminalInterrupt: () => {
+    // Sends the interrupt control character (^C) to the focused session; the
+    // active panel resolves it (BaseTerminal), default Ctrl+C.
+    const pid = tabStore.getActivePanelId()
+    if (pid) window.dispatchEvent(new CustomEvent('terminal:interrupt', { detail: { panelId: pid } }))
   },
   navigatePrev: () => navigatePanel(-1),
   navigateNext: () => navigatePanel(1),
@@ -1918,6 +1944,11 @@ watch(sidebarVisible, async () => {
   localStateStore.update({ sidebarVisible: sidebarVisible.value })
 })
 
+watch(bottomBarVisible, () => {
+  rdpResetTracking()
+  localStateStore.update({ bottomBarVisible: bottomBarVisible.value })
+})
+
 watch(() => aiStore.visible, () => {
   rdpResetTracking()
 })
@@ -1958,6 +1989,12 @@ watch(
   overflow: hidden;
   background: var(--bg-base);
   padding: 0.1875rem;
+}
+
+/* Bottom bar: the tab area pads its content by 0.1875rem, so pull the bar back
+   out to fill the full width/height available between the two sidebars. */
+.tab-area > .bottom-slot {
+  margin: 0 -0.1875rem -0.1875rem;
 }
 
 .group-list {

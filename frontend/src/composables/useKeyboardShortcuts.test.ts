@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
-  loadKeybindings, onGlobalKeydown, matchDigitShortcut, panelDigitShortcutsSuppressed,
+  loadKeybindings, onGlobalKeydown, onTerminalKey, matchDigitShortcut, panelDigitShortcutsSuppressed,
   tabDigitShortcutPrefix, panelDigitShortcutPrefix, formatDigitShortcut, formatKeyBinding,
   digitModifierCollides, isRebinding, setRebinding,
 } from './useKeyboardShortcuts'
@@ -93,6 +93,33 @@ describe('useKeyboardShortcuts — maximize panel', () => {
     expect(maximizePanel).toHaveBeenCalledTimes(2)
     onGlobalKeydown(fakeKey({ key: 'Enter' }))
     expect(maximizePanel).toHaveBeenCalledTimes(2) // bare Enter → unharmed
+  })
+})
+
+describe('useKeyboardShortcuts — terminal interrupt', () => {
+  it('defaults to Ctrl+C, fires only from the focused terminal and never mirrors to Cmd', () => {
+    expect(DEFAULT_KEYBOARD.terminalInterrupt).toEqual({ ctrl: true, shift: false, alt: false, key: 'c' })
+
+    const terminalInterrupt = vi.fn()
+    loadKeybindings(DEFAULT_KEYBOARD, { terminalInterrupt } as any)
+
+    // Terminal-scoped: consumed by the focused terminal's key handler...
+    expect(onTerminalKey(fakeKey({ ctrlKey: true, key: 'c' }))).toBe(false)
+    expect(terminalInterrupt).toHaveBeenCalledTimes(1)
+
+    // ...but never from the global listener (no terminal focused).
+    onGlobalKeydown(fakeKey({ ctrlKey: true, key: 'c' }))
+    expect(terminalInterrupt).toHaveBeenCalledTimes(1)
+
+    // Cmd+C stays with copy on macOS — the interrupt is Ctrl-only.
+    expect(onTerminalKey(fakeKey({ metaKey: true, key: 'c' }))).toBe(true)
+    expect(terminalInterrupt).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders the literal Ctrl symbol (⌃C) on macOS for ctrl-only bindings', () => {
+    expect(formatKeyBinding(DEFAULT_KEYBOARD.terminalInterrupt!, true, true)).toBe('⌃C')
+    expect(formatKeyBinding(DEFAULT_KEYBOARD.terminalInterrupt!, true)).toBe('⌘C')
+    expect(formatKeyBinding(DEFAULT_KEYBOARD.terminalInterrupt!, false, true)).toBe('Ctrl+C')
   })
 })
 

@@ -18,7 +18,7 @@
         class="qc-item"
         :class="{ active: selectedIds.has(entry.id) }"
         @click="onItemClick($event, entry)"
-        @dblclick="runCommand(entry)"
+        @dblclick="onItemDblClick($event, entry)"
         @contextmenu.prevent="onContextMenu($event, entry)"
         @mouseenter="hoveredId = entry.id; showTooltip($event, entry.command)"
         @mouseleave="hoveredId = null; hideTooltip()"
@@ -219,6 +219,15 @@ function pasteCommand(entry: HistoryEntry) {
   }
   // Return focus to the terminal (issue #285).
   focusActivePanelTerminal()
+}
+
+// Row double-click runs the entry, but a double-click on the hover action
+// buttons must not: the buttons stop their own `click`, while `dblclick` is a
+// separate event that still bubbles to the row — so a quick double tap on
+// "paste" used to run the command.
+function onItemDblClick(e: MouseEvent, entry: HistoryEntry) {
+  if ((e.target as HTMLElement | null)?.closest('button')) return
+  runCommand(entry)
 }
 
 async function copyCommand(entry: HistoryEntry) {

@@ -186,6 +186,13 @@ type AppSettings struct {
 	// builds (which lack this field) still load; a nil map means "use the
 	// frontend defaults" (everything visible).
 	SidebarTabs map[string]bool `json:"sidebarTabs,omitempty"`
+	// BottomBarTabs toggles which views the bottom bar offers, keyed by the
+	// same view ids as SidebarTabs. The bottom bar is a second panel area
+	// (its own tab strip plus a resizable panel) bound to the same view set.
+	// Pointer + omitempty so settings.json written by older builds (which lack
+	// this field) still load; a nil map means "use the frontend defaults"
+	// (every view offered).
+	BottomBarTabs map[string]bool `json:"bottomBarTabs,omitempty"`
 }
 
 type SFTPBookmarks struct {

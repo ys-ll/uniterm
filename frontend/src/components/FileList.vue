@@ -68,7 +68,22 @@
       @navigate="(p: string) => emit('navigate', p)"
       @save-bookmark="(p: string) => emit('saveBookmark', p)"
       @remove-bookmark="(p: string) => emit('removeBookmark', p)"
-    />
+    >
+      <!-- Transfer-queue icon, right after the bookmark button. Only the
+           dual-pane tab passes showTransferButton: it owns the queue, the
+           sidebar's file browser has none. -->
+      <template #trailing>
+        <button
+          v-if="showTransferButton"
+          class="filter-icon-btn transfer-queue-btn"
+          :class="{ active: transferActive }"
+          :title="t('sftp.transferPanel.show')"
+          @click.stop="emit('openTransfers')"
+        >
+          <el-icon><ArrowUpDown :size="'0.875rem'" /></el-icon>
+        </button>
+      </template>
+    </PathBreadcrumb>
     <div v-if="clipboardCount" class="clipboard-bar">
       <span class="clipboard-info">{{ clipboardMode === 'cut' ? t('sftp.cut') : t('sftp.copy') }} ({{ clipboardCount }})</span>
       <el-button type="primary" @click="emit('paste')">{{ t('sftp.paste') }}</el-button>
@@ -143,12 +158,6 @@
       class="band-rect"
       :style="{ left: bandRect.x + 'px', top: bandRect.y + 'px', width: bandRect.w + 'px', height: bandRect.h + 'px' }"
     />
-    </div>
-    <!-- Always-visible footer: entry count, plus the selection stats when a
-         selection exists (kept below the table so it can never cover rows). -->
-    <div class="selection-bar">
-      <span class="selection-info">{{ itemCountText }}</span>
-      <span v-if="selectionStats.count > 0 && selectionStats.size > 0">{{ formatSize(selectionStats.size) }}</span>
     </div>
 
     <Menu ref="ctxMenuRef" v-model:visible="ctxMenuVisible">
@@ -264,7 +273,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { Folder, File, Link, RefreshCw, Eye, Upload, FilePlus2, FolderPlus, MoreHorizontal, ChevronLeft, ChevronRight, CornerLeftUp } from '@lucide/vue'
+import { Folder, File, Link, RefreshCw, Eye, Upload, FilePlus2, FolderPlus, MoreHorizontal, ChevronLeft, ChevronRight, CornerLeftUp, ArrowUpDown } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
 import { joinPath } from '../composables/useFilePanel'
@@ -313,6 +322,12 @@ const props = defineProps<{
    *  download) as icon buttons in the filter bar; 'compact' (default) keeps them
    *  in the more-menu only. */
   toolbarLayout?: 'flat' | 'compact'
+  /** Show the transfer-queue icon next to the breadcrumb's bookmark button.
+   *  Only the dual-pane tab hosts a queue, so this stays off elsewhere. */
+  showTransferButton?: boolean
+  /** Draw the transfer-queue icon in its active style (a transfer is running
+   *  or paused), so the queue is discoverable while the popup is closed. */
+  transferActive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -343,6 +358,7 @@ const emit = defineEmits<{
   forward: []
   up: []
   copyPathToTerminal: [text: string]
+  openTransfers: []
 }>()
 
 const { t, locale } = useI18n()
@@ -373,27 +389,6 @@ const flatToolbar = computed(() => props.toolbarLayout === 'flat')
 // Name column default width: the narrow sidebar (compact layout) uses 2/3 of
 // the dual-pane default so one column doesn't dominate the little space.
 const nameColMinWidth = computed(() => (flatToolbar.value ? 220 : 147))
-
-// Footer stats for the current multi-selection. The '..' parent row is not a
-// real entry, so it never counts toward the item total or the size sum.
-const selectionStats = computed(() => {
-  const items = selectedItems.value.filter(i => i.name !== '..')
-  const totalSize = items.reduce((sum, i) => sum + (i.isDir ? 0 : i.size), 0)
-  return { count: items.length, size: totalSize }
-})
-
-// Real entries currently listed (filter applied, '..' excluded).
-const entryCount = computed(() =>
-  filteredFiles.value.reduce((n, f) => (f.name === '..' ? n : n + 1), 0))
-
-// Footer text: "{count} items" normally, "{count} items | {count} selected"
-// while a selection exists.
-const itemCountText = computed(() => {
-  const base = t('sftp.itemCount', { count: entryCount.value })
-  return selectionStats.value.count > 0
-    ? `${base} | ${t('sftp.selectionStats', { count: selectionStats.value.count })}`
-    : base
-})
 
 // --- Column visibility (header right-click) -------------------------------
 // Every non-name column can be hidden via the header's context menu
@@ -1174,17 +1169,11 @@ function applyBandSelection() {
   flex: 1;
   color: var(--text-secondary);
 }
-.selection-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.75rem;
-  border-top: 1px solid var(--border-subtle);
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-.selection-info {
-  flex: 1;
+/* Transfer-queue icon: sits directly right of the breadcrumb's bookmark
+   button, which already pins the pair to the right edge with margin-left:auto,
+   so this only needs a hair of breathing room. */
+.transfer-queue-btn {
+  margin-left: 0.125rem;
 }
 .band-rect {
   position: absolute;

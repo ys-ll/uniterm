@@ -155,6 +155,7 @@ export type ShortcutAction =
   | 'openSettings'
   | 'copy'
   | 'paste'
+  | 'terminalInterrupt'
   | 'toggleLineNumbers'
   | 'toggleTimestamps'
   | 'zoomFontIn'
@@ -206,6 +207,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   openSettings: 'shortcut.openSettings',
   copy: 'shortcut.copy',
   paste: 'shortcut.paste',
+  terminalInterrupt: 'shortcut.terminalInterrupt',
   toggleLineNumbers: 'shortcut.toggleLineNumbers',
   toggleTimestamps: 'shortcut.toggleTimestamps',
   zoomFontIn: 'shortcut.zoomFontIn',
@@ -230,6 +232,10 @@ export const DEFAULT_KEYBOARD: KeyboardSettings = {
   openSettings: { ctrl: true, shift: false, alt: false, key: ',' },
   copy: { ctrl: true, shift: true, alt: false, key: 'c' },
   paste: { ctrl: true, shift: true, alt: false, key: 'v' },
+  // Terminal interrupt (SIGINT / ^C). Ctrl-only on purpose: this is a control
+  // character sent to the remote shell, not a menu accelerator, so it stays on
+  // the physical Ctrl key on macOS instead of mirroring to Cmd+C (copy).
+  terminalInterrupt: { ctrl: true, shift: false, alt: false, key: 'c' },
   toggleLineNumbers: { ctrl: true, shift: true, alt: false, key: 'g' },
   toggleTimestamps: { ctrl: true, shift: true, alt: false, key: 't' },
   zoomFontIn: { ctrl: true, shift: false, alt: false, key: '=' },
@@ -293,6 +299,9 @@ export interface AppSettings {
   // Which connection-sidebar tab icons are visible, keyed by view id.
   // Missing keys fall back to SIDEBAR_TAB_DEFAULTS.
   sidebarTabs: Record<string, boolean>
+  // Which view tabs the bottom bar offers, keyed by the same view ids.
+  // Missing keys fall back to BOTTOM_BAR_TAB_DEFAULTS.
+  bottomBarTabs: Record<string, boolean>
 }
 
 // Default visibility per sidebar view. "connections" is the primary view and
@@ -300,16 +309,35 @@ export interface AppSettings {
 // context menu); every tab ships visible by default.
 export const SIDEBAR_TAB_DEFAULTS: Record<string, boolean> = {
   connections: true,
-  files: true,
-  monitor: true,
   tunnels: true,
-  quickCommands: true,
-  history: true,
-  personalization: true,
+  files: false,
+  monitor: true,
+  quickCommands: false,
+  history: false,
+  personalization: false,
 }
 
-// Canonical sidebar tab order shared by the tab-strip context menu and the
-// Settings card. `labelKey` is the existing i18n key for each tab's title.
+export const BOTTOM_TAB_DEFAULTS: Record<string, boolean> = {
+  connections: false,
+  tunnels: false,
+  files: true,
+  monitor: false,
+  quickCommands: true,
+  history: true,
+  personalization: false,
+}
+
+// Default visibility per bottom-bar view. The bottom bar is a second, optional
+// home for the same view set (its own tab strip + panel area above the status
+// row), so it mirrors the left sidebar's defaults: "connections" is fixed and
+// every other view ships visible.
+export const BOTTOM_BAR_TAB_DEFAULTS: Record<string, boolean> = {
+  ...BOTTOM_TAB_DEFAULTS,
+}
+
+// Canonical sidebar tab order shared by the tab-strip context menu, the
+// Settings cards and the bottom bar. `labelKey` is the existing i18n key for
+// each tab's title.
 export const SIDEBAR_TAB_ORDER: { key: string; labelKey: string }[] = [
   { key: 'connections', labelKey: 'header.connections' },
   { key: 'files', labelKey: 'header.files' },
@@ -379,10 +407,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sftpTransferPanelVisible: false,
   customTerminalThemes: [],
   defaultLocalShell: '',
-  tabCloseButton: 'left',
+  tabCloseButton: 'right',
   showTabShortcutHints: true,
   hostListMenuStyle: 'button',
-  sidebarTabs: { ...SIDEBAR_TAB_DEFAULTS }
+  sidebarTabs: { ...SIDEBAR_TAB_DEFAULTS },
+  bottomBarTabs: { ...BOTTOM_BAR_TAB_DEFAULTS }
 }
 
 export interface TerminalThemeEntry { label: string; value: string; type: 'dark' | 'light' }

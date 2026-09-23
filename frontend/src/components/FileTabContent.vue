@@ -47,6 +47,9 @@
           @cancel-load="onCancelLoadLocal"
           @save-bookmark="onLocalSaveBookmark"
           @remove-bookmark="onLocalRemoveBookmark"
+          @open-transfers="transferDialogVisible = true"
+          show-transfer-button
+          :transfer-active="hasActiveTransfer"
           toolbar-layout="flat"
         />
       </div>
@@ -102,24 +105,33 @@
           @cancel-load="onCancelLoadRemote"
           @save-bookmark="onSaveBookmark"
           @remove-bookmark="onRemoveBookmark"
+          @open-transfers="transferDialogVisible = true"
+          show-transfer-button
+          :transfer-active="hasActiveTransfer"
           toolbar-layout="flat"
         />
       </div>
     </div>
-    <!-- The panel bar is always visible; collapsing hides only the task list
-         (the persisted flag now tracks "list expanded", default collapsed). -->
-    <TransferPanel
-      v-model:height="transferHeight"
-      :collapsed="!settingsStore.sftpTransferPanelVisible"
-      @update:collapsed="(v: boolean) => settingsStore.sftpTransferPanelVisible = !v"
-      resizable
-      :tasks="transferTasks"
-      @cancel="onCancelTransfer"
-      @pause="onPauseTransfer"
-      @resume="onResumeTransfer"
-      @retry="onRetryTransfer"
-      @clearCompleted="clearFinishedTransfers"
-    />
+    <!-- The transfer queue is a popup now (opened from the icon next to the
+         breadcrumb's bookmark button) instead of a docked bottom panel, so the
+         two panes keep their full height while it is closed. -->
+    <el-dialog
+      v-model="transferDialogVisible"
+      append-to-body
+      class="transfer-dialog"
+      :title="t('sftp.transferPanel.title')"
+      width="56rem"
+    >
+      <TransferPanel
+        :tasks="transferTasks"
+        :collapsible="false"
+        @cancel="onCancelTransfer"
+        @pause="onPauseTransfer"
+        @resume="onResumeTransfer"
+        @retry="onRetryTransfer"
+        @clearCompleted="clearFinishedTransfers"
+      />
+    </el-dialog>
 
     <!-- Custom Dialog (shared) -->
     <FileGenericDialog
@@ -206,7 +218,13 @@ const props = defineProps<{
 const panelStore = usePanelStore()
 const settingsStore = useSettingsStore()
 const transferTasks = panelStore.getTransferTasks(props.panelId)
-const transferHeight = ref(130)
+// The queue is a popup opened from the transfer icon, not a docked panel, so
+// its visibility is plain per-tab UI state and is deliberately not persisted.
+const transferDialogVisible = ref(false)
+// Keeps the transfer icon in its active style while a transfer runs, so the
+// queue stays discoverable with the popup closed.
+const hasActiveTransfer = computed(() =>
+  transferTasks.some(task => task.status === 'running' || task.status === 'paused'))
 const { t } = useI18n()
 bindExtEditUploadedToast()
 const panel = computed(() => panelStore.getPanel(props.panelId))
@@ -435,13 +453,12 @@ watch(() => panel.value?.sessionId, async (newId, oldId) => {
   }
 }, { immediate: true })
 
-// Transfer panel visibility: hidden by default; a NEW task id auto-pops it
-// (a manual collapse only hides the panel until the next task starts). The
-// persisted flag remembers the last visibility across restarts but never
-// suppresses the auto-pop.
+// Transfer popup: closed by default; a NEW task id opens it so a running
+// transfer is visible without hunting for the icon. Closing the popup by hand
+// only hides it until the next task starts.
 watchNewTransferTasks(
   () => transferTasks,
-  () => { settingsStore.sftpTransferPanelVisible = true },
+  () => { transferDialogVisible.value = true },
 )
 
 // Transfer events are routed app-level by transferTaskCenter keyed by
@@ -702,5 +719,23 @@ async function onDropRemote(e: DragEvent) {
   border: 0.125rem dashed var(--border-hover);
   border-radius: var(--radius-md);
 }
+</style>
 
+<style>
+/* Transfer popup: the re-used TransferPanel drops its docked-panel chrome (the
+   top border and the reserved min-height) so the popup hugs the queue, and the
+   task list gets the extra height. Deliberately not scoped — el-dialog teleports
+   the content to body, and the extra el-dialog in the selector keeps these
+   rules above TransferPanel's own scoped ones. */
+.el-dialog.transfer-dialog .transfer-panel {
+  border-top: none;
+  min-height: 0;
+}
+.el-dialog.transfer-dialog .transfer-panel .transfer-progress-bar {
+  max-height: 50vh;
+}
+.el-dialog.transfer-dialog .transfer-panel .transfer-empty {
+  position: static;
+  padding: 1.5rem 0;
+}
 </style>

@@ -62,15 +62,17 @@ function keyLabel(key: string): string {
  * and the terminal context-menu shortcut hints so both show the same format:
  * mac symbols concatenated without separators on macOS (⌃⇧M), words joined
  * with '+' elsewhere (Ctrl+Shift+M). An empty `key` (modifier-only bindings
- * of the digit settings rows) renders just the modifiers.
+ * of the digit settings rows) renders just the modifiers. `literalCtrl` marks
+ * the bindings that only fire on the physical Ctrl key on macOS (see
+ * CTRL_ONLY_ACTIONS), so their ctrl renders as ⌃ instead of the ⌘ mirror.
  */
-export function formatKeyBinding(b: KeyBinding, isMac: boolean): string {
+export function formatKeyBinding(b: KeyBinding, isMac: boolean, literalCtrl = false): string {
   if (!b) return ''
   if (isMac) {
     let s = ''
     // ctrl combos fire on Cmd on macOS (the physical Ctrl works too), so
     // display the natural Cmd symbol.
-    if (b.ctrl) s += '⌘'
+    if (b.ctrl) s += literalCtrl ? '⌃' : '⌘'
     if (b.alt) s += '⌥'
     if (b.shift) s += '⇧'
     return s + macKeyLabel(b.key)
@@ -113,7 +115,13 @@ const terminalShortcutMap = new Map<string, () => void>()
 const actionKeyMap = new Map<ShortcutAction, string>()
 
 // Actions that should only take effect while a terminal session is focused.
-const TERMINAL_SCOPED_ACTIONS: ShortcutAction[] = ['copy', 'paste']
+const TERMINAL_SCOPED_ACTIONS: ShortcutAction[] = ['copy', 'paste', 'terminalInterrupt']
+
+// Actions whose binding must not be mirrored to Cmd on macOS. The interrupt
+// sends a control character (^C) to the remote shell rather than acting as a
+// menu accelerator, so mirroring it would hijack macOS copy (Cmd+C, handled
+// directly in BaseTerminal) and break the universal Ctrl+C for ^C.
+export const CTRL_ONLY_ACTIONS: ShortcutAction[] = ['terminalInterrupt']
 
 export function loadKeybindings(
   bindings: KeyboardSettings,
@@ -129,8 +137,8 @@ export function loadKeybindings(
     if (handler) {
       const target = TERMINAL_SCOPED_ACTIONS.includes(action) ? terminalShortcutMap : shortcutMap
       target.set(key, handler)
-      // macOS: ctrl combos also answer to Cmd.
-      if (b.ctrl) {
+      // macOS: ctrl combos also answer to Cmd (except CTRL_ONLY_ACTIONS).
+      if (b.ctrl && !CTRL_ONLY_ACTIONS.includes(action)) {
         target.set(key.replace(/^ctrl\+/, 'meta+'), handler)
       }
       actionKeyMap.set(action, key)

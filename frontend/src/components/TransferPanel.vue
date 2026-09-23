@@ -9,8 +9,11 @@
     <div class="transfer-panel-head">
       <div class="transfer-panel-actions">
         <!-- Collapse toggle: pinned far left; collapsing hides ONLY the task
-             list — this button bar stays so the panel can be re-expanded. -->
+             list — this button bar stays so the panel can be re-expanded.
+             Hidden when the host owns the sizing (the SFTP popup), where there
+             is nothing to collapse. -->
         <button
+          v-if="collapsible !== false"
           class="filter-icon-btn"
           :title="collapsed ? t('sftp.transferPanel.show') : t('sftp.transferPanel.hide')"
           @click="emit('update:collapsed', !collapsed)"
@@ -111,6 +114,9 @@ const props = defineProps<{
   title?: string
   /** Collapsed = only the button bar is shown; the task list is hidden. */
   collapsed?: boolean
+  /** Whether to offer the collapse toggle. Defaults to shown; hosts that size
+   *  the panel themselves (the SFTP popup) pass false. */
+  collapsible?: boolean
 }>()
 
 const emit = defineEmits<{

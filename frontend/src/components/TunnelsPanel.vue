@@ -21,7 +21,7 @@
         :key="tn.id"
         class="tn-item"
         :class="{ running: statusOf(tn) === 'running', errored: statusOf(tn) === 'error' }"
-        @dblclick="toggleRun(tn)"
+        @dblclick="onRowDblClick($event, tn)"
         @contextmenu.prevent="onTunnelContextMenu($event, tn)"
       >
         <span class="tn-status" :title="statusTitle(tn)"></span>
@@ -115,6 +115,15 @@ const statusTitle = (tn: Tunnel) => {
   const status = statusOf(tn)
   if (status === 'error') return store.states[tn.id]?.error || t('tunnels.statusError')
   return status === 'running' ? t('tunnels.statusRunning') : t('tunnels.statusStopped')
+}
+
+// Row double-click starts/stops the tunnel, but a double-click on the row's
+// own start/stop button must not: the button stops `click` only, while
+// `dblclick` still bubbles to the row — so a quick double tap toggled the
+// tunnel twice (start then immediately stop).
+function onRowDblClick(e: MouseEvent, tn: Tunnel) {
+  if ((e.target as HTMLElement | null)?.closest('button')) return
+  toggleRun(tn)
 }
 
 async function toggleRun(tn: Tunnel) {

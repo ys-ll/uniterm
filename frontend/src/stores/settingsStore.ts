@@ -377,6 +377,10 @@ function mergeSettings(loaded: AppSettings): AppSettings {
     sidebarTabs: {
       ...DEFAULT_SETTINGS.sidebarTabs,
       ...(loaded.sidebarTabs || {})
+    },
+    bottomBarTabs: {
+      ...DEFAULT_SETTINGS.bottomBarTabs,
+      ...(loaded.bottomBarTabs || {})
     }
   }
 }

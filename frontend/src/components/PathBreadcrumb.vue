@@ -41,14 +41,22 @@
         </span>
         <span v-if="idx < visibleParts.length - 1" class="separator" @click.stop>&gt;</span>
       </template>
-      <button
-        v-if="bookmarkMode"
-        class="bookmark-btn"
-        :title="t('sftp.bookmark.title')"
-        @click.stop="bookmarkMenuRef?.toggle($event.currentTarget)"
-      >
-        <Bookmark :size="'0.875rem'" :class="{ 'bookmark-active': hasCurrentPathBookmarked }" />
-      </button>
+      <!-- Bookmark + trailing actions (e.g. the transfer-queue icon of the
+           dual-pane tab) form one non-shrinkable cluster pinned to the right
+           edge. Inside this overflow-hidden row a plain trailing sibling can
+           get clipped away by a long path; the cluster keeps the icons safe
+           while the path parts do the collapsing. -->
+      <span v-if="bookmarkMode || $slots.trailing" class="breadcrumb-actions">
+        <button
+          v-if="bookmarkMode"
+          class="bookmark-btn"
+          :title="t('sftp.bookmark.title')"
+          @click.stop="bookmarkMenuRef?.toggle($event.currentTarget)"
+        >
+          <Bookmark :size="'0.875rem'" :class="{ 'bookmark-active': hasCurrentPathBookmarked }" />
+        </button>
+        <slot name="trailing" />
+      </span>
     </template>
 
     <!-- Drive dropdown -->
@@ -401,13 +409,18 @@ function onBookmarkClick(path: string) {
   margin: 0 0.125rem;
   flex-shrink: 0;
 }
+.breadcrumb-actions {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .bookmark-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 1.5rem;
   height: 1.5rem;
-  margin-left: auto;
   flex-shrink: 0;
   background: transparent;
   border: none;

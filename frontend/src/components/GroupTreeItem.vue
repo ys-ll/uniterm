@@ -53,7 +53,7 @@
       @dragover.prevent="onConnDragOver($event, conn)"
       @drop.prevent="onConnDrop($event, conn)"
       @click="onItemClick($event, conn)"
-      @dblclick="onItemDblClick(conn)"
+      @dblclick="onItemDblClick(conn, $event)"
       @contextmenu.prevent="onConnCtxMenu($event, conn)"
     >
       <span class="conn-icon"><component :is="connIcon(conn)" :size="'0.875rem'" /></span>
@@ -164,8 +164,8 @@ function onItemClick(e: MouseEvent, conn: ConnectionConfig) {
   handlers.onItemClick(e, conn)
 }
 
-function onItemDblClick(conn: ConnectionConfig) {
-  handlers.onItemDblClick(conn)
+function onItemDblClick(conn: ConnectionConfig, e: MouseEvent) {
+  handlers.onItemDblClick(conn, e)
 }
 
 function onConnCtxMenu(e: MouseEvent, conn: ConnectionConfig) {

@@ -66,17 +66,27 @@
           @save-bookmark="onSaveBookmark"
           @remove-bookmark="onRemoveBookmark"
           @copy-path-to-terminal="onCopyPathToTerminal"
+          @open-transfers="transferDialogVisible = true"
+          show-transfer-button
+          :transfer-active="hasActiveTransfer"
         />
       </div>
 
-      <!-- Transfer history / progress panel (pinned at the sidebar bottom).
-           Defaults to collapsed; a new transfer expands it (see the watcher). -->
+    </template>
+
+    <!-- Transfer queue popup, opened from the transfer icon next to the
+         breadcrumb's bookmark button (same pattern as the dual-pane tab; the
+         global .transfer-dialog styles in FileTabContent apply here too). -->
+    <el-dialog
+      v-model="transferDialogVisible"
+      append-to-body
+      class="transfer-dialog"
+      :title="t('sftp.transferPanel.title')"
+      width="56rem"
+    >
       <TransferPanel
-        v-model:height="transferHeight"
-        :collapsed="sidebarTransferCollapsed"
-        @update:collapsed="(v: boolean) => sidebarTransferCollapsed = v"
-        resizable
         :tasks="transferTasks"
+        :collapsible="false"
         @cancel="onCancelTransfer"
         @pause="onPauseTransfer"
         @resume="onResumeTransfer"
@@ -101,7 +111,7 @@
           ><el-icon><ExternalLink :size="'0.875rem'" /></el-icon></button>
         </template>
       </TransferPanel>
-    </template>
+    </el-dialog>
 
     <!-- Change permission dialog (shared with the full SFTP tab) -->
     <FileChmodDialog
@@ -183,11 +193,9 @@ const settingsStore = useSettingsStore()
 
 const connecting = ref(false)
 const connectError = ref('')
-// Transfer panel: default height (px), adjustable by dragging its top edge.
-const transferHeight = ref(130)
-// The transfer panel starts COLLAPSED (only its button bar shows) and a new
-// transfer expands it — the user can always re-collapse via the bar's toggle.
-const sidebarTransferCollapsed = ref(true)
+// Transfer queue popup, opened from the transfer icon next to the bookmark
+// button (same pattern as the dual-pane SFTP tab); plain local UI state.
+const transferDialogVisible = ref(false)
 // Set on unmount so late transfer-done callbacks (routes outlive the
 // sidebar's v-if) don't refresh an unmounted component.
 let sidebarDisposed = false
@@ -202,8 +210,12 @@ const FILE_DROP_ID = 'file-sidebar-drop'
 const sessionId = computed(() => companionStore.currentSftpSessionId)
 const transferKey = computed(() => companionStore.transferKey || 'companion-sftp')
 const transferTasks = computed(() => panelStore.getTransferTasks(transferKey.value))
-// Auto-expand the collapsed panel whenever a NEW transfer task appears.
-watchNewTransferTasks(() => transferTasks.value, () => { sidebarTransferCollapsed.value = false })
+// Drives the transfer icon's active style while a transfer runs or pauses.
+const hasActiveTransfer = computed(() =>
+  transferTasks.value.some(task => task.status === 'running' || task.status === 'paused'))
+// A NEW transfer task opens the popup so the progress is visible without
+// hunting for the icon (same behavior as the dual-pane tab).
+watchNewTransferTasks(() => transferTasks.value, () => { transferDialogVisible.value = true })
 const LIST_TIMEOUT_MS = 20000
 
 function scheduleRefreshRetry() {

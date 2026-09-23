@@ -35,6 +35,17 @@
       <el-icon><Bot :size="'0.875rem'" /></el-icon>
     </button>
 
+    <!-- Bottom bar toggle: shows/hides the second panel area below the tabs.
+         Highlighted while the bar is visible. -->
+    <button
+      class="header-btn"
+      :class="{ active: bottomBarVisible }"
+      @click="emit('toggle-bottom-bar')"
+      :title="t('header.bottomBar')"
+    >
+      <el-icon><PanelBottom :size="'0.875rem'" /></el-icon>
+    </button>
+
     <!-- Settings button opens a dropdown menu with common settings items -->
     <div class="settings-wrap">
       <button ref="settingsBtnRef" class="header-btn" @click.stop="toggleSettingsMenu" :title="t('header.menu')">
@@ -138,7 +149,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, h } from 'vue'
-import { Menu as MenuIcon, PanelLeft, Bot } from '@lucide/vue'
+import { Menu as MenuIcon, PanelLeft, PanelBottom, Bot } from '@lucide/vue'
 import { ElMessageBox, ElCheckbox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { useTabStore } from '../stores/tabStore'
@@ -285,12 +296,18 @@ const hasActiveConnections = computed(() =>
 const emit = defineEmits<{
   'toggle-ai': []
   'toggle-sidebar': []
+  'toggle-bottom-bar': []
   'open-settings': [category?: string]
   'close-tab': [id: string]
   'close-tab-batch': [ids: string[]]
   'toggle-ai-lock': [panelId: string]
   'tab-dragstart': [e: DragEvent, tabId: string]
 }>()
+
+// Whether the bottom bar is currently shown (drives the toggle button's lit
+// state). Read from the local state store so the header stays in sync with the
+// bar itself, which App.vue renders from the same field.
+const bottomBarVisible = computed(() => localStateStore.state.bottomBarVisible ?? true)
 
 const platform = ref(detectPlatformSync())
 const isMaximised = ref(false)

@@ -7,6 +7,10 @@ import { LoadLocalState, SaveLocalState } from '../../bindings/github.com/ys-ll/
 interface LocalState {
   sidebarVisible: boolean
   aiSidebarVisible: boolean
+  // Whether the bottom bar (second panel area) is shown. Optional: a
+  // local_state.json written before the bar existed has no such key, and a
+  // missing value means "shown" (see DEFAULT below).
+  bottomBarVisible?: boolean
   collapsedGroupIds: string[]
   collapsedQuickCommandGroupIds: string[]
   windowX: number
@@ -29,6 +33,7 @@ interface LocalState {
 const DEFAULT: LocalState = {
   sidebarVisible: true,
   aiSidebarVisible: true,
+  bottomBarVisible: true,
   collapsedGroupIds: [],
   collapsedQuickCommandGroupIds: [],
   windowX: 0,

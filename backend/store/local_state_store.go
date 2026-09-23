@@ -9,8 +9,13 @@ import (
 const localStateFileName = "local_state.json"
 
 type LocalState struct {
-	SidebarVisible    bool     `json:"sidebarVisible"`
-	AISidebarVisible  bool     `json:"aiSidebarVisible"`
+	SidebarVisible   bool `json:"sidebarVisible"`
+	AISidebarVisible bool `json:"aiSidebarVisible"`
+	// BottomBarVisible remembers whether the bottom bar (the second, resizable
+	// panel area) is shown. Pointer + omitempty so local_state.json written by
+	// older builds still loads; nil means "shown", which the frontend falls
+	// back to.
+	BottomBarVisible  *bool    `json:"bottomBarVisible,omitempty"`
 	CollapsedGroupIds []string `json:"collapsedGroupIds"`
 	// Collapsed quick-command group ids (plus "__ungrouped__"). Local-only
 	// UI state, never synced; groups absent from the list stay expanded.

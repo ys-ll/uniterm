@@ -310,6 +310,7 @@ let onClearScrollback: ((e: Event) => void) | null = null
 let onSendRz: ((e: Event) => void) | null = null
 let onTerminalCopy: ((e: Event) => void) | null = null
 let onTerminalPaste: ((e: Event) => void) | null = null
+let onTerminalInterrupt: ((e: Event) => void) | null = null
 let onVisibilityChange: (() => void) | null = null
 
 // Reset xterm's internal IME composition state. Two variants:
@@ -1722,6 +1723,20 @@ onMounted(() => {
   }
   window.addEventListener('terminal:paste', onTerminalPaste)
 
+  // Configurable in-terminal interrupt (Ctrl+C by default). The App-level
+  // shortcut handler intercepts the combo before xterm's hardcoded Ctrl+C
+  // mapping and dispatches this event, so the binding is rebindable. Feeding
+  // the control character back through xterm's own input pipeline keeps the
+  // remaining behaviour identical to a native Ctrl+C (broadcast panes,
+  // alternate-screen filtering, session buffering).
+  onTerminalInterrupt = (e: Event) => {
+    if (!isActive.value) return
+    const detail = (e as CustomEvent).detail
+    if (detail?.panelId && detail.panelId !== props.panelId) return
+    terminal?.input('\x03')
+  }
+  window.addEventListener('terminal:interrupt', onTerminalInterrupt)
+
   bindListeners()
 
   // When the browser tab/page becomes hidden (user switches to another app
@@ -2145,6 +2160,7 @@ onUnmounted(() => {
   if (onSendRz) window.removeEventListener('terminal:send-rz', onSendRz)
   if (onTerminalCopy) window.removeEventListener('terminal:copy', onTerminalCopy)
   if (onTerminalPaste) window.removeEventListener('terminal:paste', onTerminalPaste)
+  if (onTerminalInterrupt) window.removeEventListener('terminal:interrupt', onTerminalInterrupt)
   if (onVisibilityChange) document.removeEventListener('visibilitychange', onVisibilityChange)
   onVisibilityChange = null
   suggestions.close()

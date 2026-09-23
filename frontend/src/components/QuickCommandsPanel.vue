@@ -49,7 +49,7 @@
             draggable="true"
             @dragstart="onCommandDragStart($event, cmd)"
             @click="selectCommand(cmd.id)"
-            @dblclick="runCommand(cmd)"
+            @dblclick="onItemDblClick($event, cmd)"
             @contextmenu.prevent="onCommandContextMenu($event, cmd)"
             @mouseenter="hoveredId = cmd.id"
             @mouseleave="hoveredId = null"
@@ -83,7 +83,7 @@
           draggable="true"
           @dragstart="onCommandDragStart($event, cmd)"
           @click="selectCommand(cmd.id)"
-          @dblclick="runCommand(cmd)"
+          @dblclick="onItemDblClick($event, cmd)"
           @contextmenu.prevent="onCommandContextMenu($event, cmd)"
           @mouseenter="hoveredId = cmd.id"
           @mouseleave="hoveredId = null"
@@ -131,7 +131,7 @@
             draggable="true"
             @dragstart="onCommandDragStart($event, cmd)"
             @click="selectCommand(cmd.id)"
-            @dblclick="runCommand(cmd)"
+            @dblclick="onItemDblClick($event, cmd)"
             @contextmenu.prevent="onCommandContextMenu($event, cmd)"
             @mouseenter="hoveredId = cmd.id"
             @mouseleave="hoveredId = null"
@@ -436,6 +436,16 @@ async function sendCommand(cmd: QuickCommand, mode: 'run' | 'paste') {
 
 function runCommand(cmd: QuickCommand) { sendCommand(cmd, 'run') }
 function pasteCommand(cmd: QuickCommand) { sendCommand(cmd, 'paste') }
+
+// Row double-click runs the command (the long-standing shortcut), but a
+// double-click on the hover action buttons must never reach it: those buttons
+// only call e.stopPropagation() for `click`, while `dblclick` is a separate
+// event that still bubbles to the row — so a quick double tap on "paste"
+// silently ran the command (reported as "pasting executes the command").
+function onItemDblClick(e: MouseEvent, cmd: QuickCommand) {
+  if ((e.target as HTMLElement | null)?.closest('button')) return
+  runCommand(cmd)
+}
 
 async function copyCommand(cmd: QuickCommand) {
   try {
