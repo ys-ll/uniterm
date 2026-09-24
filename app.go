@@ -14,6 +14,7 @@ import (
 	"github.com/ys-ll/uniterm/backend/importer"
 	"github.com/ys-ll/uniterm/backend/k8s"
 	"github.com/ys-ll/uniterm/backend/log"
+	"github.com/ys-ll/uniterm/backend/mcp"
 	"github.com/ys-ll/uniterm/backend/platform"
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/store"
@@ -91,6 +92,18 @@ type App struct {
 	// calls reuse the keep-alive pool and skip the TCP+TLS handshake.
 	httpClient     *http.Client
 	httpClientOnce stdsync.Once
+
+	// MCP server (external AI agents): listener + token auth + approval
+	// bridge. Lazily created once stores are ready (ensureMCPServer).
+	mcpServer   *mcp.Server
+	mcpOnce     stdsync.Once
+	// mcpApprovals maps pending approval request ids to their answer channels.
+	mcpApprovals   map[string]chan mcpApprovalVerdict
+	mcpApprovalsMu stdsync.Mutex
+	// Token hot-reload cache: mcp.json mtime → parsed token map.
+	mcpTokenCacheMu    stdsync.Mutex
+	mcpTokenCache      map[string]mcp.TokenInfo
+	mcpTokenCacheMtime time.Time
 
 	// session objects and the log file spans all of them. sessionToPanel
 	// tracks the current session→panel binding so emitData can look up
@@ -351,6 +364,13 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 	}
 
 	a.storesReady = true
+
+	// External-agent MCP server: auto-start when enabled in settings.
+	a.mcpApprovals = make(map[string]chan mcpApprovalVerdict)
+	if err := a.StartMCP(); err != nil {
+		log.Writef("mcp: start failed: %v", err)
+		a.emit("app:startup-error", "MCP server: "+err.Error())
+	}
 
 	// Raise the window to the foreground once, shortly after launch. On Windows a
 	// relaunched instance can otherwise land behind other windows; the short delay
@@ -713,6 +733,9 @@ func (a *App) watchForeground(ctx context.Context) {
 
 func (a *App) shutdown() {
 	a.unsubclassMainWindow()
+	if a.mcpServer != nil {
+		a.mcpServer.Stop()
+	}
 	if a.tunnelService != nil {
 		a.tunnelService.Shutdown()
 	}
@@ -1485,6 +1508,10 @@ func (a *App) SaveSettings(settings store.AppSettings) error {
 		// Re-apply the global show/hide hotkey so binding changes (and the
 		// enable switch) take effect immediately. No-op when unchanged.
 		applyGlobalShowHideHotkey(a.app, a.window, trayHotkeyBinding(&settings))
+		// MCP endpoint follows the enabled switch / port without a restart.
+		if err := a.StartMCP(); err != nil {
+			log.Writef("mcp: restart after settings save failed: %v", err)
+		}
 	}
 	return err
 }

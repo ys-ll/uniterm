@@ -133,6 +133,38 @@ type AISettings struct {
 	ActiveModelID string          `json:"activeModelId"`
 }
 
+// MCPToolToggles are the per-group MCP tool switches. Discovery is always on
+// (read-only); the other three default off until the user opts in.
+type MCPToolToggles struct {
+	Exec     bool `json:"exec"`
+	Terminal bool `json:"terminal"`
+	Files    bool `json:"files"`
+}
+
+// MCPSettings configures the external-agent MCP server endpoint. Pointer on
+// AppSettings + omitempty so settings.json written by older builds still
+// loads; nil means "feature off with defaults".
+type MCPSettings struct {
+	// Enabled starts the localhost Streamable HTTP endpoint on launch.
+	Enabled bool `json:"enabled"`
+	// Port for the 127.0.0.1 listener; 0 = DefaultPort.
+	Port int `json:"port,omitempty"`
+	// Policy is the approval policy: confirm_all (default) / confirm_write /
+	// confirm_dangerous / bypass.
+	Policy string `json:"policy,omitempty"`
+	// Tools carries the per-group toggles.
+	Tools MCPToolToggles `json:"tools"`
+}
+
+// DefaultMCPSettings is the off-by-default MCP block for settings.json.
+func DefaultMCPSettings() MCPSettings {
+	return MCPSettings{
+		Enabled: false,
+		Policy:  "confirm_all",
+		Tools:   MCPToolToggles{Exec: true},
+	}
+}
+
 type KeyBinding struct {
 	Ctrl  bool   `json:"ctrl"`
 	Meta  bool   `json:"meta"`
@@ -186,6 +218,10 @@ type AppSettings struct {
 	// builds (which lack this field) still load; a nil map means "use the
 	// frontend defaults" (everything visible).
 	SidebarTabs map[string]bool `json:"sidebarTabs,omitempty"`
+	// MCP configures the external-agent MCP server (see MCPSettings).
+	// Pointer + omitempty so settings.json written by older builds still
+	// loads; nil means the feature is off with defaults.
+	MCP *MCPSettings `json:"mcp,omitempty"`
 }
 
 type SFTPBookmarks struct {

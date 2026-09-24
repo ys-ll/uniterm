@@ -142,6 +142,12 @@
       <MenuItem @click="inputMenuSelectAll">{{ t('input.selectAll') }}</MenuItem>
     </Menu>
 
+    <MCPApprovalDialog
+      v-model:visible="mcpApprovalVisible"
+      :request="mcpApprovalRequest"
+      @resolve="onMcpApprovalResolve"
+    />
+
     <SyncConflictDialog />
     <UpdateDialog />
     <DataDirDialog v-model:visible="dataDirVisible" :first-run="credStore.firstRun || credStore.dataDirInfo.firstRun" @done="onDataDirDone" />
@@ -196,6 +202,8 @@ import CredentialUnlockDialog from './components/CredentialUnlockDialog.vue'
 import KeychainLostDialog from './components/KeychainLostDialog.vue'
 import CredentialPrompt from './components/CredentialPrompt.vue'
 import type { CredentialResult } from './components/CredentialPrompt.vue'
+import MCPApprovalDialog from './components/MCPApprovalDialog.vue'
+import type { MCPApprovalRequest } from './types/mcp'
 import Menu from './components/Menu.vue'
 import MenuItem from './components/MenuItem.vue'
 import { ElMessageBox, ElCheckbox } from 'element-plus'
@@ -221,7 +229,7 @@ import { focusPanelTerminal, installTerminalFocusRestore } from './composables/u
 import { useDuplicateSession } from './composables/useDuplicateSession'
 import type { ShortcutAction } from './types/settings'
 import { useI18n } from './i18n'
-import { CreateSession, CloseSession, RDPHide, RDPShow, RDPInvalidate, RDPSnapshot, RDPSetPosition, RecordRecentConnection, GetPlatform, GetBackgroundImage, SessionStart, RelaunchApp } from '../bindings/github.com/ys-ll/uniterm/app'
+import { CreateSession, CloseSession, RDPHide, RDPShow, RDPInvalidate, RDPSnapshot, RDPSetPosition, RecordRecentConnection, GetPlatform, GetBackgroundImage, SessionStart, RelaunchApp, ResolveMCPApproval } from '../bindings/github.com/ys-ll/uniterm/app'
 import { waitForTerminalSize } from './services/terminalManager'
 import { msg } from './services/message'
 import { unregisterTransferRoute } from './services/transferTaskCenter'
@@ -623,6 +631,40 @@ function onCredentialResolve(result: CredentialResult | null) {
   }
 }
 
+// ── MCP approval bridge (external AI agents) ──────────────────────
+// backend mcp:approval-request event → dialog → ResolveMCPApproval binding.
+const mcpApprovalVisible = ref(false)
+const mcpApprovalRequest = ref<MCPApprovalRequest | null>(null)
+let unsubMcpApproval: (() => void) | null = null
+let unsubMcpSessionCreated: (() => void) | null = null
+
+function onMcpApprovalResolve(approved: boolean, reason: string) {
+  const req = mcpApprovalRequest.value
+  mcpApprovalVisible.value = false
+  mcpApprovalRequest.value = null
+  if (req) ResolveMCPApproval(req.id, approved, reason).catch(() => {})
+}
+
+// backend mcp:session-created: an agent opened a new SSH session; mount a
+// visible terminal tab for it so the user can watch and control it.
+function onMcpSessionCreated(payload: { sessionId: string; name?: string; host?: string }) {
+  const cfg: Partial<ConnectionConfig> = {
+    type: 'ssh',
+    name: payload.name || payload.host || 'MCP',
+    host: payload.host || '',
+  }
+  const panel = panelStore.createPanel(cfg as ConnectionConfig, 'ssh')
+  const title = payload.name || payload.host || 'MCP'
+  panelStore.updateTitle(panel.id, title)
+  panelStore.bindSession(panel.id, payload.sessionId)
+  sessionStore.initSession(payload.sessionId)
+  sessionStore.updateStatus(payload.sessionId, 'connecting')
+  const tab = tabStore.activeTab?.type === 'start'
+    ? tabStore.replaceStartTab(tabStore.activeTab.id, title, panel.id)
+    : tabStore.createTerminalTab(title, panel.id)
+  panelStore.movePanelToTab(panel.id, tab.id)
+}
+
 function needsCredentialCheck(config: ConnectionConfig): boolean {
   const inScope = ['ssh', 'mosh', 'sftp', 'scp', 'ftp'].includes(config.type)
   if (!inScope) return false
@@ -966,6 +1008,14 @@ onMounted(async () => {
   // Tray menu: "Settings" / "About" show the window (Go side) then land here.
   unsubTrayOpenSettings = Events.On('app:open-settings', () => openSettings())
   unsubTrayOpenAbout = Events.On('app:open-about', () => openSettings('about'))
+  // MCP (external AI agents): approval dialogs + session takeover.
+  unsubMcpApproval = Events.On('mcp:approval-request', (ev) => {
+    mcpApprovalRequest.value = ev.data as MCPApprovalRequest
+    mcpApprovalVisible.value = true
+  })
+  unsubMcpSessionCreated = Events.On('mcp:session-created', (ev) => {
+    onMcpSessionCreated(ev.data)
+  })
   // Go-side WndProc events: window move/resize start/end. The RDP window is a
   // WS_CHILD, so it moves with the main window automatically; only a resize of
   // the .rdp-area (or a re-show after an overlay) needs a position sync.
@@ -1215,6 +1265,8 @@ onUnmounted(() => {
   unsubRdpMoveResizeEnd?.()
   unsubTrayOpenSettings?.()
   unsubTrayOpenAbout?.()
+  unsubMcpApproval?.()
+  unsubMcpSessionCreated?.()
   rdpAreaObserver?.disconnect()
   settingsStore.dispose?.()
   connectionStore.dispose?.()

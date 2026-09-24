@@ -377,6 +377,12 @@ function mergeSettings(loaded: AppSettings): AppSettings {
     sidebarTabs: {
       ...DEFAULT_SETTINGS.sidebarTabs,
       ...(loaded.sidebarTabs || {})
-    }
+    },
+    // MCP block: pass through as-is when present (older settings.json has
+    // none and falls back to the defaults); tools merge per-key so a file
+    // written before a group existed still gets that group's default.
+    mcp: loaded.mcp
+      ? { ...loaded.mcp, tools: { ...DEFAULT_SETTINGS.mcp!.tools, ...loaded.mcp.tools } }
+      : undefined
   }
 }

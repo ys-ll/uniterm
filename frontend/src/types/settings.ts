@@ -1,3 +1,6 @@
+import type { MCPSettings } from './mcp'
+import { DEFAULT_MCP_SETTINGS } from './mcp'
+
 export const SUPPORTED_LOCALES = [
   'zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'de', 'es', 'fr', 'ru'
 ] as const
@@ -293,6 +296,9 @@ export interface AppSettings {
   // Which connection-sidebar tab icons are visible, keyed by view id.
   // Missing keys fall back to SIDEBAR_TAB_DEFAULTS.
   sidebarTabs: Record<string, boolean>
+  // MCP server for external AI agents. Mirrors the Go AppSettings.MCP
+  // pointer: absent in older settings.json = feature off.
+  mcp?: MCPSettings
 }
 
 // Default visibility per sidebar view. "connections" is the primary view and
@@ -382,7 +388,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tabCloseButton: 'left',
   showTabShortcutHints: true,
   hostListMenuStyle: 'button',
-  sidebarTabs: { ...SIDEBAR_TAB_DEFAULTS }
+  sidebarTabs: { ...SIDEBAR_TAB_DEFAULTS },
+  mcp: { ...DEFAULT_MCP_SETTINGS, tools: { ...DEFAULT_MCP_SETTINGS.tools } }
 }
 
 export interface TerminalThemeEntry { label: string; value: string; type: 'dark' | 'light' }

@@ -576,8 +576,11 @@ func (s *SSHSession) readLoop() {
 			// unchanged (binary fidelity); the scanner still runs so its
 			// state cannot desync.
 			cwd, cleaned, found := s.osc7.Feed(data)
-			if found && TerminalCwdSink != nil {
-				TerminalCwdSink(s.id, cwd)
+			if found {
+				recordSessionCwd(s.id, cwd)
+				if TerminalCwdSink != nil {
+					TerminalCwdSink(s.id, cwd)
+				}
 			}
 			if !s.cwdHookInstalled.Load() {
 				var confirmed bool

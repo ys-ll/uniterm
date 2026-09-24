@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -16,6 +17,27 @@ import (
 // so the App layer can forward it to the frontend as a Wails event. Installed
 // once in NewApp, next to TransferEventSink.
 var TerminalCwdSink func(sessionID, cwd string)
+
+// sessionCwds remembers the last OSC-7 cwd per session so MCP list_sessions
+// can report it without a frontend round-trip.
+var sessionCwds = struct {
+	mu sync.Mutex
+	m  map[string]string
+}{m: make(map[string]string)}
+
+func recordSessionCwd(sessionID, cwd string) {
+	sessionCwds.mu.Lock()
+	sessionCwds.m[sessionID] = cwd
+	sessionCwds.mu.Unlock()
+}
+
+// GetSessionCwd returns the last OSC-7 reported cwd for a session ("" when
+// unknown).
+func GetSessionCwd(sessionID string) string {
+	sessionCwds.mu.Lock()
+	defer sessionCwds.mu.Unlock()
+	return sessionCwds.m[sessionID]
+}
 
 const (
 	osc7Prefix            = "\x1b]7;"

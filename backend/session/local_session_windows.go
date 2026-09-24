@@ -638,8 +638,11 @@ func (s *LocalSession) readLoop() {
 			// the data for every downstream consumer so stripped sequences
 			// never render.
 			cwd, cleaned, found := s.osc7.Feed(data)
-			if found && TerminalCwdSink != nil {
-				TerminalCwdSink(s.id, cwd)
+			if found {
+				recordSessionCwd(s.id, cwd)
+				if TerminalCwdSink != nil {
+					TerminalCwdSink(s.id, cwd)
+				}
 			}
 			s.emitData(s.decodeOutput(cleaned))
 			s.updateMouseTrackingState(cleaned)
