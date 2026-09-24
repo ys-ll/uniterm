@@ -77,7 +77,7 @@ Legend: ✅ Shipped, 🚧 Planned
 | Skill Support | ✅ | v1.6.0 | Packaged, reusable workflows the agent can invoke | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
 | Prompt Library | ✅ | v1.6.0 | Manage and trigger reusable AI prompts | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
 | Interaction Modes | 🚧 | — | Chat / read-only / agent modes to constrain AI actions |  |
-| MCP Server | 🚧 | — | Expose uniTerm as an MCP server for external AI agents |  |
+| MCP Server | ✅ | v1.9.6 | Expose uniTerm as an MCP server for external AI agents: exec with real exit codes, file transfers, per-token auth and approval policies (#1041) | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
 | MCP Client | 🚧 | — | Connect external MCP servers to extend uniTerm's AI |  |
 | File Attachments | 🚧 | — | Attach files to AI prompts for the agent to read |  |
 
