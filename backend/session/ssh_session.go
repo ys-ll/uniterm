@@ -385,6 +385,13 @@ func (s *SSHSession) Connect(config ConnectionConfig) error {
 // (issue #983). On failure the channel is closed but the client stays open —
 // the dial path's own error handling closes its client, clones hold a ref.
 func (s *SSHSession) attach(client *ssh.Client, config ConnectionConfig) error {
+	// Shell detection MUST run before opening the shell channel: it executes
+	// `echo $SHELL` on a second exec channel, and some servers (e.g. dropbear
+	// on OpenWrt CPEs) kill the whole connection when an exec channel runs
+	// while another session channel is open — the later pty-req then fails
+	// with EOF. Detect first, close the probe, then open the shell channel.
+	injectHook, injectShell := startupCwdHook(client)
+
 	session, err := client.NewSession()
 	if err != nil {
 		s.setStatus(StatusError)
@@ -403,7 +410,6 @@ func (s *SSHSession) attach(client *ssh.Client, config ConnectionConfig) error {
 	// Terminal modes: ECHO is only disabled when we are about to inject the
 	// cwd hook, which restores it itself once installed. A server that
 	// ignores pty modes would echo the hook line once — cosmetic only.
-	injectHook, injectShell := startupCwdHook(client)
 	modes := ssh.TerminalModes{
 		ssh.TTY_OP_ISPEED: 38400,
 		ssh.TTY_OP_OSPEED: 38400,
