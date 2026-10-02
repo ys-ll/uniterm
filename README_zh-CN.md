@@ -156,6 +156,7 @@ Oracle Database 支持基于纯 Go 驱动实现。uniTerm 不随安装包分发 
 - **Windows** (amd64 / arm64): 安装包 `uniterm-windows-*-installer-*.exe`，或便携版 `uniterm-windows-*-portable-*.zip`
 - **macOS** (Apple Silicon arm64 / Intel amd64): 下载 `uniterm-darwin-*-*.dmg`
 - **Linux** (amd64 / arm64): 下载 `uniterm-linux-*-*.tar.gz`、`.deb` 或 `.rpm`
+- **Linux legacy** (amd64 / arm64): 适用于基础库较旧的企业发行版——银河麒麟 V10/V11、统信 UOS / deepin、RHEL 8、openEuler。下载 `uniterm-linux-legacy-*-*.tar.gz`、`.deb` 或 `.rpm`。若标准包运行报 `undefined symbol: webkit_web_view_evaluate_javascript`（WebKit 低于 2.40），请使用此包
 - **Android** (arm64, 预发布版): 下载 `uniterm-android-arm64-*.apk`（debug 签名，安装时需允许"未知来源应用"）
 
 > **关于 Windows 杀软误报**：由于本开源软件未购买代码签名证书，未签名的可执行文件可能被部分杀毒引擎（如 Windows Defender）误报拦截。这是 Go/Wails 应用的已知问题（参见 [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)）。可在杀毒软件中为其添加排除规则以放行。请务必从 GitHub、Gitee 官方开源渠道下载软件。如仍担心存在病毒，可自行下载源代码在本地构建运行。
@@ -183,6 +184,7 @@ sudo rpm -i uniterm.rpm
 - **Windows**: WebView2 运行时（Windows 10+ 已内置，更老的系统需安装）
 - **macOS**: 无需额外依赖（使用系统自带 WebKit）
 - **Linux**: `libgtk-3-0` 与 `libwebkit2gtk-4.1-0`（多数桌面发行版已自带）
+- **Linux legacy**: `gtk3` 与 `webkit2gtk3`（WebKit2GTK 4.0 ABI；WebKit 2.38 即可，无需 2.40+）
 - **Android**: Android 5.0+（使用系统自带 WebView，无需额外依赖）
 
 ## 使用流程

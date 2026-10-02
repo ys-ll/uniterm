@@ -28,6 +28,8 @@ Download the installer for your platform from [GitHub Releases](https://github.c
   ./uniterm
   ```
 
+> **Enterprise distros with older system libraries** (Kylin V10/V11, UOS / deepin, RHEL 8, openEuler): use the `uniterm-linux-legacy-<arch>-<version>` packages instead. If the standard package fails with `undefined symbol: webkit_web_view_evaluate_javascript`, your WebKit is older than 2.40 — the legacy build only requires the WebKit2GTK 4.0 ABI (WebKit 2.38 is sufficient).
+
 
 ## Creating Your First Connection
 

@@ -28,6 +28,8 @@
   ./uniterm
   ```
 
+> **基础库较旧的企业发行版**（银河麒麟 V10/V11、统信 UOS / deepin、RHEL 8、openEuler）：请改用 `uniterm-linux-legacy-<架构>-<版本>` 包。若标准包运行报 `undefined symbol: webkit_web_view_evaluate_javascript`，说明系统的 WebKit 低于 2.40——legacy 包只需 WebKit2GTK 4.0 ABI（WebKit 2.38 即可）。
+
 
 ## 创建第一个连接
 

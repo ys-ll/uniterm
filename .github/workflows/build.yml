@@ -30,8 +30,23 @@ jobs:
             slug: darwin
           - os: ubuntu-latest
             slug: android
+          # "legacy" = builds for enterprise distros with older system
+          # libraries (Kylin V10/V11, UOS/deepin, RHEL 8, openEuler).
+          # Must be compiled natively in a Rocky Linux 8 container
+          # (glibc 2.28) and linked against webkit2gtk-4.0 WITHOUT any webkit
+          # version tag — a tag would demand WebKit >= 2.40 at runtime, which
+          # those distros' repos (e.g. Kylin's webkit2gtk3 2.38.x) lack (#1072).
+          # Native CGO on arm64 runners too — no cross-compiling of GTK.
+          - os: ubuntu-latest
+            slug: linux-legacy-amd64
+            container: rockylinux:8
+          - os: ubuntu-24.04-arm
+            slug: linux-legacy-arm64
+            container: rockylinux:8
 
     runs-on: ${{ matrix.os }}
+    # Entries without a "container" field leave this empty → run on the host.
+    container: ${{ matrix.container }}
 
     steps:
       - name: Checkout
@@ -75,10 +90,29 @@ jobs:
           upx --version
 
       - name: Install dependencies (Linux)
-        if: startsWith(matrix.slug, 'linux')
+        if: startsWith(matrix.slug, 'linux') && !startsWith(matrix.slug, 'linux-legacy')
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev upx pkg-config
+
+      - name: Install dependencies (Linux legacy)
+        if: startsWith(matrix.slug, 'linux-legacy')
+        shell: bash
+        run: |
+          # Rocky Linux 8 container: dnf instead of apt. gcc/make/pkgconfig for
+          # CGO, gtk3-devel + webkit2gtk3-devel for the webkit2gtk-4.0 ABI.
+          dnf -y install epel-release
+          dnf -y install \
+            gcc gcc-c++ make pkgconfig which curl ca-certificates tar gzip unzip xz \
+            gtk3-devel webkit2gtk3-devel \
+            git binutils
+          UPX_ARCH=${{ matrix.slug == 'linux-legacy-amd64' && 'amd64' || 'arm64' }}
+          UPX_VER="4.2.4"
+          curl -sSfL -o /tmp/upx.tar.xz \
+            "https://github.com/upx/upx/releases/download/v${UPX_VER}/upx-${UPX_VER}-${UPX_ARCH}_linux.tar.xz"
+          tar -xJf /tmp/upx.tar.xz -C /tmp
+          install -m 755 /tmp/upx-*/upx /usr/local/bin/upx
+          upx --version
 
       - name: Install dependencies (Android)
         if: matrix.slug == 'android'
@@ -107,14 +141,22 @@ jobs:
           # setup-go does not add GOPATH/bin to PATH; wails3 (and the
           # overlay:gen / generate bindings calls inside the tasks) live there.
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-          # On Linux, wails3 defaults to the WebKitGTK 6.0 (GTK4) pkg-config
-          # stack, which ubuntu-24.04 does not ship. Build the CLI (and later the
-          # app) with the legacy -tags gtk3 contract (WebKit2GTK 4.1). The CLI
-          # only orchestrates the gradle/NDK android build, so the tag choice
-          # does not affect the APK.
+          WAILS_VER="v3.0.0-beta.27"
           TAGS=""
-          if [[ "${{ matrix.slug }}" == linux* || "${{ matrix.slug }}" == "android" ]]; then TAGS="-tags gtk3"; fi
-          go install $TAGS github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.27
+          if [[ "${{ matrix.slug }}" == linux-legacy* ]]; then
+            # Legacy build stays on beta.12: its default (no-tag) pkg-config
+            # contract is webkit2gtk-4.0, exactly what the Rocky 8 container
+            # provides and what Kylin/RHEL 8 ship at runtime.
+            WAILS_VER="v3.0.0-beta.12"
+          elif [[ "${{ matrix.slug }}" == linux* || "${{ matrix.slug }}" == "android" ]]; then
+            # On Linux, wails3 beta.27 defaults to the WebKitGTK 6.0 (GTK4)
+            # pkg-config stack, which ubuntu-24.04 does not ship. Build the
+            # CLI (and later the app) with the legacy -tags gtk3 contract
+            # (WebKit2GTK 4.1). The CLI only orchestrates the gradle/NDK
+            # android build, so the tag choice does not affect the APK.
+            TAGS="-tags gtk3"
+          fi
+          go install $TAGS github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VER}
 
       - name: Set version
         shell: bash
@@ -151,7 +193,7 @@ jobs:
           echo "AMD64|ARM64 built:"; ls -la bin/
 
       - name: Build (Linux)
-        if: startsWith(matrix.slug, 'linux')
+        if: startsWith(matrix.slug, 'linux') && !startsWith(matrix.slug, 'linux-legacy')
         shell: bash
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
@@ -161,6 +203,24 @@ jobs:
           wails3 build GOOS=linux VERSION="$VERSION" EXTRA_TAGS=gtk3
           chmod +x bin/uniTerm
           echo "Linux binary:"; ls -la bin/uniTerm
+
+      - name: Build (Linux legacy)
+        if: startsWith(matrix.slug, 'linux-legacy')
+        shell: bash
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          # Native CGO build inside the Rocky 8 container (glibc 2.28). No
+          # webkit version tag: wails3 beta.12's default contract links the
+          # webkit2gtk-4.0 ABI without demanding WebKit >= 2.40 at runtime,
+          # which is what Kylin V10/V11 / RHEL 8 / openEuler ship (e.g.
+          # Kylin's webkit2gtk3 2.38.x, see #1072).
+          pkg-config --modversion webkit2gtk-4.0
+          wails3 build GOOS=linux VERSION="$VERSION"
+          chmod +x bin/uniTerm
+          echo "Linux legacy binary:"
+          ls -la bin/uniTerm
+          # Sanity check: the binary must not require glibc newer than 2.28.
+          objdump -T bin/uniTerm | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -5
 
       - name: Build (macOS)
         if: matrix.slug == 'darwin'
@@ -287,7 +347,7 @@ jobs:
           }
 
       - name: Package (Linux, nfpm)
-        if: startsWith(matrix.slug, 'linux')
+        if: startsWith(matrix.slug, 'linux') && !startsWith(matrix.slug, 'linux-legacy')
         run: |
           ARCH=${{ matrix.slug == 'linux-amd64' && 'amd64' || 'arm64' }}
           NFPM_ARCH=${{ matrix.slug == 'linux-amd64' && 'x86_64' || 'arm64' }}
@@ -333,6 +393,59 @@ jobs:
             --target "uniterm-linux-${ARCH}-${VERSION}.deb"
           nfpm package --config nfpm.yaml --packager rpm \
             --target "uniterm-linux-${ARCH}-${VERSION}.rpm"
+
+      - name: Package (Linux legacy, nfpm)
+        if: startsWith(matrix.slug, 'linux-legacy')
+        shell: bash
+        run: |
+          ARCH=${{ matrix.slug == 'linux-legacy-amd64' && 'amd64' || 'arm64' }}
+          # NFPM_ARCH selects the nfpm *binary* to download inside the container
+          # (amd64 on the x86_64 runner, aarch64 on the arm64 runner); nfpm
+          # itself maps deb amd64/arm64 → rpm x86_64/aarch64 automatically.
+          NFPM_ARCH=${{ matrix.slug == 'linux-legacy-amd64' && 'x86_64' || 'aarch64' }}
+          upx --best --lzma bin/uniTerm
+
+          cd bin
+          tar czf ../uniterm-linux-legacy-${ARCH}-${VERSION}.tar.gz uniTerm
+          cd ..
+
+          NFPM_VER="2.46.3"
+          curl -sSfL -o /tmp/nfpm.tar.gz \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VER}/nfpm_${NFPM_VER}_Linux_${NFPM_ARCH}.tar.gz"
+          tar xf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
+          chmod +x /usr/local/bin/nfpm
+
+          cat > nfpm.yaml << EOF
+          name: uniterm
+          arch: ${ARCH}
+          platform: linux
+          version: ${VERSION}
+          maintainer: uniTerm <uniTerm@uniterm.net>
+          description: Lightweight all-in-one terminal emulator (legacy build for Kylin V10/V11, UOS/deepin, RHEL 8, openEuler — glibc 2.28 / WebKit2GTK 4.0)
+          homepage: https://uniterm.net
+          license: Proprietary
+          depends:
+            - libgtk-3-0
+            - libwebkit2gtk-4.0-37
+          overrides:
+            rpm:
+              depends:
+                - gtk3
+                - webkit2gtk3
+          contents:
+            - src: bin/uniTerm
+              dst: /usr/bin/uniterm
+            - src: build/linux/uniTerm.desktop
+              dst: /usr/share/applications/uniterm.desktop
+            - src: build/linux/icons/hicolor
+              dst: /usr/share/icons/hicolor
+          EOF
+
+          nfpm package --config nfpm.yaml --packager deb \
+            --target "uniterm-linux-legacy-${ARCH}-${VERSION}.deb"
+          nfpm package --config nfpm.yaml --packager rpm \
+            --target "uniterm-linux-legacy-${ARCH}-${VERSION}.rpm"
+          ls -la uniterm-linux-legacy-${ARCH}-*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
