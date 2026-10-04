@@ -248,6 +248,8 @@
   "ai.daysAgo": "il y a {n} j",
   "ai.monthsAgo": "il y a {n} mois",
   "ai.yearsAgo": "il y a {n} an(s)",
+  "ai.backgroundRun": "L'IA travaille toujours dans l'onglet « {tab} ». Revenir à cet onglet pour interagir, ou l'arrêter ici.",
+  "ai.closedTabChip": "onglet fermé",
   "ai.avatarUser": "Vous",
   "ai.avatarTool": "Outil",
   "ai.avatarAI": "IA",

@@ -248,6 +248,8 @@
   "ai.daysAgo": "{n} дн. назад",
   "ai.monthsAgo": "{n} мес. назад",
   "ai.yearsAgo": "{n} г. назад",
+  "ai.backgroundRun": "ИИ всё ещё работает во вкладке «{tab}». Вернитесь в неё, чтобы продолжить, или остановите задачу здесь.",
+  "ai.closedTabChip": "закрытая вкладка",
   "ai.avatarUser": "Вы",
   "ai.avatarTool": "Инструмент",
   "ai.avatarAI": "ИИ",

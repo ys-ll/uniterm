@@ -248,6 +248,8 @@
   "ai.daysAgo": "hace {n} días",
   "ai.monthsAgo": "hace {n} meses",
   "ai.yearsAgo": "hace {n} años",
+  "ai.backgroundRun": "La IA sigue trabajando en la pestaña \"{tab}\". Vuelva a esa pestaña para interactuar, o detenga la tarea aquí.",
+  "ai.closedTabChip": "pestaña cerrada",
   "ai.avatarUser": "Tú",
   "ai.avatarTool": "Herramienta",
   "ai.avatarAI": "IA",

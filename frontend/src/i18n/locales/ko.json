@@ -248,6 +248,8 @@
   "ai.daysAgo": "{n}일 전",
   "ai.monthsAgo": "{n}개월 전",
   "ai.yearsAgo": "{n}년 전",
+  "ai.backgroundRun": "AI가 여전히 \"{tab}\" 탭에서 작업 중입니다. 해당 탭으로 돌아가거나 여기서 중지하세요.",
+  "ai.closedTabChip": "닫은 탭",
   "ai.avatarUser": "사용자",
   "ai.avatarTool": "도구",
   "ai.avatarAI": "AI",

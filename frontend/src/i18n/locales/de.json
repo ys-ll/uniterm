@@ -248,6 +248,8 @@
   "ai.daysAgo": "vor {n} Tagen",
   "ai.monthsAgo": "vor {n} Monaten",
   "ai.yearsAgo": "vor {n} Jahren",
+  "ai.backgroundRun": "Die KI arbeitet noch im Tab \"{tab}\". Wechsle zurück zu diesem Tab, um fortzufahren, oder stoppe sie hier.",
+  "ai.closedTabChip": "geschlossener Tab",
   "ai.avatarUser": "Du",
   "ai.avatarTool": "Werkzeug",
   "ai.avatarAI": "KI",

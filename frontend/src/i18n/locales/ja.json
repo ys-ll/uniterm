@@ -248,6 +248,8 @@
   "ai.daysAgo": "{n} 日前",
   "ai.monthsAgo": "{n} か月前",
   "ai.yearsAgo": "{n} 年前",
+  "ai.backgroundRun": "AI はまだタブ「{tab}」で作業中です。そのタブに戻るか、ここで停止してください。",
+  "ai.closedTabChip": "閉じたタブ",
   "ai.avatarUser": "あなた",
   "ai.avatarTool": "ツール",
   "ai.avatarAI": "AI",
