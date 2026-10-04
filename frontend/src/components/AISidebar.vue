@@ -78,12 +78,12 @@
         />
       </div>
       <div v-if="(aiStore.isRunning || aiStore.pendingCommand || aiStore.pendingQuestion) && !aiStore.backgroundRun" class="ai-thinking">
-        <div class="thinking-row" :title="t('ai.thinkingToggleHint')" @click="toggleThinking">
+        <div class="thinking-row" :class="{ clickable: showThoughtProcess }" :title="showThoughtProcess ? t('ai.thinkingToggleHint') : undefined" @click="showThoughtProcess && toggleThinking()">
           <div class="thinking-text">{{ statusText }}</div>
-          <ChevronDown v-if="!aiStore.thinkingExpanded" :size="'0.75rem'" class="thinking-chevron" />
-          <ChevronUp v-else :size="'0.75rem'" class="thinking-chevron" />
+          <ChevronDown v-if="showThoughtProcess && !aiStore.thinkingExpanded" :size="'0.75rem'" class="thinking-chevron" />
+          <ChevronUp v-else-if="showThoughtProcess" :size="'0.75rem'" class="thinking-chevron" />
         </div>
-        <div v-show="aiStore.thinkingExpanded" ref="thinkingPanelRef" class="thinking-panel">
+        <div v-show="showThoughtProcess && aiStore.thinkingExpanded" ref="thinkingPanelRef" class="thinking-panel">
           <div class="thinking-panel-header">
             <span class="thinking-dot" :class="aiStore.status === 'thinking' ? 'live' : 'done'">{{ aiStore.status === 'thinking' ? '○' : '●' }}</span>
             <span class="thinking-panel-title">{{ t('ai.thoughtProcess') }}</span>
@@ -517,6 +517,11 @@ const statusText = computed(() => {
   const key = `ai.${aiStore.status}` as any
   return t(key) || t('ai.thinking')
 })
+
+// The Thought process panel (chevron + transcript) belongs to the thinking
+// phase only; "Executing…"/"Outputting…" show the status line alone. The
+// expanded preference survives the phase change.
+const showThoughtProcess = computed(() => aiStore.status === 'thinking')
 
 // ── Live thinking box (click the status text to expand/collapse) ──
 const thinkingPanelRef = ref<HTMLDivElement>()
@@ -1767,9 +1772,11 @@ defineExpose({ focusInput })
   align-items: center;
   gap: 0.25rem;
   align-self: flex-start;
+}
+.thinking-row.clickable {
   cursor: pointer;
 }
-.thinking-row:hover .thinking-text {
+.thinking-row.clickable:hover .thinking-text {
   color: var(--text-secondary);
 }
 .thinking-text {
