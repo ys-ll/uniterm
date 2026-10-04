@@ -1411,6 +1411,8 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
     }
   }
   const panelIds = tabStore.closeTab(tabId)
+  // Drop this tab's AI conversation binding (and cancel a run it still owns)
+  aiStore.onTabClosed(tabId)
   // Dispose SSH companion sidebars (sftp/monitor) bound to these panels
   companionStore.disposeForPanels(panelIds).catch(() => {})
   panelIds.forEach(pid => {
@@ -1960,6 +1962,17 @@ async function createWslTerminal(distro: string, keepOpen?: boolean) {
     panelStore.removePanel(panel.id)
   }
 }
+
+// Per-tab AI conversations: the sidebar follows the active terminal-like
+// tab's conversation (created on first visit). Non-terminal tabs (start,
+// sftp, …) keep the previous view — their input is gated by currentIsTerminal.
+watch(() => activeTab.value?.id, () => {
+  const tab = activeTab.value
+  if (!tab) return
+  if (tab.type === 'terminal' || tab.type === 'settings' || tab.type === 'workspace') {
+    aiStore.attachTab(tab.id, tab.name)
+  }
+}, { immediate: true })
 
 // Show/hide native RDP window on tab switch.
 // Position updates are only sent to the active RDP session (see rdpSyncPosition),

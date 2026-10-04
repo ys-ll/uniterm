@@ -249,6 +249,8 @@
   "ai.daysAgo": "{n}天前",
   "ai.monthsAgo": "{n}个月前",
   "ai.yearsAgo": "{n}年前",
+  "ai.backgroundRun": "AI 仍在「{tab}」标签页中工作。切回该标签页可继续交互，或在此停止。",
+  "ai.closedTabChip": "已关闭标签页",
   "ai.avatarUser": "你",
   "ai.avatarTool": "工具",
   "ai.avatarAI": "AI",

@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, shallowRef, watch } from 'vue'
 import type { AIMessage, ExecutionMode, AISession, AIAgentStatus } from '../types/ai'
-import { SaveAISessions, LoadAISessions } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { SaveAISessions, LoadAISessions, CancelChatStream } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useLocalStateStore } from './localStateStore'
+import { usePanelStore } from './panelStore'
 import { isMobilePlatform } from '../utils/platform'
 import { t } from '../i18n'
 
@@ -118,6 +119,15 @@ For chained commands, classify based on the MOST risky operation in the chain.
 ❌ In PowerShell, do NOT run: bash -c "..."
 Use ONLY the current shell's native syntax.`
 
+/**
+ * Session ids must be unique even when two tabs attach or two sessions are
+ * created within the same millisecond (fast tab switching does exactly that).
+ */
+let sessionCounter = 0
+function genSessionId(): string {
+  return `session-${Date.now()}-${++sessionCounter}`
+}
+
 async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], currentSessionId: string | null }> {
   try {
     const data = await LoadAISessions() as any
@@ -126,6 +136,8 @@ async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], curre
       name: s.name,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
+      tabId: s.tabId || undefined,
+      tabName: s.tabName || undefined,
       messages: (s.messages || []).map((m: any) => ({
         id: m.id,
         role: m.role,
@@ -188,8 +200,182 @@ export const useAIStore = defineStore('ai', () => {
   const lastPanelContext = ref<{ panelId: string; shellPath: string } | null>(null)
   const queuedMessages = ref<{ id: string; content: string; skillName?: string; skillBody?: string; commandBody?: string }[]>([])
 
+  // ── Per-tab conversation binding ──
+  // One live conversation per terminal tab. tabSessionMap maps a frontend
+  // tab id to the AISession it owns; runs are serialized app-wide (the Go
+  // backend streams one LLM call at a time), so the agent loop state below
+  // describes the single active run — including which tab owns it. When the
+  // user switches tabs mid-run, runScope keeps the run's messages landing in
+  // its own session instead of the newly-visible tab's view array.
+  const viewTabId = ref<string | null>(null)
+  const viewTabName = ref<string>('')
+  const tabSessionMap = reactive<Record<string, string>>({})
+
+  interface RunScope {
+    tabId: string
+    tabName: string
+    sessionId: string
+    /** The view messages array captured when the run started. The agent
+     *  keeps appending to this array while the sidebar shows another tab. */
+    msgs: AIMessage[]
+    /** Panel the run's tools default to, captured at run start so a
+     *  background run never retargets the newly-active tab. */
+    panelId?: string
+  }
+  // shallowRef: RunScope.msgs must stay the raw (already-reactive) array.
+  const runScope = shallowRef<RunScope | null>(null)
+
+  /** Tab that owns the current run or pending confirmation/question. */
+  const runTabId = computed(() => runScope.value?.tabId ?? null)
+  const runTabName = computed(() => runScope.value?.tabName ?? '')
+  /** Panel the active run is bound to (see RunScope.panelId). */
+  const runPanelId = computed(() => runScope.value?.panelId ?? null)
+  /** True while a run (or a confirmation it waits on) is active in a tab
+   *  the user is no longer looking at. */
+  const backgroundRun = computed(() => {
+    const scope = runScope.value
+    if (!scope || scope.tabId === viewTabId.value) return false
+    return isRunning.value || !!pendingCommand.value || !!pendingQuestion.value
+  })
+
+  function beginRun(tabId: string, tabName: string, panelId?: string): RunScope | null {
+    if (!currentSessionId.value) return null
+    // Serialized app-wide (the Go backend streams one LLM call at a time):
+    // refuse to start while another conversation owns a live run. Re-entry
+    // for the same session (confirm-replay, continue) is allowed. A scope
+    // left behind by a crashed run (no run, no pending) is reclaimed.
+    const cur = runScope.value
+    if (cur && cur.sessionId !== currentSessionId.value) {
+      const live = isRunning.value || !!pendingCommand.value || !!pendingQuestion.value
+      if (live) return null
+      runScope.value = null
+    }
+    const scope: RunScope = {
+      tabId,
+      tabName,
+      sessionId: currentSessionId.value,
+      msgs: messages.value,
+      panelId,
+    }
+    runScope.value = scope
+    return scope
+  }
+
+  function endRun() {
+    runScope.value = null
+  }
+
+  /** Default panel title for tool calls of the active run. The "(id: …)"
+   *  suffix always resolves via resolveActiveSession's suffix match, so a
+   *  background run stays on its own panel even after tab switches. */
+  function runPanelTitle(): string | undefined {
+    const scope = runScope.value
+    if (!scope?.panelId) return undefined
+    const panel = usePanelStore().getPanel(scope.panelId)
+    if (!panel) return undefined
+    return `${panel.title} (id: ${panel.id})`
+  }
+
+  /**
+   * Move a tab's conversation binding onto a new tab id without disturbing
+   * an active run. Used when tabStore rebuilds a tab under a new id (merge
+   * into workspace, dissolve back to terminal tabs, workspace shrinking to a
+   * single panel) so the user keeps the same AI conversation across the
+   * reorganization.
+   */
+  function transferTabConversation(fromTabId: string, toTabId: string, toTabName: string) {
+    const sid = tabSessionMap[fromTabId]
+    if (sid === undefined) return
+    delete tabSessionMap[fromTabId]
+    const s = sessions.value.find(x => x.id === sid)
+    if (!s) return
+    s.tabId = toTabId
+    s.tabName = toTabName
+    tabSessionMap[toTabId] = sid
+    if (runScope.value?.tabId === fromTabId) {
+      runScope.value.tabId = toTabId
+      runScope.value.tabName = toTabName
+    }
+    if (viewTabId.value === fromTabId) {
+      viewTabId.value = toTabId
+      viewTabName.value = toTabName
+    }
+    doSave()
+  }
+
   function setLastPanelContext(panelId: string, shellPath: string) {
     lastPanelContext.value = { panelId, shellPath }
+  }
+
+  /**
+   * Point the sidebar at the conversation owned by `tabId` (called whenever
+   * the active tab becomes a terminal-like tab). Creates the tab's first
+   * conversation on demand. A run that is still active in another tab keeps
+   * its own message array (runScope.msgs), so swapping the view here is safe;
+   * only the run-owned scratch (thinking stream, queue) is left untouched.
+   */
+  function attachTab(tabId: string, tabName: string) {
+    if (viewTabId.value === tabId) {
+      viewTabName.value = tabName
+      return
+    }
+    viewTabId.value = tabId
+    viewTabName.value = tabName
+    const bg = backgroundRun.value
+    let s = sessions.value.find(x => x.id === tabSessionMap[tabId])
+    if (!s) {
+      const now = Date.now()
+      s = {
+        id: genSessionId(),
+        name: t('ai.newSession'),
+        createdAt: now,
+        updatedAt: now,
+        messages: [],
+        tabId,
+        tabName
+      }
+      sessions.value.unshift(s)
+      if (sessions.value.length > 15) {
+        sessions.value = sessions.value.slice(0, 15)
+      }
+      tabSessionMap[tabId] = s.id
+    }
+    currentSessionId.value = s.id
+    messages.value = s.messages.map(m => reactive({ ...m }) as AIMessage)
+    if (!bg) {
+      thinkingText.value = ''
+      thinkingExpanded.value = false
+      thinkingStartedAt.value = 0
+      clearQueue()
+    }
+  }
+
+  /**
+   * The tab (and its terminal sessions) is gone: drop the binding. If a run
+   * still owned that tab it must die with it — cancel its stream, end the
+   * run, and clear the runtime scratch. The conversation itself stays in
+   * `sessions` as detached history (its tabId is now stale by definition).
+   */
+  function onTabClosed(tabId: string) {
+    const sid = tabSessionMap[tabId]
+    if (sid !== undefined) delete tabSessionMap[tabId]
+    const scope = runScope.value
+    if (scope && scope.tabId === tabId) {
+      void CancelChatStream().catch(() => {})
+      stopRequested.value = true
+      isRunning.value = false
+      clearQueue()
+      endRun()
+      thinkingText.value = ''
+      thinkingStartedAt.value = 0
+    }
+    if (viewTabId.value === tabId) {
+      viewTabId.value = null
+      viewTabName.value = ''
+      currentSessionId.value = null
+      // Leave the last messages on screen; the attachTab for the tab that
+      // takes focus replaces them immediately.
+    }
   }
 
   function enqueueMessage(content: string, skillName?: string, skillBody?: string, commandBody?: string) {
@@ -263,11 +449,32 @@ export const useAIStore = defineStore('ai', () => {
     visible.value = !visible.value
   }
 
+  // Push into the array the current run owns (its view snapshot) while a run
+  // is active, otherwise into the visible tab's view array. The owning
+  // session is resolved from the scope too, so a background run's tool
+  // results never leak into the tab the user switched to.
+  function pushScoped(r: AIMessage) {
+    const scope = runScope.value
+    const view = scope ? scope.msgs : messages.value
+    view.push(r)
+    const sid = scope ? scope.sessionId : currentSessionId.value
+    if (!sid) return
+    const s = sessions.value.find(s => s.id === sid)
+    if (s) {
+      s.messages.push(r)
+      s.updatedAt = Date.now()
+      doSave()
+    }
+  }
+
   function addMessage(msg: AIMessage): AIMessage {
     const r = reactive({ createdAt: Date.now(), ...msg }) as AIMessage
-    messages.value.push(r)
-    if (currentSessionId.value) {
-      const s = sessions.value.find(s => s.id === currentSessionId.value)
+    const scope = runScope.value
+    const sid = scope ? scope.sessionId : currentSessionId.value
+    const view = scope ? scope.msgs : messages.value
+    view.push(r)
+    if (sid) {
+      const s = sessions.value.find(s => s.id === sid)
       if (s) {
         s.messages.push(r)
         s.updatedAt = Date.now()
@@ -297,15 +504,7 @@ export const useAIStore = defineStore('ai', () => {
       skillName: name,
       skillSource: source,
     }) as AIMessage
-    messages.value.push(r)
-    if (currentSessionId.value) {
-      const s = sessions.value.find(s => s.id === currentSessionId.value)
-      if (s) {
-        s.messages.push(r)
-        s.updatedAt = Date.now()
-        doSave()
-      }
-    }
+    pushScoped(r)
   }
 
   function addCommandCard(name: string, args: string) {
@@ -316,15 +515,7 @@ export const useAIStore = defineStore('ai', () => {
       commandName: name,
       commandArgs: args,
     }) as AIMessage
-    messages.value.push(r)
-    if (currentSessionId.value) {
-      const s = sessions.value.find(s => s.id === currentSessionId.value)
-      if (s) {
-        s.messages.push(r)
-        s.updatedAt = Date.now()
-        doSave()
-      }
-    }
+    pushScoped(r)
   }
 
   function clearMessages() {
@@ -359,24 +550,8 @@ export const useAIStore = defineStore('ai', () => {
     } catch {
       // keep default
     }
-
-    // Restore current session or create a new one
-    if (currentSessionId.value) {
-      const s = sessions.value.find(s => s.id === currentSessionId.value)
-      if (s) {
-        messages.value = s.messages.map(m => {
-          const msg = { ...m }
-          if (typeof msg._rawApiMsg === 'string' && msg._rawApiMsg) {
-            try { msg._rawApiMsg = JSON.parse(msg._rawApiMsg) } catch { delete msg._rawApiMsg }
-          }
-          return reactive(msg) as AIMessage
-        })
-      } else {
-        createSession()
-      }
-    } else {
-      createSession()
-    }
+    // The view conversation is bound lazily when the sidebar attaches to a
+    // terminal tab (attachTab). Per-tab history stays in `sessions`.
   }
 
 
@@ -388,6 +563,8 @@ export const useAIStore = defineStore('ai', () => {
           name: s.name,
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
+          tabId: s.tabId || '',
+          tabName: s.tabName || '',
           messages: s.messages.map(m => ({
             id: m.id,
             role: m.role,
@@ -412,14 +589,19 @@ export const useAIStore = defineStore('ai', () => {
   function createSession(name?: string) {
     const now = Date.now()
     const session: AISession = {
-      id: `session-${now}`,
+      id: genSessionId(),
       name: name || t('ai.newSession'),
       createdAt: now,
       updatedAt: now,
-      messages: []
+      messages: [],
+      tabId: viewTabId.value || undefined,
+      tabName: viewTabName.value || undefined
     }
     sessions.value.unshift(session)
     currentSessionId.value = session.id
+    if (viewTabId.value) {
+      tabSessionMap[viewTabId.value] = session.id
+    }
     messages.value = []
     // Trim to max 15 sessions
     if (sessions.value.length > 15) {
@@ -432,8 +614,21 @@ export const useAIStore = defineStore('ai', () => {
   function switchSession(sessionId: string) {
     const s = sessions.value.find(s => s.id === sessionId)
     if (!s) return
+    // Never steal a conversation whose run is still live (running, or paused
+    // on a confirmation/question) — its runtime state belongs to that run.
+    if (runScope.value?.sessionId === sessionId &&
+        (isRunning.value || pendingCommand.value || pendingQuestion.value)) return
     currentSessionId.value = sessionId
     messages.value = s.messages.map(m => reactive({ ...m }) as AIMessage)
+    // Rebind: the picked conversation now belongs to the tab in view.
+    if (viewTabId.value) {
+      s.tabId = viewTabId.value
+      s.tabName = viewTabName.value
+      for (const [tid, sid] of Object.entries(tabSessionMap)) {
+        if (sid === sessionId && tid !== viewTabId.value) delete tabSessionMap[tid]
+      }
+      tabSessionMap[viewTabId.value] = sessionId
+    }
     thinkingText.value = ''
     thinkingExpanded.value = false
     thinkingStartedAt.value = 0
@@ -443,10 +638,24 @@ export const useAIStore = defineStore('ai', () => {
   function deleteSession(sessionId: string) {
     const idx = sessions.value.findIndex(s => s.id === sessionId)
     if (idx === -1) return
+    // Deleting a conversation that still owns a live run: kill the run first
+    // (its stream, then the loop notices stopRequested at the next boundary).
+    if (runScope.value?.sessionId === sessionId) {
+      void CancelChatStream().catch(() => {})
+      stop()
+      endRun()
+    }
+    for (const [tid, sid] of Object.entries(tabSessionMap)) {
+      if (sid === sessionId) delete tabSessionMap[tid]
+    }
     sessions.value.splice(idx, 1)
     doSave()
     if (currentSessionId.value === sessionId) {
-      if (sessions.value.length > 0) {
+      if (viewTabId.value) {
+        // The deleted conversation belonged to a bound tab: start a fresh
+        // one for that tab rather than hijacking another tab's history.
+        createSession()
+      } else if (sessions.value.length > 0) {
         switchSession(sessions.value[0].id)
       } else {
         createSession()
@@ -531,6 +740,11 @@ export const useAIStore = defineStore('ai', () => {
     // Token budget: 80% of Claude's 200K context window, minus headroom
     const MAX_CONTEXT_TOKENS = 160000
 
+    // During a run the agent reads this; if the user switched tabs the
+    // visible array belongs to another conversation, so build from the
+    // run's own snapshot instead.
+    const src = runScope.value ? runScope.value.msgs : messages.value
+
     // Estimate static overhead (cached, counted once)
     // Tools definition is small and static (~1KB); hardcode estimate to avoid
     // a circular dependency on llm.ts
@@ -541,8 +755,8 @@ export const useAIStore = defineStore('ai', () => {
     // Walk backwards through messages, accumulate token estimates.
     // Stop when we exceed the budget.
     const kept: typeof messages.value = []
-    for (let i = messages.value.length - 1; i >= 0; i--) {
-      const msg = messages.value[i]
+    for (let i = src.length - 1; i >= 0; i--) {
+      const msg = src[i]
       const msgTokens = estimateMessageTokens(msg)
       if (tokenCount + msgTokens > MAX_CONTEXT_TOKENS) break
       tokenCount += msgTokens
@@ -750,6 +964,20 @@ export const useAIStore = defineStore('ai', () => {
     enqueueMessage,
     removeQueuedMessage,
     clearQueue,
-    doSave
+    doSave,
+    // Per-tab conversation binding
+    viewTabId,
+    viewTabName,
+    tabSessionMap,
+    runTabId,
+    runTabName,
+    runPanelId,
+    backgroundRun,
+    beginRun,
+    endRun,
+    runPanelTitle,
+    attachTab,
+    onTabClosed,
+    transferTabConversation
   }
 })

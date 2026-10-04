@@ -218,6 +218,66 @@ func TestAISessionStore_MigrationIdempotent(t *testing.T) {
 // F-103: reversibility — if the legacy file is re-introduced (e.g. user
 // downgrade to a pre-shard build) after a successful migration, re-running
 // Load must recover the data into shards and remove the legacy file again.
+// Per-tab conversation binding: TabID/TabName must survive the shard
+// save/load round trip (and be omitted from JSON when empty so old readers
+// see unchanged payloads).
+func TestAISessionStore_TabBindingRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := newAISessionStoreAt(t, dir)
+
+	data := AISessionData{
+		Sessions: []AISessionEntry{
+			{ID: "sess-tab-1", Name: "bound", CreatedAt: 1, UpdatedAt: 2,
+				TabID: "term-tab-1700000000000-1", TabName: "build server",
+				Messages: []AIMessageEntry{{ID: "m1", Role: "user", Content: "hi"}}},
+			{ID: "sess-legacy", Name: "legacy", CreatedAt: 3, UpdatedAt: 4,
+				Messages: []AIMessageEntry{{ID: "m2", Role: "user", Content: "yo"}}},
+		},
+	}
+	if err := s.Save(data); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Shard on disk carries the tab fields for the bound session only.
+	raw, err := os.ReadFile(filepath.Join(s.shardDir(), "sess-tab-1.json"))
+	if err != nil {
+		t.Fatalf("read shard: %v", err)
+	}
+	var onDisk map[string]interface{}
+	if err := json.Unmarshal(raw, &onDisk); err != nil {
+		t.Fatalf("unmarshal shard: %v", err)
+	}
+	if onDisk["tabId"] != "term-tab-1700000000000-1" || onDisk["tabName"] != "build server" {
+		t.Errorf("shard tab fields: got %v / %v", onDisk["tabId"], onDisk["tabName"])
+	}
+	rawLegacy, err := os.ReadFile(filepath.Join(s.shardDir(), "sess-legacy.json"))
+	if err != nil {
+		t.Fatalf("read legacy shard: %v", err)
+	}
+	var legacyDisk map[string]interface{}
+	if err := json.Unmarshal(rawLegacy, &legacyDisk); err != nil {
+		t.Fatalf("unmarshal legacy shard: %v", err)
+	}
+	if _, ok := legacyDisk["tabId"]; ok {
+		t.Error("empty tabId must be omitted from JSON")
+	}
+
+	got, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	byID := map[string]AISessionEntry{}
+	for _, e := range got.Sessions {
+		byID[e.ID] = e
+	}
+	if e := byID["sess-tab-1"]; e.TabID != "term-tab-1700000000000-1" || e.TabName != "build server" {
+		t.Errorf("loaded tab fields: got %q / %q", e.TabID, e.TabName)
+	}
+	if e := byID["sess-legacy"]; e.TabID != "" || e.TabName != "" {
+		t.Errorf("legacy session must load with empty tab fields, got %q / %q", e.TabID, e.TabName)
+	}
+}
+
 func TestAISessionStore_MigrationReversible(t *testing.T) {
 	dir := t.TempDir()
 	s := newAISessionStoreAt(t, dir)

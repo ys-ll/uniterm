@@ -3,6 +3,7 @@ import { reactive, computed } from 'vue'
 import type { Tab, TerminalTab, WorkspaceTab, StartTab, PanelLayout, LayoutNode } from '../types/workspace'
 import type { IProgressState } from '@xterm/addon-progress'
 import { usePanelStore } from './panelStore'
+import { useAIStore } from './aiStore'
 import { t } from '../i18n'
 
 const tabState = reactive<{
@@ -385,6 +386,7 @@ export const useTabStore = defineStore('tab', () => {
     direction: 'horizontal' | 'vertical',
     insertBefore: boolean
   ): WorkspaceTab | null {
+    const prevActiveTabId = tabState.activeTabId
     const idxA = tabState.tabs.findIndex(t => t.id === terminalTabAId)
     const idxB = tabState.tabs.findIndex(t => t.id === terminalTabBId)
     if (idxA === -1 || idxB === -1) return null
@@ -435,6 +437,14 @@ export const useTabStore = defineStore('tab', () => {
     const insertIdx = Math.min(removeIdxA, removeIdxB)
     tabState.tabs.splice(insertIdx, 0, workspaceTab)
     tabState.activeTabId = workspaceTab.id
+
+    // The tab the user was looking at owns the conversation; carry it into
+    // the merged workspace instead of orphaning it.
+    if (prevActiveTabId === terminalTabAId) {
+      useAIStore().transferTabConversation(terminalTabAId, workspaceTab.id, workspaceTab.name)
+    } else if (prevActiveTabId === terminalTabBId) {
+      useAIStore().transferTabConversation(terminalTabBId, workspaceTab.id, workspaceTab.name)
+    }
 
     // The dragged tab is gone; its source element unmounts before dragend can
     // fire, so clear the drag tracking here.
@@ -575,6 +585,8 @@ export const useTabStore = defineStore('tab', () => {
       tabState.tabs.splice(wsIdx, 1, convertedTab)
       panelStore.movePanelToTab(remainingPanelId, convertedTab.id)
       tabState.activeTabId = convertedTab.id
+      // The workspace's AI conversation follows the surviving tab.
+      useAIStore().transferTabConversation(workspaceTabId, convertedTab.id, convertedTab.name)
     } else if (wsTab.panelIds.length === 0) {
       tabState.tabs.splice(wsIdx, 1)
     } else {
@@ -624,6 +636,9 @@ export const useTabStore = defineStore('tab', () => {
     tabState.tabs.splice(insertIdx, 1)
     if (created.length > 0) {
       tabState.activeTabId = created[0].id
+      // Keep the workspace's AI conversation alive on the first new tab —
+      // the user was just looking at that conversation.
+      useAIStore().transferTabConversation(workspaceTabId, created[0].id, created[0].name)
     } else if (tabState.tabs.length > 0) {
       const newIdx = Math.min(idx, tabState.tabs.length - 1)
       tabState.activeTabId = tabState.tabs[newIdx].id

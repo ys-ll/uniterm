@@ -249,6 +249,8 @@
   "ai.daysAgo": "{n} days ago",
   "ai.monthsAgo": "{n} months ago",
   "ai.yearsAgo": "{n} years ago",
+  "ai.backgroundRun": "AI is still working in \"{tab}\". Switch back to that tab to interact, or stop it here.",
+  "ai.closedTabChip": "closed tab",
   "ai.avatarUser": "You",
   "ai.avatarTool": "Tool",
   "ai.avatarAI": "AI",

@@ -24,6 +24,12 @@ type AISessionEntry struct {
 	CreatedAt int64            `json:"createdAt"`
 	UpdatedAt int64            `json:"updatedAt"`
 	Messages  []AIMessageEntry `json:"messages"`
+	// TabID/TabName bind a conversation to the terminal tab it belongs to.
+	// Tab ids are per-app-run (tabs are a frontend concept and are rebuilt
+	// with fresh ids on restart), so the frontend treats stale TabIDs as
+	// "detached history" — the pair is persisted for display and grouping.
+	TabID   string `json:"tabId,omitempty"`
+	TabName string `json:"tabName,omitempty"`
 }
 
 type AIMessageEntry struct {

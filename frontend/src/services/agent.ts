@@ -49,6 +49,14 @@ function setActiveAssistantMsg(msg: AIMessage | null) {
 function getActivePanel() {
   const tabStore = useTabStore()
   const panelStore = usePanelStore()
+  const aiStore = useAIStore()
+
+  // A live run is pinned to the panel its tab started on — mid-run tab
+  // switches must not retarget its shell guidance or context banner.
+  if (aiStore.runPanelId) {
+    const p = panelStore.getPanel(aiStore.runPanelId)
+    if (p) return p
+  }
 
   // Check for AI-locked panel first
   const lockedPanelId = tabStore.getAILockedPanel()
@@ -412,6 +420,12 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     return
   }
 
+  // Another conversation owns the serialized run (possibly paused on a
+  // confirmation): never touch its pending state from here.
+  if (store.backgroundRun) {
+    return
+  }
+
   // Auto-reject any pending command/question from previous turn
   if (userInput && store.pendingCommand) {
     store.addMessage({
@@ -447,6 +461,12 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     const panelStore = usePanelStore()
     const tp = panelStore.getPanel(trackPanelId)
     store.setLastPanelContext(trackPanelId, tp?.config?.shellPath || '')
+  }
+
+  // Claim the run for the tab in view. Null means another conversation owns
+  // the single serialized LLM stream — refuse rather than interleave.
+  if (!store.beginRun(store.viewTabId ?? '', store.viewTabName, trackPanelId)) {
+    return
   }
 
   if (userInput || (skillName && skillBody) || commandBody) {
@@ -537,6 +557,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       })
       store.isRunning = false
       cleanupStreamListeners()
+      store.endRun()
       return
     }
 
@@ -624,6 +645,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       store.setDebugInfo(store.conversation, errMsg)
       store.isRunning = false
       cleanupStreamListeners()
+      store.endRun()
       return
     }
 
@@ -654,6 +676,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       }
       store.isRunning = false
       cleanupStreamListeners()
+      store.endRun()
       return
     }
 
@@ -678,6 +701,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       assistantMsg.content = '[No response received from the model. Check your API settings and network connection.]'
       store.isRunning = false
       cleanupStreamListeners()
+      store.endRun()
       return
     }
 
@@ -689,6 +713,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       }
       store.isRunning = false
       cleanupStreamListeners()
+      store.endRun()
       return
     }
 
@@ -731,7 +756,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
           command,
           risk,
           dangerous: risk === 'dangerous',
-          panel: validated.panel,
+          panel: validated.panel ?? store.runPanelTitle(),
           timeout: timeoutMs,
           headLines,
           tailLines
@@ -752,7 +777,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
 
       try {
         store.status = 'executing'
-        const panelTitle = validated.panel
+        const panelTitle = validated.panel ?? store.runPanelTitle()
         const result = await executeCommand(command, timeoutMs, headLines, tailLines, () => store.stopRequested, panelTitle)
         if (result.cancelled || store.stopRequested) {
           store.addMessage({
@@ -762,6 +787,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
           })
           store.isRunning = false
           cleanupStreamListeners()
+          store.endRun()
           return
         }
         store.addMessage({
@@ -797,7 +823,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
           command,
           risk,
           dangerous: risk === 'dangerous',
-          panel: validated.panel
+          panel: validated.panel ?? store.runPanelTitle()
         })
         store.status = 'confirming'
         assistantMsg.tool_calls = [{
@@ -815,7 +841,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
 
       try {
         store.status = 'executing'
-        const panelTitle = validated.panel
+        const panelTitle = validated.panel ?? store.runPanelTitle()
         const result = await startCommand(command, panelTitle)
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -835,7 +861,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       const tailLines = (tu.input.tail_lines as number) ?? 200
       try {
         store.status = 'executing'
-        const panelTitle = tu.input.panel as string | undefined
+        const panelTitle = (tu.input.panel as string | undefined) ?? store.runPanelTitle()
         const result = captureTerminal(tailLines, panelTitle)
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -859,7 +885,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       const tailLines = (tu.input.tail_lines as number) ?? 300
       try {
         store.status = 'executing'
-        const panelTitle = tu.input.panel as string | undefined
+        const panelTitle = (tu.input.panel as string | undefined) ?? store.runPanelTitle()
         const result = await collectOutput(timeoutMs, headLines, tailLines, () => store.stopRequested, panelTitle)
         if (store.stopRequested) {
           store.addMessage({
@@ -869,6 +895,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
           })
           store.isRunning = false
           cleanupStreamListeners()
+          store.endRun()
           return
         }
         const status = result.completed ? '[COMMAND COMPLETED]' : '[COMMAND STILL RUNNING]'
@@ -899,7 +926,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       const sendEnter = validated.send_enter
       try {
         store.status = 'executing'
-        const panelTitle = validated.panel
+        const panelTitle = validated.panel ?? store.runPanelTitle()
         const result = await sendTerminalKey(
           input,
           control,
@@ -923,7 +950,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     } else if (tu.name === 'interrupt_command') {
       try {
         store.status = 'executing'
-        const panelTitle = tu.input.panel as string | undefined
+        const panelTitle = (tu.input.panel as string | undefined) ?? store.runPanelTitle()
         const result = await sendTerminalKey(undefined, 'ctrl_c', true, panelTitle)
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -1079,6 +1106,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
 
   cleanupStreamListeners()
   store.isRunning = false
+  store.endRun()
   store.doSave()
 }
 
@@ -1106,8 +1134,9 @@ export async function approveTool(_messageId: string) {
   store.status = 'executing'
 
   try {
+    const replayPanel = cmd.panel ?? store.runPanelTitle()
     if (cmd.toolName === 'start_command') {
-      const result = await startCommand(cmd.command, cmd.panel)
+      const result = await startCommand(cmd.command, replayPanel)
       store.addMessage({
         id: `msg-${Date.now()}`,
         role: 'tool',
@@ -1121,7 +1150,7 @@ export async function approveTool(_messageId: string) {
         cmd.headLines,
         cmd.tailLines,
         () => store.stopRequested,
-        cmd.panel
+        replayPanel
       )
       store.addMessage({
         id: `msg-${Date.now()}`,

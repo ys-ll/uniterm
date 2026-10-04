@@ -18,6 +18,7 @@
             @click="onSessionSelect(s.id)"
           >
             <span class="session-item-name">{{ s.name }}</span>
+            <span v-if="isDetachedSession(s)" class="session-tab-chip" :title="s.tabName">{{ t('ai.closedTabChip') }}</span>
             <span class="session-time">{{ formatRelativeTime(s.updatedAt) }}</span>
             <template #trailing>
               <el-icon class="session-delete" :title="t('ai.renameSession')" @click.stop="onSessionRename(s.id); closeMenus()"><Pencil :size="'0.875rem'" /></el-icon>
@@ -76,7 +77,7 @@
           @dismiss="onDismiss"
         />
       </div>
-      <div v-if="aiStore.isRunning || aiStore.pendingCommand || aiStore.pendingQuestion" class="ai-thinking">
+      <div v-if="(aiStore.isRunning || aiStore.pendingCommand || aiStore.pendingQuestion) && !aiStore.backgroundRun" class="ai-thinking">
         <div class="thinking-row" :title="t('ai.thinkingToggleHint')" @click="toggleThinking">
           <div class="thinking-text">{{ statusText }}</div>
           <ChevronDown v-if="!aiStore.thinkingExpanded" :size="'0.75rem'" class="thinking-chevron" />
@@ -118,6 +119,12 @@
     </Menu>
 
     <div class="ai-input">
+      <!-- Background run notice: the single LLM stream is owned by another
+           tab's conversation; switch back to interact, or stop it here. -->
+      <div v-if="aiStore.backgroundRun" class="bg-run-banner">
+        <span class="bg-run-text">{{ t('ai.backgroundRun', { tab: aiStore.runTabName }) }}</span>
+        <button class="ghost-btn bg-run-stop" @click="onStop">{{ t('ai.stop') }}</button>
+      </div>
       <!-- Panel tags area -->
       <div class="ai-panel-tags">
         <div class="panel-tags-list">
@@ -187,7 +194,7 @@
           </div>
         </div>
 
-        <div v-if="aiStore.queuedMessages.length" class="queued-area">
+        <div v-if="aiStore.queuedMessages.length && !aiStore.backgroundRun" class="queued-area">
           <div v-for="q in aiStore.queuedMessages" :key="q.id" class="queued-chip">
             <span class="queued-text">{{ q.content }}</span>
             <button class="queued-remove" :title="t('ai.queueRemove')" @click="aiStore.removeQueuedMessage(q.id)">
@@ -199,7 +206,7 @@
           <div
             ref="editableRef"
             class="ai-editable"
-            :contenteditable="lockedPanels.length > 0 || currentIsTerminal ? 'true' : 'false'"
+            :contenteditable="!aiStore.backgroundRun && (lockedPanels.length > 0 || currentIsTerminal) ? 'true' : 'false'"
             :data-placeholder="lockedPanels.length === 0 && !currentIsTerminal ? t('ai.noTerminalHint') : t('ai.placeholder')"
             @input="onEditableInput"
             @keydown="onKeydown"
@@ -255,7 +262,7 @@
             <button
               v-if="!(busy && !inputText.trim())"
               class="send-btn"
-              :disabled="(!inputText.trim() && !hasSkillTag && !hasCommandTag) || (lockedPanels.length === 0 && !currentIsTerminal)"
+              :disabled="(!inputText.trim() && !hasSkillTag && !hasCommandTag) || (lockedPanels.length === 0 && !currentIsTerminal) || aiStore.backgroundRun"
               :title="busy ? t('ai.queue') : t('ai.send')"
               @click="onSend"
             >
@@ -600,6 +607,12 @@ function onModelSelect(id: string) { closeMenus(); onModelChange(id) }
 function onModeSelect(mode: string) { closeMenus(); onModeChange(mode) }
 
 // ── Session rename (pencil button in the history dropdown) ──
+function isDetachedSession(s: { tabId?: string; id: string }): boolean {
+  // The owning tab is gone (its map entry was cleared on close) — the
+  // conversation survives only as history.
+  return !s.tabId || aiStore.tabSessionMap[s.tabId] !== s.id
+}
+
 async function onSessionRename(id: string) {
   const s = aiStore.sessions.find(x => x.id === id)
   if (!s) return
@@ -1378,6 +1391,11 @@ function clearInput() {
 }
 
 async function onSend() {
+  // Serialized runs: the single LLM stream is owned by another tab.
+  if (aiStore.backgroundRun) {
+    ElMessage.info(t('ai.backgroundRun', { tab: aiStore.runTabName }))
+    return
+  }
   const text = getEditableText().trim()
 
   // F6: command tag —— 取 tag 后参数,后台组装正文作为 user 消息
@@ -1672,6 +1690,15 @@ defineExpose({ focusInput })
   font-size: 0.625rem;
   font-family: var(--font-mono);
   color: var(--text-muted);
+  white-space: nowrap;
+}
+.session-tab-chip {
+  margin-left: 0.5rem;
+  padding: 0 0.3125rem;
+  font-size: 0.5625rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 .session-delete {
@@ -2155,6 +2182,27 @@ defineExpose({ focusInput })
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Background-run banner: another tab owns the serialized LLM stream */
+.bg-run-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  margin: 0.5rem 0.5rem 0 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+}
+.bg-run-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-secondary);
+}
+.bg-run-stop {
+  flex-shrink: 0;
 }
 /* Skill chip */
 .queued-area {

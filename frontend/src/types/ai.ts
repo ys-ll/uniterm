@@ -49,4 +49,9 @@ export interface AISession {
   createdAt: number
   updatedAt: number
   messages: AIMessage[]
+  /** Terminal tab this conversation belongs to. Tab ids are per app run;
+   *  after a restart stale ids mean "detached history", not a live binding. */
+  tabId?: string
+  /** Display name of the owning tab, captured at creation for history rows. */
+  tabName?: string
 }
