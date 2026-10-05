@@ -68,6 +68,7 @@ func (p *oracleProvider) PagedTableQuery(dbName, tableName string, limit, offset
 }
 
 func (p *oracleProvider) InsertRow(db *sql.DB, dbName, tableName string, values map[string]any) error {
+	values = p.rawArgs(db, dbName, tableName, values)
 	cols := sortedKeys(values)
 	quotedCols := make([]string, len(cols))
 	placeholders := make([]string, len(cols))
@@ -83,6 +84,8 @@ func (p *oracleProvider) InsertRow(db *sql.DB, dbName, tableName string, values 
 }
 
 func (p *oracleProvider) UpdateRow(db *sql.DB, dbName, tableName string, set, where map[string]any) error {
+	raw := p.rawColumns(db, dbName, tableName)
+	set, where = applyRaw(raw, set), applyRaw(raw, where)
 	args := make([]any, 0, len(set)+len(where))
 	phIdx := 1
 
@@ -116,6 +119,7 @@ func (p *oracleProvider) UpdateRow(db *sql.DB, dbName, tableName string, set, wh
 }
 
 func (p *oracleProvider) DeleteRow(db *sql.DB, dbName, tableName string, where map[string]any) error {
+	where = p.rawArgs(db, dbName, tableName, where)
 	args := make([]any, 0, len(where))
 	phIdx := 1
 	whereParts := make([]string, 0, len(where))
@@ -134,6 +138,45 @@ func (p *oracleProvider) DeleteRow(db *sql.DB, dbName, tableName string, where m
 		sql += " WHERE " + strings.Join(whereParts, " AND ")
 	}
 	return execPrepared(p, db, dbName, sql, args)
+}
+
+// rawColumns returns the table's RAW columns mapped to "is RAW(16)". The grid
+// shows RAW(16) as a Guid string and other RAW values as 0x hex (see
+// formatBytes), so row edits must turn those back into bytes before binding.
+// A lookup failure returns nil and leaves values as typed.
+func (p *oracleProvider) rawColumns(db *sql.DB, dbName, tableName string) map[string]bool {
+	owner, err := p.resolveSchema(db, dbName)
+	if err != nil || owner == "" {
+		return nil
+	}
+	rows, err := queryStrings(db, `SELECT COLUMN_NAME, DATA_LENGTH FROM ALL_TAB_COLUMNS
+		WHERE OWNER = :1 AND TABLE_NAME = :2 AND DATA_TYPE = 'RAW'`, owner, p.dictionaryTableName(tableName))
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		out[r["COLUMN_NAME"]] = strings.TrimSpace(r["DATA_LENGTH"]) == "16"
+	}
+	return out
+}
+
+func (p *oracleProvider) rawArgs(db *sql.DB, dbName, tableName string, values map[string]any) map[string]any {
+	return applyRaw(p.rawColumns(db, dbName, tableName), values)
+}
+
+func applyRaw(raw map[string]bool, values map[string]any) map[string]any {
+	if len(raw) == 0 || len(values) == 0 {
+		return values
+	}
+	out := make(map[string]any, len(values))
+	for k, v := range values {
+		if guid, ok := raw[k]; ok && v != nil {
+			v = bytesFromDisplay(v, guid)
+		}
+		out[k] = v
+	}
+	return out
 }
 
 func (p *oracleProvider) GetCapabilities() DBCapabilities {

@@ -65,6 +65,7 @@ func queryStrings(db *sql.DB, query string, args ...any) ([]map[string]string, e
 		return nil, err
 	}
 
+	guids := guidColumns(rows)
 	var result []map[string]string
 	for rows.Next() {
 		values := make([]any, len(cols))
@@ -77,7 +78,7 @@ func queryStrings(db *sql.DB, query string, args ...any) ([]map[string]string, e
 		}
 		row := make(map[string]string, len(cols))
 		for i, col := range cols {
-			row[col] = scanToString(values[i])
+			row[col] = scanToStringCol(values[i], isGuidCol(guids, i))
 		}
 		result = append(result, row)
 	}
@@ -98,6 +99,7 @@ func queryAny(db *sql.DB, query string, args ...any) ([]map[string]any, []string
 		return nil, nil, err
 	}
 
+	guids := guidColumns(rows)
 	var result []map[string]any
 	for rows.Next() {
 		values := make([]any, len(cols))
@@ -110,7 +112,7 @@ func queryAny(db *sql.DB, query string, args ...any) ([]map[string]any, []string
 		}
 		row := make(map[string]any, len(cols))
 		for i, col := range cols {
-			row[col] = scanToAny(values[i])
+			row[col] = scanToAnyCol(values[i], isGuidCol(guids, i))
 		}
 		result = append(result, row)
 	}
@@ -140,13 +142,14 @@ func QueryRowsStream(db *sql.DB, query string, callback func(row []string) error
 		valuePtrs[i] = &values[i]
 	}
 	out := make([]string, len(cols))
+	guids := guidColumns(rows)
 
 	for rows.Next() {
 		if err := rows.Scan(valuePtrs...); err != nil {
 			return err
 		}
 		for i, v := range values {
-			out[i] = scanToString(v)
+			out[i] = scanToStringCol(v, isGuidCol(guids, i))
 		}
 		if err := callback(out); err != nil {
 			return err
@@ -156,24 +159,34 @@ func QueryRowsStream(db *sql.DB, query string, callback func(row []string) error
 }
 
 func scanToAny(v any) any {
+	return scanToAnyCol(v, false)
+}
+
+// scanToAnyCol is scanToAny with the column's Guid flag (see guidColumns).
+func scanToAnyCol(v any, guid bool) any {
 	if v == nil {
 		return nil
 	}
 	switch s := v.(type) {
 	case []byte:
-		return string(s)
+		return formatBytes(s, guid)
 	default:
 		return v
 	}
 }
 
 func scanToString(v any) string {
+	return scanToStringCol(v, false)
+}
+
+// scanToStringCol is scanToString with the column's Guid flag (see guidColumns).
+func scanToStringCol(v any, guid bool) string {
 	if v == nil {
 		return ""
 	}
 	switch x := v.(type) {
 	case []byte:
-		return string(x)
+		return formatBytes(x, guid)
 	case string:
 		return x
 	case int64:

@@ -59,6 +59,7 @@ func ExecuteQuery(p Provider, db *sql.DB, dbName, sqlStr string) (*QueryResult, 
 		return nil, err
 	}
 
+	guids := guidColumns(rows)
 	var result []map[string]any
 	for rows.Next() {
 		values := make([]any, len(cols))
@@ -71,7 +72,7 @@ func ExecuteQuery(p Provider, db *sql.DB, dbName, sqlStr string) (*QueryResult, 
 		}
 		row := make(map[string]any, len(cols))
 		for i, col := range cols {
-			row[col] = scanToAny(values[i])
+			row[col] = scanToAnyCol(values[i], isGuidCol(guids, i))
 		}
 		result = append(result, row)
 	}
