@@ -30,6 +30,8 @@ func Parse(format, srcPath string, opts ParseOptions) (*ImportResult, error) {
 		return parseXshell(data)
 	case FormatMobaXterm:
 		return parseMobaXterm(data)
+	case FormatMRemoteNG:
+		return parseMRemoteNG(data, opts)
 	case FormatWindTerm:
 		return parseWindTerm(data, srcPath, opts)
 	case FormatSecureCRT:

@@ -149,6 +149,8 @@ func defaultPort(typ string) int {
 		return 23
 	case "rdp":
 		return 3389
+	case "vnc":
+		return 5900
 	}
 	return 0
 }

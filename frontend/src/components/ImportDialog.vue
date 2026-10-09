@@ -10,6 +10,7 @@
         <el-select v-model="format" style="width:100%">
           <el-option label="uniTerm (.utm)" value="uniterm" />
           <el-option label="MobaXterm (.mxtsessions)" value="mobaxterm" />
+          <el-option label="mRemoteNG (confCons.xml)" value="mremoteng" />
           <el-option label="OpenSSH config (~/.ssh/config)" value="openssh" />
           <el-option label="SecureCRT (.xml)" value="securecrt" />
           <el-option label="WindTerm (.sessions)" value="windterm" />
@@ -31,7 +32,7 @@
           <el-button @click="pickDBeaverDir">{{ t('importExport.chooseFile') }}</el-button>
         </div>
       </el-form-item>
-      <el-form-item v-if="format === 'uniterm' || format === 'windterm'" :label="t('importExport.importPassword')">
+      <el-form-item v-if="format === 'uniterm' || format === 'windterm' || format === 'mremoteng'" :label="t('importExport.importPassword')">
         <el-input v-model="password" type="password" show-password />
       </el-form-item>
     </el-form>
@@ -61,6 +62,7 @@ const FILTERS: Record<string, { display: string; pattern: string }> = {
   uniterm: { display: 'uniTerm (*.utm)', pattern: '*.utm' },
   xshell: { display: 'Xshell (*.xts)', pattern: '*.xts' },
   mobaxterm: { display: 'MobaXterm (*.mxtsessions)', pattern: '*.mxtsessions' },
+  mremoteng: { display: 'mRemoteNG (confCons.xml)', pattern: '*.xml' },
   windterm: { display: 'WindTerm (*.sessions)', pattern: '*.sessions' },
   securecrt: { display: 'SecureCRT (*.xml)', pattern: '*.xml' },
   navicat: { display: 'Navicat (*.ncx)', pattern: '*.ncx' },
@@ -91,7 +93,7 @@ async function onImport() {
     // DBeaver with an empty path means "auto-detect the default workspace".
     const path = (format.value === 'dbeaver' && !srcPath.value) ? '' : srcPath.value
     const result = await ParseImportFile(format.value, path,
-      (format.value === 'uniterm' || format.value === 'windterm') ? password.value : '')
+      (format.value === 'uniterm' || format.value === 'windterm' || format.value === 'mremoteng') ? password.value : '')
     await ApplyImport({ groups: result.groups || [], connections: result.connections || [] } as any)
     const count = (result.connections || []).length
     if (result.warnings && result.warnings.length) {

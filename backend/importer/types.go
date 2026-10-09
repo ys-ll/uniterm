@@ -7,6 +7,7 @@ const (
 	FormatUniterm    = "uniterm"
 	FormatXshell     = "xshell"
 	FormatMobaXterm  = "mobaxterm"
+	FormatMRemoteNG  = "mremoteng"
 	FormatWindTerm   = "windterm"
 	FormatSecureCRT  = "securecrt"
 	FormatOpenSSH    = "openssh"
@@ -14,8 +15,9 @@ const (
 )
 
 // ParseOptions carries per-parse inputs. Password is the import password for the
-// uniterm own-format (encrypted=true) path, or the WindTerm master password for
-// the windterm path; empty means "no password".
+// uniterm own-format (encrypted=true) path, the WindTerm master password, or the
+// mRemoteNG configuration password. Empty selects mRemoteNG's default password;
+// for the other formats it means "no password".
 type ParseOptions struct {
 	Password string
 }
