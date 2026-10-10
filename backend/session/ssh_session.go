@@ -127,6 +127,21 @@ type SSHSession struct {
 	// client instead of dialing — Connect skips handshake/auth and only
 	// opens a new session channel.
 	channelClone bool
+
+	// connConfig is the fully materialized config this session connected
+	// with (identity/proxy resolved by the App layer, tunnel rewrite
+	// applied). MCP file tools reuse it to lazily open the companion
+	// file-transfer session (SFTP/SCP per FileTransferProto) the same way
+	// the frontend file sidebar does.
+	connConfig ConnectionConfig
+}
+
+// ConnectionConfig returns the materialized config this session connected
+// with. Zero value before Connect.
+func (s *SSHSession) ConnectionConfig() ConnectionConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.connConfig
 }
 
 // sshClientRef owns one authenticated SSH transport. The last release closes
@@ -276,6 +291,9 @@ func shouldPromptForSSHPassword(config ConnectionConfig) bool {
 func (s *SSHSession) Connect(config ConnectionConfig) error {
 	s.SetLogOnConnect(config.LogOnConnect)
 	s.setStatus(StatusConnecting)
+	s.mu.Lock()
+	s.connConfig = config
+	s.mu.Unlock()
 	if config.Name != "" {
 		s.title = config.Name
 	} else {

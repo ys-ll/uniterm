@@ -90,9 +90,11 @@ type Env struct {
 	// take effect without a restart). "" = unknown token. When nil, the
 	// in-memory map from SetTokens is authoritative.
 	ResolveToken func(hash string) (name string)
-	// FileSession resolves a live session id to its SFTP-backed file
-	// executor; (nil,false) when the session is gone or not SSH.
-	FileSession func(sessionID string) (FileExecutor, bool)
+	// FileSession resolves a live session id to its companion file-transfer
+	// executor (created lazily per the connection's file protocol); an
+	// error when the session is gone, not SSH, or the transfer session
+	// cannot be opened — the text reaches the AI caller.
+	FileSession func(sessionID string) (FileExecutor, error)
 	// ResolveLocalPath validates a local path against the user-configured
 	// allowed directories (SFTP bookmarks) and returns the resolved path.
 	ResolveLocalPath func(path string) (resolved string, err error)
@@ -136,14 +138,13 @@ type SSHExecutor interface {
 // the exec group can be implemented/tested without SFTP.
 type FileExecutor interface {
 	MCPListDir(remotePath string) (entries []FileEntry, err error)
-	MCPReadFile(remotePath string, offset int64, max int) (data []byte, truncated bool, err error)
 	MCPWriteFile(localPath, remotePath string) (bytes int64, err error)
 	MCPReadRemoteToFile(remotePath, localPath string) (bytes int64, err error)
 }
 
 // Policy is the approval policy for exec calls.
-//   - "confirm_all": every command needs approval (default)
-//   - "confirm_write": only risk≥write commands
+//   - "confirm_write": only risk≥write commands (default)
+//   - "confirm_all": every command needs approval
 //   - "confirm_dangerous": only dangerous commands
 //   - "bypass": no dialogs (dangerous commands still require approval)
 type Policy string

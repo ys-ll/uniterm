@@ -23,5 +23,5 @@ export interface MCPSettings {
 
 export const DEFAULT_MCP_SETTINGS: MCPSettings = {
   enabled: false,
-  policy: 'confirm_all',
+  policy: 'confirm_write',
 }

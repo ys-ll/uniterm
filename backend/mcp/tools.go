@@ -245,9 +245,10 @@ func (s *Server) gateExec(ctx context.Context, req *mcp.CallToolRequest, session
 	case PolicyConfirmDangerous:
 		needsDialog = risk >= RiskDangerous
 	case PolicyBypass:
-		// Dangerous commands still demand a dialog even in bypass mode
-		// (NyaTerm-style hard floor).
-		needsDialog = risk >= RiskDangerous
+		// Bypass all: no dialogs, not even for dangerous commands — same
+		// semantics as the built-in AI panel's 全部免确认 (agent.ts returns
+		// false for every risk class).
+		needsDialog = false
 	}
 	if !needsDialog {
 		return nil
@@ -256,8 +257,11 @@ func (s *Server) gateExec(ctx context.Context, req *mcp.CallToolRequest, session
 }
 
 func (s *Server) gateConnect(ctx context.Context, req *mcp.CallToolRequest, connectionID string) error {
-	// Opening a new connection always confirms: it dials out with stored
-	// credentials.
+	// Opening a new connection normally always confirms: it dials out with
+	// stored credentials. Under bypass (全部免确认) nothing prompts at all.
+	if s.env.Policy() == PolicyBypass {
+		return nil
+	}
 	return s.requestApproval(ctx, req, connectionID, "")
 }
 

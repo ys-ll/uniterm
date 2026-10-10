@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -283,63 +284,315 @@ func (a *App) mcpListSessions() []mcp.SessionSummary {
 	return out
 }
 
-// mcpFileSession adapts a live SSH session to the mcp package's FileExecutor.
-func (a *App) mcpFileSession(sessionID string) (mcp.FileExecutor, bool) {
-	exec, ok := a.mcpSessionExec(sessionID)
-	if !ok {
-		return nil, false
-	}
-	fe, ok := exec.(MCPFileExecutor)
-	if !ok {
-		return nil, false
-	}
-	return fileExecutorAdapter{fe}, true
+// ── MCP file tools: companion file-transfer session ─────────────────────
+//
+// Instead of a bespoke SFTP client pool riding the terminal's SSH client,
+// the MCP layer opens the same companion file-transfer session the frontend
+// file sidebar opens — an SFTPSession or SCPSession per the connection's
+// FileTransferProto, lazily created on the first MCP file call and cached
+// per SSH session. All transfer/list/read behavior (progress events into
+// the task center, pause/cancel/retry, uid/gid resolution) is the sidebar's
+// own, and hosts whose SSH server provides no SFTP subsystem (common on
+// embedded devices) work by setting the connection's file protocol to SCP.
+
+// mcpTransferOutcome is what a completed transfer tells its MCP waiter.
+type mcpTransferOutcome struct {
+	status string // "done" | "error" | "cancelled"
+	errMsg string
 }
 
-// MCPFileExecutor is the session-side contract implemented by SSHSession
-// (mcp_file.go); declared here because the mcp package must stay free of
-// session imports. The adapter below maps its types across.
-type MCPFileExecutor interface {
-	MCPListDir(remotePath string) ([]MCPFileEntry, error)
-	MCPReadFile(remotePath string, offset int64, max int) ([]byte, bool, error)
-	MCPWriteFile(localPath, remotePath string) (int64, error)
-	MCPReadRemoteToFile(remotePath, localPath string) (int64, error)
+// mcpDispatchTransferEvent feeds "complete" transfer events to registered
+// MCP waiters. Installed inside the global TransferEventSink; no-op overhead
+// for transfers nobody waits on.
+func (a *App) mcpDispatchTransferEvent(payload map[string]any) {
+	if event, _ := payload["event"].(string); event != "complete" {
+		return
+	}
+	taskID, _ := payload["taskId"].(string)
+	if taskID == "" {
+		return
+	}
+	a.mcpTransferMu.Lock()
+	ch, ok := a.mcpTransferWaiters[taskID]
+	if ok {
+		delete(a.mcpTransferWaiters, taskID)
+	}
+	a.mcpTransferMu.Unlock()
+	if !ok {
+		return
+	}
+	out := mcpTransferOutcome{status: "done"}
+	if status, _ := payload["status"].(string); status == "error" || status == "cancelled" {
+		out.status = status
+		out.errMsg, _ = payload["error"].(string)
+	}
+	select {
+	case ch <- out:
+	default:
+	}
 }
 
-// MCPFileEntry is the session-side listing row (mirrors mcp.FileEntry).
-type MCPFileEntry = session.MCPFileEntry
+// mcpRunTransfer starts a transfer and synchronously waits for its
+// completion event. The waiter is registered while holding mcpTransferMu so
+// a transfer that completes between start() returning and registration is
+// not missed (dispatch blocks on the same mutex). Error text comes from the
+// completion event, so the AI sees why a transfer failed.
+func (a *App) mcpRunTransfer(start func() (string, error), timeout time.Duration) error {
+	a.mcpTransferMu.Lock()
+	taskID, err := start()
+	if err != nil {
+		a.mcpTransferMu.Unlock()
+		return err
+	}
+	ch := make(chan mcpTransferOutcome, 1)
+	a.mcpTransferWaiters[taskID] = ch
+	a.mcpTransferMu.Unlock()
+	defer func() {
+		a.mcpTransferMu.Lock()
+		delete(a.mcpTransferWaiters, taskID)
+		a.mcpTransferMu.Unlock()
+	}()
+	select {
+	case out := <-ch:
+		switch out.status {
+		case "error":
+			if out.errMsg != "" {
+				return fmt.Errorf("transfer failed: %s", out.errMsg)
+			}
+			return fmt.Errorf("transfer failed")
+		case "cancelled":
+			return fmt.Errorf("transfer cancelled (task %s)", taskID)
+		}
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("transfer did not finish within %s (task %s may still be running — see the transfer task center)", timeout, taskID)
+	}
+}
 
-// fileExecutorAdapter converts between the session and mcp type shapes.
-type fileExecutorAdapter struct{ fe MCPFileExecutor }
-
-func (a fileExecutorAdapter) MCPListDir(remotePath string) ([]mcp.FileEntry, error) {
-	entries, err := a.fe.MCPListDir(remotePath)
+// mcpFileSession resolves an MCP file tool call to the SSH session's
+// companion file-transfer session, creating it on first use.
+func (a *App) mcpFileSession(sessionID string) (mcp.FileExecutor, error) {
+	if a.sessionManager == nil {
+		return nil, fmt.Errorf("session manager not initialized")
+	}
+	s, ok := a.sessionManager.Get(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session %s not found", sessionID)
+	}
+	ssh, ok := s.(*session.SSHSession)
+	if !ok {
+		return nil, fmt.Errorf("session %s is not an SSH session", sessionID)
+	}
+	fs, err := a.mcpEnsureFileSession(ssh)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]mcp.FileEntry, len(entries))
-	for i, e := range entries {
-		out[i] = mcp.FileEntry{
-			Name:    e.Name,
-			Size:    e.Size,
-			IsDir:   e.IsDir,
-			ModTime: e.ModTime,
-			Mode:    e.Mode,
+	fts, ok := fs.(fileTransferSession)
+	if !ok {
+		return nil, fmt.Errorf("transfer session %s is not a file transfer backend", fs.ID())
+	}
+	return fileExecutorAdapter{app: a, fs: fts}, nil
+}
+
+// mcpEnsureFileSession returns the cached companion file session for the SSH
+// session, or creates one. The companion is closed when the SSH session
+// disconnects; a cached-but-dead companion is replaced on the next call.
+func (a *App) mcpEnsureFileSession(ssh *session.SSHSession) (session.Session, error) {
+	sshSID := ssh.ID()
+	a.mcpFileMu.Lock()
+	fileSID, ok := a.mcpFileSessions[sshSID]
+	a.mcpFileMu.Unlock()
+	if ok {
+		if fs, ok := a.sessionManager.Get(fileSID); ok && fs.Status() == session.StatusConnected {
+			return fs, nil
 		}
+		// Stale entry: tear the leftover down and recreate below.
+		_ = a.sessionManager.Close(fileSID)
+		a.mcpFileMu.Lock()
+		delete(a.mcpFileSessions, sshSID)
+		a.mcpFileMu.Unlock()
+	}
+	if ssh.Status() != session.StatusConnected {
+		return nil, fmt.Errorf("ssh session %s is not connected", sshSID)
+	}
+	config := ssh.ConnectionConfig()
+	fs, err := a.mcpCreateFileSession(sshSID, config)
+	if err != nil {
+		return nil, err
+	}
+	createdSID := fs.ID()
+	a.mcpFileMu.Lock()
+	a.mcpFileSessions[sshSID] = createdSID
+	a.mcpFileMu.Unlock()
+	// Follow the SSH session down so the companion never outlives its
+	// terminal. Only the registered generation cleans up.
+	ssh.AddStatusListener(func(st session.SessionStatus) {
+		if st != session.StatusDisconnected && st != session.StatusError {
+			return
+		}
+		a.mcpFileMu.Lock()
+		cur, ok := a.mcpFileSessions[sshSID]
+		if ok && cur == createdSID {
+			delete(a.mcpFileSessions, sshSID)
+		} else {
+			ok = false
+		}
+		a.mcpFileMu.Unlock()
+		if ok {
+			log.Writef("[mcp-file] ssh session %s gone; closing transfer session %s", sshSID, createdSID)
+			_ = a.sessionManager.Close(createdSID)
+		}
+	})
+	return fs, nil
+}
+
+// mcpCreateFileSession creates and connects the companion file-transfer
+// session (SFTP or SCP per config.FileTransferProto) with the same
+// credential resolution chain the terminal connect path uses. Connect runs
+// synchronously so MCP callers get the real failure reason.
+func (a *App) mcpCreateFileSession(sshSID string, config session.ConnectionConfig) (session.Session, error) {
+	proto := "sftp"
+	if config.FileTransferProto == "scp" {
+		proto = "scp"
+	}
+	// Same credential resolution as CreateSession/SessionStart
+	// (app_terminal.go): keychain fallback, identity and proxy
+	// materialization. The SSH session's stored config is already
+	// materialized, so these are no-ops except for channel clones, whose
+	// frontend-passed config skipped resolution.
+	if config.AuthType == "password" && config.Password == "" && config.ID != "" && a.connectionStore != nil {
+		if pw, err := a.connectionStore.EnsurePassword(config.ID); err == nil && pw != "" {
+			config.Password = pw
+		}
+	}
+	if config.AuthType == "identity" {
+		mc, err := a.materializeIdentity(config)
+		if err != nil {
+			return nil, fmt.Errorf("transfer session (%s): %w", proto, err)
+		}
+		config = mc
+	}
+	if mc, err := a.materializeProxy(config); err != nil {
+		return nil, fmt.Errorf("transfer session (%s): %w", proto, err)
+	} else {
+		config = mc
+	}
+	s, err := a.sessionManager.Create(proto, config)
+	if err != nil {
+		return nil, fmt.Errorf("transfer session (%s): %w", proto, err)
+	}
+	fail := func(err error) (session.Session, error) {
+		_ = a.sessionManager.Close(s.ID())
+		return nil, fmt.Errorf("%s transfer session connect failed: %w (hosts with interactive logon need the password saved or key auth configured — same as the file sidebar)", proto, err)
+	}
+	if setter, ok := s.(interface{ SetLogIdentity(string, string) }); ok {
+		setter.SetLogIdentity(config.Name, config.Host)
+	}
+	// Mirror CreateSession's concurrency limit for file-transfer sessions.
+	n := config.SftpMaxConcurrency
+	if n <= 0 {
+		n = 5
+	}
+	if sftp, ok := s.(*session.SFTPSession); ok {
+		sftp.SetMaxConcurrency(n)
+	}
+	if scp, ok := s.(*session.SCPSession); ok {
+		scp.SetMaxConcurrency(n)
+	}
+	// Status events so the session's lifecycle stays observable (task
+	// center transfers already flow through the global TransferEventSink).
+	s.SetOnStatusChangeCallback(func(st session.SessionStatus) {
+		a.emit("session:status", map[string]interface{}{
+			"id":     s.ID(),
+			"status": st,
+		})
+	})
+	// Jump-host tunnel first (launchConnectGoroutine's ordering), then the
+	// dial — for tunneled terminals the stored config still carries
+	// TunnelSSHConnID, and each companion gets its own fresh forward.
+	if err := a.setupJumpHostTunnel(s.ID(), proto, &config); err != nil {
+		return fail(err)
+	}
+	if err := s.Connect(config); err != nil {
+		return fail(err)
+	}
+	log.Writef("[mcp-file] opened %s transfer session %s for ssh session %s", proto, s.ID(), sshSID)
+	return s, nil
+}
+
+// mcpTransferTimeout bounds a single MCP upload/download wait. The transfer
+// keeps running in the task center when the wait expires.
+const mcpTransferTimeout = 10 * time.Minute
+
+// fileExecutorAdapter exposes a companion file session as the mcp package's
+// FileExecutor, converting types and adding the synchronous wait. fs is the
+// same fileTransferSession contract the frontend Sftp* bindings dispatch
+// through.
+type fileExecutorAdapter struct {
+	app *App
+	fs  fileTransferSession
+}
+
+func (a fileExecutorAdapter) MCPListDir(remotePath string) ([]mcp.FileEntry, error) {
+	res, err := a.fs.ListRemote(remotePath)
+	if err != nil {
+		return nil, err
+	}
+	files := res.Files
+	// Dirs first, then name — mirrors the old MCP listing order.
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].IsDir != files[j].IsDir {
+			return files[i].IsDir
+		}
+		return files[i].Name < files[j].Name
+	})
+	if len(files) > mcp.DefaultMCPDirEntries {
+		files = files[:mcp.DefaultMCPDirEntries]
+	}
+	out := make([]mcp.FileEntry, 0, len(files))
+	for _, f := range files {
+		var mtime int64
+		if t, err := time.Parse(time.RFC3339, f.ModTime); err == nil {
+			mtime = t.UnixMilli()
+		}
+		out = append(out, mcp.FileEntry{
+			Name:    f.Name,
+			Size:    f.Size,
+			IsDir:   f.IsDir,
+			ModTime: mtime,
+			Mode:    f.Mode,
+		})
 	}
 	return out, nil
 }
 
-func (a fileExecutorAdapter) MCPReadFile(remotePath string, offset int64, max int) ([]byte, bool, error) {
-	return a.fe.MCPReadFile(remotePath, offset, max)
-}
-
 func (a fileExecutorAdapter) MCPWriteFile(localPath, remotePath string) (int64, error) {
-	return a.fe.MCPWriteFile(localPath, remotePath)
+	if err := a.app.mcpRunTransfer(func() (string, error) {
+		return a.fs.Put(localPath, remotePath, false)
+	}, mcpTransferTimeout); err != nil {
+		return 0, err
+	}
+	return localFileSize(localPath)
 }
 
 func (a fileExecutorAdapter) MCPReadRemoteToFile(remotePath, localPath string) (int64, error) {
-	return a.fe.MCPReadRemoteToFile(remotePath, localPath)
+	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
+		return 0, err
+	}
+	if err := a.app.mcpRunTransfer(func() (string, error) {
+		return a.fs.Get(remotePath, localPath, false)
+	}, mcpTransferTimeout); err != nil {
+		return 0, err
+	}
+	return localFileSize(localPath)
+}
+
+func localFileSize(path string) (int64, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return fi.Size(), nil
 }
 
 // mcpResolveLocalPath validates an agent-supplied local path against the
@@ -350,7 +603,7 @@ func (a *App) mcpResolveLocalPath(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return session.ResolveMcpLocalPath(path, settings.SFTPBookmarks.LocalPaths)
+	return mcp.ResolveMcpLocalPath(path, settings.SFTPBookmarks.LocalPaths)
 }
 
 func (a *App) mcpListConnections() []mcp.ConnectionSummary {
@@ -615,7 +868,14 @@ func (a *App) mcpSettings() store.MCPSettings {
 }
 
 func (a *App) mcpPolicy() mcp.Policy {
-	return mcp.Policy(a.mcpSettings().Policy)
+	// Unknown or empty stored values (older configs, hand-edited settings)
+	// must not silently disable approvals: fall back to the default.
+	switch p := mcp.Policy(a.mcpSettings().Policy); p {
+	case mcp.PolicyConfirmAll, mcp.PolicyConfirmWrite, mcp.PolicyConfirmDangerous, mcp.PolicyBypass:
+		return p
+	default:
+		return mcp.PolicyConfirmWrite
+	}
 }
 
 // ── Approval notification strings ───────────────────────────────
