@@ -65,9 +65,13 @@ type SSHSession struct {
 	// Only used from the readLoop goroutine.
 	osc7 osc7Scanner
 
-	// hookReady strips the cwd hook's ready marker from the display stream.
-	// Only used from the readLoop goroutine.
-	hookReady hookReadyScanner
+	// hook carries the typed cwd-hook injection state machine shared with the
+	// WSL path (see typedCwdHookState): the marker scanners plus the
+	// arm/body handoff of the on-demand two-phase injection. The startup path
+	// runs it single-phase: the pty is created echo-off and the hook is typed
+	// before the shell reads anything, so no arm phase is ever pending and
+	// only the ready marker fires. Scanner Feeds run in the readLoop only.
+	hook typedCwdHookState
 
 	enc            encoding.Encoding     // input(write) codec; nil = utf-8 passthrough
 	encoder        transform.Transformer // cached encoder; nil = utf-8 passthrough (F-003)
@@ -85,16 +89,23 @@ type SSHSession struct {
 	// Connect from the server identification string.
 	remoteOS string
 
-	// cwdHookInstalled records that the injected startup cwd hook confirmed
-	// itself via its ready marker (read loop). Session objects are recreated
-	// on reconnect, so the flag resets naturally and the reconnect
-	// re-injection still fires.
-	cwdHookInstalled atomic.Bool
-
 	// cwdHookFollow marks connections with CwdHookMode "follow": the hook is
 	// not injected at attach time; InjectCwdHook types it into the running
 	// shell on demand when the frontend enables directory follow.
 	cwdHookFollow bool
+
+	// hookConfirmedCh is closed once the injected startup cwd hook confirms
+	// via its ready marker, or the blind echo-restore fallback has fired.
+	// Post-login automation waits on it before typing anything: the hook's
+	// cursor-position probe (read -t 1 < /dev/tty) keeps a read pending on
+	// the tty input queue for up to 1s, and a post-login line queued inside
+	// that window is silently consumed by the read instead of reaching the
+	// shell. Nil when no hook was injected (follow mode / unsupported shell).
+	hookConfirmedCh chan struct{}
+
+	// hookConfirmOnce guards the single close of hookConfirmedCh: the ready
+	// marker (readLoop) and the blind echo-restore fallback can race.
+	hookConfirmOnce sync.Once
 
 	// detectedShell holds the remote login shell reported by the pre-connect
 	// probe ("" when the probe failed, was skipped for follow mode, or timed
@@ -151,7 +162,7 @@ func NewSSHSession(id string) *SSHSession {
 		},
 		quit: make(chan struct{}),
 	}
-	s.hookReady = newHookReadyScanner(sshCwdHookReadyMarker)
+	s.hook = newTypedCwdHookState()
 	return s
 }
 
@@ -466,6 +477,9 @@ func (s *SSHSession) attach(client *ssh.Client, config ConnectionConfig) error {
 			log.Writef("ssh: cwd hook skipped (no probe result or unsupported shell %q)", shell)
 		}
 	}
+	if injectHook != "" {
+		s.hookConfirmedCh = make(chan struct{})
+	}
 
 	session, err := client.NewSession()
 	if err != nil {
@@ -668,13 +682,15 @@ func (s *SSHSession) readLoop() {
 					TerminalCwdSink(s.id, cwd)
 				}
 			}
-			if !s.cwdHookInstalled.Load() {
-				var confirmed bool
-				cleaned, confirmed = s.hookReady.Feed(cleaned)
-				if confirmed {
-					s.cwdHookInstalled.Store(true)
-					log.Writef("ssh: cwd hook confirmed via ready marker")
-				}
+			cleaned, armed, confirmed := s.hook.onOutput(cleaned)
+			if armed {
+				// stty -echo took effect — the body can no longer echo.
+				go s.writeCwdHookBody(s.hook.takeArmedBody())
+			}
+			if confirmed {
+				s.hook.confirm()
+				log.Writef("ssh: cwd hook confirmed via ready marker")
+				s.closeHookConfirmed()
 			}
 			s.offerExpectOutput(cleaned)
 			s.outputRouteMu.Lock()
@@ -732,6 +748,18 @@ func (s *SSHSession) offerExpectOutput(data []byte) {
 }
 
 func (s *SSHSession) runPostLoginAutomation(config ConnectionConfig) {
+	// Gate on the injected cwd hook before typing anything. The hook's
+	// cursor-position probe keeps a `read -t 1 < /dev/tty` pending on the tty
+	// input queue for up to 1s (longer when slow rc files delay the hook
+	// line); a post-login line queued inside that window is silently consumed
+	// by the read instead of reaching the shell (log-timeline reproduced).
+	// No startup injection → nil channel → no wait.
+	if s.hookConfirmedCh != nil {
+		select {
+		case <-s.hookConfirmedCh:
+		case <-time.After(postLoginHookWaitTimeout):
+		}
+	}
 	if len(config.PostLoginExpectSteps) > 0 {
 		s.runPostLoginExpect(config)
 		return
@@ -861,28 +889,26 @@ func (s *SSHSession) Disconnect() error {
 	return nil
 }
 
-// startupCwdHook detects the remote login shell over an exec channel on the
-// live client. Only used by the on-demand path (InjectCwdHook, directory-follow
-// mode): the startup path probes on a connection of its own
-// (probeCwdShellSeparately) so the main connection never carries an exec
-// request. An empty snippet means no injection (detection failed or the shell
-// is unsupported).
-func startupCwdHook(client *ssh.Client) (snippet, shell string) {
-	if client == nil {
-		return "", ""
+// writeCwdHookBody is phase 2 of the on-demand two-phase injection: runs once
+// the echo-armed marker confirmed that stty -echo took effect, so the body
+// cannot echo. The body ends with its own echo restore and ready marker, so
+// this is also where the confirm watchdog that InjectCwdHook armed becomes
+// meaningful.
+func (s *SSHSession) writeCwdHookBody(body string) {
+	if body == "" {
+		return
 	}
-	detected, err := sshRunCommand(client, "echo $SHELL", "", sshIntegrationTimeout)
-	if err != nil {
-		log.Writef("ssh: cwd hook skipped (detect shell: %v)", err)
-		return "", ""
+	s.mu.RLock()
+	stdin := s.stdin
+	s.mu.RUnlock()
+	if stdin == nil {
+		return
 	}
-	shell = strings.TrimSpace(detected)
-	snippet, ok := buildStartupCwdHook(shell)
-	if !ok {
-		log.Writef("ssh: cwd hook skipped (unsupported shell %q)", shell)
-		return "", ""
+	if _, err := stdin.Write(s.encodeInput([]byte(body))); err != nil {
+		log.Writef("ssh: cwd hook body write failed: %v", err)
+		return
 	}
-	return snippet, shellBasename(shell)
+	log.Writef("ssh: cwd hook body written on demand")
 }
 
 // cwdProbeDialTimeout bounds the probe connection's TCP dial. It only needs
@@ -936,12 +962,19 @@ func probeCwdShellSeparately(config ConnectionConfig) string {
 		return ""
 	}
 	defer client.Close()
-	shell, err := sshRunCommand(client, "echo $SHELL", "", sshIntegrationTimeout)
+	out, err := sshRunCommand(client, sshShellProbeCommand, "", sshIntegrationTimeout)
 	if err != nil {
 		log.Writef("ssh: cwd hook probe exec failed: %v", err)
 		return ""
 	}
-	shell = strings.TrimSpace(shell)
+	shell, hasStty := parseShellProbe(out)
+	if !hasStty {
+		// Without stty the injected hook could never restore terminal echo
+		// (the pty is created ECHO-off exactly when the hook is injected), so
+		// no injection — the shell stays a plain echo-on login.
+		log.Writef("ssh: cwd hook skipped (stty not available on remote, shell=%q)", shell)
+		return ""
+	}
 	log.Writef("ssh: login shell probed on a separate connection: %q", shell)
 	return shell
 }
@@ -952,22 +985,42 @@ func probeCwdShellSeparately(config ConnectionConfig) string {
 // itself, so a confirmed session is never touched.
 const cwdHookConfirmTimeout = 3 * time.Second
 
+// postLoginHookWaitTimeout bounds the post-login gate on the cwd hook: the
+// ready marker normally confirms within a second; the fallback path fires at
+// cwdHookConfirmTimeout and its blind echo-restore write lands shortly after,
+// so confirm-timeout + margin covers both. Past the gate the post-login lines
+// can no longer be swallowed by the hook's cursor-position read.
+const postLoginHookWaitTimeout = cwdHookConfirmTimeout + time.Second
+
+// closeHookConfirmed releases the post-login hook gate. Safe on nil (no
+// startup injection) and idempotent (marker confirm in the readLoop and the
+// blind echo-restore fallback can race).
+func (s *SSHSession) closeHookConfirmed() {
+	if s.hookConfirmedCh != nil {
+		s.hookConfirmOnce.Do(func() { close(s.hookConfirmedCh) })
+	}
+}
+
 func (s *SSHSession) watchCwdHookConfirm() {
 	select {
 	case <-time.After(cwdHookConfirmTimeout):
 	case <-s.quit:
 		return
 	}
-	if s.cwdHookInstalled.Load() || s.Status() != StatusConnected {
+	if s.hook.isInstalled() || s.Status() != StatusConnected {
 		return
 	}
 	log.Writef("ssh: cwd hook not confirmed after %s, restoring echo blindly", cwdHookConfirmTimeout)
+	// Release the post-login gate even on this fallback path: the hook line
+	// never confirmed, so the input-eating read window is either gone (hook
+	// line executed without the marker) or will never open (hook line never
+	// executed). Waiting longer would just delay post-login further.
+	s.closeHookConfirmed()
 	s.mu.RLock()
 	stdin := s.stdin
 	s.mu.RUnlock()
 	if stdin != nil {
-		// Leading space keeps it out of bash history (HISTCONTROL=ignorespace).
-		_, _ = stdin.Write([]byte(" stty echo\n"))
+		_, _ = stdin.Write([]byte(cwdHookBlindRestoreLine))
 	}
 }
 
@@ -977,6 +1030,12 @@ func (s *SSHSession) watchCwdHookConfirm() {
 // directory follow is first enabled for the session's file panel. Repeated
 // calls are no-ops; a transiently failed attempt re-arms so a later call can
 // retry.
+//
+// Two-phase for bash/zsh: the pty of such a session is echo-on
+// and the shell sits at its prompt, so a single-shot write renders every line
+// — the line discipline echoes bytes before stty -echo executes. Phase 1
+// arms echo-off and prints the echo-armed marker; the read loop writes the
+// phase-2 body only after seeing it. fish keeps the single-line injection.
 func (s *SSHSession) InjectCwdHook() error {
 	if !s.cwdHookTriggered.CompareAndSwap(false, true) {
 		return nil
@@ -992,17 +1051,37 @@ func (s *SSHSession) InjectCwdHook() error {
 		s.cwdHookTriggered.Store(false)
 		return fmt.Errorf("ssh session not attached")
 	}
-	snippet, shell := startupCwdHook(client)
-	if snippet == "" {
-		// Unsupported shell or failed detection — definitive for this
-		// session object. Keep the guard set so later toggles don't re-probe.
-		return fmt.Errorf("cwd hook unavailable (shell %q)", shell)
+	detected, err := sshRunCommand(client, sshShellProbeCommand, "", sshIntegrationTimeout)
+	if err != nil {
+		// Failed detection — definitive for this session object. Keep the
+		// guard set so later toggles don't re-probe.
+		return fmt.Errorf("cwd hook shell detection: %w", err)
 	}
-	if _, err := stdin.Write(s.encodeInput([]byte(snippet))); err != nil {
+	shell, hasStty := parseShellProbe(detected)
+	arm, body, ok := buildTwoPhaseCwdHook(shell)
+	if !ok || !hasStty {
+		return fmt.Errorf("cwd hook unavailable (shell %q, stty=%v)", shell, hasStty)
+	}
+	if arm != "" {
+		// Phase 1: arm echo-off. The watchdog (watchCwdHookConfirm) still
+		// runs: if the arm line never confirms, it restores echo blindly at
+		// cwdHookConfirmTimeout — the arm line alone leaves echo OFF.
+		s.hook.arm(body)
+		if _, err := stdin.Write(s.encodeInput([]byte(arm))); err != nil {
+			s.hook.disarm()
+			s.cwdHookTriggered.Store(false)
+			return fmt.Errorf("cwd hook arm write: %w", err)
+		}
+		log.Writef("ssh: cwd hook armed on demand (shell=%s)", shellBasename(shell))
+		go s.watchCwdHookConfirm()
+		return nil
+	}
+	// Single-phase shell (fish): accept the known cosmetic leak.
+	if _, err := stdin.Write(s.encodeInput([]byte(body))); err != nil {
 		s.cwdHookTriggered.Store(false)
 		return fmt.Errorf("cwd hook write: %w", err)
 	}
-	log.Writef("ssh: cwd hook injected on demand (shell=%s)", shell)
+	log.Writef("ssh: cwd hook injected on demand (shell=%s)", shellBasename(shell))
 	go s.watchCwdHookConfirm()
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -223,8 +224,7 @@ func buildStartupCwdHook(shell string) (string, bool) {
 // pty echo, so the WSL injection arms echo-off first (printing an
 // echo-armed marker) and only then sends the hook body, which must never
 // render.
-func buildShellCwdHookBody(shell string) (string, bool) {
-	base := shellBasename(shell)
+func buildShellCwdHookBody(shell string) (string, bool) {	base := shellBasename(shell)
 	const oscFn = `__uniterm_osc7() { printf '\033]7;file://%s\033\\' "$PWD" 2>/dev/null; }`
 	switch base {
 	case "bash":
@@ -251,6 +251,124 @@ func buildShellCwdHookBody(shell string) (string, bool) {
 			`; stty echo; printf '\r\e[2K'; printf '\e]7777;uniterm-ok\a'` + "\n", true
 	}
 	return "", false
+}
+
+// cwdHookEchoArmedMarker is printed by the phase-1 arm line of the typed
+// cwd-hook injection once stty -echo has taken effect. Shared by the WSL and
+// the on-demand SSH paths; the read loop strips it from the display stream
+// and starts phase 2 (the hook body) only after seeing it, so the body can
+// never render. Kept short so the arm line stays single-row when echoed.
+const cwdHookEchoArmedMarker = "\x1b]7777;e\x07"
+
+// cwdHookArmLine is phase 1 of the on-demand typed cwd-hook injection into a
+// LIVE shell (directory follow). The pty of such a session was created
+// echo-on (no startup injection happened), so the arm line turns the echo off
+// itself and prints the echo-armed marker; the row it leaves behind is
+// erased by its own trailing cursor-up/clear. Content matches the WSL arm
+// line.
+const cwdHookArmLine = " stty -echo;printf '\\033]7777;e\\007\\033[1A\\033[2K\\r\\n'\n"
+
+// buildTwoPhaseCwdHook returns the phase-1 arm line and the phase-2 hook body
+// for typing the cwd hook into a running shell. bash/zsh get the two-phase
+// treatment (arm echo-off, wait for the armed marker, then the body — issue
+// #1113: a single-shot write into a live echo-on shell renders both lines
+// because the line discipline echoes bytes before stty -echo executes).
+// fish has no stty-based arm and keeps the single-line injection with its
+// known cosmetic leak. ok=false for unsupported shells.
+func buildTwoPhaseCwdHook(shell string) (arm, body string, ok bool) {
+	body, ok = buildShellCwdHookBody(shell)
+	if !ok {
+		return "", "", false
+	}
+	switch shellBasename(shell) {
+	case "bash", "zsh":
+		return cwdHookArmLine, body, true
+	}
+	return "", body, true
+}
+
+// cwdHookBlindRestoreLine is typed into the shell when the injected hook
+// never confirmed within the watchdog timeout: the arm phase left the pty
+// echo off and nothing else will turn it back on. Leading space keeps it out
+// of bash history (HISTCONTROL=ignorespace).
+const cwdHookBlindRestoreLine = " stty echo\n"
+
+// typedCwdHookState carries the state machine of the two-phase typed
+// cwd-hook injection shared by the WSL and the on-demand SSH paths: phase 1
+// arms stty -echo, and the read loop writes the stored phase-2 body only once
+// the echo-armed marker shows the echo actually went off, so the body can
+// never render. The ready marker (printed last by the body) confirms the
+// whole injection. Single-phase injections (fish, or the SSH startup path
+// with its echo-off pty) never set an arm pending, so the armed event never
+// fires and only the ready marker matters. onOutput must only be called from
+// the session's read loop; arm/disarm come from the injecting goroutine.
+type typedCwdHookState struct {
+	mu          sync.Mutex
+	armPending  bool
+	pendingBody string
+	echoReady   hookReadyScanner
+	hookReady   hookReadyScanner
+	installed   atomic.Bool
+}
+
+func newTypedCwdHookState() typedCwdHookState {
+	return typedCwdHookState{
+		echoReady: newHookReadyScanner(cwdHookEchoArmedMarker),
+		hookReady: newHookReadyScanner(sshCwdHookReadyMarker),
+	}
+}
+
+// arm stores the phase-2 body; the write happens when the read loop sees the
+// echo-armed marker.
+func (h *typedCwdHookState) arm(body string) {
+	h.mu.Lock()
+	h.armPending = true
+	h.pendingBody = body
+	h.mu.Unlock()
+}
+
+// disarm drops a pending phase-2 body (the phase-1 write failed).
+func (h *typedCwdHookState) disarm() {
+	h.mu.Lock()
+	h.armPending = false
+	h.pendingBody = ""
+	h.mu.Unlock()
+}
+
+// takeArmedBody hands out the stored body once the echo-armed marker arrived
+// (stty -echo took effect) and clears the pending state.
+func (h *typedCwdHookState) takeArmedBody() string {
+	h.mu.Lock()
+	h.armPending = false
+	body := h.pendingBody
+	h.mu.Unlock()
+	return body
+}
+
+// confirm marks the injection complete; from then on onOutput is a
+// passthrough and the confirm watchdog becomes a no-op.
+func (h *typedCwdHookState) confirm() { h.installed.Store(true) }
+
+// isInstalled reports whether the ready marker confirmed the hook.
+func (h *typedCwdHookState) isInstalled() bool { return h.installed.Load() }
+
+// onOutput feeds the next display chunk through the marker scanners. cleaned
+// must always be used in place of the input: partially arrived markers are
+// withheld and flushed on a later call. armed fires once per arm phase,
+// confirmed exactly once.
+func (h *typedCwdHookState) onOutput(data []byte) (cleaned []byte, armed, confirmed bool) {
+	if h.installed.Load() {
+		return data, false, false
+	}
+	h.mu.Lock()
+	pending := h.armPending
+	h.mu.Unlock()
+	if pending {
+		cleaned, armed = h.echoReady.Feed(data)
+		data = cleaned
+	}
+	cleaned, confirmed = h.hookReady.Feed(data)
+	return cleaned, armed, confirmed
 }
 
 // hookReadyScanner strips control markers from the terminal byte stream (they
@@ -317,6 +435,33 @@ func shellBasename(shell string) string {
 		return shell[i+1:]
 	}
 	return shell
+}
+
+// sshShellProbeCommand reports the login shell and whether stty exists, in
+// one exec that always exits 0. Line 1 is the shell path; a non-empty line 2
+// is stty's path. The injected cwd hook relies on stty both to silence the
+// injection and to restore terminal echo — without it the ECHO-off pty stays
+// echo-off forever (minimal busybox builds may ship a shell without stty), so
+// callers must skip the injection entirely when stty is missing.
+const sshShellProbeCommand = `echo "$SHELL"; command -v stty || true`
+
+// parseShellProbe splits the sshShellProbeCommand output into the detected
+// shell and whether stty is available. shell is "" when the first line is
+// missing or empty.
+func parseShellProbe(out string) (shell string, hasStty bool) {
+	// Only strip \r and the trailing newline: a leading empty line is
+	// meaningful (empty $SHELL) and must not collapse into the shell line.
+	out = strings.TrimSuffix(strings.ReplaceAll(out, "\r", ""), "\n")
+	lines := strings.SplitN(out, "\n", 2)
+	if len(lines) == 0 {
+		return "", false
+	}
+	shell = strings.TrimSpace(lines[0])
+	if shell == "" {
+		return "", false
+	}
+	hasStty = len(lines) == 2 && strings.TrimSpace(lines[1]) != ""
+	return shell, hasStty
 }
 
 func sshRunCommand(client *ssh.Client, cmd, stdin string, timeout time.Duration) (string, error) {
