@@ -116,6 +116,13 @@ type App struct {
 	sessionToPanel     map[string]string
 	panelAutoTriggered map[string]bool
 	panelLogMu         stdsync.Mutex
+	// MCP file tools: per-SSH-session companion file-transfer session ids
+	// (created lazily, protocol per the connection's fileTransferProto) and
+	// the completion waiters registered by in-flight MCP transfers.
+	mcpFileSessions    map[string]string
+	mcpFileMu          stdsync.Mutex
+	mcpTransferWaiters map[string]chan mcpTransferOutcome
+	mcpTransferMu      stdsync.Mutex
 	// customLogDir, when non-empty, overrides defaultSessionLogDir()
 	// as the target for new session logs. Set from settings via
 	// SetDefaultSessionLogDir; ongoing logs are not migrated.
@@ -138,14 +145,18 @@ func NewApp(webviewDataPath string) *App {
 		panelLogs:          make(map[string]*session.OutputLogger),
 		sessionToPanel:     make(map[string]string),
 		panelAutoTriggered: make(map[string]bool),
+		mcpFileSessions:    make(map[string]string),
+		mcpTransferWaiters: make(map[string]chan mcpTransferOutcome),
 		k8sManager:         k8s.NewManager(),
 		containerManager:   container.NewManager(),
 		errCh:              make(chan error, 16),
 	}
 
 	// Transfer progress is published as Wails events, not OSC sequences in the
-	// terminal data stream.
+	// terminal data stream. MCP file tools additionally hook completion
+	// events to synchronously wait on their transfer tasks.
 	session.TransferEventSink = func(sid string, payload map[string]any) {
+		a.mcpDispatchTransferEvent(payload)
 		a.emit("sftp:transfer", payload)
 	}
 

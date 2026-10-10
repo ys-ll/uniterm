@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/ys-ll/uniterm/backend/session"
 )
 
 func TestClassifyCommand(t *testing.T) {
@@ -313,9 +312,6 @@ type fakeFileExecutor struct{}
 func (fakeFileExecutor) MCPListDir(p string) ([]FileEntry, error) {
 	return []FileEntry{{Name: "a.txt", Size: 3}, {Name: "sub", IsDir: true}}, nil
 }
-func (fakeFileExecutor) MCPReadFile(p string, off int64, max int) ([]byte, bool, error) {
-	return []byte("hello"), false, nil
-}
 func (fakeFileExecutor) MCPWriteFile(local, remote string) (int64, error) {
 	return 5, nil
 }
@@ -337,13 +333,13 @@ func TestFileToolsAndLocalPathScope(t *testing.T) {
 
 	env := Env{
 		Sessions:     func(id string) (SSHExecutor, bool) { return fakeExecutor{}, id == "s1" },
-		FileSession:  func(id string) (FileExecutor, bool) { return fakeFileExecutor{}, id == "s1" },
+		FileSession:  func(id string) (FileExecutor, error) { return fakeFileExecutor{}, map[bool]error{true: nil, false: fmt.Errorf("session %s not found", id)}[id == "s1"] },
 		ListSessions: func() []SessionSummary { return []SessionSummary{{ID: "s1", Type: "ssh", Status: "connected"}} },
 		Approve:      func(req ApprovalRequest) error { return nil },
 		Audit:        func(entry AuditEntry) {},
 		Policy:       func() Policy { return PolicyConfirmAll },
 		ResolveLocalPath: func(p string) (string, error) {
-			return session.ResolveMcpLocalPath(p, []string{inside})
+			return ResolveMcpLocalPath(p, []string{inside})
 		},
 	}
 	srv := NewServer(env)
@@ -382,15 +378,6 @@ func TestFileToolsAndLocalPathScope(t *testing.T) {
 	json.Unmarshal(b, &ld)
 	if len(ld.Entries) != 2 || ld.Entries[0].Name != "a.txt" {
 		t.Fatalf("entries = %+v", ld.Entries)
-	}
-
-	// read_remote_file: no approval, content returned.
-	res, err = cs.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "read_remote_file",
-		Arguments: map[string]any{"sessionId": "s1", "remotePath": "/tmp/f.txt"},
-	})
-	if err != nil || res.IsError {
-		t.Fatalf("read_remote_file: err=%v isError=%v", err, res.IsError)
 	}
 
 	// upload inside the allowed dir: policy confirm_all → approval called

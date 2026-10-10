@@ -144,8 +144,9 @@ type MCPSettings struct {
 	Enabled bool `json:"enabled"`
 	// Port for the 127.0.0.1 listener; 0 = DefaultPort.
 	Port int `json:"port,omitempty"`
-	// Policy is the approval policy: confirm_all (default) / confirm_write /
-	// confirm_dangerous / bypass.
+	// Policy is the approval policy: confirm_write (default) / confirm_all /
+	// confirm_dangerous / bypass. Unknown or empty values fall back to
+	// confirm_write when the policy is evaluated (mcpPolicy in app_mcp.go).
 	Policy string `json:"policy,omitempty"`
 }
 
@@ -153,7 +154,7 @@ type MCPSettings struct {
 func DefaultMCPSettings() MCPSettings {
 	return MCPSettings{
 		Enabled: false,
-		Policy:  "confirm_all",
+		Policy:  "confirm_write",
 	}
 }
 
