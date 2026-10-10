@@ -458,10 +458,11 @@ export const SELECTION_ACTIONS: { label: string; value: TerminalSettings['select
 
 // Timestamp column display formats. `value` is a tokenized template consumed
 // by formatTimestampMs (see utils/terminalGutter.ts); the option text is its
-// i18n label.
-export const TIMESTAMP_FORMATS: { labelKey: string; value: string; sample: string }[] = [
-  { labelKey: 'settings.timestampFormatTime', value: 'HH:mm:ss', sample: '12:34:56' },
-  { labelKey: 'settings.timestampFormatDateTime', value: 'YYYY-MM-DD HH:mm:ss', sample: '2026-08-18 12:34:56' },
+// i18n label followed by the template itself.
+export const TIMESTAMP_FORMATS: { labelKey: string; value: string }[] = [
+  { labelKey: 'settings.timestampFormatTime', value: 'HH:mm:ss' },
+  { labelKey: 'settings.timestampFormatTimeMs', value: 'HH:mm:ss.SSS' },
+  { labelKey: 'settings.timestampFormatDateTime', value: 'YYYY-MM-DD HH:mm:ss' },
 ]
 
 export const CURSOR_STYLES: { labelKey: string; value: TerminalSettings['cursorStyle'] }[] = [

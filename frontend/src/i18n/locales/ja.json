@@ -529,6 +529,7 @@
   "settings.timestampFormat": "時刻の形式",
   "settings.timestampFormatTime": "時刻",
   "settings.timestampFormatDateTime": "日付と時刻",
+  "settings.timestampFormatTimeMs": "時刻（ミリ秒）",
   "settings.hideTimestamps": "時間を非表示",
   "settings.hideLineNumbers": "行番号を非表示",
   "settings.cursorBlink": "カーソル点滅",

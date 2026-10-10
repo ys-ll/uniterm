@@ -529,6 +529,7 @@
   "settings.timestampFormat": "Формат времени",
   "settings.timestampFormatTime": "Время",
   "settings.timestampFormatDateTime": "Дата и время",
+  "settings.timestampFormatTimeMs": "Время (мс)",
   "settings.hideTimestamps": "Скрыть время",
   "settings.hideLineNumbers": "Скрыть номера строк",
   "settings.cursorBlink": "Мигание курсора",

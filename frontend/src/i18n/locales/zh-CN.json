@@ -532,6 +532,7 @@
   "settings.timestampFormat": "时间格式",
   "settings.timestampFormatTime": "时间",
   "settings.timestampFormatDateTime": "日期和时间",
+  "settings.timestampFormatTimeMs": "时间（毫秒）",
   "settings.hideTimestamps": "隐藏时间",
   "settings.hideLineNumbers": "隐藏行号",
   "settings.cursorBlink": "光标闪烁",

@@ -65,8 +65,8 @@ export interface GutterBuildResult {
 
 /**
  * Format a birth timestamp per a tokenized template. Supported tokens:
- * YYYY/YY (year), MM/DD (month/day), HH/mm/ss (hour/minute/second); everything
- * else (e.g. ":") passes through unchanged.
+ * YYYY/YY (year), MM/DD (month/day), HH/mm/ss (hour/minute/second), SSS
+ * (milliseconds); everything else (e.g. ":") passes through unchanged.
  */
 export function formatTimestampMs(ms: number, format: string = DEFAULT_TIMESTAMP_FORMAT): string {
   const d = new Date(ms)
@@ -79,8 +79,9 @@ export function formatTimestampMs(ms: number, format: string = DEFAULT_TIMESTAMP
     HH: pad(d.getHours()),
     mm: pad(d.getMinutes()),
     ss: pad(d.getSeconds()),
+    SSS: String(d.getMilliseconds()).padStart(3, '0'),
   }
-  return format.replace(/YYYY|YY|MM|DD|HH|mm|ss/g, (t) => tokens[t])
+  return format.replace(/YYYY|YY|MM|DD|HH|mm|ss|SSS/g, (t) => tokens[t])
 }
 
 /** Sample timestamp whose rendered length bounds a format's column width. */

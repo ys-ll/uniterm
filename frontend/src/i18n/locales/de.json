@@ -529,6 +529,7 @@
   "settings.timestampFormat": "Zeitformat",
   "settings.timestampFormatTime": "Uhrzeit",
   "settings.timestampFormatDateTime": "Datum und Uhrzeit",
+  "settings.timestampFormatTimeMs": "Uhrzeit (ms)",
   "settings.hideTimestamps": "Zeitstempel ausblenden",
   "settings.hideLineNumbers": "Zeilennummern ausblenden",
   "settings.cursorBlink": "Cursor blinken",
