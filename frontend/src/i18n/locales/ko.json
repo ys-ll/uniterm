@@ -529,6 +529,7 @@
   "settings.timestampFormat": "시간 형식",
   "settings.timestampFormatTime": "시간",
   "settings.timestampFormatDateTime": "날짜와 시간",
+  "settings.timestampFormatTimeMs": "시간(밀리초)",
   "settings.hideTimestamps": "시간 숨기기",
   "settings.hideLineNumbers": "줄 번호 숨기기",
   "settings.cursorBlink": "커서 깜박임",

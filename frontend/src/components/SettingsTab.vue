@@ -539,7 +539,7 @@
             </div>
             <div class="setting-control">
               <el-select v-model="settingsStore.settings.terminal.timestampFormat" @change="settingsStore.save()">
-                <el-option v-for="opt in TIMESTAMP_FORMATS" :key="opt.value" :label="t(opt.labelKey)" :value="opt.value" />
+                <el-option v-for="opt in TIMESTAMP_FORMATS" :key="opt.value" :label="`${t(opt.labelKey)} (${opt.value})`" :value="opt.value" />
               </el-select>
             </div>
           </div>

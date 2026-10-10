@@ -130,6 +130,11 @@ describe('formatTimestampMs', () => {
     const d = new Date(2026, 0, 3, 9, 4, 5)
     expect(formatTimestampMs(d.getTime(), 'HH:mm')).toBe('09:04')
   })
+
+  it('renders milliseconds with the SSS token', () => {
+    const d = new Date(2026, 7, 18, 6, 5, 9, 42)
+    expect(formatTimestampMs(d.getTime(), 'HH:mm:ss.SSS')).toBe('06:05:09.042')
+  })
 })
 
 describe('resolveRowMeta', () => {

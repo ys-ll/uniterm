@@ -529,6 +529,7 @@
   "settings.timestampFormat": "Format d'heure",
   "settings.timestampFormatTime": "Heure",
   "settings.timestampFormatDateTime": "Date et heure",
+  "settings.timestampFormatTimeMs": "Heure (ms)",
   "settings.hideTimestamps": "Masquer les horodatages",
   "settings.hideLineNumbers": "Masquer les numéros de ligne",
   "settings.cursorBlink": "Clignotement du curseur",
