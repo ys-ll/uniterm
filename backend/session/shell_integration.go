@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -257,7 +258,7 @@ func buildShellCwdHookBody(shell string) (string, bool) {	base := shellBasename(
 // the on-demand SSH paths; the read loop strips it from the display stream
 // and starts phase 2 (the hook body) only after seeing it, so the body can
 // never render. Kept short so the arm line stays single-row when echoed.
-const cwdHookEchoArmedMarker = wslCwdHookEchoMarker
+const cwdHookEchoArmedMarker = "\x1b]7777;e\x07"
 
 // cwdHookArmLine is phase 1 of the on-demand typed cwd-hook injection into a
 // LIVE shell (directory follow). The pty of such a session was created
@@ -284,6 +285,90 @@ func buildTwoPhaseCwdHook(shell string) (arm, body string, ok bool) {
 		return cwdHookArmLine, body, true
 	}
 	return "", body, true
+}
+
+// cwdHookBlindRestoreLine is typed into the shell when the injected hook
+// never confirmed within the watchdog timeout: the arm phase left the pty
+// echo off and nothing else will turn it back on. Leading space keeps it out
+// of bash history (HISTCONTROL=ignorespace).
+const cwdHookBlindRestoreLine = " stty echo\n"
+
+// typedCwdHookState carries the state machine of the two-phase typed
+// cwd-hook injection shared by the WSL and the on-demand SSH paths: phase 1
+// arms stty -echo, and the read loop writes the stored phase-2 body only once
+// the echo-armed marker shows the echo actually went off, so the body can
+// never render. The ready marker (printed last by the body) confirms the
+// whole injection. Single-phase injections (fish, or the SSH startup path
+// with its echo-off pty) never set an arm pending, so the armed event never
+// fires and only the ready marker matters. onOutput must only be called from
+// the session's read loop; arm/disarm come from the injecting goroutine.
+type typedCwdHookState struct {
+	mu          sync.Mutex
+	armPending  bool
+	pendingBody string
+	echoReady   hookReadyScanner
+	hookReady   hookReadyScanner
+	installed   atomic.Bool
+}
+
+func newTypedCwdHookState() typedCwdHookState {
+	return typedCwdHookState{
+		echoReady: newHookReadyScanner(cwdHookEchoArmedMarker),
+		hookReady: newHookReadyScanner(sshCwdHookReadyMarker),
+	}
+}
+
+// arm stores the phase-2 body; the write happens when the read loop sees the
+// echo-armed marker.
+func (h *typedCwdHookState) arm(body string) {
+	h.mu.Lock()
+	h.armPending = true
+	h.pendingBody = body
+	h.mu.Unlock()
+}
+
+// disarm drops a pending phase-2 body (the phase-1 write failed).
+func (h *typedCwdHookState) disarm() {
+	h.mu.Lock()
+	h.armPending = false
+	h.pendingBody = ""
+	h.mu.Unlock()
+}
+
+// takeArmedBody hands out the stored body once the echo-armed marker arrived
+// (stty -echo took effect) and clears the pending state.
+func (h *typedCwdHookState) takeArmedBody() string {
+	h.mu.Lock()
+	h.armPending = false
+	body := h.pendingBody
+	h.mu.Unlock()
+	return body
+}
+
+// confirm marks the injection complete; from then on onOutput is a
+// passthrough and the confirm watchdog becomes a no-op.
+func (h *typedCwdHookState) confirm() { h.installed.Store(true) }
+
+// isInstalled reports whether the ready marker confirmed the hook.
+func (h *typedCwdHookState) isInstalled() bool { return h.installed.Load() }
+
+// onOutput feeds the next display chunk through the marker scanners. cleaned
+// must always be used in place of the input: partially arrived markers are
+// withheld and flushed on a later call. armed fires once per arm phase,
+// confirmed exactly once.
+func (h *typedCwdHookState) onOutput(data []byte) (cleaned []byte, armed, confirmed bool) {
+	if h.installed.Load() {
+		return data, false, false
+	}
+	h.mu.Lock()
+	pending := h.armPending
+	h.mu.Unlock()
+	if pending {
+		cleaned, armed = h.echoReady.Feed(data)
+		data = cleaned
+	}
+	cleaned, confirmed = h.hookReady.Feed(data)
+	return cleaned, armed, confirmed
 }
 
 // hookReadyScanner strips control markers from the terminal byte stream (they

@@ -65,21 +65,13 @@ type SSHSession struct {
 	// Only used from the readLoop goroutine.
 	osc7 osc7Scanner
 
-	// hookReady strips the cwd hook's ready marker from the display stream.
-	// Only used from the readLoop goroutine.
-	hookReady hookReadyScanner
-
-	// echoReady strips the on-demand cwd hook's echo-armed marker from the
-	// display stream (two-phase injection for directory follow). Only used
-	// from the readLoop goroutine; initialized by InjectCwdHook before the
-	// arm phase is written.
-	echoReady hookReadyScanner
-
-	// cwdHookArmPending and cwdHookPendingBody carry the two-phase on-demand
-	// injection from InjectCwdHook (phase-1 arm write) to the readLoop
-	// (echo-armed marker seen → phase-2 body write). Guarded by mu.
-	cwdHookArmPending  bool
-	cwdHookPendingBody string
+	// hook carries the typed cwd-hook injection state machine shared with the
+	// WSL path (see typedCwdHookState): the marker scanners plus the
+	// arm/body handoff of the on-demand two-phase injection. The startup path
+	// runs it single-phase: the pty is created echo-off and the hook is typed
+	// before the shell reads anything, so no arm phase is ever pending and
+	// only the ready marker fires. Scanner Feeds run in the readLoop only.
+	hook typedCwdHookState
 
 	enc            encoding.Encoding     // input(write) codec; nil = utf-8 passthrough
 	encoder        transform.Transformer // cached encoder; nil = utf-8 passthrough (F-003)
@@ -96,12 +88,6 @@ type SSHSession struct {
 	// for Microsoft's OpenSSH for Windows, "" otherwise). Set once during
 	// Connect from the server identification string.
 	remoteOS string
-
-	// cwdHookInstalled records that the injected startup cwd hook confirmed
-	// itself via its ready marker (read loop). Session objects are recreated
-	// on reconnect, so the flag resets naturally and the reconnect
-	// re-injection still fires.
-	cwdHookInstalled atomic.Bool
 
 	// cwdHookFollow marks connections with CwdHookMode "follow": the hook is
 	// not injected at attach time; InjectCwdHook types it into the running
@@ -176,7 +162,7 @@ func NewSSHSession(id string) *SSHSession {
 		},
 		quit: make(chan struct{}),
 	}
-	s.hookReady = newHookReadyScanner(sshCwdHookReadyMarker)
+	s.hook = newTypedCwdHookState()
 	return s
 }
 
@@ -696,26 +682,15 @@ func (s *SSHSession) readLoop() {
 					TerminalCwdSink(s.id, cwd)
 				}
 			}
-			if !s.cwdHookInstalled.Load() {
-				if s.cwdHookArmPending {
-					var armed bool
-					cleaned, armed = s.echoReady.Feed(cleaned)
-					if armed {
-						s.mu.Lock()
-						s.cwdHookArmPending = false
-						body := s.cwdHookPendingBody
-						s.mu.Unlock()
-						// stty -echo took effect — the body can no longer echo.
-						go s.writeCwdHookBody(body)
-					}
-				}
-				var confirmed bool
-				cleaned, confirmed = s.hookReady.Feed(cleaned)
-				if confirmed {
-					s.cwdHookInstalled.Store(true)
-					log.Writef("ssh: cwd hook confirmed via ready marker")
-					s.closeHookConfirmed()
-				}
+			cleaned, armed, confirmed := s.hook.onOutput(cleaned)
+			if armed {
+				// stty -echo took effect — the body can no longer echo.
+				go s.writeCwdHookBody(s.hook.takeArmedBody())
+			}
+			if confirmed {
+				s.hook.confirm()
+				log.Writef("ssh: cwd hook confirmed via ready marker")
+				s.closeHookConfirmed()
 			}
 			s.offerExpectOutput(cleaned)
 			s.outputRouteMu.Lock()
@@ -1032,7 +1007,7 @@ func (s *SSHSession) watchCwdHookConfirm() {
 	case <-s.quit:
 		return
 	}
-	if s.cwdHookInstalled.Load() || s.Status() != StatusConnected {
+	if s.hook.isInstalled() || s.Status() != StatusConnected {
 		return
 	}
 	log.Writef("ssh: cwd hook not confirmed after %s, restoring echo blindly", cwdHookConfirmTimeout)
@@ -1045,8 +1020,7 @@ func (s *SSHSession) watchCwdHookConfirm() {
 	stdin := s.stdin
 	s.mu.RUnlock()
 	if stdin != nil {
-		// Leading space keeps it out of bash history (HISTCONTROL=ignorespace).
-		_, _ = stdin.Write([]byte(" stty echo\n"))
+		_, _ = stdin.Write([]byte(cwdHookBlindRestoreLine))
 	}
 }
 
@@ -1092,16 +1066,9 @@ func (s *SSHSession) InjectCwdHook() error {
 		// Phase 1: arm echo-off. The watchdog (watchCwdHookConfirm) still
 		// runs: if the arm line never confirms, it restores echo blindly at
 		// cwdHookConfirmTimeout — the arm line alone leaves echo OFF.
-		s.echoReady = newHookReadyScanner(cwdHookEchoArmedMarker)
-		s.mu.Lock()
-		s.cwdHookArmPending = true
-		s.cwdHookPendingBody = body
-		s.mu.Unlock()
+		s.hook.arm(body)
 		if _, err := stdin.Write(s.encodeInput([]byte(arm))); err != nil {
-			s.mu.Lock()
-			s.cwdHookArmPending = false
-			s.cwdHookPendingBody = ""
-			s.mu.Unlock()
+			s.hook.disarm()
 			s.cwdHookTriggered.Store(false)
 			return fmt.Errorf("cwd hook arm write: %w", err)
 		}

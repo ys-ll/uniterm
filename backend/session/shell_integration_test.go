@@ -414,3 +414,75 @@ func TestBuildTwoPhaseCwdHook(t *testing.T) {
 		t.Fatal("ash must stay unsupported")
 	}
 }
+
+func TestTypedCwdHookState(t *testing.T) {
+	h := newTypedCwdHookState()
+
+	// Single-phase (SSH startup): no arm pending — the arm line never came
+	// with a marker, so nothing arms; only the ready marker confirms.
+	cleaned, armed, confirmed := h.onOutput([]byte(" stty -echo" + sshCwdHookReadyMarker))
+	if armed {
+		t.Fatal("single-phase output must not arm")
+	}
+	if !confirmed {
+		t.Fatal("ready marker must confirm")
+	}
+	if string(cleaned) != " stty -echo" {
+		t.Fatalf("marker not stripped: %q", cleaned)
+	}
+	// The read loop turns the confirmed event into install; the passthrough
+	// only starts afterwards.
+	h.confirm()
+	if !h.isInstalled() {
+		t.Fatal("state must be installed after confirm")
+	}
+	// Passthrough after install: nothing is withheld or reported anymore.
+	cleaned, armed, confirmed = h.onOutput([]byte("more" + cwdHookEchoArmedMarker))
+	if armed || confirmed || string(cleaned) != "more"+cwdHookEchoArmedMarker {
+		t.Fatalf("passthrough broken: cleaned=%q armed=%v confirmed=%v", cleaned, armed, confirmed)
+	}
+}
+
+func TestTypedCwdHookStateTwoPhase(t *testing.T) {
+	h := newTypedCwdHookState()
+	h.arm("echo body\n")
+
+	// Before the armed marker nothing arms or confirms.
+	cleaned, armed, confirmed := h.onOutput([]byte("prompt "))
+	if armed || confirmed || string(cleaned) != "prompt " {
+		t.Fatalf("pre-arm output changed: cleaned=%q armed=%v confirmed=%v", cleaned, armed, confirmed)
+	}
+
+	// The armed marker split across chunks: the partial first chunk is
+	// withheld (cleaned empty), the event fires when the marker completes.
+	c1, armed1, confirmed1 := h.onOutput([]byte("\x1b]7777;"))
+	c2, armed2, confirmed2 := h.onOutput([]byte("e\x07body output"))
+	if armed1 || !armed2 || confirmed1 || confirmed2 {
+		t.Fatalf("arm events wrong: armed1=%v armed2=%v confirmed1=%v confirmed2=%v", armed1, armed2, confirmed1, confirmed2)
+	}
+	if string(c1) != "" || string(c2) != "body output" {
+		t.Fatalf("arm marker not stripped: %q %q", c1, c2)
+	}
+	c3, armed3, confirmed3 := h.onOutput([]byte(sshCwdHookReadyMarker + " more"))
+	if armed3 || !confirmed3 || string(c3) != " more" {
+		t.Fatalf("ready events wrong: armed3=%v confirmed3=%v cleaned3=%q", armed3, confirmed3, c3)
+	}
+	if got := h.takeArmedBody(); got != "echo body\n" {
+		t.Fatalf("armed body = %q", got)
+	}
+
+	// takeArmedBody clears the pending state; a second arm marker never
+	// fires again.
+	_, armed, _ = h.onOutput([]byte(cwdHookEchoArmedMarker))
+	if armed {
+		t.Fatal("armed fired twice")
+	}
+	h.confirm()
+	if !h.isInstalled() {
+		t.Fatal("confirm did not install")
+	}
+	h.disarm()
+	if h.takeArmedBody() != "" {
+		t.Fatal("disarm must drop the body")
+	}
+}
