@@ -324,3 +324,93 @@ func TestSSHRunCommandTimesOutWhileOpeningSession(t *testing.T) {
 	_ = client.Close()
 }
 
+
+// Regression: a post-login line queued while the injected cwd hook's
+// cursor-position probe (read -t 1 < /dev/tty) was still pending was silently
+// consumed by that read instead of reaching the shell. runPostLoginAutomation
+// must hold its gate until the hook confirms before typing anything.
+func TestPostLoginWaitsForCwdHookConfirm(t *testing.T) {
+	s := NewSSHSession("test-post-login-gate")
+	s.hookConfirmedCh = make(chan struct{})
+	s.setStatus(StatusConnected)
+	s.RecordReadActivity()
+
+	stdin := &testWriteCloser{}
+	s.stdin = stdin
+
+	done := make(chan struct{})
+	go func() {
+		s.runPostLoginAutomation(ConnectionConfig{PostLoginScript: "echo hookgate"})
+		close(done)
+	}()
+
+	// Gate must hold: nothing typed while the hook channel is open.
+	time.Sleep(300 * time.Millisecond)
+	if stdin.Len() != 0 {
+		t.Fatalf("post-login typed before hook confirm: %q", stdin.String())
+	}
+
+	close(s.hookConfirmedCh)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("post-login automation did not finish after hook confirm")
+	}
+	if !strings.Contains(stdin.String(), "echo hookgate\r") {
+		t.Fatalf("post-login line missing after gate release: %q", stdin.String())
+	}
+}
+
+type testWriteCloser struct{ bytes.Buffer }
+
+func (w *testWriteCloser) Close() error { return nil }
+
+func TestParseShellProbe(t *testing.T) {
+	cases := []struct {
+		name    string
+		out     string
+		shell   string
+		hasStty bool
+	}{
+		{"bash with stty", "/bin/bash\n/usr/bin/stty\n", "/bin/bash", true},
+		{"bash without stty", "/bin/bash\n", "/bin/bash", false},
+		{"crlf output", "/bin/bash\r\n/usr/bin/stty\r\n", "/bin/bash", true},
+		{"empty SHELL", "\n/usr/bin/stty\n", "", false},
+		{"empty output", "", "", false},
+		{"shell only no newline", "/bin/zsh", "/bin/zsh", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			shell, hasStty := parseShellProbe(tc.out)
+			if shell != tc.shell || hasStty != tc.hasStty {
+				t.Fatalf("parseShellProbe(%q) = (%q, %v), want (%q, %v)", tc.out, shell, hasStty, tc.shell, tc.hasStty)
+			}
+		})
+	}
+}
+
+func TestBuildTwoPhaseCwdHook(t *testing.T) {
+	arm, body, ok := buildTwoPhaseCwdHook("/usr/bin/bash")
+	if !ok || arm == "" || body == "" {
+		t.Fatalf("bash: ok=%v arm=%q body=%q, want both non-empty", ok, arm, body)
+	}
+	if !strings.Contains(arm, "stty -echo") || !strings.Contains(arm, `\033]7777;e\007`) {
+		t.Fatalf("bash arm line missing echo-off or armed marker: %q", arm)
+	}
+	// The phase-2 body must carry its own echo restore and ready marker so a
+	// completed injection always leaves the terminal echo-on.
+	if !strings.Contains(body, "stty echo") || !strings.Contains(body, "uniterm-ok") {
+		t.Fatalf("bash body missing echo restore or ready marker: %q", body)
+	}
+	if arm2, body2, ok := buildTwoPhaseCwdHook("/usr/bin/zsh"); !ok || arm2 != arm || body2 == "" {
+		t.Fatalf("zsh: ok=%v arm mismatch", ok)
+	}
+	// fish has no stty-based arm phase and keeps the single-line injection.
+	armF, bodyF, ok := buildTwoPhaseCwdHook("/usr/bin/fish")
+	if !ok || armF != "" || bodyF == "" {
+		t.Fatalf("fish: ok=%v arm=%q, want empty arm and non-empty body", ok, armF)
+	}
+	if _, _, ok := buildTwoPhaseCwdHook("/bin/ash"); ok {
+		t.Fatal("ash must stay unsupported")
+	}
+}
