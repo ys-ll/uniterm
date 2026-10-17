@@ -92,7 +92,7 @@ import { requestJSON, startLogStream, type LogHandle } from '../services/k8sClie
 import { useI18n } from '../i18n'
 import Menu from './Menu.vue'
 import SyntaxEditor from './SyntaxEditor.vue'
-import { Clipboard } from '@wailsio/runtime'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import MenuItem from './MenuItem.vue'
 
 const props = defineProps<{ connId: string; mode: 'detail' | 'logs' | null; target: any | null; resourceKey: string; selfPathOverride?: (obj: any) => string; initialTab?: 'detail' | 'yaml' }>()
@@ -115,10 +115,8 @@ function onCopyContextMenu(e: MouseEvent) {
 
 async function onCopyMenu() {
   const sel = window.getSelection()?.toString() || ''
-  if (sel) {
-    try { await Clipboard.SetText(sel) } catch { try { await navigator.clipboard.writeText(sel) } catch { /* ignore */ } }
-  }
   copyMenuVisible.value = false
+  if (sel) await writeClipboard(sel)
 }
 
 // Drawer width (draggable). Defaults widen for logs mode; not persisted.
@@ -221,7 +219,10 @@ const yamlText = computed(() => {
 function startEdit() { draft.value = yamlText.value; editing.value = true; saveError.value = '' }
 function cancelEdit() { editing.value = false; saveError.value = '' }
 async function copyYaml() {
-  try { await navigator.clipboard.writeText(yamlText.value); ElMessage.success(t('k8s.copied')) }
+  try {
+    if (await writeClipboard(yamlText.value)) ElMessage.success(t('k8s.copied'))
+    else ElMessage.error(t('k8s.copyFailed'))
+  }
   catch (e: any) { ElMessage.error(`${t('k8s.copyFailed')}: ${e?.message || e}`) }
 }
 

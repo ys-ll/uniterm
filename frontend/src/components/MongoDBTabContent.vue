@@ -292,6 +292,7 @@ import { isNarrowScreen } from '../utils/platform'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import { uiPx } from '../utils/uiScale'
 import {
   MongoListDatabases,
@@ -685,7 +686,7 @@ function onCtxViewIndexes(current: CtxMenuData) {
 }
 
 function onCtxCopyName(current: CtxMenuData) {
-  navigator.clipboard.writeText(current.col)
+  void writeClipboard(current.col)
   ctxMenuVisible.value = false
 }
 

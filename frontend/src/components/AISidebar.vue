@@ -345,9 +345,8 @@ import { isMobilePlatform } from '../utils/platform'
 import AIMessage from './AIMessage.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
-import { Clipboard } from '@wailsio/runtime'
 import MenuDivider from './MenuDivider.vue'
-import { writeClipboard } from '../composables/useClipboardWrite'
+import { writeClipboard, readClipboardText } from '../composables/useClipboardWrite'
 import { formatClock, formatDuration } from '../utils/timeFormat'
 import { useLocalStateStore } from '../stores/localStateStore'
 
@@ -666,7 +665,7 @@ async function readClipboardImage(): Promise<Blob | null> {
 
 /**
  * Last-resort clipboard read for paste events that carried no data. Prefers an
- * image from the async Clipboard API, then the Wails clipboard for text. The
+ * image from the async Clipboard API, then the device-aware text helper. The
  * read is raced against a short deadline so a slow or permission-gated call
  * can never leave paste hanging — once the text fallback has run, a late image
  * is ignored.
@@ -676,15 +675,15 @@ function pasteFromClipboard() {
   const pasteText = () => {
     if (settled) return
     settled = true
-    Clipboard.Text().then(text => { if (text) insertTextAtCursor(text) }).catch(() => {})
+    readClipboardText().then(text => { if (text) insertTextAtCursor(text) }).catch(() => {})
   }
   const timer = window.setTimeout(pasteText, 500)
   void readClipboardImage()
     .then(blob => {
       if (settled) return
       window.clearTimeout(timer)
-      settled = true
-      if (!attachClipboardImage(blob)) pasteText()
+      if (attachClipboardImage(blob)) settled = true
+      else pasteText()
     })
     .catch(() => {
       window.clearTimeout(timer)
@@ -1626,11 +1625,11 @@ function onKeydown(e: KeyboardEvent) {
   // Cmd/Ctrl+V is deliberately NOT preventDefault-ed: letting the browser run
   // its default action is the only way to receive a paste event carrying image
   // data, and onPaste() handles both the image and the text case. Mobile keeps
-  // the old Wails-clipboard path (no clipboard events on touch keyboards).
+  // explicit text read (no clipboard events on some touch keyboards).
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V')) {
     if (isMobile) {
       e.preventDefault()
-      Clipboard.Text().then(text => { if (text) insertTextAtCursor(text) }).catch(() => {})
+      readClipboardText().then(text => { if (text) insertTextAtCursor(text) }).catch(() => {})
     }
     return
   }
@@ -1648,7 +1647,7 @@ function onKeydown(e: KeyboardEvent) {
  *   2. text from the event is inserted (plain-text paste, unchanged);
  *   3. an event with nothing usable (some webviews hand over an empty
  *      clipboardData) falls back to the async Clipboard API for an image and
- *      then to the Wails clipboard for text — the pre-existing behaviour.
+ *      then to the device-aware text helper.
  */
 function onPaste(e: ClipboardEvent) {
   if (!isMobile) {
@@ -1669,7 +1668,7 @@ function onPaste(e: ClipboardEvent) {
 
   e.preventDefault()
   if (isMobile) {
-    Clipboard.Text().then(t => { if (t) insertTextAtCursor(t) }).catch(() => {})
+    readClipboardText().then(t => { if (t) insertTextAtCursor(t) }).catch(() => {})
     return
   }
   pasteFromClipboard()

@@ -70,7 +70,7 @@ import type { StreamHandle } from '../services/containerClient'
 import { useI18n } from '../i18n'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
-import { Clipboard } from '@wailsio/runtime'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import type { ContainerDetail, ContainerInfo, InspectResult } from '../types/container'
 
 const props = defineProps<{ mode: 'detail' | 'logs' | null; tabId: string; target: ContainerInfo | null }>()
@@ -94,10 +94,8 @@ function onCopyContextMenu(e: MouseEvent) {
 
 async function onCopyMenu() {
   const sel = window.getSelection()?.toString() || ''
-  if (sel) {
-    try { await Clipboard.SetText(sel) } catch { try { await navigator.clipboard.writeText(sel) } catch { /* ignore */ } }
-  }
   copyMenuVisible.value = false
+  if (sel) await writeClipboard(sel)
 }
 
 // Drawer width (draggable). Logs mode widens; not persisted.
@@ -200,7 +198,10 @@ const prettyRaw = computed(() => {
 })
 
 async function copyRaw() {
-  try { await navigator.clipboard.writeText(prettyRaw.value); ElMessage.success(t('k8s.copied')) }
+  try {
+    if (await writeClipboard(prettyRaw.value)) ElMessage.success(t('k8s.copied'))
+    else ElMessage.error(t('k8s.copyFailed'))
+  }
   catch (e: any) { ElMessage.error(`${t('k8s.copyFailed')}: ${e?.message || e}`) }
 }
 

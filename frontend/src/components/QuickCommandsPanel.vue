@@ -237,6 +237,7 @@ import { usePanelStore } from '../stores/panelStore'
 import { queuedSessionWrite } from '../services/sessionWriter'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import { focusActivePanelTerminal } from '../composables/useFocusTerminal'
 import QuickCommandEditDialog from './QuickCommandEditDialog.vue'
 import Menu from './Menu.vue'
@@ -439,8 +440,8 @@ function pasteCommand(cmd: QuickCommand) { sendCommand(cmd, 'paste') }
 
 async function copyCommand(cmd: QuickCommand) {
   try {
-    await navigator.clipboard.writeText(cmd.command)
-    msg.success(t('quickCommands.copied'))
+    if (await writeClipboard(cmd.command)) msg.success(t('quickCommands.copied'))
+    else msg.error(t('quickCommands.copyFailed'))
   } catch {
     msg.error(t('quickCommands.copyFailed'))
   }

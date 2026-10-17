@@ -183,6 +183,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { Copy, Check, BookOpen, Terminal, FileText } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useI18n } from '../i18n'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
 import { formatClock, formatDuration } from '../utils/timeFormat'
 import { attachmentPreviewUrl, formatBytes } from '../services/attachments'
@@ -327,8 +328,8 @@ const CHECK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="0.75rem" heig
 
 async function copyAsMarkdown() {
   try {
-    await navigator.clipboard.writeText(props.message.content)
-    copyMdLabel.value = t('ai.copied')
+    const ok = await writeClipboard(props.message.content)
+    copyMdLabel.value = t(ok ? 'ai.copied' : 'ai.copyFailed')
     setTimeout(() => { copyMdLabel.value = t('ai.copyMarkdown') }, 2000)
   } catch {
     copyMdLabel.value = t('ai.copyFailed')
@@ -340,7 +341,7 @@ const copiedTool = ref('')
 
 async function copyToolText(text: string, key: string) {
   try {
-    await navigator.clipboard.writeText(text)
+    if (!await writeClipboard(text)) return
     copiedTool.value = key
     setTimeout(() => { copiedTool.value = '' }, 2000)
   } catch {
@@ -348,13 +349,12 @@ async function copyToolText(text: string, key: string) {
   }
 }
 
-function onTextClick(event: MouseEvent) {
+async function onTextClick(event: MouseEvent) {
   const btn = (event.target as HTMLElement).closest('.code-copy-btn') as HTMLElement | null
   if (!btn) return
   const wrapper = btn.closest('.code-block-wrapper')
   const code = wrapper?.querySelector('code')?.textContent
-  if (code) {
-    navigator.clipboard.writeText(code)
+  if (code && await writeClipboard(code)) {
     btn.innerHTML = CHECK_ICON
     setTimeout(() => { btn.innerHTML = COPY_ICON }, 2000)
   }

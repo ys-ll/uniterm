@@ -70,6 +70,7 @@ import { ElButton, ElIcon, ElMessage } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
 import { useContainerStore } from '../stores/containerStore'
 import { useI18n } from '../i18n'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import type { ContainerImage, ImageLayer } from '../types/container'
 
 const props = defineProps<{ mode: 'detail' | null; tabId: string; target: ContainerImage | null }>()
@@ -260,7 +261,10 @@ const prettyRaw = computed(() => {
 })
 
 async function copyRaw() {
-  try { await navigator.clipboard.writeText(prettyRaw.value); ElMessage.success(t('k8s.copied')) }
+  try {
+    if (await writeClipboard(prettyRaw.value)) ElMessage.success(t('k8s.copied'))
+    else ElMessage.error(t('k8s.copyFailed'))
+  }
   catch (e: any) { ElMessage.error(`${t('k8s.copyFailed')}: ${e?.message || e}`) }
 }
 

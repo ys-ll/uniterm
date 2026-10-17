@@ -182,6 +182,7 @@ import { useI18n } from '../i18n'
 import { ElMessageBox } from 'element-plus'
 import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
@@ -448,7 +449,7 @@ function onCtxViewStructure() {
 }
 
 function onCtxCopyName() {
-  navigator.clipboard.writeText(ctxTableName.value).catch(() => {})
+  void writeClipboard(ctxTableName.value)
   ctxMenuVisible.value = false
 }
 

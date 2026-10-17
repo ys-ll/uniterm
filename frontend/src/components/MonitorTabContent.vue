@@ -565,6 +565,7 @@
 import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
 import { SetMonitorActiveTab, SetMonitorPaused, GetProcessDetail, KillProcess, GetPorts, GetDisks, GetNetworkCards, GetServices, GetServiceDetail, GetServiceLogs, ServiceAction, GetDevices, GetHardwareFru, GetHardwareLan, GetHardwareSensors } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import { Close, RefreshRight } from '@element-plus/icons-vue'
 import { ChevronRight } from '@lucide/vue'
 import { useI18n } from '../i18n'
@@ -1416,21 +1417,11 @@ function showContextMenu(e: MouseEvent) {
   ctxMenuRef.value?.openAt(e.clientX, e.clientY, selection)
 }
 
-function copyContextText(text: unknown) {
+async function copyContextText(text: unknown) {
   if (typeof text !== 'string' || !text) return
-  navigator.clipboard.writeText(text).then(() => {
-    msg.success(t('ai.copied'))
-  }).catch(() => {
-    // fallback
-    const ta = document.createElement('textarea')
-    ta.value = text
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
-    msg.success(t('ai.copied'))
-  })
   ctxMenuVisible.value = false
+  if (await writeClipboard(text)) msg.success(t('ai.copied'))
+  else msg.error(t('ai.copyFailed'))
 }
 
 function onDetailSectionContextMenu(e: MouseEvent) {

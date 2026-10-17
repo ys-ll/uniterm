@@ -152,7 +152,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { RefreshCw, Play, Tag, ArrowUpFromLine, ArrowDownToLine, Trash2, Square, ScrollText, BrushCleaning } from '@lucide/vue'
 import { useContainerStore } from '../stores/containerStore'
-import { Clipboard } from '@wailsio/runtime'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import { useI18n } from '../i18n'
 import * as client from '../services/containerClient'
 import type { StreamHandle } from '../services/containerClient'
@@ -179,10 +179,8 @@ function onCopyContextMenu(e: MouseEvent) {
 
 async function onCopyMenu() {
   const sel = window.getSelection()?.toString() || ''
-  if (sel) {
-    try { await Clipboard.SetText(sel) } catch { try { await navigator.clipboard.writeText(sel) } catch { /* ignore */ } }
-  }
   copyMenuVisible.value = false
+  if (sel) await writeClipboard(sel)
 }
 
 const props = defineProps<{ tab: ContainerTab; session: ReturnType<typeof useContainerStore>['sessions'][string] | undefined }>()
