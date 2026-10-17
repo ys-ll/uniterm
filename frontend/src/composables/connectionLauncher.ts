@@ -19,6 +19,7 @@ import { parseWslFromShell } from '../utils/shellLabel'
 import { t } from '../i18n'
 import { msg } from '../services/message'
 import { supportsConnectionType } from '../utils/nativeCapabilities'
+import { isWebMode } from '../utils/webMode'
 import type { ConnectionConfig, MemberConnectResult } from '../types/session'
 
 // App.vue-provided dependencies: the credential dialog and the start-tab
@@ -127,7 +128,7 @@ export async function launchContainerFileBrowser(config: ConnectionConfig, opts:
 // - sessionType: CreateSession kind, defaults to the key; a function form is
 //   supported for per-connection resolution. componentSession instead marks
 //   kinds whose tab content owns the session (x11-desktop, k8s, container).
-// - sessionFirst: create the session BEFORE the tab. VNC/SPICE mount their
+// - sessionFirst: create the session BEFORE the tab. Desktop VNC/SPICE mount their
 //   content immediately and need sessionId + proxyAddr already bound (v3
 //   race: the session:status 'connected' event fires during CreateSession,
 //   before the component has its session id).
@@ -268,7 +269,10 @@ async function runSpec(key: string, config: ConnectionConfig, spec: ConnectSpec,
     return t
   }
 
-  const sessionType = spec.componentSession ? undefined : resolveSessionType(key, spec, config)
+  // Browser VNC/SPICE tab content creates its own authenticated /web/remote
+  // session. Precreating a native session here would leave an unowned proxy.
+  const componentSession = spec.componentSession || (isWebMode() && (key === 'vnc' || key === 'spice'))
+  const sessionType = componentSession ? undefined : resolveSessionType(key, spec, config)
   if (!sessionType) {
     // Session lifecycle belongs to the tab's content component: panel + tab
     // only.

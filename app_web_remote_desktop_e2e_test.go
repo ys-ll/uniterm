@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"net/http"
@@ -8,13 +9,67 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/ys-ll/uniterm/backend/session"
 )
+
+// The real launcher must not precreate a native session before the browser tab
+// POSTs its own. Keep the manager/transport real and adapt only the Wails RPC
+// boundary for the Node test. No GUI or external protocol fixture is needed.
+func TestWebRemoteDesktopLauncher(t *testing.T) {
+	if os.Getenv("UNITERM_REMOTE_LAUNCHER_TEST") != "1" {
+		t.Skip("set UNITERM_REMOTE_LAUNCHER_TEST=1; requires frontend dependencies and Node 22+")
+	}
+	transfer, cwd := session.TransferEventSink, session.TerminalCwdSink
+	a := NewApp(t.TempDir())
+	a.sessionManager = session.NewSessionManager()
+	a.webTransport.native = func(*application.CustomEvent) {}
+	t.Cleanup(func() {
+		a.webAccess.Close()
+		a.sessionManager.CloseAll()
+		session.TransferEventSink, session.TerminalCwdSink = transfer, cwd
+	})
+	a.webAccess.Handle("/launcher/sessions", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(a.ListSessions())
+	}))
+	a.webAccess.Handle("/launcher/native", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var config session.ConnectionConfig
+		if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		info, err := a.CreateSession(config.Type, config)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		json.NewEncoder(w).Encode(info)
+	}))
+	a.webAccess.Handle("/launcher/close/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := a.CloseSession(strings.TrimPrefix(r.URL.Path, "/launcher/close/")); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		json.NewEncoder(w).Encode(nil)
+	}))
+	base := enableWebTestListener(t, a)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "node", "node_modules/vitest/vitest.mjs", "run", "src/composables/connectionLauncher.test.ts", "src/composables/connectionLauncher.remote.test.ts")
+	cmd.Dir = "frontend"
+	cmd.Env = append(os.Environ(), "UNITERM_REMOTE_LAUNCHER_URL="+base)
+	output, err := cmd.CombinedOutput()
+	t.Logf("%s", output)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
 
 // Opt-in protocol harness. The Vue components and Go routes are real; only the
 // application shell/RPC facade is replaced. See frontend/e2e/remote/README.md.

@@ -4,10 +4,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-const { createSessionMock, recordRecentMock } = vi.hoisted(() => ({
+const { createSessionMock, recordRecentMock, mode } = vi.hoisted(() => ({
   createSessionMock: vi.fn(),
   recordRecentMock: vi.fn(),
+  mode: { web: false },
 }))
+
+vi.mock('../utils/webMode', () => ({ isWebMode: () => mode.web }))
 
 vi.mock('../../bindings/github.com/ys-ll/uniterm/app', () => ({
   CreateSession: createSessionMock,
@@ -37,6 +40,7 @@ function baseConfig(type: string): any {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  mode.web = false
   createSessionMock.mockReset().mockImplementation(async (type: string) => ({ id: `sid-${type}` }))
   recordRecentMock.mockReset()
   ensureCredentials.mockClear()
@@ -96,6 +100,40 @@ describe('launchConnection routing', () => {
       expect(createSessionMock).toHaveBeenCalledWith(sessionType, expect.anything())
     })
   }
+
+  it.each(['vnc', 'spice'])('browser %s leaves creation to its tab content', async type => {
+    mode.web = true
+    const tabs = useTabStore()
+    const before = tabs.tabs.length
+    await launchConnection(baseConfig(type), { persist: false })
+
+    expect(createSessionMock).not.toHaveBeenCalled()
+    expect(tabs.tabs).toHaveLength(before + 1)
+    const panels = [...usePanelStore().panels.values()]
+    const panel = panels[panels.length - 1]
+    expect(panel.type).toBe(type)
+    expect(panel.sessionId).toBeNull()
+    expect(usePanelStore().getProxyAddr(panel.id)).toBeUndefined()
+  })
+
+  it.each(['vnc', 'spice'])('native %s binds its session and proxy before opening the tab', async type => {
+    createSessionMock.mockResolvedValue({ id: `sid-${type}`, proxyAddr: 'ws://127.0.0.1:5999/' })
+    const panels = usePanelStore()
+    const tabs = useTabStore()
+    const createTab = tabs.createTab
+    const open = vi.spyOn(tabs, 'createTab').mockImplementation((...args) => {
+      expect(panels.getPanel(args[2])?.sessionId).toBe(`sid-${type}`)
+      expect(panels.getProxyAddr(args[2])).toBe('ws://127.0.0.1:5999/')
+      return createTab(...args)
+    })
+    try {
+      await launchConnection(baseConfig(type), { persist: false })
+      expect(createSessionMock).toHaveBeenCalledTimes(1)
+      expect(open).toHaveBeenCalledTimes(1)
+    } finally {
+      open.mockRestore()
+    }
+  })
 
   it('connects a legacy database+dbType:redis config after store migration', async () => {
     // The store migrates legacy NoSQL configs on load/add; the launcher then
