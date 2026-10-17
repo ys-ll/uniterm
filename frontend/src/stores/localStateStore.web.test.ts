@@ -43,10 +43,11 @@ describe('browser-local state isolation', () => {
   it('survives refresh without sharing preferences across browsers or host instances', async () => {
     const browserA = storage()
     const browserB = storage()
-    await view('host-1', browserA).update({ sidebarWidth: 333, collapsedGroupIds: ['group-a'] })
+    await view('host-1', browserA).update({ sidebarWidth: 333, collapsedGroupIds: ['group-a'], backgroundEnabled: true, backgroundImage: 'bg.png' })
     let store = view('host-1', browserB)
     await store.init()
     expect(store.state.sidebarWidth).toBe(240)
+    expect(store.state.backgroundEnabled).toBe(false)
     await store.update({ sidebarWidth: 444 })
     store = view('host-2', browserA)
     await store.init()
@@ -59,6 +60,8 @@ describe('browser-local state isolation', () => {
     await store.init()
     expect(store.state.sidebarWidth).toBe(333)
     expect(store.state.collapsedGroupIds).toEqual(['group-a'])
+    expect(store.state.backgroundEnabled).toBe(true)
+    expect(store.state.backgroundImage).toBe('bg.png')
     expect(save).not.toHaveBeenCalled()
   })
 

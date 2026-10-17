@@ -67,6 +67,7 @@ const DEFAULT: LocalState = {
 const WEB_FIELDS = [
   'sidebarVisible', 'aiSidebarVisible', 'sidebarWidth', 'aiSidebarWidth',
   'collapsedGroupIds', 'collapsedQuickCommandGroupIds', 'sftpHiddenColumns',
+  'backgroundEnabled', 'backgroundImage', 'backgroundOpacity', 'backgroundBlur', 'backgroundFit',
 ] as const
 
 function browserViewState(value: Partial<LocalState>): Partial<LocalState> {
