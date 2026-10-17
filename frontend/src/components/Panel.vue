@@ -174,7 +174,7 @@ import { isWebMode } from '../utils/webMode'
 import { terminateBrowserSession } from '../services/webTerminals'
 import type { ConnectionConfig } from '../types/session'
 import type { CredentialResult } from './CredentialPrompt.vue'
-import { Clipboard } from '@wailsio/runtime'
+import { writeClipboard } from '../composables/useClipboardWrite'
 
 // Escape sequences to disable all xterm mouse tracking modes.
 // When a terminal app (e.g. opencode, vim, tmux) enables mouse tracking
@@ -339,14 +339,7 @@ async function copyHostAddress() {
   moreMenuVisible.value = false
   const host = serverHost.value
   if (!host) return
-  // Wails clipboard, falling back to the browser API when the runtime is
-  // absent (plain dev in a browser) or the call fails.
-  let ok = false
-  try { ok = await Clipboard.SetText(host) } catch { ok = false }
-  if (!ok) {
-    try { await navigator.clipboard.writeText(host) } catch { /* no clipboard */ }
-  }
-  msg.success(t('tab.hostCopied', { host }))
+  if (await writeClipboard(host)) msg.success(t('tab.hostCopied', { host }))
 }
 
 async function refreshOutputLogState() {

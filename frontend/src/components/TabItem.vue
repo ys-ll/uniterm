@@ -165,7 +165,7 @@ import { useDuplicateSession } from '../composables/useDuplicateSession'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
-import { Clipboard } from '@wailsio/runtime'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import { isMobilePlatform } from '../utils/platform'
 import { isWebMode } from '../utils/webMode'
 import { terminateBrowserSession } from '../services/webTerminals'
@@ -564,14 +564,7 @@ function closeRight() {
 async function copyHostAddress() {
   const host = serverHost.value
   if (!host) return
-  // Wails clipboard, falling back to the browser API when the runtime is
-  // absent (plain dev in a browser) or the call fails.
-  let ok = false
-  try { ok = await Clipboard.SetText(host) } catch { ok = false }
-  if (!ok) {
-    try { await navigator.clipboard.writeText(host) } catch { /* no clipboard */ }
-  }
-  msg.success(t('tab.hostCopied', { host }))
+  if (await writeClipboard(host)) msg.success(t('tab.hostCopied', { host }))
   closeContextMenu()
 }
 

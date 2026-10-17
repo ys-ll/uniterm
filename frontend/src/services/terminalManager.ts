@@ -77,12 +77,34 @@ const holding = new Map<string, HTMLDivElement>()
 const textTypes = new Set(['local', 'wsl', 'ssh', 'telnet', 'mosh', 'serial', 'tcp', 'container-exec'])
 export const terminalSharingErrors = reactive(new Map<string, string>())
 let listeners: (() => void)[] = []
+let webDisconnected = false
+const syncingMessage = 'Synchronizing terminal; input is paused until the snapshot and live output are restored.'
+const offlineMessage = 'Event connection interrupted; terminal input is paused until reconnection and a fresh snapshot.'
 type TerminalBroker = { consume: NonNullable<ManagedTerminal['outputBroker']>; dispose: () => void }
 let brokerFactory: ((session: Partial<WebSession> & { id: string }) => TerminalBroker | undefined) | undefined
 
 function failed(id: string, error: unknown): void {
+  const m = terminals.get(id)
+  if (isWebMode() && m && !m.options.sftp) pauseBrowserTerminal(m, String(error))
   terminalSharingErrors.set(id, String(error))
   console.error('[terminal sharing]', id, error)
+}
+
+function pauseBrowserTerminal(m: ManagedTerminal, reason: string): void {
+  m.generation++
+  m.syncing = true
+  m.pending = []
+  m.pendingBytes = 0
+  m.protocolTail = ''
+  terminalSharingErrors.set(m.sessionId, reason)
+}
+
+function inputFailed(id: string, error: unknown): void {
+  // A refused keystroke must not invalidate the snapshot already in flight.
+  // Its pause reason is already visible; a transport failure on a ready view
+  // instead blocks that view until an explicit refresh/reconnect succeeds.
+  if (isWebMode() && terminals.get(id)?.syncing) return
+  failed(id, error)
 }
 
 function getHolding(id: string): HTMLDivElement {
@@ -116,7 +138,7 @@ export function acquireTerminal(id: string, ref: string, options: TerminalOption
     if (options.sftp !== undefined) {
       m.options.sftp = options.sftp
       m.stream.options.sftp = options.sftp
-      if (options.sftp) m.syncing = false
+      if (options.sftp) { m.syncing = false; terminalSharingErrors.delete(id) }
       setSizeProvider(m)
     }
     if (ref) m.refs.add(ref)
@@ -152,6 +174,7 @@ export function acquireTerminal(id: string, ref: string, options: TerminalOption
   }
   const managed = m
   terminals.set(id, managed)
+  if (managed.syncing) terminalSharingErrors.set(id, webDisconnected ? offlineMessage : syncingMessage)
   managed.disposables.push(installTerminalInputRouter(terminal, data => { if (!managed.closed && !managed.stream.error) queuedSessionReply(managed.sessionId, data) }))
   managed.disposables.push(terminal.onBinary(data => queuedSessionWrite(managed.sessionId, data, true)))
   trackTrims(managed)
@@ -173,8 +196,12 @@ function trackTrims(m: ManagedTerminal): void {
 
 function setSizeProvider(m: ManagedTerminal): void {
   setSessionInputSizeProvider(m.sessionId, () => {
+    if (isWebMode() && !m.options.sftp && (webDisconnected || m.syncing || m.stream.error || m.closed)) {
+      throw new Error(terminalSharingErrors.get(m.sessionId) ?? 'Terminal view is not ready; input was not sent. Refresh the view and retry.')
+    }
     const rect = m.container?.getBoundingClientRect()
-    return rect?.width && rect.height ? m.fitAddon.proposeDimensions() ?? getTerminalSize(m.sessionId) : getTerminalSize(m.sessionId)
+    const size = rect?.width && rect.height ? m.fitAddon.proposeDimensions() ?? getTerminalSize(m.sessionId) : getTerminalSize(m.sessionId)
+    return { ...size, generation: m.generation }
   }, !m.options.sftp)
 }
 
@@ -251,29 +278,31 @@ function deliver(m: ManagedTerminal, event: TerminalEvent): void {
   }
   m.eventBytes += bytes
   m.eventCount++
-  const task = (eventTails.get(m.sessionId) ?? Promise.resolve()).then(() => consume(m, event)).finally(() => { m.eventBytes -= bytes; m.eventCount-- })
-  eventTails.set(m.sessionId, task.catch(error => failed(m.sessionId, error)))
+  const generation = m.generation
+  const task = (eventTails.get(m.sessionId) ?? Promise.resolve()).then(() => {
+    if (!isWebMode() || generation === m.generation) return consume(m, event)
+  }).finally(() => { m.eventBytes -= bytes; m.eventCount-- })
+  eventTails.set(m.sessionId, task.catch(error => {
+    if (terminals.get(m.sessionId) === m && (!isWebMode() || generation === m.generation)) failed(m.sessionId, error)
+  }))
 }
 
 function receive(event: TerminalEvent): void {
   const m = terminals.get(event.id) ?? (!isWebMode() && typeof event.data === 'string' ? ensureAuthority({ id: event.id }) : undefined)
   if (!m) return
+  if (isWebMode() && webDisconnected && !m.options.sftp) return
   if (isWebMode() && typeof event.data === 'string') {
     const probe = m.protocolTail + event.data
     m.protocolTail = probe.slice(-32)
     if (/\*{2,}\x18[ABC][0-9a-fA-F]{10,}/.test(probe)) {
       // File owner must supply its single-broker handoff. Until it does, do
       // not silently interpret transfer bytes as terminal text in a browser.
-      m.generation++
-      m.syncing = true
       failed(event.id, 'File transfer is using the desktop parser. Refresh this view after the transfer completes.')
     }
   }
   if (m.syncing) {
     m.pendingBytes += event.data?.length ?? 128
     if (m.pendingBytes > 16 * 1024 * 1024 || m.pending.length >= 8192) {
-      m.generation++
-      m.pending = []
       failed(event.id, 'Attachment queue overflow; reconnect to request a fresh snapshot')
       return
     }
@@ -285,7 +314,18 @@ function receive(event: TerminalEvent): void {
  * events normally and calls resyncWebTerminals after EVERY SSE ready frame. */
 export function initWebTerminals(): () => void {
   if (listeners.length) return disposeWebTerminals
+  const onInputError = (event: Event) => {
+    const { id, error } = (event as CustomEvent<{ id: string; error: string }>).detail
+    inputFailed(id, error)
+  }
+  window.addEventListener('terminal:sharing-error', onInputError)
   listeners = [
+    () => window.removeEventListener('terminal:sharing-error', onInputError),
+    Events.On('web:disconnected', () => {
+      if (!isWebMode()) return
+      webDisconnected = true
+      for (const m of terminals.values()) if (!m.options.sftp) pauseBrowserTerminal(m, offlineMessage)
+    }),
     ...['session:data', 'session:resize', 'session:presentation', 'session:status'].map(name => Events.On(name, ev => receive(ev.data))),
     Events.On('session:closed', ev => {
       const id = ev.data.id
@@ -336,6 +376,7 @@ export function initWebTerminals(): () => void {
 export function disposeWebTerminals(): void {
   listeners.splice(0).forEach(unsub => unsub())
   for (const id of [...terminals.keys()]) disposeTerminal(id)
+  webDisconnected = false
 }
 
 export async function attachWebTerminal(session: WebSession): Promise<Terminal> {
@@ -347,19 +388,19 @@ export async function attachWebTerminal(session: WebSession): Promise<Terminal> 
 }
 
 async function resnapshotTerminal(m: ManagedTerminal): Promise<void> {
-  const generation = ++m.generation
-  m.syncing = true
-  m.pending = []
-  m.pendingBytes = 0
-  m.protocolTail = ''
-  terminalSharingErrors.delete(m.sessionId)
+  pauseBrowserTerminal(m, webDisconnected ? offlineMessage : syncingMessage)
+  const generation = m.generation
   try {
+    if (webDisconnected) throw new Error(offlineMessage)
     const snapshot = await webTerminalBridge.snapshot(m.sessionId)
     if (generation !== m.generation || terminals.get(m.sessionId) !== m) return
     if (snapshot.sessionId !== m.sessionId) throw new Error('Snapshot session mismatch')
     await (eventTails.get(m.sessionId) ?? Promise.resolve())
+    if (generation !== m.generation) return
     m.stream.error = undefined
-    await m.stream.run(() => restoreTerminalSnapshot(m.stream, snapshot, { image: m.imageAddon, progress: m.progressAddon }))
+    await m.stream.run(() => {
+      if (generation === m.generation) return restoreTerminalSnapshot(m.stream, snapshot, { image: m.imageAddon, progress: m.progressAddon })
+    })
     if (generation !== m.generation) return
     const extra = snapshot.state.extra
     trackTrims(m)
@@ -367,12 +408,18 @@ async function resnapshotTerminal(m: ManagedTerminal): Promise<void> {
     m.lineRegistry = { nextNumber: extra.nextNumber, entries: new Map(extra.entries) }
     m.activeClient = extra.activeClient
     m.closed = extra.closed ?? false
-    const pending = m.pending
-    m.pending = []
-    m.pendingBytes = 0
+    // Keep input gated through catch-up, including resize/presentation events
+    // and bytes that arrive while xterm is still parsing an earlier batch.
+    while (m.pending.length) {
+      const pending = m.pending
+      m.pending = []
+      m.pendingBytes = 0
+      for (const event of pending) if (event.webSequence > snapshot.sequence) deliver(m, event)
+      await eventTails.get(m.sessionId)
+      if (generation !== m.generation) return
+    }
     m.syncing = false
-    for (const event of pending) if (event.webSequence > snapshot.sequence) deliver(m, event)
-    await eventTails.get(m.sessionId)
+    terminalSharingErrors.delete(m.sessionId)
   } catch (error) {
     if (generation === m.generation && terminals.get(m.sessionId) === m) failed(m.sessionId, error)
     throw error
@@ -381,7 +428,8 @@ async function resnapshotTerminal(m: ManagedTerminal): Promise<void> {
 
 export async function resyncWebTerminals(): Promise<void> {
   if (!isWebMode()) return
-  await Promise.all([...terminals.values()].map(resnapshotTerminal))
+  webDisconnected = false
+  await Promise.all([...terminals.values()].filter(m => !m.options.sftp && !m.sessionId.startsWith('pending:')).map(resnapshotTerminal))
 }
 
 export async function refreshWebTerminal(id: string): Promise<void> {
@@ -413,7 +461,7 @@ export function setTerminalBrokerFactory(factory: typeof brokerFactory): void {
  * observers never clear their own buffer independently of the authority. */
 export function presentTerminal(id: string, operation: TerminalPresentation): void {
   if (isWebMode() && (operation.kind === 'write' || operation.kind === 'configure')) return
-  void enqueueSessionOperation(id, () => webTerminalBridge.present(id, operation)).catch(error => failed(id, error))
+  void enqueueSessionOperation(id, () => webTerminalBridge.present(id, operation), true).catch(error => inputFailed(id, error))
 }
 
 export function resizeTerminalView(id: string, active = false): void {
@@ -423,7 +471,7 @@ export function resizeTerminalView(id: string, active = false): void {
   const rect = m.container?.getBoundingClientRect()
   if (!rect?.width || !rect.height) return
   const size = m.fitAddon.proposeDimensions()
-  if (size) void resizeSessionView(id, size.cols, size.rows, active).catch(error => failed(id, error))
+  if (size) void resizeSessionView(id, size.cols, size.rows, active).catch(error => inputFailed(id, error))
 }
 
 export function releaseTerminal(id: string, ref: string): void {

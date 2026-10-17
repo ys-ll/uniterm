@@ -9,7 +9,10 @@
     @dragleave="onDragLeave"
     @drop="onDragDrop"
   >
-    <div v-if="sharingError" class="terminal-sharing-error" role="alert">{{ sharingError }}</div>
+    <div v-if="sharingError" class="terminal-sharing-error" role="alert">
+      {{ sharingError }}
+      <button v-if="isWebMode()" type="button" :disabled="sharingRefreshing" @click="refreshSharing">{{ t('web.refreshStatus') }}</button>
+    </div>
     <div class="terminal-area" @contextmenu="onTerminalContextMenu">
       <TerminalGutter
         ref="gutterRef"
@@ -160,6 +163,7 @@ import { useTerminalMenu } from '../composables/useTerminalMenu'
 import { writeClipboard, readClipboardText } from '../composables/useClipboardWrite'
 import { isAuthFailureError } from '../utils/authError'
 import { isWebMode } from '../utils/webMode'
+import { openExternalLink } from '../utils/nativeCapabilities'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
@@ -177,6 +181,7 @@ import {
   presentTerminal,
   setTerminalOutputBroker,
   terminalSharingErrors,
+  refreshWebTerminal,
 } from '../services/terminalManager'
 import { getXtermTheme } from '../composables/useTerminal'
 import { resolveXtermBackground, applyTerminalBgVar, resolveTerminalThemeName } from '../composables/useTerminalTheme'
@@ -191,7 +196,7 @@ import { startZmodemService } from '../services/zmodemService'
 import { useZmodemStore } from '../stores/zmodemStore'
 import ZmodemTransfer from './ZmodemTransfer.vue'
 import TerminalScreenPreview from './TerminalScreenPreview.vue'
-import { Browser, Events } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
 import type { ISearchOptions } from '@xterm/addon-search'
 import { CaseSensitive, ChevronUp, ChevronDown, Regex, WholeWord, X } from '@lucide/vue'
 
@@ -243,6 +248,14 @@ const showLineNumbers = computed(() => settingsStore.settings.terminal.showLineN
 const showTimestamps = computed(() => settingsStore.settings.terminal.showTimestamps ?? false)
 
 const sharingError = computed(() => props.sessionId ? terminalSharingErrors.get(props.sessionId) : undefined)
+const sharingRefreshing = ref(false)
+async function refreshSharing() {
+  if (!props.sessionId || sharingRefreshing.value) return
+  sharingRefreshing.value = true
+  try { await refreshWebTerminal(props.sessionId) }
+  catch { /* The manager keeps the failure visible and input blocked. */ }
+  finally { sharingRefreshing.value = false }
+}
 
 // Pass the xterm host element to the gutter so it can verify the terminal it
 // renders is attached to this very component (KeepAlive/drag can move it).
@@ -1094,8 +1107,7 @@ onMounted(() => {
   const webLinksAddon = new WebLinksAddon(
     (event, uri) => {
       if (event.ctrlKey || event.metaKey) {
-        if (isWebMode()) window.open(uri, '_blank', 'noopener,noreferrer')
-        else Browser.OpenURL(uri)
+        void openExternalLink(uri)
       }
     },
     {
@@ -2216,6 +2228,10 @@ defineExpose({
   padding: 0.5rem;
   color: var(--color-danger, #ef4444);
   overflow-wrap: anywhere;
+}
+.terminal-sharing-error button {
+  margin-left: 0.5rem;
+  text-decoration: underline;
 }
 .base-terminal {
   flex: 1;

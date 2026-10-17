@@ -8,13 +8,14 @@ import '@xterm/xterm/css/xterm.css'
 import { SessionResize } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { queuedSessionWrite } from '../services/sessionWriter'
 import { writeClipboard } from './useClipboardWrite'
+import { openExternalLink } from '../utils/nativeCapabilities'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useLocalStateStore } from '../stores/localStateStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { stripCursorBlink } from '../utils/cursor'
 import { formatFontFamily } from '../utils/formatFontFamily'
 import { resolveXtermBackground, applyTerminalBgVar, resolveTerminalThemeName } from './useTerminalTheme'
-import { Browser, Events } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
 import type { CustomTerminalTheme } from '../types/settings'
 
 export interface UseTerminalOptions {
@@ -578,7 +579,7 @@ export function useTerminal(
     const webLinksAddon = new WebLinksAddon(
       (event, uri) => {
         if (event.ctrlKey || event.metaKey) {
-          Browser.OpenURL(uri)
+          void openExternalLink(uri)
         }
       },
       {
