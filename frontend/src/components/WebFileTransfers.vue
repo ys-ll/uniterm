@@ -4,7 +4,7 @@
       Device → host: uploading…
       <button @click="$emit('cancelUpload')">Cancel upload</button>
     </div>
-    <div v-for="item in webDownloads" :key="item.id">
+    <div v-for="item in downloads" :key="item.id">
       <span>{{ item.name }} — {{ item.state === 'ready' ? 'Ready for browser download' : item.error || 'Remote → host: preparing…' }}</span>
       <a v-if="item.state === 'ready'" :href="fileDownloadURL(item.id)" download>Download</a>
       <button v-if="item.state === 'error'" @click="watchDownload(item.id)">Check status</button>
@@ -16,7 +16,11 @@
 import { webDownloads, fileDownloadURL, removeWebDownload, watchDownload } from '../services/webFiles'
 import { isWebMode } from '../utils/webMode'
 import { msg } from '../services/message'
-defineProps<{ uploading?: boolean }>()
+import { computed } from 'vue'
+const props = defineProps<{ uploading?: boolean; terminalSessionId?: string }>()
+const downloads = computed(() => webDownloads.value.filter(item => props.terminalSessionId !== undefined
+  ? item.terminal && item.sessionId === props.terminalSessionId
+  : !item.terminal))
 defineEmits<{ cancelUpload: [] }>()
 async function dismiss(id: string) {
   try { await removeWebDownload(id) } catch (e) { msg.error(String(e)) }

@@ -276,6 +276,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Folder, File, Link, RefreshCw, Eye, Upload, FilePlus2, FolderPlus, MoreHorizontal, ChevronLeft, ChevronRight, CornerLeftUp } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import { joinPath } from '../composables/useFilePanel'
 import PathBreadcrumb from './PathBreadcrumb.vue'
 import Menu from './Menu.vue'
@@ -806,33 +807,17 @@ async function doCopyPath() {
   ctxMenuVisible.value = false
   const text = buildSelectedPathsText()
   if (!text) return
-  if (await copyFilePath(text)) msg.success(t('sftp.pathCopied'))
+  if (await writeClipboard(text)) msg.success(t('sftp.pathCopied'))
 }
 
 async function doCopyPathToTerminal() {
   ctxMenuVisible.value = false
   const text = buildSelectedPathsText()
   if (!text) return
-  await copyFilePath(text)
+  await writeClipboard(text)
   // The host types the text at its terminal's prompt (no trailing newline);
   // silently no-ops when no terminal panel exists for this session.
   emit('copyPathToTerminal', text)
-}
-
-// File-view fallback for trusted HTTP LAN pages without secure Clipboard API.
-// The shell's common clipboard helper can replace this at integration.
-async function copyFilePath(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard) { await navigator.clipboard.writeText(text); return true }
-  } catch { /* try the user-activated document copy below */ }
-  const input = document.createElement('textarea')
-  input.value = text
-  input.style.position = 'fixed'
-  input.style.opacity = '0'
-  document.body.append(input)
-  input.select()
-  try { return document.execCommand('copy') } catch { return false }
-  finally { input.remove() }
 }
 
 function doRename() { emit('rename', selectedItems.value[0]); ctxMenuVisible.value = false }

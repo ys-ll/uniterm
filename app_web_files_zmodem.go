@@ -8,11 +8,57 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/ys-ll/uniterm/backend/webaccess"
 )
+
+// Called by WebTerminalInput under its existing per-session input lock, before
+// writing non-binary manual input. Replies/SessionWriteBinary never call this.
+// Keep a prepared drop armed until Pick consumes it; a different active writer
+// replaces the target. This avoids a target RPC racing another client's input.
+func (a *App) webZmodemInputTarget(sessionID, clientID string) error {
+	if clientID == "desktop" {
+		clientID = ""
+	}
+	w := &a.webFiles
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return errors.New("web files closed")
+	}
+	if w.zTargets == nil {
+		w.zTargets = make(map[string]webZmodemTarget)
+	}
+	target := w.zTargets[sessionID]
+	target.clientID, target.stageID = clientID, target.pending[clientID]
+	if s := w.stages[target.stageID]; s == nil || s.discard {
+		delete(target.pending, clientID)
+		target.stageID = ""
+	}
+	w.zTargets[sessionID] = target
+	return nil
+}
+
+// The desktop calls this only after its ordered text lane has parsed the final
+// binary watermark and restored trailing prompt. All attached observers resync,
+// including those which did not initiate the transfer (or picker cancellation).
+func (a *App) WebZmodemRestored(ctx context.Context, sessionID string) error {
+	if webaccess.IsBrowser(ctx) {
+		return webError("native_only", "only the desktop restores ZMODEM terminal output")
+	}
+	if _, err := a.webTerminalFor(sessionID); err != nil {
+		return err
+	}
+	a.emit("web:zmodem-restored", map[string]string{"sessionId": sessionID})
+	return nil
+}
 
 // A picker/sink broker only. The native zmodemService remains the sole parser
 // and keeps sending binary protocol replies through SessionWriteBinary.
-type webZmodemTarget struct{ clientID, stageID string }
+type webZmodemTarget struct {
+	clientID, stageID string
+	pending           map[string]string // prepared drops; input chooses their owner
+}
 type WebZmodemChoice struct {
 	RequestID string   `json:"requestId"`
 	ClientID  string   `json:"clientId"`
@@ -29,8 +75,9 @@ type webZmodemRequest struct {
 	answered bool
 }
 
-// Called before active terminal input; an empty clientID restores native
-// pickers. A dropped upload is already staged before the remote rz command.
+// A dropped upload is staged before the remote rz command. Preparing a stage
+// does not make an observer the target; the locked manual input hook does that.
+// Without a stage this is also an explicit native/browser picker selection.
 func (a *App) WebZmodemTarget(sessionID, clientID, stageID string) error {
 	w := &a.webFiles
 	w.mu.Lock()
@@ -43,11 +90,26 @@ func (a *App) WebZmodemTarget(sessionID, clientID, stageID string) error {
 		if s == nil || s.discard || s.State != "ready" {
 			return errors.New("upload stage not ready")
 		}
+		s.SessionID = sessionID
 	}
 	if w.zTargets == nil {
 		w.zTargets = make(map[string]webZmodemTarget)
 	}
-	w.zTargets[sessionID] = webZmodemTarget{clientID, stageID}
+	target := w.zTargets[sessionID]
+	for client, id := range target.pending {
+		if s := w.stages[id]; s == nil || s.discard {
+			delete(target.pending, client)
+		}
+	}
+	if stageID != "" {
+		if target.pending == nil {
+			target.pending = make(map[string]string)
+		}
+		target.pending[clientID] = stageID
+	} else {
+		target.clientID, target.stageID = clientID, ""
+	}
+	w.zTargets[sessionID] = target
 	return nil
 }
 
@@ -87,7 +149,10 @@ func (a *App) WebZmodemPick(ctx context.Context, sessionID, direction string) (W
 		w.zmodem = make(map[string]*webZmodemRequest)
 	}
 	w.zmodem[id] = req
-	w.zTargets[sessionID] = webZmodemTarget{clientID: target.clientID}
+	next := target
+	next.stageID = ""
+	delete(next.pending, target.clientID)
+	w.zTargets[sessionID] = next
 	w.mu.Unlock()
 	if target.stageID != "" && direction == "upload" {
 		req.answer <- target.stageID

@@ -51,4 +51,5 @@ export const webTerminalBridge = {
   resize: (id: string, client: string, cols: number, rows: number, active: boolean) =>
     call<void>('ResizeWebTerminal', id, client, cols, rows, active),
   present: (id: string, operation: TerminalPresentation) => call<void>('PublishWebTerminalPresentation', id, operation),
+  fileRestored: (id: string) => call<void>('WebZmodemRestored', id),
 }

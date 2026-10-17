@@ -45,12 +45,28 @@ function report(id: string, error: unknown): void {
 
 export function queuedSessionWrite(id: string, data: string, binary = false): void {
   if (!id || !data) return
-  void enqueueSessionOperation(id, () => {
+  void writeSessionInput(id, data, binary).catch(error => report(id, error))
+}
+
+/** Prepared drops use the same manual-input lane. Preparation must finish before
+ * rz, and subsequent human input cannot overtake it. Automatic replies bypass it.
+ * WebTerminalInput selects the file target under its backend per-session lock. */
+export function writeSessionInput(id: string, data: string, binary = false, prepare?: () => Promise<unknown>): Promise<void> {
+  if (!id || !data) return Promise.resolve()
+  const view = prepare ? sizes.get(id) : undefined
+  let generation: number | undefined
+  try { generation = view?.measure().generation } catch (error) { return Promise.reject(error) }
+  return enqueueSessionOperation(id, async () => {
+    if (prepare) {
+      await prepare()
+      if (isWebMode() && (sizes.get(id) !== view || view?.measure().generation !== generation)) {
+        throw new Error('Terminal view changed during file preparation; input was not sent.')
+      }
+    }
     const size = sizes.get(id)
     const { cols = 0, rows = 0 } = size?.measure() ?? {}
     return size?.shared === false ? writeFn.current(id, data) : webTerminalBridge.input(id, isWebMode() ? webClientId() : 'desktop', binary ? btoa(data) : data, cols, rows, binary)
   }, true)
-    .catch(error => report(id, error))
 }
 
 export function queuedSessionReply(id: string, data: string): void {

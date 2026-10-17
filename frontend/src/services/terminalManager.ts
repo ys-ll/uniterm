@@ -23,6 +23,7 @@ import { bufferRowSource, createLineRegistry, realignRegistry, recordWrite, curr
 import { TerminalStream, installTerminalInputRouter } from './terminalStream'
 import { captureTerminalSnapshot, restoreTerminalSnapshot } from './terminalSnapshot'
 import { webTerminalBridge, type SnapshotRequest, type WebSession, type TerminalPresentation } from './webTerminalBridge'
+import { splitZmodemHeader } from './zmodemHeader'
 
 export interface TerminalOptions {
   fontSize?: number
@@ -34,7 +35,7 @@ export interface TerminalOptions {
   sftp?: boolean
 }
 type Disposable = { dispose(): void }
-type TerminalEvent = { id: string; webSequence: number; webTimestamp?: number; data?: string; cols?: number; rows?: number; activeClient?: string; operation?: TerminalPresentation; closed?: boolean }
+type TerminalEvent = { id: string; webSequence: number; webTimestamp?: number; data?: string; binary?: boolean; cols?: number; rows?: number; activeClient?: string; operation?: TerminalPresentation; closed?: boolean }
 export interface ManagedTerminal {
   terminal: Terminal
   fitAddon: FitAddon
@@ -65,9 +66,10 @@ export interface ManagedTerminal {
   eventBytes: number
   eventCount: number
   protocolTail: string
+  fileTransferActive: boolean
   /** One desktop file broker, installed independently of visible refs. null
    * consumes protocol bytes; returned text alone enters the authority parser. */
-  outputBroker?: (data: string) => string | null | Promise<string | null>
+  outputBroker?: (data: string, binary?: boolean) => string | null | Promise<string | null>
   brokerDispose?: () => void
   session?: Partial<WebSession> & { id: string }
 }
@@ -80,6 +82,7 @@ let listeners: (() => void)[] = []
 let webDisconnected = false
 const syncingMessage = 'Synchronizing terminal; input is paused until the snapshot and live output are restored.'
 const offlineMessage = 'Event connection interrupted; terminal input is paused until reconnection and a fresh snapshot.'
+const transferMessage = 'ZMODEM transfer in progress; the terminal will restore automatically when it finishes.'
 type TerminalBroker = { consume: NonNullable<ManagedTerminal['outputBroker']>; dispose: () => void }
 let brokerFactory: ((session: Partial<WebSession> & { id: string }) => TerminalBroker | undefined) | undefined
 
@@ -169,7 +172,7 @@ export function acquireTerminal(id: string, ref: string, options: TerminalOption
   m = {
     terminal, fitAddon, searchAddon, unicodeAddon, imageAddon, progressAddon, stream,
     sessionId: id, container: null, refs: new Set(ref ? [ref] : []), activeRefs: new Set(), options,
-    disposeTimer: null, isNew: true, onDataGeneration: 0, lineRegistry: createLineRegistry(), lineOffset: 0,
+    disposeTimer: null, isNew: true, onDataGeneration: 0, lineRegistry: createLineRegistry(), lineOffset: 0, fileTransferActive: false,
     disposables: [], imeDispose: null, activeClient: 'desktop', syncing: isWebMode() && !options.sftp, pending: [], pendingBytes: 0, generation: 0, closed: false, eventBytes: 0, eventCount: 0, protocolTail: '',
   }
   const managed = m
@@ -185,6 +188,7 @@ export function acquireTerminal(id: string, ref: string, options: TerminalOption
   managed.disposables.push(progressAddon.onChange(state => setTabProgressForSession(managed.sessionId, state.state === 0 ? null : state)))
   setSizeProvider(managed)
   terminal.open(getHolding(id))
+  installBroker(managed)
   return terminal
 }
 
@@ -214,11 +218,14 @@ function ensureAuthority(session: Partial<WebSession> & { id: string }): Managed
     if (session.cols && session.rows) m.terminal.resize(session.cols, session.rows)
   }
   m.session = { ...m.session, ...session }
-  if (!isWebMode() && brokerFactory && !m.outputBroker) {
-    const broker = brokerFactory(m.session)
-    if (broker) setTerminalOutputBroker(m.sessionId, broker.consume, broker.dispose)
-  }
+  installBroker(m)
   return m
+}
+
+function installBroker(m: ManagedTerminal): void {
+  if (isWebMode() || !brokerFactory || m.outputBroker || m.options.sftp || m.sessionId.startsWith('pending:')) return
+  const broker = brokerFactory(m.session ?? { id: m.sessionId })
+  if (broker) setTerminalOutputBroker(m.sessionId, broker.consume, broker.dispose)
 }
 
 async function consume(m: ManagedTerminal, event: TerminalEvent): Promise<void> {
@@ -227,11 +234,32 @@ async function consume(m: ManagedTerminal, event: TerminalEvent): Promise<void> 
     // Keep the broker and parse in the same serial queue. output() itself must
     // be queued synchronously, so never await outside the stream ordering lane.
     let data = event.data
+    let text = ''
+    if (event.binary) {
+      m.protocolTail = ''
+      m.fileTransferActive = true
+    } else if (!m.options.sftp && !m.fileTransferActive) {
+      const framed = splitZmodemHeader(m.protocolTail + data)
+      m.protocolTail = framed.pending
+      data = framed.text
+      if (framed.protocol) {
+        m.fileTransferActive = true
+        text = data
+        data = framed.protocol
+        if (isWebMode()) {
+          await m.stream.output(text, event.webSequence || 0)
+          pauseBrowserTerminal(m, transferMessage)
+          return
+        }
+      }
+    }
     if (m.outputBroker && !isWebMode()) {
-      data = await m.outputBroker(data) ?? ''
+      data = await m.outputBroker(data, event.binary) ?? ''
+    } else if (event.binary || m.fileTransferActive) {
+      throw new Error('ZMODEM authority broker was not installed before binary output')
     }
     const before = currentAbsoluteLine(m.sessionId)
-    await m.stream.output(data, event.webSequence || 0)
+    await m.stream.output(text + data, event.webSequence || 0)
     recordWrite(m.sessionId, before, event.webTimestamp ?? Date.now())
   } else if (event.cols && event.rows) {
     await m.stream.resize(event.cols, event.rows, event.webSequence)
@@ -291,15 +319,21 @@ function receive(event: TerminalEvent): void {
   const m = terminals.get(event.id) ?? (!isWebMode() && typeof event.data === 'string' ? ensureAuthority({ id: event.id }) : undefined)
   if (!m) return
   if (isWebMode() && webDisconnected && !m.options.sftp) return
-  if (isWebMode() && typeof event.data === 'string') {
-    const probe = m.protocolTail + event.data
-    m.protocolTail = probe.slice(-32)
-    if (/\*{2,}\x18[ABC][0-9a-fA-F]{10,}/.test(probe)) {
-      // File owner must supply its single-broker handoff. Until it does, do
-      // not silently interpret transfer bytes as terminal text in a browser.
-      failed(event.id, 'File transfer is using the desktop parser. Refresh this view after the transfer completes.')
+  if (isWebMode() && event.binary) {
+    if (!m.fileTransferActive) {
+      m.fileTransferActive = true
+      pauseBrowserTerminal(m, transferMessage)
     }
+    return
   }
+  if (isWebMode() && event.closed && m.fileTransferActive) {
+    m.closed = true
+    pauseBrowserTerminal(m, 'Terminal closed during file transfer.')
+    return
+  }
+  // During transfer recovery only the authority snapshot can restore text;
+  // observers never feed binary payloads to xterm or a second sentry.
+  if (isWebMode() && m.fileTransferActive) return
   if (m.syncing) {
     m.pendingBytes += event.data?.length ?? 128
     if (m.pendingBytes > 16 * 1024 * 1024 || m.pending.length >= 8192) {
@@ -327,6 +361,14 @@ export function initWebTerminals(): () => void {
       for (const m of terminals.values()) if (!m.options.sftp) pauseBrowserTerminal(m, offlineMessage)
     }),
     ...['session:data', 'session:resize', 'session:presentation', 'session:status'].map(name => Events.On(name, ev => receive(ev.data))),
+    Events.On('session:binary', ev => receive({ ...ev.data, binary: true })),
+    Events.On('web:zmodem-restored', ev => {
+      const m = terminals.get(ev.data.sessionId)
+      if (isWebMode() && m) {
+        m.fileTransferActive = false
+        void resnapshotTerminal(m).catch(() => {})
+      }
+    }),
     Events.On('session:closed', ev => {
       const id = ev.data.id
       useSessionStore().updateStatus(id, 'disconnected')
@@ -358,6 +400,7 @@ export function initWebTerminals(): () => void {
         if (m.stream.sequence < request.sequence) throw new Error('Snapshot request is ahead of parsed terminal sequence')
         return captureTerminalSnapshot(m.sessionId, m.stream, { image: m.imageAddon, progress: m.progressAddon }, {
           lineOffset: m.lineOffset, nextNumber: m.lineRegistry.nextNumber, entries: [...m.lineRegistry.entries], activeClient: m.activeClient, closed: m.closed,
+          protocolTail: m.protocolTail, fileTransferActive: m.fileTransferActive,
         })
       }))
       eventTails.set(m.sessionId, task.then(() => {}, () => {}))
@@ -389,6 +432,9 @@ export async function attachWebTerminal(session: WebSession): Promise<Terminal> 
 
 async function resnapshotTerminal(m: ManagedTerminal): Promise<void> {
   pauseBrowserTerminal(m, webDisconnected ? offlineMessage : syncingMessage)
+  // Buffer live events while refreshing even if the previous view was paused
+  // for a transfer. The new snapshot decides whether that transfer is active.
+  m.fileTransferActive = false
   const generation = m.generation
   try {
     if (webDisconnected) throw new Error(offlineMessage)
@@ -408,6 +454,14 @@ async function resnapshotTerminal(m: ManagedTerminal): Promise<void> {
     m.lineRegistry = { nextNumber: extra.nextNumber, entries: new Map(extra.entries) }
     m.activeClient = extra.activeClient
     m.closed = extra.closed ?? false
+    m.protocolTail = extra.protocolTail ?? ''
+    m.fileTransferActive = extra.fileTransferActive ?? false
+    if (m.fileTransferActive) {
+      m.pending = []
+      m.pendingBytes = 0
+      terminalSharingErrors.set(m.sessionId, transferMessage)
+      return
+    }
     // Keep input gated through catch-up, including resize/presentation events
     // and bytes that arrive while xterm is still parsing an earlier batch.
     while (m.pending.length) {
@@ -451,10 +505,16 @@ export function setTerminalOutputBroker(id: string, broker?: ManagedTerminal['ou
 export function setTerminalBrokerFactory(factory: typeof brokerFactory): void {
   brokerFactory = factory
   if (isWebMode() || !factory) return
-  for (const m of terminals.values()) {
-    const broker = factory(m.session ?? { id: m.sessionId })
-    if (broker) setTerminalOutputBroker(m.sessionId, broker.consume, broker.dispose)
-  }
+  for (const m of terminals.values()) installBroker(m)
+}
+
+/** Called after native binary mode and trailing output handoff have settled. */
+export async function finishTerminalFileTransfer(id: string): Promise<void> {
+  const m = terminals.get(id)
+  if (!m || isWebMode()) return
+  m.fileTransferActive = false
+  await eventTails.get(id)
+  if (terminals.get(id) === m && !m.closed) await webTerminalBridge.fileRestored(id)
 }
 
 /** UI annotations and clear actions use the ordered backend presentation lane;
@@ -508,6 +568,10 @@ export function transferTerminal(oldId: string, newId: string): boolean {
   // New-session first-byte capture may already own a terminal; never overwrite
   // its parsed state with the disconnected session's old screen.
   if (terminals.has(newId)) return false
+  if (m.fileTransferActive) return false
+  m.brokerDispose?.()
+  m.outputBroker = undefined
+  m.brokerDispose = undefined
   terminals.delete(oldId)
   terminals.set(newId, m)
   const host = holding.get(oldId)
@@ -518,10 +582,12 @@ export function transferTerminal(oldId: string, newId: string): boolean {
   if (m.session) m.session = { ...m.session, id: newId }
   m.stream.sequence = 0
   m.stream.frames.pending = ''
+  m.protocolTail = ''
   m.stream.error = undefined
   m.closed = false
   setSessionInputSizeProvider(oldId)
   setSizeProvider(m)
+  installBroker(m)
   return true
 }
 

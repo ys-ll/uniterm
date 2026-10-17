@@ -12,7 +12,7 @@ import {
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { Events } from '@wailsio/runtime'
 import { useZmodemStore } from '../stores/zmodemStore'
-import { queuedSessionWrite } from './sessionWriter'
+import { queuedSessionReply } from './sessionWriter'
 import { isWebMode } from '../utils/webMode'
 import { nativeZmodemChoice, finishNativeZmodem } from './webZmodem'
 
@@ -57,6 +57,11 @@ export interface ZmodemServiceOptions {
   onTerminalRestoreState?: (restoring: boolean) => void
   onRegister?: (abort: () => void) => void
   onUnregister?: () => void
+  /** Binary mode, queued trailing output and cancellation cleanup have ended. */
+  onSettled?: () => void
+  /** Managed authorities feed binary in their ordered output lane. */
+  subscribeBinary?: boolean
+  onTerminalData?: (bytes: number[]) => void
 }
 
 export function startZmodemService(options: ZmodemServiceOptions) {
@@ -72,6 +77,9 @@ export function startZmodemService(options: ZmodemServiceOptions) {
   let aborted = false
   let disposed = false
   let notified = false
+  let settled = false
+  let detectionTimer: ReturnType<typeof setTimeout> | undefined
+  let started = false
   let writeChain: Promise<void> = Promise.resolve()
   let writeFailure: unknown = null
   let suppressSender = false
@@ -87,6 +95,20 @@ export function startZmodemService(options: ZmodemServiceOptions) {
   const { sessionId } = options
   const abortCtl = createTransferControl()
   const watchdog = createActivityWatchdog(TRANSFER_TIMEOUT_MS)
+
+  function settle() {
+    if (settled) return
+    settled = true
+    clearTimeout(detectionTimer)
+    disarmTerminalRestore()
+    options.onSettled?.()
+  }
+
+  function watchDetection() {
+    if (started) return
+    started = true
+    detectionTimer = setTimeout(() => { void fail(new Error('ZMODEM header was not accepted')) }, TRANSFER_TIMEOUT_MS)
+  }
 
   function appendTrailingOutput(bytes: ArrayLike<number>, start = 0, end = bytes.length) {
     const target = captureLateTrailingOutput ? lateTrailingOutput : trailingOutput
@@ -114,7 +136,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
     notified = true
     watchdog.stop()
     options.onError?.(errorMessage(error))
-    void finishBroker(errorMessage(error))
+    void finishBroker(errorMessage(error)).catch(error => options.onWarning?.(String(error)))
   }
 
   function sender(octets: number[]) {
@@ -222,10 +244,10 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       } catch (_) {
         // Local cleanup below must run even if the session bridge is broken.
       } finally {
-        queuedSessionWrite(sessionId, '\x03')
+        queuedSessionReply(sessionId, '\x03')
         await waitBinaryQuiet()
         await endBackendMode()
-        disarmTerminalRestore()
+        queuedSessionReply(sessionId, '\n')
       }
     })()
     return cancelPromise
@@ -238,6 +260,8 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       notifyError(error)
     } catch (cleanupError) {
       notifyError(cleanupError)
+    } finally {
+      settle()
     }
   }
 
@@ -412,7 +436,6 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       options.onWarning?.(`Shell output restore failed: ${errorMessage(error)}`)
     } finally {
       captureLateTrailingOutput = false
-      options.onTerminalRestoreState?.(false)
     }
   }
 
@@ -422,10 +445,12 @@ export function startZmodemService(options: ZmodemServiceOptions) {
     // bytes here; retain them until the completion message has been shown.
     to_terminal: (octets: number[]) => {
       if (captureTrailingOutput) appendTrailingOutput(octets)
+      else options.onTerminalData?.(octets)
     },
     sender,
     on_detect: (detection: import('zmodem.js/src/zmodem_browser').Detection) => {
       if (disposed || dialogLocks.has(sessionId)) return
+      clearTimeout(detectionTimer)
       const zsession = detection.confirm()
       currentZsession = zsession
       dialogLocks.add(sessionId)
@@ -508,15 +533,17 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       }).finally(() => {
         dialogLocks.delete(sessionId)
         watchdog.stop()
+        settle()
       })
     },
     on_retract: () => { currentZsession = null },
   })
 
-  binaryUnsub = Events.On('session:binary', (ev) => {
+  if (options.subscribeBinary !== false) binaryUnsub = Events.On('session:binary', (ev) => {
     const payload: { id: string; data: string } = ev.data
     if (payload.id !== sessionId || disposed) return
     lastBinaryAt = Date.now()
+    watchDetection()
     watchdog.touch()
     consumeIncoming(base64ToUint8Array(payload.data))
   })
@@ -524,17 +551,28 @@ export function startZmodemService(options: ZmodemServiceOptions) {
   const svc = {
     start: (data: string) => {
       if (disposed) return
+      watchDetection()
       void startBackendMode().catch(err => { void fail(err) })
-      svc.consume(data)
+      // A fragmented header can cross the backend's text decoder before its
+      // binary sniff fires. lrzsz's parity LF is equivalent to ordinary LF.
+      svc.consume(data.replace(/(\*\*\x18B[0-9a-fA-F]{14}\r)\ufffd/g, '$1\n'))
     },
     consume: (data: string) => {
       if (disposed) return
       watchdog.touch()
       consumeIncoming(new TextEncoder().encode(data))
     },
+    consumeBinary: (data: string) => {
+      if (disposed) return
+      watchDetection()
+      lastBinaryAt = Date.now()
+      watchdog.touch()
+      consumeIncoming(base64ToUint8Array(data))
+    },
     dispose: async () => {
       if (disposed) return
       disposed = true
+      clearTimeout(detectionTimer)
       watchdog.stop()
       abortCtl.abort(new Error('aborted'))
       binaryUnsub?.()
@@ -545,11 +583,12 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       await finishBroker('aborted')
       // Pair disposal with an ordered end even when the component is
       // unmounted before the pending start bridge call completes.
-      try { await endBackendMode() } catch (_) {}
+      if (started || currentZsession) try { await endBackendMode() } catch (_) {}
     },
     isAborted: () => aborted,
     abort: async () => {
-      try { await cancel(); await finishBroker('cancelled') } catch (err) { notifyError(err) }
+      try { await cancel(); await finishBroker('cancelled'); notifyComplete([]) } catch (err) { notifyError(err) }
+      finally { settle() }
     },
   }
 

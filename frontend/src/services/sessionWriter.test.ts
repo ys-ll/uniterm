@@ -5,7 +5,7 @@ vi.mock('../utils/webMode', () => ({ isWebMode: vi.fn(() => false), webClientId:
 import { SessionWrite } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { webTerminalBridge } from './webTerminalBridge'
 import { isWebMode } from '../utils/webMode'
-import { enqueueSessionOperation, queuedSessionWrite, queuedSessionReply, resizeSessionView, setSessionInputSizeProvider } from './sessionWriter'
+import { enqueueSessionOperation, queuedSessionWrite, queuedSessionReply, resizeSessionView, setSessionInputSizeProvider, writeSessionInput } from './sessionWriter'
 
 describe('actual session input writer', () => {
   beforeEach(() => { vi.clearAllMocks(); vi.mocked(isWebMode).mockReturnValue(false) })
@@ -93,5 +93,42 @@ describe('actual session input writer', () => {
     expect(webTerminalBridge.input).not.toHaveBeenCalled()
     expect(errors.mock.calls.map(args => String(args[2]))).toContainEqual(expect.stringContaining('Invalid snapshot'))
     setSessionInputSizeProvider('failed')
+  })
+
+  it('awaits staged-drop preparation before rz, preserves input ordering and measures the current grid', async () => {
+    const calls: string[] = []
+    let release!: () => void, cols = 80
+    setSessionInputSizeProvider('drop', () => ({ cols, rows: 24 }))
+    vi.mocked(webTerminalBridge.input).mockImplementation(async (_id, _client, data) => { calls.push(data) })
+    const dropped = writeSessionInput('drop', 'rz -be\n', false, async () => {
+      calls.push('upload')
+      await new Promise<void>(resolve => { release = resolve })
+      calls.push('target:stage')
+    })
+    queuedSessionWrite('drop', 'next key')
+    queuedSessionReply('drop', 'protocol reply')
+    await vi.waitFor(() => expect(calls).toEqual(['upload']))
+    cols = 120
+    release()
+    await dropped
+    await enqueueSessionOperation('drop', async () => {})
+    expect(calls).toEqual(['upload', 'target:stage', 'rz -be\n', 'next key'])
+    expect(webTerminalBridge.input).toHaveBeenCalledWith('drop', 'desktop', 'rz -be\n', 120, 24, false)
+    expect(SessionWrite).toHaveBeenCalledWith('drop', 'protocol reply')
+    setSessionInputSizeProvider('drop')
+  })
+
+  it('rejects rz if a browser reattaches while the upload is being prepared', async () => {
+    vi.mocked(isWebMode).mockReturnValue(true)
+    let generation = 1, release!: () => void
+    setSessionInputSizeProvider('drop', () => ({ cols: 80, rows: 24, generation }))
+    const dropping = writeSessionInput('drop', 'rz -be\n', false,
+      () => new Promise<void>(resolve => { release = resolve })).catch(String)
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    generation++
+    release()
+    expect(await dropping).toContain('changed during file preparation')
+    expect(webTerminalBridge.input).not.toHaveBeenCalled()
+    setSessionInputSizeProvider('drop')
   })
 })

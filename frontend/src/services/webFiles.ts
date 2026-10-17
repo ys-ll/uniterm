@@ -173,15 +173,19 @@ export async function pickWebBackgroundImage(): Promise<string> {
 
 // BaseTerminal local-shell drop hook: returns durable host copies for explicit
 // shell quoting by its existing drop handler, never visitor "absolute paths".
-export async function copyDeviceFilesForShell(entries: DeviceEntry[]): Promise<string[]> {
-  return withDevicePaths(entries, async s => {
+export async function copyDeviceFilesForShell(entries: DeviceEntry[], signal?: AbortSignal): Promise<string[]> {
+  const s = await stageDeviceFiles(entries, signal)
+  try {
     const paths: string[] = []
-    for (const root of new Set(entries.map(e => e.path.split('/')[0]))) paths.push(await fileRPC<string>('WebFilesPersist', s.id, root))
+    for (const root of new Set(entries.map(e => e.path.split('/')[0]))) {
+      signal?.throwIfAborted()
+      paths.push(await fileRPC<string>('WebFilesPersist', s.id, root))
+    }
     return paths
-  })
+  } finally { await dismissFileStage(s.id) }
 }
 
-export const webDownloads = ref<Array<{ id: string; name: string; state: string; error?: string; sessionId?: string; taskId?: string }>>([])
+export const webDownloads = ref<Array<{ id: string; name: string; state: string; error?: string; sessionId?: string; taskId?: string; terminal?: boolean }>>([])
 const watchingDownloads = new Set<string>()
 let downloadsRestored = false
 function saveDownloads() {
@@ -193,9 +197,9 @@ export function restoreWebDownloads() {
   try { webDownloads.value = JSON.parse(sessionStorage.getItem('uniterm:web-downloads') || '[]') } catch { /* empty */ }
   for (const item of webDownloads.value) if (item.state !== 'ready') void watchDownload(item.id)
 }
-export function trackWebDownload(stage: FileStage, name: string) {
+export function trackWebDownload(stage: FileStage, name: string, terminal = false) {
   restoreWebDownloads()
-  webDownloads.value.push({ id: stage.id, name, state: stage.state, sessionId: stage.sessionId, taskId: stage.taskId })
+  webDownloads.value.push({ id: stage.id, name, state: stage.state, sessionId: stage.sessionId, taskId: stage.taskId, terminal })
   saveDownloads()
   void watchDownload(stage.id)
 }

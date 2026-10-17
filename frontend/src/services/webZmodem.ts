@@ -1,7 +1,7 @@
 import { Events } from '@wailsio/runtime'
 import { ElMessageBox } from 'element-plus'
 import { isWebMode, webClientId } from '../utils/webMode'
-import { fileRPC, stageDeviceFiles, pickDeviceFiles, dismissFileStage, trackWebDownload, type DeviceEntry } from './webFiles'
+import { fileRPC, stageDeviceFiles, pickDeviceFiles, dismissFileStage, trackWebDownload, restoreWebDownloads, type DeviceEntry } from './webFiles'
 import { msg } from './message'
 import { useZmodemStore, type TransferInfo } from '../stores/zmodemStore'
 
@@ -14,6 +14,7 @@ let initialized = false
 export function initWebZmodem() {
   if (!isWebMode() || initialized) return
   initialized = true
+  restoreWebDownloads()
   Events.On('web:zmodem-progress', event => {
     const payload = event.data as { clientId: string; sessionId: string; transfer: TransferInfo }
     if (payload.clientId !== webClientId()) return
@@ -43,27 +44,30 @@ export function initWebZmodem() {
   Events.On('web:zmodem-done', event => {
     const result = event.data as WebZmodemChoice & { error?: string }
     if (result.clientId !== webClientId()) return
+    useZmodemStore().clearTransfers(result.sessionId)
     if (result.error) msg.error(result.error)
     else if (result.direction === 'download' && result.stageId) {
-      trackWebDownload({ id: result.stageId, files: [], state: 'ready' }, 'ZMODEM')
+      trackWebDownload({ id: result.stageId, sessionId: result.sessionId, files: [], state: 'ready' }, 'ZMODEM', true)
     } else msg.success('ZMODEM upload complete')
   })
 }
 
-/** Terminal input hook, awaited BEFORE sending manual input. Native uses ''. */
+/** Explicit picker override. Normal manual input selects its target atomically
+ * in WebTerminalInput; do not add an extra target RPC for every keystroke. */
 export async function targetWebZmodem(sessionId: string) {
   initWebZmodem()
   await fileRPC('WebZmodemTarget', sessionId, isWebMode() ? webClientId() : '', '')
 }
 
-/** Browser remote-drop hook. Caller sends rz through its normal manual input
- * helper after this returns; do not clear the armed stage in that same write. */
+/** Browser remote-drop hook, awaited inside writeSessionInput's preparation.
+ * The backend input hook claims this stage for the following rz command. */
 export async function stageWebZmodemUpload(sessionId: string, entries: DeviceEntry[], signal?: AbortSignal) {
   initWebZmodem()
   if (entries.some(e => !e.file || e.path.includes('/'))) throw new Error('ZMODEM accepts individual files')
   const stage = await stageDeviceFiles(entries, signal)
-  try { await fileRPC('WebZmodemTarget', sessionId, webClientId(), stage.id) }
+  try { signal?.throwIfAborted(); await fileRPC('WebZmodemTarget', sessionId, webClientId(), stage.id) }
   catch (e) { await dismissFileStage(stage.id); throw e }
+  return stage.id
 }
 
 export function cancelWebZmodem(sessionId: string) {

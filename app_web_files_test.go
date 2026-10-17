@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/ys-ll/uniterm/backend/session"
 )
 
@@ -584,6 +585,17 @@ func TestWebFilesZmodemBrokerTargetsAndCompletion(t *testing.T) {
 	if err := a.WebZmodemTarget("terminal", "browser-a", stage.ID); err != nil {
 		t.Fatal(err)
 	}
+	// The coordinator's WebTerminalInput hook runs under its existing input
+	// lock. rz and the next key from that writer must not disarm a staged drop.
+	_ = a.webZmodemInputTarget("terminal", "browser-b")
+	if target := a.webFiles.zTargets["terminal"]; target.clientID != "browser-b" || target.stageID != "" {
+		t.Fatal("preparing a drop stole another writer's target", target)
+	}
+	for i := 0; i < 2; i++ {
+		if err := a.webZmodemInputTarget("terminal", "browser-a"); err != nil {
+			t.Fatal(err)
+		}
+	}
 	choice, err := a.WebZmodemPick(context.Background(), "terminal", "upload")
 	if err != nil || choice.ClientID != "browser-a" || len(choice.Paths) != 1 {
 		t.Fatalf("choice: %+v %v", choice, err)
@@ -645,9 +657,37 @@ func TestWebFilesZmodemBrokerTargetsAndCompletion(t *testing.T) {
 	if _, err := zip.NewReader(bytes.NewReader(b), int64(len(b))); err != nil {
 		t.Fatal("completed ZMODEM receive unavailable", err)
 	}
-	_ = a.WebZmodemTarget("terminal", "", "")
+	_ = a.webZmodemInputTarget("terminal", "browser-b")
+	if target := a.webFiles.zTargets["terminal"]; target.clientID != "browser-b" || target.stageID != "" {
+		t.Fatal("new manual writer did not replace file target", target)
+	}
+	_ = a.webZmodemInputTarget("terminal", "desktop")
 	native, err := a.WebZmodemPick(context.Background(), "terminal", "upload")
 	if err != nil || native.RequestID != "" {
 		t.Fatal("native picker fallback broken")
+	}
+	cancelled := uploadWebTest(t, srv.URL, map[string][]byte{"cancelled.bin": {1}})
+	_ = a.WebZmodemTarget("terminal", "browser-a", cancelled.ID)
+	a.dismissWebFile(cancelled.ID)
+	_ = a.webZmodemInputTarget("terminal", "browser-a")
+	if target := a.webFiles.zTargets["terminal"]; target.stageID != "" {
+		t.Fatal("cancelled preparation poisoned the next input", target)
+	}
+}
+
+func TestWebFilesZmodemRestoreAuthorityOnly(t *testing.T) {
+	a := webTestApp(t)
+	s := addControlledTerminal(a, "restore", true)
+	var restored int
+	a.webTransport.native = func(event *application.CustomEvent) {
+		if event.Name == "web:zmodem-restored" {
+			restored++
+		}
+	}
+	if err := a.WebZmodemRestored(webTestBrowserContext(t, a), s.id); err == nil || restored != 0 {
+		t.Fatal("browser forged authority completion", err)
+	}
+	if err := a.WebZmodemRestored(context.Background(), s.id); err != nil || restored != 1 {
+		t.Fatal("native completion was not broadcast", err)
 	}
 }

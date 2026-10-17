@@ -4,6 +4,8 @@ const mock = vi.hoisted(() => ({
   call: vi.fn(async (..._args: any[]): Promise<any> => {}),
   write: vi.fn(async () => {}),
   panels: new Map(),
+  startZmodem: vi.fn(),
+  clearTransfers: vi.fn(),
 }))
 // Exercise the same local beta.27 event dispatcher that browserRuntime uses;
 // only the host RPC boundary is mocked, not Events.On or event payloads.
@@ -26,6 +28,10 @@ vi.mock('../stores/panelStore', () => ({ usePanelStore: () => ({ panels: mock.pa
 vi.mock('../stores/sessionStore', () => ({ useSessionStore: () => ({ updateStatus() {} }) }))
 vi.mock('../composables/useTerminal', () => ({ getXtermTheme: () => ({}) }))
 vi.mock('../composables/useTerminalTheme', () => ({ resolveXtermBackground: () => ({}), resolveTerminalThemeName: () => 'dark', applyTerminalBgVar() {} }))
+vi.mock('./zmodemService', () => ({ startZmodemService: mock.startZmodem }))
+vi.mock('./webZmodem', () => ({ initWebZmodem() {} }))
+vi.mock('../stores/zmodemStore', () => ({ useZmodemStore: () => ({ registerAbort() {}, unregisterAbort() {}, clearTransfers: mock.clearTransfers }) }))
+vi.mock('./message', () => ({ msg: { error() {}, warning() {}, success() {} } }))
 import {
   initWebTerminals, disposeWebTerminals, getManagedTerminal, acquireTerminal,
   attachTerminal, detachTerminal, releaseTerminal, attachWebTerminal,
@@ -38,6 +44,7 @@ import type { WebSession, WebTerminalSnapshot } from './webTerminalBridge'
 import { queuedSessionWrite, enqueueSessionOperation, resizeSessionView } from './sessionWriter'
 import { Events } from '@wailsio/runtime'
 import '@xterm/xterm/css/xterm.css'
+import { initTerminalFiles } from './terminalFileBroker'
 
 const session: WebSession = { id: 'session', type: 'ssh', title: 'Shared', status: 'connected', cols: 25, rows: 6, activeClient: 'desktop', resizeCapability: 'pty' }
 const emit = (name: string, data: any) => (window as any)._wails.dispatchWailsEvent({ name, data })
@@ -60,6 +67,102 @@ async function authoritySnapshot(): Promise<WebTerminalSnapshot> {
 }
 
 describe('managed terminal sharing lifecycle', () => {
+  it.each(['complete', 'cancel', 'error'])('owns one hidden file parser and restores ordered text after %s', async outcome => {
+    const options: any[] = [], services: any[] = []
+    const header = '**\x18B00000000000000\r\n\x11'
+    mock.startZmodem.mockImplementation(opts => {
+      options.push(opts)
+      const service = { start: vi.fn(), consume: vi.fn(), consumeBinary: vi.fn((data: string) => {
+        opts.onTerminalData(Array.from(atob(data), c => c.charCodeAt(0)))
+      }), dispose: vi.fn(async () => {}) }
+      services.push(service)
+      return service
+    })
+    initTerminalFiles()
+    emit('web:session-created', session)
+    expect(mock.startZmodem).toHaveBeenCalledTimes(1)
+    expect(options[0].subscribeBinary).toBe(false)
+    expect(getManagedTerminal(session.id)?.refs.size).toBe(0)
+    emit('web:terminal-attach', { requestId: 'hidden-attach', sessionId: session.id, session })
+    acquireTerminal(session.id, 'visible-1', {})
+    acquireTerminal(session.id, 'visible-2', {})
+    initTerminalFiles()
+    expect(mock.startZmodem).toHaveBeenCalledTimes(1)
+    emit('session:binary', { id: session.id, data: btoa('ordinary\r\n' + header), webSequence: 1 })
+    await finish(1)
+    const m = getManagedTerminal(session.id)!
+    expect(m.fileTransferActive).toBe(true)
+    expect(m.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe('ordinary')
+    expect(m.terminal.buffer.active.getLine(1)?.translateToString(true)).toBe('')
+    expect(services[0].consumeBinary).toHaveBeenCalledTimes(1)
+    emit('web:snapshot-request', { requestId: 'during-transfer', sessionId: session.id, sequence: 1, session })
+    await expect.poll(() => mock.call.mock.calls.find(c => c[1] === 'during-transfer')?.[2].state.extra.fileTransferActive).toBe(true)
+
+    options[0].onTerminalRestoreState(true)
+    emit('session:data', { id: session.id, data: 'trailing$ ', webSequence: 2 })
+    await expect.poll(() => m.eventCount).toBe(1)
+    // Let the broker actually enter its deferred-text wait.
+    await new Promise(resolve => setTimeout(resolve, 20))
+    if (outcome === 'error') options[0].onError('disk full')
+    else options[0].onComplete(outcome === 'complete' ? ['file.bin'] : [])
+    expect(mock.call.mock.calls.some(c => c[0] === 'main.App.WebZmodemRestored')).toBe(false)
+    options[0].onSettled()
+    await expect.poll(() => mock.call.mock.calls.some(c => c[0] === 'main.App.WebZmodemRestored')).toBe(true)
+    expect(m.stream.sequence).toBe(2)
+    expect(m.terminal.buffer.active.getLine(1)?.translateToString(true)).toBe('trailing$ ')
+    expect(m.fileTransferActive).toBe(false)
+    expect(services[0].dispose).toHaveBeenCalledTimes(1)
+    expect(mock.startZmodem).toHaveBeenCalledTimes(2) // one idle replacement
+    releaseTerminal(session.id, 'visible-1')
+    releaseTerminal(session.id, 'visible-2')
+    expect(services[1].dispose).not.toHaveBeenCalled()
+    emit('session:closed', { id: session.id, webSequence: 3 })
+    await expect.poll(() => getManagedTerminal(session.id)).toBeUndefined()
+    expect(services[1].dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('pauses observers before raw headers and automatically resnapshots after native handoff, including mid-transfer attach', async () => {
+    const snapshot = await authoritySnapshot()
+    const completed = structuredClone(snapshot)
+    completed.sequence = 20
+    completed.state.extra.fileTransferActive = false
+    disposeWebTerminals()
+    window.__UNITERM_WEB__ = { instanceId: 'test-host', clientId: 'observer' }
+    initWebTerminals()
+    mock.call.mockImplementation(async name => name === 'main.App.GetWebTerminalSnapshot' ? snapshot : undefined)
+    await attachWebTerminal(session)
+    const m = getManagedTerminal(session.id)!
+    const output = vi.spyOn(m.stream, 'output')
+    emit('session:data', { id: session.id, data: '**\x18B000000', webSequence: 11 })
+    await finish(11)
+    emit('session:data', { id: session.id, data: '00000000\r\n', webSequence: 12 })
+    await expect.poll(() => m.fileTransferActive).toBe(true)
+    expect(m.syncing).toBe(true)
+    expect(output.mock.calls.every(call => !call[0].includes('**') && !call[0].includes('\x18'))).toBe(true)
+    emit('session:binary', { id: session.id, data: btoa('binary protocol'), webSequence: 13 })
+    emit('session:data', { id: session.id, data: 'prompt to be restored', webSequence: 20 })
+    expect(mock.startZmodem).not.toHaveBeenCalled()
+
+    // A manual refresh or a new browser attached during the transfer must stay
+    // gated, even if its snapshot is otherwise valid and has no pending bytes.
+    const active = structuredClone(snapshot)
+    active.sequence = 13
+    active.state.extra.fileTransferActive = true
+    mock.call.mockImplementation(async name => name === 'main.App.GetWebTerminalSnapshot' ? active : undefined)
+    await refreshWebTerminal(session.id)
+    expect(m.syncing).toBe(true)
+    expect(terminalSharingErrors.get(session.id)).toContain('ZMODEM')
+    mock.call.mockImplementation(async name => name === 'main.App.GetWebTerminalSnapshot' ? completed : undefined)
+    emit('web:zmodem-restored', { sessionId: session.id })
+    await expect.poll(() => m.syncing).toBe(false)
+    expect(m.stream.sequence).toBe(20)
+    expect(terminalSharingErrors.has(session.id)).toBe(false)
+    emit('session:data', { id: session.id, data: '1mLIVE', webSequence: 21 })
+    await finish(21)
+    expect(m.terminal.buffer.active.getLine(0)?.translateToString(true)).toBe('     vimLIVE')
+    expect(mock.call.mock.calls.some(c => /CloseSession|SessionStart/.test(c[0]))).toBe(false)
+  })
+
   it('transfers a quiet desktop view on reconnect without discarding a new session authority', async () => {
     await authoritySnapshot()
     const previous = acquireTerminal(session.id, 'view', {})

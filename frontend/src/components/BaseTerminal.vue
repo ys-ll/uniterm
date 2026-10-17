@@ -132,6 +132,7 @@
 
     <!-- Zmodem transfer panel -->
     <ZmodemTransfer :session-id="props.sessionId || ''" @cancel="onZmodemCancel" />
+    <WebFileTransfers v-if="isActive && props.sessionId" :terminal-session-id="props.sessionId" :uploading="deviceUploading" @cancel-upload="deviceUpload?.abort()" />
 
     <!-- Screen preview on scrollbar hover (issue #729) -->
     <TerminalScreenPreview :session-id="props.sessionId || ''" />
@@ -143,9 +144,8 @@ import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, onActivated, on
 import type { Terminal } from '@xterm/xterm'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { SessionEndZmodem } from '../../bindings/github.com/ys-ll/uniterm/app'
-import { queuedSessionWrite } from '../services/sessionWriter'
-import { WriteFileBase64, SaveFileDialog, EnableSessionOutputLog, DisableSessionOutputLog, GetSessionOutputLogInfo, OpenPathInExplorer } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { queuedSessionWrite, writeSessionInput } from '../services/sessionWriter'
+import { EnableSessionOutputLog, DisableSessionOutputLog, GetSessionOutputLogInfo, OpenPathInExplorer } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useNativeFileDrop } from '../composables/useFilePanel'
 import { connectFileMenuKey } from '../utils/fileTransferUtils'
 import { isMobilePlatform } from '../utils/platform'
@@ -179,7 +179,6 @@ import {
   markTerminalActive,
   resizeTerminalView,
   presentTerminal,
-  setTerminalOutputBroker,
   terminalSharingErrors,
   refreshWebTerminal,
 } from '../services/terminalManager'
@@ -192,7 +191,10 @@ import { useTerminalInput } from '../composables/useTerminalInput'
 import { useSuggestions } from '../composables/useSuggestions'
 import TerminalSuggestion from './TerminalSuggestion.vue'
 import TerminalGutter from './TerminalGutter.vue'
-import { startZmodemService } from '../services/zmodemService'
+import { saveTextFile, deviceDropEntries, copyDeviceFilesForShell, dismissFileStage } from '../services/webFiles'
+import { stageWebZmodemUpload } from '../services/webZmodem'
+import { quoteShellPath } from '../utils/shellPath'
+import WebFileTransfers from './WebFileTransfers.vue'
 import { useZmodemStore } from '../stores/zmodemStore'
 import ZmodemTransfer from './ZmodemTransfer.vue'
 import TerminalScreenPreview from './TerminalScreenPreview.vue'
@@ -351,108 +353,9 @@ let isResizing = false
 let splitResizing = false
 let suppressResizeUntil = 0
 let retryOnEnter = false
-let zmodemService: ReturnType<typeof startZmodemService> | null = null
-const ownedBrokerSessions = new Set<string>()
-let installZmodemBroker: ((id: string) => void) | null = null
-let isZmodemStarting = false
-let zmodemStartTimer: ReturnType<typeof setTimeout> | null = null
-let zmodemDirection: 'upload' | 'download' | undefined = undefined
-let zmodemCancellingUntil = 0
-let zmodemRestoringOutput = false
-let zmodemCompletionPending = false
-const zmodemDeferredOutput: { data: string; resolve: (data: string) => void }[] = []
 let exporting = false
-
-function initZmodemService(sessionId: string) {
-  if (isWebMode()) return
-  if (getManagedTerminal(sessionId)?.outputBroker && !ownedBrokerSessions.has(sessionId)) return
-  if (!sessionId || props.mode !== 'ssh') return
-  // Don't create a duplicate zmodem service if a transfer is already
-  // active for this session. The existing service (in a deactivated
-  // BaseTerminal) continues to handle the transfer.
-  if (zmodemStore.getActiveTransfer(sessionId)) return
-  zmodemService = startZmodemService({
-    // Register abort so any BaseTerminal component can cancel the transfer
-    onRegister: (abort) => zmodemStore.registerAbort(sessionId, abort),
-    onUnregister: () => zmodemStore.unregisterAbort(sessionId),
-    sessionId,
-    direction: zmodemDirection,
-    getDefaultDownloadDir: () => settingsStore.settings.terminal.zmodemDownloadDir,
-    onTerminalRestoreState: restoring => {
-      zmodemRestoringOutput = restoring
-      if (!restoring) {
-        for (const item of zmodemDeferredOutput.splice(0)) item.resolve(item.data)
-        if (zmodemCompletionPending) {
-          zmodemCompletionPending = false
-          void disposeZmodemService(sessionId, true, false)
-          initZmodemService(sessionId)
-        }
-      }
-    },
-    onWarning: warning => {
-      write(`\r\n\x1b[33mZmodem: ${warning}\x1b[0m\r\n`)
-    },
-    onComplete: (files, hint) => {
-      if (files.length > 0) {
-        write(`\r\n\x1b[32mZmodem: ${files.length} file(s) transferred\x1b[0m\r\n`)
-      }
-      if (hint) {
-        write(`\r\n\x1b[33m${hint}\x1b[0m\r\n`)
-      }
-      if (files.length === 0 && !hint) {
-        // 取消或未选择文件：打印提示
-        write(`\r\n\x1b[33mZmodem transfer cancelled\x1b[0m\r\n`)
-        // 等吞数据保护过期后再发送一次回车，确保 sz 已退出、bash 恢复前台后触发提示符
-        const cancelUntil = Math.max(zmodemCancellingUntil, zmodemStore.getCancelUntil(sessionId))
-        const remaining = Math.max(0, cancelUntil - Date.now())
-        setTimeout(() => {
-          queuedSessionWrite(sessionId, '\n')
-        }, remaining + 100)
-      }
-      zmodemStore.clearTransfers(sessionId)
-      zmodemDirection = undefined
-      if (zmodemRestoringOutput) {
-        // Keep the binary listener alive until finishTransfer has drained any
-        // prompt event queued concurrently with the backend mode handoff.
-        zmodemCompletionPending = true
-      } else {
-        void disposeZmodemService(sessionId, true, false)
-        initZmodemService(sessionId)
-      }
-    },
-    onError: (err) => {
-      zmodemCompletionPending = false
-      write(`\r\n\x1b[31mZmodem error: ${err}\x1b[0m\r\n`)
-      zmodemStore.clearTransfers(sessionId)
-      zmodemDirection = undefined
-      void disposeZmodemService(sessionId, true, false)
-      initZmodemService(sessionId)
-    },
-  })
-}
-
-async function disposeZmodemService(sessionId: string, resetDirection = true, endSession = true) {
-  if (isWebMode()) return
-  if (getManagedTerminal(sessionId)?.outputBroker && !ownedBrokerSessions.has(sessionId)) return
-  const service = zmodemService
-  const serviceDisposed = service?.dispose()
-  zmodemService = null
-  isZmodemStarting = false
-  zmodemCompletionPending = false
-  if (resetDirection) {
-    zmodemDirection = undefined
-  }
-  if (zmodemStartTimer) {
-    clearTimeout(zmodemStartTimer)
-    zmodemStartTimer = null
-  }
-  // A service that started binary mode also ends it, ordered after its pending
-  // start. Only use the direct fallback when no service owns that lifecycle.
-  if (!service && sessionId && endSession) {
-    await SessionEndZmodem(sessionId).catch(() => {})
-  }
-  await serviceDisposed
-}
+const deviceUploading = ref(false)
+let deviceUpload: AbortController | undefined
 
 // OS file drops (resource manager) are delivered by Wails via the native
 // file-drop event (common:WindowFilesDropped) with real absolute paths,
@@ -463,7 +366,7 @@ const terminalDropId = 'terminal-drop-' + (crypto.randomUUID?.() || Math.random(
 
 const nativeDrop = useNativeFileDrop({
   elementId: terminalDropId,
-  isActive: () => !!props.sessionId && !zmodemStore.getActiveTransfer(props.sessionId),
+  isActive: () => !isWebMode() && isActive.value && !!props.sessionId && !zmodemStore.getActiveTransfer(props.sessionId),
   upload: (paths) => onNativePathsDropped(paths),
 })
 
@@ -489,50 +392,64 @@ function onDragLeave() {
   }
 }
 
-function onDragDrop(e: DragEvent) {
+async function onDragDrop(e: DragEvent) {
   dragOver.value = false
   dragEnterCount = 0
   // Internal panel/tab drags — let them bubble to workspace handlers
   if (e.dataTransfer?.types.includes('application/panel-id') ||
       e.dataTransfer?.types.includes('application/tab-id')) return
-  // OS file drops are handled by the native file-drop event; prevent the
-  // WebView from navigating and stop here.
-  if (e.dataTransfer?.types.includes('Files')) e.preventDefault()
-}
-
-// Convert a Windows native path to the format expected by the active shell.
-// - PowerShell / cmd: keep C:\foo\bar (native)
-// - Git Bash / MSYS2 / Cygwin / MinGW: /c/foo/bar
-// - WSL: /mnt/c/foo/bar
-function toShellPath(nativePath: string, shellPath?: string): string {
-  const isWinPath = /^[A-Za-z]:\\/.test(nativePath)
-  if (!isWinPath) return nativePath.replace(/\\/g, '/')
-
-  const lower = (shellPath || '').toLowerCase()
-  let converted: string
-  if (lower.includes('wsl')) {
-    const drive = nativePath.charAt(0).toLowerCase()
-    converted = '/mnt/' + drive + nativePath.slice(2).replace(/\\/g, '/')
-  } else if (lower.includes('bash') || lower.includes('git') || lower.includes('msys') || lower.includes('cygwin') || lower.includes('mingw')) {
-    const drive = nativePath.charAt(0).toLowerCase()
-    converted = '/' + drive + nativePath.slice(2).replace(/\\/g, '/')
-  } else {
-    converted = nativePath
+  if (!e.dataTransfer?.types.includes('Files')) return
+  e.preventDefault()
+  if (!isWebMode()) return
+  e.stopPropagation()
+  const sessionId = props.sessionId
+  const mode = props.mode
+  const shell = panelStore.getPanel(props.panelId || '')?.config?.shellPath
+    || getManagedTerminal(sessionId || '')?.session?.shellPath
+  if (!sessionId || !isActive.value || deviceUploading.value || zmodemStore.getActiveTransfer(sessionId)) return
+  const upload = new AbortController()
+  deviceUpload = upload
+  deviceUploading.value = true
+  let stage = ''
+  const checkSession = () => {
+    upload.signal.throwIfAborted()
+    if (props.sessionId !== sessionId || !isActive.value) throw new Error('Terminal changed during file preparation; input was not sent.')
   }
-  // Quote paths with spaces so the shell treats them as a single argument
-  return converted.includes(' ') ? `"${converted}"` : converted
+  try {
+    const entries = await deviceDropEntries(e.dataTransfer)
+    checkSession()
+    if (mode === 'local') {
+      const paths = await copyDeviceFilesForShell(entries, upload.signal)
+      checkSession()
+      await writeSessionInput(sessionId, paths.map(path => quoteShellPath(path, shell)).join(' '), false, async () => checkSession())
+    } else if (mode === 'ssh') {
+      await writeSessionInput(sessionId, 'rz -be\n', false, async () => {
+        checkSession()
+        stage = await stageWebZmodemUpload(sessionId, entries, upload.signal)
+        checkSession()
+      })
+      stage = '' // The native broker now owns this upload.
+    } else throw new Error('Use the file panel for this session.')
+  } catch (error) {
+    if (stage) await dismissFileStage(stage).catch(() => {})
+    if (!upload.signal.aborted) msg.error(String(error))
+  } finally {
+    if (deviceUpload === upload) { deviceUpload = undefined; deviceUploading.value = false }
+  }
 }
 
 // Called with real absolute paths from the native OS file-drop event.
 function onNativePathsDropped(paths: string[]) {
-  if (!props.sessionId || paths.length === 0) return
+  if (!isActive.value || !props.sessionId || paths.length === 0) return
 
   // Local terminal: paste file paths as input, adapting format to the shell
   if (props.mode === 'local') {
     const panel = panelStore.getPanel(props.panelId || '')
     const shellPath = panel?.config?.shellPath
-    const text = paths.map(p => toShellPath(p, shellPath)).join(' ')
-    queuedSessionWrite(props.sessionId, text)
+    try {
+      const text = paths.map(p => quoteShellPath(p, shellPath)).join(' ')
+      queuedSessionWrite(props.sessionId, text)
+    } catch (error) { msg.error(String(error)) }
     return
   }
 
@@ -542,10 +459,7 @@ function onNativePathsDropped(paths: string[]) {
 }
 
 function onZmodemCancel() {
-  const ts = Date.now() + 2000
-  zmodemCancellingUntil = ts
   if (props.sessionId) {
-    zmodemStore.setCancelUntil(props.sessionId, ts)
     zmodemStore.abortTransfer(props.sessionId)
   }
 }
@@ -704,16 +618,6 @@ function focus() {
   terminal?.focus()
 }
 
-function toBase64(str: string): string {
-  const encoder = new TextEncoder()
-  const bytes = encoder.encode(str)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
-
 async function exportContent() {
   if (!terminal || exporting) return
   exporting = true
@@ -733,9 +637,7 @@ async function exportContent() {
       return
     }
     try {
-      const filePath = await SaveFileDialog('terminal.txt')
-      if (!filePath) return
-      await WriteFileBase64(filePath, toBase64(content))
+      await saveTextFile(content, 'terminal.txt')
     } catch (e) {
       console.error('Export failed:', e)
     }
@@ -1156,8 +1058,6 @@ onMounted(() => {
     el.addEventListener('touchcancel', () => { touchPanStop(); touchPan.moved = false }, { passive: true })
   }
 
-  initZmodemService(props.sessionId || '')
-
   // Initialize terminal input handling for SSH
   if (props.mode === 'ssh') {
     terminalInput = useTerminalInput(terminal, {
@@ -1238,30 +1138,10 @@ onMounted(() => {
         return
       }
 
-      // Detect rz/sz command to hint zmodem transfer direction.
-      // Must happen BEFORE terminalInput.handleInput because handleInput
-      // clears the line buffer on Enter.
       if ((data === '\r' || data === '\n') && terminalInput && !terminalInput.isInAlternateScreen()) {
         // Stamp the command line with the moment it was executed (timestamp
         // column). Must happen before handleInput clears the line buffer.
         if (props.sessionId) presentTerminal(props.sessionId, { kind: 'stamp', timestamp: Date.now() })
-        const line = terminalInput.lineBuffer.value.trim()
-        if (/^(?:sudo\s+)?rz\b/.test(line)) {
-          zmodemDirection = 'upload'
-          // Recreate the zmodem service so on_detect sees the new direction.
-          if (props.sessionId) {
-            disposeZmodemService(props.sessionId, false).then(() => {
-              initZmodemService(props.sessionId)
-            })
-          }
-        } else if (/^(?:sudo\s+)?sz\b/.test(line)) {
-          zmodemDirection = 'download'
-          if (props.sessionId) {
-            disposeZmodemService(props.sessionId, false).then(() => {
-              initZmodemService(props.sessionId)
-            })
-          }
-        }
       }
 
       // Handle suggestions input (skip in alternate screen apps like vim/k9s)
@@ -1444,47 +1324,6 @@ onMounted(() => {
     }
   })
 
-  // The fixed desktop parser owns the file-protocol broker independently of
-  // visibility. File-transfer integration can replace this through the same
-  // manager hook; a browser must never run a second sentry or OSC52 writer.
-  installZmodemBroker = (brokerSessionId: string) => {
-    if (!brokerSessionId || isWebMode() || getManagedTerminal(brokerSessionId)?.outputBroker) return
-    ownedBrokerSessions.add(brokerSessionId)
-    setTerminalOutputBroker(brokerSessionId, (data) => {
-      if (Date.now() < zmodemCancellingUntil) return null
-      // Keep output arriving after EndZmodem behind its restored prompt.
-      if (zmodemRestoringOutput) {
-        return new Promise<string>(resolve => zmodemDeferredOutput.push({ data, resolve }))
-      }
-      const hasStoreTransfer = zmodemStore.getActiveTransfer(brokerSessionId)
-      if (!zmodemService && hasStoreTransfer) return null
-      const activeZmodem = zmodemService && hasStoreTransfer
-      if (zmodemService && !activeZmodem && !zmodemService.isAborted?.()) {
-        if (isZmodemStarting) {
-          zmodemService.consume(data)
-          return null
-        }
-        // Require ZDLE: ordinary text containing **B<hex> is not a transfer.
-        if (/\*{2,}\x18[ABC][0-9a-fA-F]{10,}/.test(data)) {
-          isZmodemStarting = true
-          if (zmodemStartTimer) clearTimeout(zmodemStartTimer)
-          zmodemStartTimer = setTimeout(() => { isZmodemStarting = false }, 3000)
-          zmodemService.start(data)
-          return null
-        }
-      }
-      if (activeZmodem) {
-        isZmodemStarting = false
-        return null
-      }
-      return data
-    }, () => {
-      void disposeZmodemService(brokerSessionId)
-      ownedBrokerSessions.delete(brokerSessionId)
-    })
-  }
-  if (props.sessionId) installZmodemBroker(props.sessionId)
-
   // SSH/Local: session status events
   if (props.mode === 'ssh' || props.mode === 'local') {
     retryOnEnter = false
@@ -1578,6 +1417,7 @@ onMounted(() => {
   window.addEventListener('terminal:clear-scrollback', onClearScrollback)
 
   onSendRz = (e: Event) => {
+    if (!isActive.value) return
     const detail = (e as CustomEvent).detail
     if (detail?.panelId && detail.panelId !== props.panelId) return
     if (props.sessionId) {
@@ -1702,18 +1542,13 @@ onActivated(() => {
     resize()
     restoreSavedScroll()
   }, d))
-  // Re-initialize zmodem service only if it was disposed in onDeactivated.
-  // If a transfer was active, the service is still running — skip recreate.
-  // safe: no focus() call here, avoids WebView2 crash race with native dialogs.
-  if (props.sessionId && props.mode === 'ssh' && !zmodemService) {
-    initZmodemService(props.sessionId)
-  }
   // Note: focus() is intentionally skipped here. Calling focus() during
   // activation can race with native dialogs (OpenDirectoryDialog etc.)
   // and trigger a WebView2 crash (edge.Chromium.Focus parameter error).
 })
 
 onDeactivated(() => {
+  deviceUpload?.abort()
   // Component deactivated by KeepAlive (e.g. terminal tab moved into workspace).
   // Mark inactive so session event handlers become no-ops.
   nativeDrop.unbind()
@@ -1746,11 +1581,10 @@ onDeactivated(() => {
 })
 
 // Watch sessionId changes to rebind session data
-watch(() => props.sessionId, (newId, oldId) => {
+watch(() => props.sessionId, (newId) => {
+  deviceUpload?.abort()
   if (boundTerminalId !== newId) {
     if (terminalRef.value) detachTerminal(boundTerminalId, terminalRef.value)
-    if (ownedBrokerSessions.has(boundTerminalId)) setTerminalOutputBroker(boundTerminalId)
-    if (oldId && zmodemService) disposeZmodemService(oldId)
     markTerminalActive(boundTerminalId, terminalInstanceRef, false)
     if (!newId || !transferTerminal(boundTerminalId, newId)) releaseTerminal(boundTerminalId, terminalInstanceRef)
     if (newId) boundTerminalId = newId
@@ -1759,9 +1593,7 @@ watch(() => props.sessionId, (newId, oldId) => {
   savedViewportY = null
   savedBaseY = null
   if (newId && (props.mode === 'ssh' || props.mode === 'local')) {
-    initZmodemService(newId)
     terminal = acquireTerminal(newId, terminalInstanceRef, getTerminalOptions(), settingsStore.settings.customTerminalThemes)
-    installZmodemBroker?.(newId)
     markTerminalActive(newId, terminalInstanceRef, isActive.value)
     if (terminalRef.value) {
       attachTerminal(newId, terminalRef.value)
@@ -2003,9 +1835,7 @@ onUnmounted(() => {
   if (onVisibilityChange) document.removeEventListener('visibilitychange', onVisibilityChange)
   onVisibilityChange = null
   suggestions.close()
-  if (!ownedBrokerSessions.has(boundTerminalId) && !zmodemStore.getActiveTransfer(props.sessionId || '')) {
-    disposeZmodemService(props.sessionId || '')
-  }
+  deviceUpload?.abort()
 })
 
 // Paste handling
