@@ -55,20 +55,28 @@ type WebTerminalSnapshot struct {
 }
 
 type WebTerminalPresentationOperation struct {
-	Kind string  `json:"kind"`
-	Data *string `json:"data,omitempty"`
+	Kind        string  `json:"kind"`
+	Data        *string `json:"data,omitempty"`
+	Timestamp   *int64  `json:"timestamp,omitempty"`
+	CursorBlink *bool   `json:"cursorBlink,omitempty"`
+	Scrollback  *int    `json:"scrollback,omitempty"`
 }
 
 // PublishWebTerminalPresentation puts local UI changes on the same timeline as
-// PTY output. Only the desktop writes prompts; either trusted client may clear
-// or reset the shared display. These operations never write back to the PTY.
+// PTY output. Only the desktop writes prompts or configures the terminal; either
+// trusted client may clear, reset, or stamp it. Nothing writes back to the PTY.
 func (a *App) PublishWebTerminalPresentation(ctx context.Context, sessionID string, operation WebTerminalPresentationOperation) error {
+	if webaccess.IsBrowser(ctx) && (operation.Kind == "write" || operation.Kind == "configure") {
+		return webError("native_only", "only the desktop can publish terminal writes or configuration")
+	}
+	if (operation.Kind != "write" && operation.Data != nil) ||
+		(operation.Kind != "stamp" && operation.Timestamp != nil) ||
+		(operation.Kind != "configure" && (operation.CursorBlink != nil || operation.Scrollback != nil)) {
+		return webError("invalid_presentation", "presentation fields do not match kind")
+	}
 	payload := map[string]any{"kind": operation.Kind}
 	switch operation.Kind {
 	case "write":
-		if webaccess.IsBrowser(ctx) {
-			return webError("native_only", "only the desktop can publish terminal presentation writes")
-		}
 		if operation.Data == nil || !utf8.ValidString(*operation.Data) {
 			return webError("invalid_presentation", "write requires UTF-8 string data")
 		}
@@ -77,11 +85,21 @@ func (a *App) PublishWebTerminalPresentation(ctx context.Context, sessionID stri
 		}
 		payload["data"] = *operation.Data
 	case "clear", "reset":
-		if operation.Data != nil {
-			return webError("invalid_presentation", "clear and reset do not accept data")
+	case "stamp":
+		// JavaScript Date's non-negative Unix-millisecond range, all exact integers.
+		if operation.Timestamp == nil || *operation.Timestamp < 0 || *operation.Timestamp > 8640000000000000 {
+			return webError("invalid_presentation", "stamp requires integer Unix milliseconds in 0..8640000000000000")
 		}
+		payload["timestamp"] = *operation.Timestamp
+	case "configure":
+		// Match the settings UI's history ceiling; zero disables scrollback.
+		if operation.CursorBlink == nil || operation.Scrollback == nil || *operation.Scrollback < 0 || *operation.Scrollback > 50000 {
+			return webError("invalid_presentation", "configure requires boolean cursorBlink and integer scrollback in 0..50000")
+		}
+		payload["cursorBlink"] = *operation.CursorBlink
+		payload["scrollback"] = *operation.Scrollback
 	default:
-		return webError("invalid_presentation", "presentation kind must be write, clear, or reset")
+		return webError("invalid_presentation", "presentation kind must be write, clear, reset, stamp, or configure")
 	}
 	terminal, err := a.webTerminalFor(sessionID)
 	if err != nil {

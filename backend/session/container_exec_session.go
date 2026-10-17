@@ -76,13 +76,14 @@ func (s *ContainerExecSession) IsConnected() bool { return s.Status() == StatusC
 type k8sExecStream struct {
 	conn    *websocket.Conn
 	data    chan []byte
+	done    chan struct{}
 	writeMu sync.Mutex
 	once    sync.Once
 }
 
 // NewK8sExecStream 启动读循环并返回适配后的 ExecPTY。
 func NewK8sExecStream(conn *websocket.Conn) ExecPTY {
-	s := &k8sExecStream{conn: conn, data: make(chan []byte, 32)}
+	s := &k8sExecStream{conn: conn, data: make(chan []byte, 32), done: make(chan struct{})}
 	go s.readLoop()
 	return s
 }
@@ -102,7 +103,11 @@ func (s *k8sExecStream) readLoop() {
 		switch ch {
 		case execChStdout, execChStderr:
 			if len(payload) > 0 {
-				s.data <- payload
+				select {
+				case s.data <- payload:
+				case <-s.done:
+					return
+				}
 			}
 		case execChError:
 			if len(payload) > 0 {
@@ -133,6 +138,8 @@ func (s *k8sExecStream) Resize(cols, rows int) error {
 func (s *k8sExecStream) Close() error {
 	var err error
 	s.once.Do(func() {
+		// A failed attach can leave the output queue full with no consumer.
+		close(s.done)
 		err = s.conn.Close()
 	})
 	return err

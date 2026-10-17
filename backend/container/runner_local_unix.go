@@ -17,6 +17,7 @@ type localPTY struct {
 	cmd  *exec.Cmd
 	ptmx *os.File
 	data chan []byte
+	done chan struct{}
 	mu   sync.Mutex
 	once sync.Once
 }
@@ -31,22 +32,8 @@ func (r *LocalRunner) RunPTY(_ context.Context, argv []string, cols, rows int) (
 	if err != nil {
 		return nil, err
 	}
-	p := &localPTY{cmd: cmd, ptmx: ptmx, data: make(chan []byte, 32)}
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := ptmx.Read(buf)
-			if n > 0 {
-				cp := make([]byte, n)
-				copy(cp, buf[:n])
-				p.data <- cp
-			}
-			if err != nil {
-				close(p.data)
-				return
-			}
-		}
-	}()
+	p := &localPTY{cmd: cmd, ptmx: ptmx, data: make(chan []byte, 32), done: make(chan struct{})}
+	go readPTYOutput(ptmx, p.data, p.done)
 	return p, nil
 }
 
@@ -63,6 +50,7 @@ func (p *localPTY) Resize(cols, rows int) error {
 func (p *localPTY) Close() error {
 	var err error
 	p.once.Do(func() {
+		close(p.done)
 		_ = p.ptmx.Close()
 		if p.cmd.Process != nil {
 			_ = p.cmd.Process.Kill()

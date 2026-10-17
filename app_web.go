@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/ys-ll/uniterm/backend/webaccess"
@@ -97,6 +98,9 @@ func (t *webTransport) DispatchWailsEvent(event *application.CustomEvent) {
 		if err == nil && json.Unmarshal(b, &data) == nil && data != nil {
 			id, _ = data["id"].(string)
 			data["webSequence"] = t.sequence
+			if event.Name == "session:data" {
+				data["webTimestamp"] = time.Now().UnixMilli()
+			}
 			delivery.Data = data
 		}
 	}

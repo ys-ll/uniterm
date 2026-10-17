@@ -27,6 +27,28 @@ type PTYStream interface {
 	Close() error
 }
 
+// readPTYOutput preserves backpressure while the terminal authority attaches.
+// Close must unblock both Read (by closing r) and a send to a full output queue.
+func readPTYOutput(r io.Reader, data chan<- []byte, done <-chan struct{}) {
+	defer close(data)
+	buf := make([]byte, 4096)
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			cp := make([]byte, n)
+			copy(cp, buf[:n])
+			select {
+			case data <- cp:
+			case <-done:
+				return
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
 type Runner interface {
 	Run(ctx context.Context, argv []string) ([]byte, error)
 	// RunStdin 带标准输入执行一次命令（docker login --password-stdin 用）。

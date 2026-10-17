@@ -217,6 +217,7 @@ type sshPTY struct {
 	sess  *ssh.Session
 	stdin io.Writer
 	data  chan []byte
+	done  chan struct{}
 	mu    sync.Mutex
 	once  sync.Once
 }
@@ -245,22 +246,8 @@ func (r *SSHRunner) RunPTY(_ context.Context, argv []string, cols, rows int) (PT
 		sess.Close()
 		return nil, err
 	}
-	p := &sshPTY{sess: sess, stdin: stdin, data: make(chan []byte, 32)}
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := stdout.Read(buf)
-			if n > 0 {
-				cp := make([]byte, n)
-				copy(cp, buf[:n])
-				p.data <- cp
-			}
-			if err != nil {
-				close(p.data)
-				return
-			}
-		}
-	}()
+	p := &sshPTY{sess: sess, stdin: stdin, data: make(chan []byte, 32), done: make(chan struct{})}
+	go readPTYOutput(stdout, p.data, p.done)
 	return p, nil
 }
 
@@ -274,6 +261,6 @@ func (p *sshPTY) Write(b []byte) error {
 func (p *sshPTY) Resize(cols, rows int) error { return p.sess.WindowChange(rows, cols) }
 func (p *sshPTY) Close() error {
 	var err error
-	p.once.Do(func() { err = p.sess.Close() })
+	p.once.Do(func() { close(p.done); err = p.sess.Close() })
 	return err
 }

@@ -4,6 +4,7 @@ package container
 
 import (
 	"context"
+	"io"
 	"os/exec"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ func setHideWindow(cmd *exec.Cmd) {
 type localPTY struct {
 	cpty *conpty.ConPty
 	data chan []byte
+	done chan struct{}
 	mu   sync.Mutex
 	once sync.Once
 }
@@ -46,21 +48,11 @@ func (r *LocalRunner) RunPTY(_ context.Context, argv []string, cols, rows int) (
 	if err != nil {
 		return nil, err
 	}
-	p := &localPTY{cpty: cpty, data: make(chan []byte, 32)}
+	p := &localPTY{cpty: cpty, data: make(chan []byte, 32), done: make(chan struct{})}
 	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := cpty.Read(buf)
-			if n > 0 {
-				cp := make([]byte, n)
-				copy(cp, buf[:n])
-				p.data <- cp
-			}
-			if err != nil {
-				close(p.data)
-				return
-			}
-		}
+		readPTYOutput(cpty, p.data, p.done)
+		// ConPTY can flush output while Close waits, before closing its handles.
+		_, _ = io.Copy(io.Discard, cpty)
 	}()
 	return p, nil
 }
@@ -75,6 +67,6 @@ func (p *localPTY) Write(b []byte) error {
 func (p *localPTY) Resize(cols, rows int) error { return p.cpty.Resize(cols, rows) }
 func (p *localPTY) Close() error {
 	var err error
-	p.once.Do(func() { err = p.cpty.Close() })
+	p.once.Do(func() { close(p.done); err = p.cpty.Close() })
 	return err
 }
