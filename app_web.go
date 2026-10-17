@@ -85,7 +85,7 @@ func (t *webTransport) DispatchWailsEvent(event *application.CustomEvent) {
 	t.sequence++
 	// Never mutate the original CustomEvent: Wails Go listeners run in parallel.
 	delivery := &application.CustomEvent{Name: event.Name, Data: event.Data, Sender: event.Sender}
-	terminal := event.Name == "session:data" || event.Name == "session:binary" || event.Name == "session:status" || event.Name == "session:closed" || event.Name == "session:resize" || event.Name == "session:gap"
+	terminal := event.Name == "session:data" || event.Name == "session:binary" || event.Name == "session:status" || event.Name == "session:closed" || event.Name == "session:resize" || event.Name == "session:gap" || event.Name == "session:presentation"
 	var id string
 	if terminal {
 		b, err := json.Marshal(event.Data)

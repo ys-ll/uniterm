@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/webaccess"
@@ -51,6 +52,50 @@ type WebTerminalSnapshot struct {
 	Rows      int            `json:"rows"`
 	ANSI      string         `json:"ansi"`
 	State     map[string]any `json:"state"`
+}
+
+type WebTerminalPresentationOperation struct {
+	Kind string  `json:"kind"`
+	Data *string `json:"data,omitempty"`
+}
+
+// PublishWebTerminalPresentation puts local UI changes on the same timeline as
+// PTY output. Only the desktop writes prompts; either trusted client may clear
+// or reset the shared display. These operations never write back to the PTY.
+func (a *App) PublishWebTerminalPresentation(ctx context.Context, sessionID string, operation WebTerminalPresentationOperation) error {
+	payload := map[string]any{"kind": operation.Kind}
+	switch operation.Kind {
+	case "write":
+		if webaccess.IsBrowser(ctx) {
+			return webError("native_only", "only the desktop can publish terminal presentation writes")
+		}
+		if operation.Data == nil || !utf8.ValidString(*operation.Data) {
+			return webError("invalid_presentation", "write requires UTF-8 string data")
+		}
+		if len(*operation.Data) > 1<<20 {
+			return webError("presentation_too_large", "presentation write exceeds 1 MiB")
+		}
+		payload["data"] = *operation.Data
+	case "clear", "reset":
+		if operation.Data != nil {
+			return webError("invalid_presentation", "clear and reset do not accept data")
+		}
+	default:
+		return webError("invalid_presentation", "presentation kind must be write, clear, or reset")
+	}
+	terminal, err := a.webTerminalFor(sessionID)
+	if err != nil {
+		return err
+	}
+	terminal.mu.Lock()
+	defer terminal.mu.Unlock()
+	if terminal.closed {
+		return webError("session_closed", "terminal is closed")
+	}
+	terminal.events.Lock()
+	defer terminal.events.Unlock()
+	a.emit("session:presentation", map[string]any{"id": sessionID, "operation": payload})
+	return nil
 }
 
 type webTerminalRequest struct {
