@@ -241,6 +241,31 @@ describe('managed terminal sharing lifecycle', () => {
     expect(mock.call.mock.calls.some(c => /CloseSession|SessionStart|UnregisterSession|RegisterSessionForPanel/.test(c[0]))).toBe(false)
   })
 
+  it('ignores layout callbacks after the host closes a visible browser terminal', async () => {
+    const snapshot = await authoritySnapshot()
+    disposeWebTerminals()
+    window.__UNITERM_WEB__ = { instanceId: 'test-host', clientId: 'test-browser' }
+    initWebTerminals()
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mock.call.mockImplementation(async name => name === 'main.App.GetWebTerminalSnapshot' ? snapshot : undefined)
+    await attachWebTerminal(session)
+    acquireTerminal(session.id, 'view', {})
+    const host = document.createElement('div')
+    host.dataset.testTerminal = ''
+    host.style.cssText = 'width:800px;height:400px'
+    document.body.appendChild(host)
+    attachTerminal(session.id, host)
+    emit('session:closed', { id: session.id, webSequence: 11 })
+    await expect.poll(() => getManagedTerminal(session.id)?.closed).toBe(true)
+    mock.call.mockClear()
+    resizeTerminalView(session.id)
+    resizeTerminalView(session.id, true)
+    await enqueueSessionOperation(session.id, async () => {})
+    expect(mock.call).not.toHaveBeenCalled()
+    expect(terminalSharingErrors.has(session.id)).toBe(false)
+    expect(error).not.toHaveBeenCalled()
+  })
+
   it('keeps a new browser session blocked until snapshot and buffered resize/output finish parsing', async () => {
     const snap = await authoritySnapshot()
     disposeWebTerminals()

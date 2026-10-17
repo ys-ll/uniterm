@@ -27,6 +27,7 @@ vi.mock('../composables/useTerminal', () => ({ getXtermTheme: () => ({}) }))
 vi.mock('../composables/useTerminalTheme', () => ({ resolveXtermBackground: () => ({}), resolveTerminalThemeName: () => 'dark', applyTerminalBgVar() {} }))
 vi.mock('../utils/browserRuntime', () => ({ waitForBrowserEvents: mock.ready }))
 vi.mock('./webFiles', () => ({ fileRPC: vi.fn(async () => {}) }))
+vi.mock('./webFiles', () => ({ fileRPC: vi.fn(async () => {}) }))
 
 import { initBrowserTerminalIntegration, attachBrowserTerminal, restoreBrowserTerminalViews } from '../utils/webTerminalIntegration'
 import { detachBrowserPanel } from './webTerminals'

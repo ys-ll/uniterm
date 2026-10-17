@@ -11,6 +11,7 @@ import { useSettingsStore } from './stores/settingsStore'
 import { setLocale } from './i18n'
 import { isWebMode } from './utils/webMode'
 import { initBrowserTerminalIntegration } from './utils/webTerminalIntegration'
+import { initTerminalFiles } from './services/terminalFileBroker'
 
 if (isWebMode()) document.title = 'uniTerm'
 else Window.SetTitle('uniTerm')
@@ -33,6 +34,7 @@ setLocale('system')
 // Keep module evaluation non-blocking for Wails' page-load/window Show, but
 // install the sole desktop authority before any mounted UI can start a PTY.
 void settingsStore.init().then(() => {
+  initTerminalFiles()
   const dispose = initBrowserTerminalIntegration()
   app.onUnmount(dispose)
   app.mount('#app')

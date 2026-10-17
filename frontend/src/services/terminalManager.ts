@@ -106,7 +106,8 @@ function inputFailed(id: string, error: unknown): void {
   // A refused keystroke must not invalidate the snapshot already in flight.
   // Its pause reason is already visible; a transport failure on a ready view
   // instead blocks that view until an explicit refresh/reconnect succeeds.
-  if (isWebMode() && terminals.get(id)?.syncing) return
+  const m = terminals.get(id)
+  if (!m || m.closed || isWebMode() && m.syncing) return
   failed(id, error)
 }
 
@@ -483,7 +484,7 @@ async function resnapshotTerminal(m: ManagedTerminal): Promise<void> {
 export async function resyncWebTerminals(): Promise<void> {
   if (!isWebMode()) return
   webDisconnected = false
-  await Promise.all([...terminals.values()].filter(m => !m.options.sftp && !m.sessionId.startsWith('pending:')).map(resnapshotTerminal))
+  await Promise.all([...terminals.values()].filter(m => !m.closed && !m.options.sftp && !m.sessionId.startsWith('pending:')).map(resnapshotTerminal))
 }
 
 export async function refreshWebTerminal(id: string): Promise<void> {
@@ -526,7 +527,7 @@ export function presentTerminal(id: string, operation: TerminalPresentation): vo
 
 export function resizeTerminalView(id: string, active = false): void {
   const m = terminals.get(id)
-  if (!m || m.syncing) return
+  if (!m || m.closed || m.syncing) return
   if (id.startsWith('pending:')) { m.fitAddon.fit(); return }
   const rect = m.container?.getBoundingClientRect()
   if (!rect?.width || !rect.height) return

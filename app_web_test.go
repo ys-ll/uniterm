@@ -206,6 +206,9 @@ func TestWebTerminalSharedInputOwnershipAndAppliedSize(t *testing.T) {
 	if err := a.SessionWriteBinary(s.id, "AP8="); err != nil {
 		t.Fatal(err)
 	}
+	if a.webFiles.zTargets[s.id].clientID != "browser" {
+		t.Fatal("human input did not select its file target, or an automatic reply stole it")
+	}
 	sequence := a.webTransport.terminalSequence(s.id)
 	if err := a.SessionResize(s.id, 90, 20); err != nil {
 		t.Fatalf("passive layout observation must be harmless: %v", err)

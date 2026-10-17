@@ -240,6 +240,11 @@ func (a *App) WebTerminalInput(sessionID, clientID, data string, cols, rows int,
 	if err = a.resizeWebTerminalLocked(t, clientID, cols, rows, true); err != nil {
 		return err
 	}
+	if !binary {
+		if err := a.webZmodemInputTarget(sessionID, clientID); err != nil {
+			return err
+		}
+	}
 	if err := t.session.Write(b); err != nil {
 		return webError("write_failed", err.Error())
 	}

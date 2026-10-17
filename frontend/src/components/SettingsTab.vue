@@ -92,7 +92,7 @@
             </div>
           </div>
 
-          <div v-if="!web" class="setting-card">
+          <div class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.bgEnable') }}</div>
               <div class="setting-desc">{{ t('settings.bgEnableDesc') }}</div>
@@ -105,7 +105,7 @@
             </div>
           </div>
 
-          <template v-if="!web && localStateStore.state.backgroundEnabled">
+          <template v-if="localStateStore.state.backgroundEnabled">
             <div class="setting-card">
               <div class="setting-info">
                 <div class="setting-title">{{ t('settings.bgImage') }}</div>
@@ -1652,6 +1652,7 @@ import type { Tunnel, TunnelMode } from '../stores/tunnelStore'
 import type { Identity } from '../types/identity'
 import WebAccessSettings from './WebAccessSettings.vue'
 import { isWebMode } from '../utils/webMode'
+import { pickWebBackgroundImage } from '../services/webFiles'
 import { openExternalLink } from '../utils/nativeCapabilities'
 import { detectPlatformSync, isMobilePlatform, supportsLocalTerminal } from '../utils/platform'
 import type { Proxy } from '../types/proxy'
@@ -2989,15 +2990,19 @@ async function refreshBgPreview() {
 }
 
 async function chooseBackground() {
-  if (web) return
-  const path = await OpenFileDialogFiltered(
-    t('settings.bgChoose'),
-    'Images',
-    '*.png;*.jpg;*.jpeg;*.webp'
-  )
-  if (!path) return
   try {
-    const name = await SetBackgroundImage(path)
+    let name: string
+    if (web) name = await pickWebBackgroundImage()
+    else {
+      const path = await OpenFileDialogFiltered(
+        t('settings.bgChoose'),
+        'Images',
+        '*.png;*.jpg;*.jpeg;*.webp'
+      )
+      if (!path) return
+      name = await SetBackgroundImage(path)
+    }
+    if (!name) return
     await localStateStore.update({ backgroundImage: name, backgroundEnabled: true })
     await refreshBgPreview()
   } catch {
@@ -3006,8 +3011,7 @@ async function chooseBackground() {
 }
 
 async function clearBackground() {
-  if (web) return
-  await ClearBackgroundImage()
+  if (!web) await ClearBackgroundImage()
   await localStateStore.update({ backgroundImage: '' })
   bgPreview.value = ''
 }

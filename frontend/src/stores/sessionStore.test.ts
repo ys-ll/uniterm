@@ -22,6 +22,8 @@ vi.mock('@wailsio/runtime', () => ({
 import { useSessionStore } from './sessionStore'
 import { useZmodemStore } from './zmodemStore'
 
+vi.mock('../services/webFiles', () => ({ fileRPC: vi.fn(async () => {}) }))
+
 const MAX_CHUNKS = 2000
 const TRIM_TO = 1000
 
