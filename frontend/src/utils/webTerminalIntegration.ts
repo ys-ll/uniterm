@@ -2,6 +2,7 @@ import { ref, watch } from 'vue'
 import { Events } from '@wailsio/runtime'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
+import { useTabStore } from '../stores/tabStore'
 import { attachWebTerminal } from '../services/terminalManager'
 import { attachBrowserSession, initWebTerminals, resyncWebTerminals, webTerminalBridge, type WebSession } from '../services/webTerminals'
 import { isSharedTextSession } from './nativeCapabilities'
@@ -10,6 +11,19 @@ import { waitForBrowserEvents } from './browserRuntime'
 
 export const webTerminalError = ref('')
 let dispose: (() => void) | undefined
+let restoration: Promise<boolean> | undefined
+
+interface BrowserTerminalViews {
+  sessionIds: string[]
+  activeSessionId: string | null
+}
+
+const isSessionId = (id: unknown): id is string => typeof id === 'string' && !!id && !id.startsWith('pending:')
+
+/** App waits for the one startup restoration before deciding to show the picker. */
+export function restoreBrowserTerminalViews(): Promise<boolean> {
+  return restoration ?? Promise.resolve(false)
+}
 
 /** Install after Pinia/settings, before mounting any session-creating UI. */
 export function initBrowserTerminalIntegration(): () => void {
@@ -73,6 +87,65 @@ export function initBrowserTerminalIntegration(): () => void {
         }
       }).catch(report)
     }))
+
+    const tabs = useTabStore()
+    const key = `uniterm:web:${window.__UNITERM_WEB__!.instanceId}:terminals`
+    let saved: BrowserTerminalViews = { sessionIds: [], activeSessionId: null }
+    try {
+      const value = JSON.parse(sessionStorage.getItem(key) || 'null')
+      if (Array.isArray(value?.sessionIds)) saved = {
+        sessionIds: [...new Set<string>(value.sessionIds.filter(isSessionId))],
+        activeSessionId: isSessionId(value.activeSessionId) ? value.activeSessionId : null,
+      }
+    } catch { /* Unavailable/corrupt tab storage starts with an empty view list. */ }
+
+    const currentViews = (): BrowserTerminalViews => {
+      const ids = tabs.tabs.flatMap(tab => tab.type === 'terminal' ? [tab.panelId] : tab.type === 'workspace' ? tab.panelIds : [])
+        .map(id => panels.getPanel(id))
+        .filter(p => p && isSharedTextSession(p.type))
+        .map(p => p!.sessionId).filter(isSessionId)
+      const activeId = panels.getPanel(tabs.getActivePanelId() || '')?.sessionId
+      return { sessionIds: [...new Set(ids)], activeSessionId: activeId && ids.includes(activeId) ? activeId : null }
+    }
+    let restored = false
+    let leaving = false
+    let preserveSaved = true
+    const saveViews = (views: BrowserTerminalViews) => {
+      if (!restored || stopped || leaving || preserveSaved && !views.sessionIds.length) return
+      try {
+        sessionStorage.setItem(key, JSON.stringify(views))
+        preserveSaved = false
+      } catch { /* Keep the current views when tab storage is unavailable. */ }
+    }
+    // Never let startup's empty stores or teardown replace the saved IDs.
+    offs.push(watch(currentViews, saveViews, { flush: 'sync' }))
+    const onPageHide = () => { leaving = true }
+    window.addEventListener('pagehide', onPageHide)
+    offs.push(() => window.removeEventListener('pagehide', onPageHide))
+
+    restoration = (async () => {
+      try {
+        if (saved.sessionIds.length) {
+          await waitForBrowserEvents()
+          if (stopped || leaving) return false
+          const catalog = new Map((await webTerminalBridge.sessions()).filter(s => isSharedTextSession(s.type)).map(s => [s.id, s]))
+          await waitForBrowserEvents()
+          if (stopped || leaving) return false
+          await Promise.all(saved.sessionIds.map(async id => {
+            const session = catalog.get(id)
+            if (session) await attachBrowserTerminal(session).catch(report)
+          }))
+          const active = [...panels.panels.values()].find(p => p.sessionId === saved.activeSessionId && p.tabId)
+          if (!stopped && !leaving && active) tabs.setActiveTab(active.tabId)
+        }
+        preserveSaved = false // A successful catalog lookup can prune closed IDs.
+      } catch (error) { report(error) }
+      if (stopped || leaving) return false
+      restored = true
+      const views = currentViews()
+      saveViews(views)
+      return views.sessionIds.length > 0
+    })()
   }
 
   dispose = () => {
@@ -81,6 +154,7 @@ export function initBrowserTerminalIntegration(): () => void {
     offs.forEach(off => off())
     stopTerminals()
     dispose = undefined
+    restoration = undefined
   }
   return dispose
 }
@@ -89,3 +163,5 @@ export async function attachBrowserTerminal(session: WebSession): Promise<string
   await waitForBrowserEvents()
   return attachBrowserSession(session)
 }
+
+if (import.meta.hot) import.meta.hot.dispose(() => dispose?.())

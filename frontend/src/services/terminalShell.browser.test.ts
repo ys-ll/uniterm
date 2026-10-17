@@ -26,8 +26,9 @@ vi.mock('../stores/localStateStore', () => ({ useLocalStateStore: () => ({ state
 vi.mock('../composables/useTerminal', () => ({ getXtermTheme: () => ({}) }))
 vi.mock('../composables/useTerminalTheme', () => ({ resolveXtermBackground: () => ({}), resolveTerminalThemeName: () => 'dark', applyTerminalBgVar() {} }))
 vi.mock('../utils/browserRuntime', () => ({ waitForBrowserEvents: mock.ready }))
+vi.mock('./webFiles', () => ({ fileRPC: vi.fn(async () => {}) }))
 
-import { initBrowserTerminalIntegration, attachBrowserTerminal } from '../utils/webTerminalIntegration'
+import { initBrowserTerminalIntegration, attachBrowserTerminal, restoreBrowserTerminalViews } from '../utils/webTerminalIntegration'
 import { detachBrowserPanel } from './webTerminals'
 import { getManagedTerminal } from './terminalManager'
 import { usePanelStore } from '../stores/panelStore'
@@ -42,6 +43,7 @@ const emit = (name: string, data: any) => mock.events.get(name)?.forEach(fn => f
 let dispose: (() => void) | undefined
 
 beforeEach(() => {
+  sessionStorage.clear()
   setActivePinia(createPinia())
   usePanelStore().panels.clear()
   useSessionStore().sessions.clear()
@@ -108,4 +110,32 @@ it('automatically snapshots connected new panels and resnapshots once on a later
   expect(getManagedTerminal(session.id)!.terminal.buffer.active.getLine(0)?.translateToString(true)).toContain('editornew')
   expect(mock.call.mock.calls.filter(c => c[0] === 'main.App.GetWebTerminalSnapshot')).toHaveLength(2)
   expect(mock.write).not.toHaveBeenCalled()
+})
+
+it('automatically restores the same selected terminal and alternate-screen snapshot after a tab reload', async () => {
+  await desktopSnapshot()
+  const panelId = await attachBrowserTerminal(session)
+  const key = 'uniterm:web:host:terminals'
+  expect(JSON.parse(sessionStorage.getItem(key)!)).toEqual({ sessionIds: [session.id], activeSessionId: session.id })
+  const previous = getManagedTerminal(session.id)!.terminal
+  const line = previous.buffer.active.getLine(0)?.translateToString(true)
+  // A fresh frontend has no panels/tabs, but the browser tab retains sessionStorage.
+  dispose!()
+  usePanelStore().panels.clear()
+  useSessionStore().sessions.clear()
+  useTabStore().tabs.splice(0)
+  dispose = initBrowserTerminalIntegration()
+  expect(await restoreBrowserTerminalViews()).toBe(true) // App must not open the picker.
+  const restoredPanel = usePanelStore().getPanel(useTabStore().getActivePanelId()!)!
+  expect(restoredPanel.id).not.toBe(panelId)
+  expect(restoredPanel.sessionId).toBe(session.id)
+  const restored = getManagedTerminal(session.id)!.terminal
+  expect(restored).not.toBe(previous)
+  expect(restored.cols).toBe(41)
+  expect(restored.rows).toBe(9)
+  expect(restored.buffer.active.type).toBe('alternate')
+  expect(restored.buffer.active.getLine(0)?.translateToString(true)).toBe(line)
+  expect(mock.call.mock.calls.filter(c => c[0] === 'main.App.GetWebTerminalSnapshot')).toHaveLength(2)
+  expect(mock.call.mock.calls.some(c => /CreateSession|SessionStart/.test(c[0]))).toBe(false)
+  for (const call of [CloseSession, RegisterSessionForPanel, UnregisterSession, DisableSessionOutputLog]) expect(call).not.toHaveBeenCalled()
 })

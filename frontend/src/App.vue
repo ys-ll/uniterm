@@ -180,7 +180,7 @@ import AppHeader from './components/AppHeader.vue'
 import BrowserSessionPicker from './components/BrowserSessionPicker.vue'
 import { isWebMode } from './utils/webMode'
 import { browserConnection } from './utils/browserRuntime'
-import { webTerminalError } from './utils/webTerminalIntegration'
+import { restoreBrowserTerminalViews, webTerminalError } from './utils/webTerminalIntegration'
 import { detachBrowserPanel } from './services/webTerminals'
 import { shouldCloseSession } from './utils/nativeCapabilities'
 import Sidebar from './components/Sidebar.vue'
@@ -954,11 +954,11 @@ onMounted(async () => {
   useQuickCommandStore().load()
   // Pre-load tunnels so auto-start state and the panel are ready
   useTunnelStore().load()
+  if (web) webSessionsVisible.value = !(await restoreBrowserTerminalViews())
   // Auto-open start tab if no tabs are open
   if (tabStore.tabs.length === 0) {
     tabStore.createStartTab()
   }
-  if (web) webSessionsVisible.value = true
   // Reopen-last-session prompt (issue #937): ask before touching tabs, then
   // start recording so the snapshot always mirrors what's open. Not awaited —
   // the dialog must not block the rest of the mount sequence.

@@ -33,7 +33,7 @@ vi.mock('../../bindings/github.com/ys-ll/uniterm/app', () => ({
   DisableSessionOutputLog: vi.fn(async () => {}), RegisterSessionForPanel: vi.fn(async () => {}), UnregisterSession: vi.fn(async () => {}),
 }))
 
-import { attachBrowserTerminal, initBrowserTerminalIntegration, webTerminalError } from './webTerminalIntegration'
+import { attachBrowserTerminal, initBrowserTerminalIntegration, restoreBrowserTerminalViews, webTerminalError } from './webTerminalIntegration'
 import { detachBrowserPanel, terminateBrowserSession, type WebSession } from '../services/webTerminals'
 import { attachWebTerminal, disposeTerminal, initWebTerminals, resyncWebTerminals } from '../services/terminalManager'
 import { usePanelStore } from '../stores/panelStore'
@@ -45,13 +45,28 @@ import { CreateSession, SessionStart, CloseSession, RegisterSessionForPanel, Unr
 const session: WebSession = { id: 'host-session', type: 'ssh', title: 'Host shell', status: 'connected', cols: 93, rows: 27, activeClient: 'other-browser', resizeCapability: 'pty', connectionId: 'saved-config', host: 'host.example', remoteOS: 'linux' }
 const emit = (name: string, data: unknown) => mock.events.get(name)?.forEach(fn => fn({ data }))
 let dispose: (() => void) | undefined
-
-beforeEach(() => {
-  vi.stubGlobal('window', { __UNITERM_WEB__: { instanceId: 'host', clientId: 'visitor' } })
-  setActivePinia(createPinia())
+const storageKey = 'uniterm:web:host:terminals'
+function storage() {
+  const values = new Map<string, string>()
+  return {
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => { values.set(key, value) }),
+  }
+}
+let tabStorage: ReturnType<typeof storage>
+const savedViews = () => JSON.parse(tabStorage.getItem(storageKey) || 'null')
+function clearViews() {
   usePanelStore().panels.clear()
   useSessionStore().sessions.clear()
   useTabStore().tabs.splice(0)
+}
+
+beforeEach(() => {
+  vi.stubGlobal('window', Object.assign(new EventTarget(), { __UNITERM_WEB__: { instanceId: 'host', clientId: 'visitor' } }))
+  tabStorage = storage()
+  vi.stubGlobal('sessionStorage', tabStorage)
+  setActivePinia(createPinia())
+  clearViews()
   vi.clearAllMocks()
   mock.ready.mockResolvedValue()
   mock.call.mockImplementation(async name => name === 'main.App.GetWebSessions' ? [session] : undefined)
@@ -192,6 +207,9 @@ describe('shell integration with the real terminal attachment service', () => {
     expect(attachWebTerminal).not.toHaveBeenCalled()
     expect(resyncWebTerminals).not.toHaveBeenCalled()
     expect(detachBrowserPanel(panel.id)).toBe(false)
+    expect(await restoreBrowserTerminalViews()).toBe(false)
+    expect(tabStorage.getItem).not.toHaveBeenCalled()
+    expect(tabStorage.setItem).not.toHaveBeenCalled()
   })
 
   it('keeps explicit Disconnect as a real session close', async () => {
@@ -213,5 +231,148 @@ describe('shell integration with the real terminal attachment service', () => {
       expect(SessionStart).toHaveBeenCalledTimes(1)
       expect(CloseSession).not.toHaveBeenCalled()
     } finally { log.mockRestore() }
+  })
+})
+
+describe('per-browser-tab terminal view restoration', () => {
+  it('waits for SSE, restores each surviving ID once, and selects the saved active ID', async () => {
+    const other = { ...session, id: 'other-session', cols: 72, rows: 20 }
+    const saved = { sessionIds: [session.id, 'closed-session', other.id, session.id, 'pending:placeholder', ''], activeSessionId: session.id }
+    tabStorage.setItem(storageKey, JSON.stringify(saved))
+    tabStorage.setItem.mockClear()
+    mock.call.mockResolvedValue([session, other])
+    let ready!: () => void
+    mock.ready.mockReturnValue(new Promise(resolve => { ready = resolve }))
+    // Status may already have arrived before the browser shell is mounted.
+    emit('session:status', { id: session.id, status: 'connected' })
+    dispose = initBrowserTerminalIntegration()
+    const restored = restoreBrowserTerminalViews()
+    expect(restoreBrowserTerminalViews()).toBe(restored)
+    await Promise.resolve()
+    expect(mock.call).not.toHaveBeenCalled()
+    expect(attachWebTerminal).not.toHaveBeenCalled()
+    expect(tabStorage.setItem).not.toHaveBeenCalled()
+    expect(savedViews()).toEqual(saved)
+    ready()
+    expect(await restored).toBe(true)
+    await Promise.resolve()
+    expect(mock.call).toHaveBeenCalledExactlyOnceWith('main.App.GetWebSessions')
+    expect(attachWebTerminal).toHaveBeenCalledTimes(2)
+    expect(attachWebTerminal).toHaveBeenNthCalledWith(1, session)
+    expect(attachWebTerminal).toHaveBeenNthCalledWith(2, other)
+    const tabs = useTabStore(), panels = usePanelStore()
+    expect(tabs.tabs).toHaveLength(2)
+    expect(panels.getPanel(tabs.getActivePanelId()!)?.sessionId).toBe(session.id)
+    expect(savedViews()).toEqual({ sessionIds: [session.id, other.id], activeSessionId: session.id })
+    for (const call of [CreateSession, SessionStart, CloseSession, RegisterSessionForPanel, UnregisterSession, DisableSessionOutputLog]) expect(call).not.toHaveBeenCalled()
+  })
+
+  it('drops IDs absent from the host and requests the picker when none survive', async () => {
+    tabStorage.setItem(storageKey, JSON.stringify({ sessionIds: ['closed-session'], activeSessionId: 'closed-session' }))
+    dispose = initBrowserTerminalIntegration()
+    expect(await restoreBrowserTerminalViews()).toBe(false)
+    expect(savedViews()).toEqual({ sessionIds: [], activeSessionId: null })
+    expect(attachWebTerminal).not.toHaveBeenCalled()
+    expect(useTabStore().tabs).toHaveLength(0)
+  })
+
+  it.each(['instance', 'browser-tab'])('isolates restored views by %s', async boundary => {
+    const saved = { sessionIds: [session.id], activeSessionId: session.id }
+    tabStorage.setItem(storageKey, JSON.stringify(saved))
+    if (boundary === 'instance') window.__UNITERM_WEB__!.instanceId = 'another-host'
+    else vi.stubGlobal('sessionStorage', storage())
+    dispose = initBrowserTerminalIntegration()
+    expect(await restoreBrowserTerminalViews()).toBe(false)
+    expect(attachWebTerminal).not.toHaveBeenCalled()
+    expect(mock.call).not.toHaveBeenCalled()
+    expect(savedViews()).toEqual(saved)
+  })
+
+  it('saves only bound text views and their selection, and removes closed views from storage', async () => {
+    dispose = initBrowserTerminalIntegration()
+    expect(await restoreBrowserTerminalViews()).toBe(false)
+    const panels = usePanelStore(), tabs = useTabStore()
+    const text = panels.createPanel(null, 'local')
+    const tab = tabs.createTerminalTab('New terminal', text.id)
+    panels.movePanelToTab(text.id, tab.id)
+    expect(savedViews().sessionIds).toEqual([])
+    panels.bindSession(text.id, 'pending:placeholder')
+    expect(savedViews().sessionIds).toEqual([])
+    panels.bindSession(text.id, session.id)
+    expect(savedViews()).toEqual({ sessionIds: [session.id], activeSessionId: session.id })
+    const database = panels.createPanel(null, 'database')
+    panels.bindSession(database.id, 'independent-database')
+    tabs.createTab('database', 'Database', database.id)
+    expect(savedViews()).toEqual({ sessionIds: [session.id], activeSessionId: null })
+    tabs.setActiveTab(tab.id)
+    expect(savedViews().activeSessionId).toBe(session.id)
+    expect(detachBrowserPanel(text.id)).toBe(true)
+    tabs.closeTab(tab.id)
+    expect(savedViews()).toEqual({ sessionIds: [], activeSessionId: null })
+    expect(CloseSession).not.toHaveBeenCalled()
+  })
+
+  it.each(['pagehide', 'dispose'])('preserves saved IDs when %s is followed by empty-store teardown', async cleanup => {
+    tabStorage.setItem(storageKey, JSON.stringify({ sessionIds: [session.id], activeSessionId: session.id }))
+    dispose = initBrowserTerminalIntegration()
+    expect(await restoreBrowserTerminalViews()).toBe(true)
+    const before = savedViews()
+    tabStorage.setItem.mockClear()
+    if (cleanup === 'pagehide') window.dispatchEvent(new Event('pagehide'))
+    else dispose() // App unmount and HMR use this same disposer.
+    clearViews()
+    await Promise.resolve()
+    expect(tabStorage.setItem).not.toHaveBeenCalled()
+    expect(savedViews()).toEqual(before)
+    expect(CloseSession).not.toHaveBeenCalled()
+  })
+
+  it('does not attach or erase IDs if teardown occurs during the catalog request', async () => {
+    const saved = { sessionIds: [session.id], activeSessionId: session.id }
+    tabStorage.setItem(storageKey, JSON.stringify(saved))
+    let finish!: (sessions: WebSession[]) => void
+    mock.call.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    dispose = initBrowserTerminalIntegration()
+    const restored = restoreBrowserTerminalViews()
+    await vi.waitFor(() => expect(mock.call).toHaveBeenCalledTimes(1))
+    dispose()
+    clearViews()
+    finish([session])
+    expect(await restored).toBe(false)
+    expect(attachWebTerminal).not.toHaveBeenCalled()
+    expect(savedViews()).toEqual(saved)
+  })
+
+  it('preserves a failed snapshot view and its error for the existing refresh path', async () => {
+    tabStorage.setItem(storageKey, JSON.stringify({ sessionIds: [session.id], activeSessionId: session.id }))
+    vi.mocked(attachWebTerminal).mockRejectedValueOnce(new Error('Snapshot unavailable'))
+    dispose = initBrowserTerminalIntegration()
+    expect(await restoreBrowserTerminalViews()).toBe(true)
+    const panels = usePanelStore(), tabs = useTabStore()
+    const panelId = tabs.getActivePanelId()!
+    expect(panels.getPanel(panelId)?.sessionId).toBe(session.id)
+    expect(panels.isAttachedPanel(panelId)).toBe(true)
+    expect(webTerminalError.value).toBe('Snapshot unavailable')
+    expect(savedViews()).toEqual({ sessionIds: [session.id], activeSessionId: session.id })
+    emit('web:resync', { reason: 'reconnect', sequence: 7 })
+    await vi.waitFor(() => expect(resyncWebTerminals).toHaveBeenCalledTimes(1))
+    expect(attachWebTerminal).toHaveBeenCalledTimes(1)
+    expect(CreateSession).not.toHaveBeenCalled()
+    expect(SessionStart).not.toHaveBeenCalled()
+  })
+
+  it('retains IDs on catalog failure until an explicit new view selection can replace them', async () => {
+    const saved = { sessionIds: [session.id], activeSessionId: session.id }
+    tabStorage.setItem(storageKey, JSON.stringify(saved))
+    mock.call.mockRejectedValueOnce(new Error('Catalog unavailable'))
+    dispose = initBrowserTerminalIntegration()
+    expect(await restoreBrowserTerminalViews()).toBe(false)
+    expect(savedViews()).toEqual(saved)
+    expect(webTerminalError.value).toBe('Catalog unavailable')
+    const other = { ...session, id: 'selected-session' }
+    const panelId = await attachBrowserTerminal(other)
+    expect(savedViews()).toEqual({ sessionIds: [other.id], activeSessionId: other.id })
+    detachBrowserPanel(panelId)
+    expect(savedViews()).toEqual({ sessionIds: [], activeSessionId: null })
   })
 })
