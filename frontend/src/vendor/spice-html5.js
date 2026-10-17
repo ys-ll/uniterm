@@ -4831,7 +4831,12 @@ function SpiceConn(o)
     if (o === undefined || o.uri === undefined || ! o.uri)
         throw new Error("You must specify a uri");
 
-    this.ws = new WebSocket(o.uri, 'binary');
+    // Browser-owned SPICE main and sibling sockets share one authenticated
+    // session. Only main owns its lifetime; native/gateway URLs stay unchanged.
+    var uri = o.uri;
+    if (o.parent && /\/web\/remote\/spice\/[^/]+\/main$/.test(uri))
+        uri = uri.replace(/\/main$/, '/channel');
+    this.ws = new WebSocket(uri, 'binary');
 
     if (! this.ws.binaryType)
         throw new Error("WebSocket doesn't support binaryType.  Try a different browser.");
@@ -4844,6 +4849,7 @@ function SpiceConn(o)
         this.parent = o.parent;
         this.message_id = o.parent.message_id;
         this.password = o.parent.password;
+        this.onerror = function(e) { o.parent.report_error(e); };
     }
     if (o.screen_id !== undefined)
         this.screen_id = o.screen_id;
@@ -5278,6 +5284,7 @@ SpiceConn.prototype =
 
     cleanup: function()
     {
+        this.state = "closing";
         if (this.timeout)
         {
             window.clearTimeout(this.timeout);
@@ -5798,7 +5805,7 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
         var canvas = document.createElement("canvas");
         canvas.setAttribute('width', m.surface.width);
         canvas.setAttribute('height', m.surface.height);
-        canvas.setAttribute('id', "spice_surface_" + m.surface.surface_id);
+        canvas.setAttribute('id', this.parent.screen_id + "_surface_" + m.surface.surface_id);
         canvas.setAttribute('tabindex', m.surface.surface_id);
         canvas.context = canvas.getContext("2d");
 
@@ -5853,6 +5860,8 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
             v.src = window.URL.createObjectURL(media);
 
             v.setAttribute('autoplay', true);
+            v.muted = true; // SPICE audio is carried by the playback channel.
+            v.playsInline = true;
             v.setAttribute('width', m.stream_width);
             v.setAttribute('height', m.stream_height);
 
@@ -5945,7 +5954,7 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
 
         if (this.streams[m.id].codec_type == SPICE_VIDEO_CODEC_TYPE_VP8)
         {
-            document.getElementById(this.parent.screen_id).removeChild(this.streams[m.id].video);
+            release_spice_media(this.streams[m.id].video);
             this.streams[m.id].source_buffer = null;
             this.streams[m.id].media = null;
             this.streams[m.id].video = null;
@@ -5956,7 +5965,9 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
 
     if (msg.type == SPICE_MSG_DISPLAY_STREAM_DESTROY_ALL)
     {
-        this.known_unimplemented(msg.type, "Display Stream Destroy All");
+        for (var id in this.streams)
+            if (this.streams[id]) release_spice_media(this.streams[id].video);
+        this.streams = [];
         return true;
     }
 
@@ -5988,14 +5999,14 @@ SpiceDisplayConn.prototype.process_channel_message = function(msg)
 
 SpiceDisplayConn.prototype.delete_surface = function(surface_id)
 {
-    var canvas = document.getElementById("spice_surface_" + surface_id);
+    var canvas = this.surfaces[surface_id].canvas;
     if (DUMP_CANVASES && this.parent.dump_id)
         document.getElementById(this.parent.dump_id).removeChild(canvas);
     if (this.primary_surface == surface_id)
     {
         this.unhook_events();
         this.primary_surface = undefined;
-        document.getElementById(this.parent.screen_id).removeChild(canvas);
+        canvas.remove();
     }
 
     delete this.surfaces[surface_id];
@@ -6801,7 +6812,7 @@ SpiceMainConn.prototype.process_channel_message = function(msg)
             else if (chans.channels[i].type == SPICE_CHANNEL_CURSOR)
                 this.cursor = new SpiceCursorConn(conn);
             else if (chans.channels[i].type == SPICE_CHANNEL_PLAYBACK)
-                this.cursor = new SpicePlaybackConn(conn);
+                this.playback = new SpicePlaybackConn(conn);
             else if (chans.channels[i].type == SPICE_CHANNEL_PORT)
                 this.ports.push(new SpicePortConn(conn));
             else
@@ -6850,26 +6861,16 @@ SpiceMainConn.prototype.process_channel_message = function(msg)
     if (msg.type == SPICE_MSG_MAIN_AGENT_DISCONNECTED)
     {
         this.agent_connected = false;
+        this.agent_caps = 0;
+        this.agent_msg_queue = [];
+        this.agent_buffer = undefined;
+        this.clipboard_text = undefined;
         return true;
     }
 
     if (msg.type == SPICE_MSG_MAIN_AGENT_DATA)
     {
-        var agent_data = new SpiceMsgMainAgentData(msg.data);
-        if (agent_data.type == VD_AGENT_ANNOUNCE_CAPABILITIES)
-        {
-            var agent_caps = new VDAgentAnnounceCapabilities(agent_data.data);
-            if (agent_caps.request)
-                this.announce_agent_capabilities(0);
-            return true;
-        }
-        else if (agent_data.type == VD_AGENT_FILE_XFER_STATUS)
-        {
-            this.handle_file_xfer_status(new VDAgentFileXferStatusMessage(agent_data.data));
-            return true;
-        }
-
-        return false;
+        return this.handle_agent_data(msg.data);
     }
 
     if (msg.type == SPICE_MSG_MAIN_MIGRATE_SWITCH_HOST)
@@ -6920,6 +6921,16 @@ SpiceMainConn.prototype.process_channel_message = function(msg)
 SpiceMainConn.prototype.stop = function(msg)
 {
     this.state = "closing";
+    if (this.playback)
+    {
+        this.playback.cleanup();
+        release_spice_media(this.playback.audio);
+        this.playback = undefined;
+    }
+    for (var port of this.ports || []) port.cleanup();
+    this.ports = [];
+    this.agent_msg_queue = [];
+    this.agent_buffer = this.clipboard_text = undefined;
 
     if (this.inputs)
     {
@@ -6929,12 +6940,15 @@ SpiceMainConn.prototype.stop = function(msg)
 
     if (this.cursor)
     {
+        if (this.cursor.spice_simulated_cursor) this.cursor.spice_simulated_cursor.remove();
         this.cursor.cleanup();
         this.cursor = undefined;
     }
 
     if (this.display)
     {
+        for (var id in this.display.streams)
+            if (this.display.streams[id]) release_spice_media(this.display.streams[id].video);
         this.display.cleanup();
         this.display.destroy_surfaces();
         this.display = undefined;
@@ -6946,6 +6960,99 @@ SpiceMainConn.prototype.stop = function(msg)
         for (var e in this.extra_channels)
             this.extra_channels[e].cleanup();
     this.extra_channels = undefined;
+}
+
+function release_spice_media(media)
+{
+    if (!media) return;
+    media.pause();
+    if (media.src) window.URL.revokeObjectURL(media.src);
+    media.removeAttribute('src');
+    media.load();
+    media.remove();
+}
+
+// Agent messages form a byte stream and can span many SPICE messages. Bound
+// clipboard data to 1 MiB, and advertise only the default UTF-8 selection.
+SpiceMainConn.prototype.handle_agent_data = function(data)
+{
+    var old = this.agent_buffer || new Uint8Array(0);
+    if (old.length + data.byteLength > 1024 * 1024 + 20)
+        throw new Error('SPICE agent message exceeds 1 MiB');
+    var bytes = new Uint8Array(old.length + data.byteLength);
+    bytes.set(old); bytes.set(new Uint8Array(data), old.length);
+    while (bytes.length >= 20)
+    {
+        var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        var size = view.getUint32(16, true);
+        if (size > 1024 * 1024) throw new Error('SPICE agent message exceeds 1 MiB');
+        if (bytes.length < 20 + size) break;
+        if (view.getUint32(0, true) != VD_AGENT_PROTOCOL) throw new Error('Invalid SPICE agent protocol');
+        this.handle_agent_message(view.getUint32(4, true), bytes.slice(20, 20 + size).buffer);
+        bytes = bytes.slice(20 + size);
+    }
+    this.agent_buffer = bytes;
+    return true;
+}
+
+SpiceMainConn.prototype.send_clipboard_message = function(type, format, text)
+{
+    var encoded = new TextEncoder().encode(text || '');
+    var bytes = new Uint8Array(4 + encoded.length);
+    new DataView(bytes.buffer).setUint32(0, format, true);
+    bytes.set(encoded, 4);
+    this.send_agent_message(type, {
+        buffer_size: function() { return bytes.length; },
+        to_buffer: function(buffer, at) { new Uint8Array(buffer, at, bytes.length).set(bytes); }
+    });
+}
+
+SpiceMainConn.prototype.sendClipboard = function(text)
+{
+    if (!this.agent_connected || !(this.agent_caps & ((1 << VD_AGENT_CAP_CLIPBOARD) | (1 << VD_AGENT_CAP_CLIPBOARD_BY_DEMAND)))) return false;
+    if (new TextEncoder().encode(text).length > 1024 * 1024 - 4 || this.agent_msg_queue.length > 1024)
+        throw new Error('SPICE clipboard text exceeds the queue limit');
+    this.clipboard_text = text;
+    if (this.agent_caps & (1 << VD_AGENT_CAP_CLIPBOARD_BY_DEMAND))
+        this.send_clipboard_message(VD_AGENT_CLIPBOARD_GRAB, 1);
+    else
+        this.send_clipboard_message(VD_AGENT_CLIPBOARD, 1, text);
+    return true;
+}
+
+SpiceMainConn.prototype.handle_agent_message = function(type, data)
+{
+    if (type == VD_AGENT_ANNOUNCE_CAPABILITIES && data.byteLength >= 8)
+    {
+        var caps = new VDAgentAnnounceCapabilities(data);
+        this.agent_caps = caps.caps;
+        if (caps.request) this.announce_agent_capabilities(0);
+    }
+    else if (type == VD_AGENT_FILE_XFER_STATUS)
+        this.handle_file_xfer_status(new VDAgentFileXferStatusMessage(data));
+    else if (type == VD_AGENT_CLIPBOARD_RELEASE)
+        this.clipboard_text = undefined;
+    else if (data.byteLength >= 4)
+    {
+        var view = new DataView(data);
+        if (type == VD_AGENT_CLIPBOARD_GRAB)
+        {
+            this.clipboard_text = undefined;
+            for (var i = 0; i + 4 <= data.byteLength; i += 4)
+                if (view.getUint32(i, true) == 1) {
+                    this.send_clipboard_message(VD_AGENT_CLIPBOARD_REQUEST, 1);
+                    break;
+                }
+        }
+        else if (type == VD_AGENT_CLIPBOARD_REQUEST)
+        {
+            if (view.getUint32(0, true) == 1 && this.clipboard_text !== undefined)
+                this.send_clipboard_message(VD_AGENT_CLIPBOARD, 1, this.clipboard_text);
+            else this.send_clipboard_message(VD_AGENT_CLIPBOARD, 0);
+        }
+        else if (type == VD_AGENT_CLIPBOARD && view.getUint32(0, true) == 1 && this.onclipboard)
+            this.onclipboard(new TextDecoder().decode(data.slice(4)));
+    }
 }
 
 SpiceMainConn.prototype.send_agent_message_queue = function(message)
@@ -6986,6 +7093,8 @@ SpiceMainConn.prototype.announce_agent_capabilities = function(request)
 {
     var caps = new VDAgentAnnounceCapabilities(request, (1 << VD_AGENT_CAP_MOUSE_STATE) |
                                                         (1 << VD_AGENT_CAP_MONITORS_CONFIG) |
+                                                        (1 << VD_AGENT_CAP_CLIPBOARD) |
+                                                        (1 << VD_AGENT_CAP_CLIPBOARD_BY_DEMAND) |
                                                         (1 << VD_AGENT_CAP_REPLY));
     this.send_agent_message(VD_AGENT_ANNOUNCE_CAPABILITIES, caps);
 }
@@ -8226,8 +8335,7 @@ SpicePlaybackConn.prototype.process_channel_message = function(msg)
         PLAYBACK_DEBUG > 0 && console.log("PlaybackStop");
         if (this.source_buffer)
         {
-            document.getElementById(this.parent.screen_id).removeChild(this.audio);
-            window.URL.revokeObjectURL(this.audio.src);
+            release_spice_media(this.audio);
 
             delete this.source_buffer;
             delete this.media_source;

@@ -1,5 +1,6 @@
 <template>
   <div class="vnc-tab-content">
+    <RemoteDesktopClipboard v-if="isWebMode() && status === 'connected'" :id="'vnc-clipboard-' + panelId" :received="remoteClipboard" :disabled="viewOnly" @send="sendClipboard" />
     <!-- Connecting state -->
     <div v-if="status === 'connecting'" class="vnc-overlay">
       <el-icon class="is-loading" :size="'2rem'"><Loader /></el-icon>
@@ -66,14 +67,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { markRaw, nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Loader } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import type { ConnectionConfig } from '../types/session'
 import { Clipboard, Events } from '@wailsio/runtime'
-import { CreateSession, CloseSession } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { CloseSession } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode } from '../utils/webMode'
+import { createRemoteDesktop, remoteDesktopURL } from '../utils/webRemoteDesktop'
+import RemoteDesktopClipboard from './RemoteDesktopClipboard.vue'
 const { t } = useI18n()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
@@ -86,12 +90,17 @@ const props = defineProps<{
 
 const status = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected')
 const lastError = ref<string>('')
-const currentSessionId = ref<string | null>(props.sessionId)
+const currentSessionId = ref<string | null>(isWebMode() ? null : props.sessionId)
 const vncContainer = ref<HTMLDivElement | null>(null)
 const savedPassword = ref<string>('')
 const scaleViewport = ref(true)
 const viewOnly = ref(false)
 const showDotCursor = ref(false)
+const remoteClipboard = ref('')
+let mounted = false
+let generation = 0
+let reconnecting = false
+let removeRFBEvents = () => {}
 
 function readThemeBackground(): string {
   // Pull the resolved --bg-base CSS variable, which the global theme
@@ -125,8 +134,10 @@ async function connect() {
   if (status.value === 'connecting' || status.value === 'connected') return
   status.value = 'connecting'
   lastError.value = ''
+  const attempt = ++generation
   try {
-    const info = await CreateSession('vnc', props.config)
+    const info = await createRemoteDesktop('vnc', props.config)
+    if (!mounted || attempt !== generation) { await CloseSession(info.id); return }
     currentSessionId.value = info.id
     // Bind the session to the panel so tab-close cleanup and later
     // session:status events resolve to this id. The proxy address comes
@@ -142,6 +153,7 @@ async function connect() {
       initRFB(info.proxyAddr, savedPassword.value)
     }
   } catch (e: any) {
+    if (!mounted || attempt !== generation) return
     console.error('VNC connect error:', e)
     lastError.value = e?.message || String(e)
     status.value = 'error'
@@ -149,22 +161,31 @@ async function connect() {
 }
 
 async function reconnect() {
-  if (currentSessionId.value) {
-    try { await CloseSession(currentSessionId.value) } catch (_) {}
-    currentSessionId.value = null
-  }
-  if (rfb) {
-    rfb.disconnect()
-    rfb = null
-  }
-  await connect()
+  if (reconnecting) return
+  reconnecting = true
+  try {
+    generation++
+    removeRFBEvents()
+    if (rfb) { rfb.disconnect(); rfb = null }
+    if (currentSessionId.value) {
+      try { await CloseSession(currentSessionId.value) } catch (_) {}
+      currentSessionId.value = null
+    }
+    isIniting = false
+    panelStore.removeProxyAddr(props.panelId)
+    status.value = 'disconnected'
+    await connect()
+  } finally { reconnecting = false }
 }
 
 function initRFB(proxyAddr: string, password: string) {
   if (isIniting) return
   isIniting = true
+  const attempt = ++generation
+  status.value = 'connecting'
 
   if (rfb) {
+    removeRFBEvents()
     try { rfb.disconnect() } catch (_) {}
     rfb = null
   }
@@ -179,6 +200,7 @@ function initRFB(proxyAddr: string, password: string) {
   }
 
   import('@novnc/novnc').then((module: any) => {
+    if (!mounted || attempt !== generation) return
     const LoadedRFB = module.default || module
     ;(window as any).__novnc_RFB = LoadedRFB
     createRFB(LoadedRFB, proxyAddr, password)
@@ -205,11 +227,12 @@ function createRFB(RFB: any, proxyAddr: string, password: string) {
   }
 
   try {
-    rfb = new RFB(vncContainer.value, proxyAddr, {
+    rfb = markRaw(new RFB(vncContainer.value, remoteDesktopURL(proxyAddr), {
       credentials: { password: password || '' },
       shared: props.config?.vncShared ?? true,
       repeaterID: props.config?.vncRepeaterID || '',
-    })
+    }))
+    rfb.__unitermSessionId = currentSessionId.value
   } catch (e: any) {
     console.error('Failed to create RFB instance:', e)
     lastError.value = e?.message || String(e)
@@ -228,48 +251,71 @@ function createRFB(RFB: any, proxyAddr: string, password: string) {
 
   applyRFBOptions()
 
+  bindRFBEvents()
+  isIniting = false
+}
+
+function bindRFBEvents() {
+  removeRFBEvents()
+  const client = rfb
+  client.__unitermRemoveEvents?.()
+  const listeners: [string, (e: any) => void][] = []
+  const on = (name: string, listener: (e: any) => void) => {
+    client.addEventListener(name, listener)
+    listeners.push([name, listener])
+  }
+  removeRFBEvents = () => listeners.forEach(([name, listener]) => client.removeEventListener(name, listener))
+  client.__unitermRemoveEvents = removeRFBEvents
+  remoteClipboard.value = client.__unitermClipboard || ''
+
   // issue #95: only flip to 'connected' on the noVNC connect event.
   // Previously status='connected' was set as soon as the local proxy was
   // up, well before the RFB handshake completed, producing a black
   // screen with no error on security failure or wrong password.
-  rfb.addEventListener('connect', () => {
+  on('connect', () => {
     lastError.value = ''
     status.value = 'connected'
   })
 
-  rfb.addEventListener('securityfailure', (e: any) => {
+  on('securityfailure', (e: any) => {
     const reason = e.detail?.reason ?? e.detail?.status
     lastError.value = t('vnc.errorSecurity', { reason: String(reason ?? '') })
     status.value = 'error'
   })
 
-  rfb.addEventListener('credentialsrequired', (e: any) => {
+  on('credentialsrequired', (e: any) => {
     const types = (e.detail?.types || []).join(', ')
     lastError.value = t('vnc.errorCredentials', { types })
     status.value = 'error'
+    client.disconnect()
   })
 
-  rfb.addEventListener('disconnect', (e: any) => {
+  on('disconnect', (e: any) => {
     if (!e.detail.clean) {
       if (!lastError.value) lastError.value = t('vnc.errorClosed')
       status.value = 'error'
-    } else {
+    } else if (status.value !== 'error') {
       status.value = 'disconnected'
     }
   })
 
-  rfb.addEventListener('clipboard', (e: any) => {
+  on('clipboard', (e: any) => {
     const text = e.detail.text
-    Clipboard.SetText(text).catch(() => {})
+    client.__unitermClipboard = text
+    if (isWebMode()) remoteClipboard.value = text
+    else Clipboard.SetText(text).catch(() => {})
   })
+}
 
-  isIniting = false
+function sendClipboard(text: string) {
+  if (rfb && !viewOnly.value) rfb.clipboardPasteFrom(text)
 }
 
 function onPaste(e: ClipboardEvent) {
   const text = e.clipboardData?.getData('text')
   if (text && rfb) {
-    rfb.clipboardPasteFrom(text)
+    e.preventDefault()
+    sendClipboard(text)
   }
 }
 
@@ -279,7 +325,9 @@ function onReconnectEvent(e: Event) {
 }
 
 onMounted(() => {
-  if (props.sessionId) {
+  mounted = true
+  window.addEventListener('panel:reconnect', onReconnectEvent)
+  if (props.sessionId && !isWebMode()) {
     currentSessionId.value = props.sessionId
   }
 
@@ -288,9 +336,14 @@ onMounted(() => {
     const children = Array.from(cached.container.children)
     children.forEach(child => vncContainer.value!.appendChild(child))
     rfb = cached.rfb
+    currentSessionId.value = rfb.__unitermSessionId || null
+    rfb._target = vncContainer.value
     panelStore.removeVNCCache(props.panelId)
-    status.value = 'connected'
-    applyRFBOptions()
+    status.value = rfb._rfbConnectionState === 'connected' ? 'connected' : 'disconnected'
+    bindRFBEvents()
+    // v-show must reveal the new container before noVNC measures it. Otherwise
+    // a same-size tab restore scales the canvas to zero with no resize to fix it.
+    nextTick(() => { if (mounted) applyRFBOptions() })
     watchThemeBackground()
     return
   }
@@ -302,6 +355,7 @@ onMounted(() => {
     if (data.id !== currentSessionId.value) return
     switch (data.status) {
       case 'connected':
+        if (isWebMode() || rfb || isIniting) break
         if (data.proxyAddr) {
           panelStore.setProxyAddr(props.panelId, data.proxyAddr)
         }
@@ -328,7 +382,7 @@ onMounted(() => {
   })
 
   const storedProxy = panelStore.getProxyAddr(props.panelId)
-  if (storedProxy && props.config) {
+  if (storedProxy && props.config && !isWebMode()) {
     savedPassword.value = props.config.password || ''
     initRFB(storedProxy, savedPassword.value)
   } else {
@@ -337,31 +391,35 @@ onMounted(() => {
 
   watchThemeBackground()
 
-  // Tab right-click 「重连」(Reconnect) menu → forced reconnect of this panel.
-  window.addEventListener('panel:reconnect', onReconnectEvent)
 })
 
 onBeforeUnmount(() => {
+  mounted = false
+  generation++
   themeObserver?.disconnect()
   themeObserver = null
   unsubStatus?.()
   window.removeEventListener('panel:reconnect', onReconnectEvent)
 
-  if (rfb && vncContainer.value && vncContainer.value.childElementCount > 0) {
+  if (rfb && status.value === 'connected' && vncContainer.value && vncContainer.value.childElementCount > 0) {
     const container = document.createElement('div')
     container.style.display = 'none'
     const children = Array.from(vncContainer.value.children)
     children.forEach(child => container.appendChild(child))
     document.body.appendChild(container)
+    rfb._target = container
     panelStore.setVNCCache(props.panelId, { rfb, container })
   } else if (rfb) {
+    removeRFBEvents()
     rfb.disconnect()
     rfb = null
+  } else if (isWebMode() && currentSessionId.value) {
+    CloseSession(currentSessionId.value).catch(() => {})
   }
 })
 
 watch(() => props.sessionId, (newId) => {
-  if (newId && !currentSessionId.value) {
+  if (!isWebMode() && newId && !currentSessionId.value) {
     currentSessionId.value = newId
   }
 })

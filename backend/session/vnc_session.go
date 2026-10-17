@@ -2,78 +2,116 @@ package session
 
 import (
 	"fmt"
+	"net"
+	"net/http"
+	"strconv"
+	"strings"
+	"sync"
 )
 
-type VNCSession struct {
+type VNCSession struct{ remoteDesktopSession }
+
+// Shared session state keeps proxy access safe during HTTP upgrades and close.
+type remoteDesktopSession struct {
 	baseSession
-	proxy     *VNCProxy
-	proxyAddr string
+	lifecycleMu sync.Mutex
+	closed      bool
+	proxyMu     sync.Mutex
+	proxy       *remoteDesktopProxy
+	proxyAddr   string
 }
 
 func NewVNCSession(id string) *VNCSession {
-	return &VNCSession{
-		baseSession: baseSession{
-			id:          id,
-			sessionType: "vnc",
-			status:      StatusDisconnected,
-		},
+	return &VNCSession{remoteDesktopSession{baseSession: baseSession{id: id, sessionType: "vnc", status: StatusDisconnected}}}
+}
+
+func remoteDesktopPort(port int) int {
+	if port <= 0 {
+		return 5900
 	}
+	if port < 100 {
+		return port + 5900
+	}
+	return port
 }
 
 func (s *VNCSession) Connect(config ConnectionConfig) error {
-	s.setStatus(StatusConnecting)
+	return s.connectProxy(config.Host, NewVNCProxy(net.JoinHostPort(strings.Trim(config.Host, "[]"), strconv.Itoa(remoteDesktopPort(config.Port)))).remoteDesktopProxy)
+}
 
-	target := fmt.Sprintf("%s:%d", config.Host, config.Port)
-	if config.Port <= 0 {
-		target = fmt.Sprintf("%s:5900", config.Host)
-	} else if config.Port < 100 {
-		// libvirt display port format: :1 -> 5901, :23 -> 5923
-		target = fmt.Sprintf("%s:%d", config.Host, config.Port+5900)
+func (s *remoteDesktopSession) connectProxy(host string, proxy *remoteDesktopProxy) error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.proxyMu.Lock()
+	if s.closed || s.proxy != nil {
+		s.proxyMu.Unlock()
+		proxy.Stop()
+		return fmt.Errorf("remote desktop session already started or closed")
 	}
-
-	s.title = fmt.Sprintf("%s (VNC)", config.Host)
-
-	proxy := NewVNCProxy(target)
+	s.proxy = proxy
+	s.title = fmt.Sprintf("%s (%s)", host, strings.ToUpper(s.sessionType))
 	addr, err := proxy.Start()
+	s.proxyAddr = addr
+	s.proxyMu.Unlock()
 	if err != nil {
 		s.setStatus(StatusError)
-		return fmt.Errorf("vnc proxy start: %w", err)
+		return err
 	}
-
-	s.proxy = proxy
-	s.proxyAddr = addr
-
-	// Set connected immediately so frontend gets proxyAddr.
-	// The actual VNC handshake happens between noVNC and the VNC server
-	// through the proxy; we don't wait for it here.
+	// This means the transport is ready. The client reports protocol success.
 	s.setStatus(StatusConnected)
-
 	return nil
 }
 
-func (s *VNCSession) Disconnect() error {
-	if s.proxy != nil {
-		s.proxy.Stop()
-		s.proxy = nil
+func (s *remoteDesktopSession) EnableWeb(onClose func()) error {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	if s.proxy == nil {
+		return fmt.Errorf("remote desktop session not started")
+	}
+	return s.proxy.EnableWeb(onClose)
+}
+
+func (s *remoteDesktopSession) IsWeb() bool {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	return s.proxy != nil && s.proxy.IsWeb()
+}
+
+func (s *remoteDesktopSession) ServeWeb(w http.ResponseWriter, r *http.Request, main bool) {
+	s.proxyMu.Lock()
+	p := s.proxy
+	s.proxyMu.Unlock()
+	if p == nil {
+		http.Error(w, "remote desktop session unavailable", http.StatusGone)
+		return
+	}
+	p.ServeWeb(w, r, main)
+}
+
+func (s *remoteDesktopSession) Disconnect() error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.closed = true
+	s.proxyMu.Lock()
+	p := s.proxy
+	s.proxyMu.Unlock()
+	if p != nil {
+		p.Stop()
 	}
 	s.setStatus(StatusDisconnected)
 	return nil
 }
 
-func (s *VNCSession) IsConnected() bool {
-	return s.Status() == StatusConnected
+func (s *remoteDesktopSession) IsConnected() bool { return s.Status() == StatusConnected }
+func (s *remoteDesktopSession) Title() string {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	return s.title
 }
-
-func (s *VNCSession) Resize(cols, rows int) error {
-	// VNC desktop size is managed by noVNC's resizeSession or the server.
-	return nil
-}
-
-func (s *VNCSession) Write(data []byte) error {
-	// VNC data flows through WebSocket, not this method.
-	return nil
-}
-
-func (s *VNCSession) ProxyAddr() string {
+func (s *remoteDesktopSession) Resize(cols, rows int) error { return nil }
+func (s *remoteDesktopSession) Write(data []byte) error     { return nil }
+func (s *remoteDesktopSession) ProxyAddr() string {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
 	return s.proxyAddr
 }
