@@ -37,12 +37,15 @@ type WebSession struct {
 }
 
 type webTerminal struct {
-	mu      sync.Mutex // serializes Connect/Write/Resize/Close across all App callers
-	events  sync.Mutex // orders output enqueue against accepted grid changes
-	info    WebSession
-	started bool
-	closed  bool
-	session session.Session
+	mu             sync.Mutex // serializes input/grid/close and setup state, never network Connect
+	events         sync.Mutex // orders output enqueue against accepted grid changes
+	delivery       sync.Mutex // drains session callbacks before session:closed
+	info           WebSession
+	started        bool
+	connecting     bool // Connect owns resource setup; input/close must not wait on it.
+	closed         bool
+	session        session.Session
+	connectedEvent map[string]any
 }
 
 type WebTerminalSnapshot struct {
@@ -199,6 +202,9 @@ func (a *App) GetWebSessions() []WebSession {
 		if !t.closed {
 			info := t.info
 			info.Status = t.session.Status()
+			if t.connecting && info.Status == session.StatusConnected {
+				info.Status = session.StatusConnecting
+			}
 			if ssh, ok := t.session.(*session.SSHSession); ok && info.Status == session.StatusConnected {
 				info.RemoteOS = ssh.RemoteOS()
 			}
@@ -234,7 +240,10 @@ func (a *App) WebTerminalInput(sessionID, clientID, data string, cols, rows int,
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if !t.started || !t.session.IsConnected() {
+	if t.closed {
+		return webError("session_closed", "terminal is closed")
+	}
+	if !terminalInputReady(t) {
 		return webError("session_not_ready", "terminal is not connected")
 	}
 	if err = a.resizeWebTerminalLocked(t, clientID, cols, rows, true); err != nil {
@@ -245,7 +254,7 @@ func (a *App) WebTerminalInput(sessionID, clientID, data string, cols, rows int,
 			return err
 		}
 	}
-	if err := t.session.Write(b); err != nil {
+	if err := writeTerminalLocked(t, b); err != nil {
 		return webError("write_failed", err.Error())
 	}
 	return nil
@@ -280,7 +289,7 @@ func (a *App) resizeWebTerminalLocked(t *webTerminal, clientID string, cols, row
 	t.events.Lock()
 	defer t.events.Unlock()
 	if t.info.Cols != cols || t.info.Rows != rows {
-		if t.started {
+		if t.started && !t.connecting {
 			if !t.session.IsConnected() {
 				return webError("session_not_ready", "terminal is not connected")
 			}
@@ -299,6 +308,29 @@ func (a *App) resizeWebTerminalLocked(t *webTerminal, clientID string, cols, row
 	return nil
 }
 
+// A connecting SSH session accepts only its authentication channel, never a
+// partially initialized PTY. Other unconnected sessions still reject input.
+func terminalInputReady(t *webTerminal) bool {
+	if !t.started {
+		return false
+	}
+	if !t.connecting && t.session.IsConnected() {
+		return true
+	}
+	ssh, ok := t.session.(*session.SSHSession)
+	return ok && ssh.Authenticating()
+}
+
+func writeTerminalLocked(t *webTerminal, data []byte) error {
+	if t.connecting || !t.session.IsConnected() {
+		if ssh, ok := t.session.(*session.SSHSession); ok {
+			return ssh.WriteAuthInput(data)
+		}
+		return webError("session_not_ready", "terminal is not connected")
+	}
+	return t.session.Write(data)
+}
+
 // Automatic replies and MCP/AI writes share the input lock but never take
 // active ownership. Only WebTerminalInput/active ResizeWebTerminal do that.
 func (a *App) writeSession(id string, data []byte) error {
@@ -308,10 +340,10 @@ func (a *App) writeSession(id string, data []byte) error {
 		if t.closed {
 			return webError("session_closed", "terminal is closed")
 		}
-		if !t.session.IsConnected() {
+		if !terminalInputReady(t) {
 			return webError("session_not_ready", "terminal is not connected")
 		}
-		return t.session.Write(data)
+		return writeTerminalLocked(t, data)
 	}
 	if a.sessionManager == nil {
 		return webError("not_ready", "session manager not initialized")
@@ -434,6 +466,10 @@ func (a *App) AcknowledgeWebTerminal(ctx context.Context, requestID string) erro
 }
 
 func (a *App) forgetWebTerminal(id string) {
+	if terminal, err := a.webTerminalFor(id); err == nil {
+		terminal.delivery.Lock()
+		defer terminal.delivery.Unlock()
+	}
 	a.webTermMu.Lock()
 	delete(a.webTerminals, id)
 	for key, req := range a.webRequests {

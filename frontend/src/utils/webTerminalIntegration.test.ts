@@ -142,6 +142,37 @@ describe('shell integration with the real terminal attachment service', () => {
     expect(SessionStart).not.toHaveBeenCalled()
   })
 
+  it('attaches a connecting SSH prompt before authentication and never starts a second connection', async () => {
+    const connecting = { ...session, status: 'connecting' as const }
+    mock.call.mockResolvedValue([connecting])
+    dispose = initBrowserTerminalIntegration()
+    const panel = usePanelStore().createPanel(null, 'ssh')
+    usePanelStore().bindSession(panel.id, session.id)
+    useSessionStore().initSession(session.id)
+    await Promise.resolve()
+    expect(attachWebTerminal).not.toHaveBeenCalled()
+    expect(mock.call).not.toHaveBeenCalled()
+    emit('session:status', { id: session.id, status: 'connecting' })
+    await vi.waitFor(() => expect(attachWebTerminal).toHaveBeenCalledExactlyOnceWith(connecting))
+    emit('session:status', { id: session.id, status: 'connected' })
+    await Promise.resolve()
+    expect(attachWebTerminal).toHaveBeenCalledTimes(1)
+    expect(SessionStart).not.toHaveBeenCalled()
+    expect(CreateSession).not.toHaveBeenCalled()
+  })
+
+  it('attaches when the host connecting event precedes binding the browser panel', async () => {
+    const connecting = { ...session, status: 'connecting' as const }
+    mock.call.mockResolvedValue([connecting])
+    dispose = initBrowserTerminalIntegration()
+    emit('session:status', { id: session.id, status: 'connecting' })
+    const panel = usePanelStore().createPanel(null, 'ssh')
+    usePanelStore().bindSession(panel.id, session.id)
+    useSessionStore().initSession(session.id)
+    await vi.waitFor(() => expect(attachWebTerminal).toHaveBeenCalledExactlyOnceWith(connecting))
+    expect(SessionStart).not.toHaveBeenCalled()
+  })
+
   it('never resurrects a panel closed while canonical metadata is loading', async () => {
     let finish!: (sessions: WebSession[]) => void
     mock.call.mockImplementation(() => new Promise(resolve => { finish = resolve }))

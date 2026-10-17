@@ -49,17 +49,19 @@ type SSHSession struct {
 	// outputRouteMu makes the binary/text routing decision atomic with
 	// EndZmodem. Without it, readLoop could observe binary mode, get paused,
 	// then emit post-transfer shell output as binary after EndZmodem returned.
-	outputRouteMu       sync.Mutex
-	client              *ssh.Client
-	session             *ssh.Session
-	stdin               io.WriteCloser
-	stdout              io.Reader
-	stderr              io.Reader
-	quit                chan struct{}
-	quitOnce            sync.Once
-	authAnswerCh        chan []byte
-	expectOutput        *postLoginOutputBuffer
-	x11Forwarder        *x11Forwarder
+	outputRouteMu sync.Mutex
+	client        *ssh.Client
+	session       *ssh.Session
+	stdin         io.WriteCloser
+	stdout        io.Reader
+	stderr        io.Reader
+	quit          chan struct{}
+	quitOnce      sync.Once
+	authAnswerCh  chan []byte
+	connectCtx    context.Context
+	cancelConnect context.CancelFunc
+	expectOutput  *postLoginOutputBuffer
+	x11Forwarder  *x11Forwarder
 
 	// osc7 extracts OSC-7 cwd reports emitted by the remote shell or tools.
 	// Only used from the readLoop goroutine.
@@ -178,6 +180,7 @@ func NewSSHSession(id string) *SSHSession {
 		quit: make(chan struct{}),
 	}
 	s.hook = newTypedCwdHookState()
+	s.connectCtx, s.cancelConnect = context.WithCancel(context.Background())
 	return s
 }
 
@@ -209,6 +212,8 @@ func (s *SSHSession) keyboardInteractiveChallenge(config ConnectionConfig, autoA
 		loop:
 			for {
 				select {
+				case <-s.connectCtx.Done():
+					return nil, s.connectCtx.Err()
 				case data := <-s.authAnswerCh:
 					for _, b := range data {
 						switch b {
@@ -289,6 +294,9 @@ func shouldPromptForSSHPassword(config ConnectionConfig) bool {
 }
 
 func (s *SSHSession) Connect(config ConnectionConfig) error {
+	if err := s.connectCtx.Err(); err != nil {
+		return err
+	}
 	s.SetLogOnConnect(config.LogOnConnect)
 	s.setStatus(StatusConnecting)
 	s.mu.Lock()
@@ -334,6 +342,8 @@ func (s *SSHSession) Connect(config ConnectionConfig) error {
 	promptLoop:
 		for {
 			select {
+			case <-s.connectCtx.Done():
+				return s.connectCtx.Err()
 			case data := <-s.authAnswerCh:
 				for _, b := range data {
 					switch b {
@@ -418,8 +428,22 @@ func (s *SSHSession) Connect(config ConnectionConfig) error {
 		log.Writef("ssh: cwd hook deferred to directory-follow toggle")
 	}
 
+	var stopCancellation []func() bool
+	defer func() {
+		for _, stop := range stopCancellation {
+			stop()
+		}
+	}()
 	client, err := dialSSHWithAuthRetry(addr, sets, authConfig, fallbackConfig, func() (net.Conn, error) {
-		return dialFirstHop(addr, config.Proxy)
+		if err := s.connectCtx.Err(); err != nil {
+			return nil, err
+		}
+		conn, err := dialFirstHop(addr, config.Proxy)
+		if err == nil {
+			// Own only this session's dial, never a channel clone's shared client.
+			stopCancellation = append(stopCancellation, context.AfterFunc(s.connectCtx, func() { conn.Close() }))
+		}
+		return conn, err
 	})
 	if err != nil {
 		s.setStatus(StatusError)
@@ -442,6 +466,9 @@ func (s *SSHSession) Connect(config ConnectionConfig) error {
 	var detectedShell string
 	if !s.cwdHookFollow {
 		select {
+		case <-s.connectCtx.Done():
+			client.Close()
+			return s.connectCtx.Err()
 		case detectedShell = <-probeCh:
 		case <-time.After(cwdProbeWaitTimeout):
 			log.Writef("ssh: cwd hook probe did not finish within %s, skipping startup injection", cwdProbeWaitTimeout)
@@ -864,12 +891,8 @@ func (s *SSHSession) startKeepAlive() {
 
 func (s *SSHSession) Write(data []byte) error {
 	// During keyboard-interactive auth, route input to the auth callback.
-	s.mu.RLock()
-	ch := s.authAnswerCh
-	s.mu.RUnlock()
-	if ch != nil {
-		ch <- data
-		return nil
+	if s.Authenticating() {
+		return s.WriteAuthInput(data)
 	}
 	if s.stdin == nil {
 		return fmt.Errorf("not connected")
@@ -880,6 +903,37 @@ func (s *SSHSession) Write(data []byte) error {
 	return err
 }
 
+func (s *SSHSession) Authenticating() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.authAnswerCh != nil && s.connectCtx.Err() == nil
+}
+
+// WriteAuthInput never falls through to a PTY being initialized by Connect.
+// A full queue fails instead of blocking the App's input/close serialization.
+func (s *SSHSession) WriteAuthInput(data []byte) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if err := s.connectCtx.Err(); err != nil {
+		return err
+	}
+	if s.authAnswerCh == nil {
+		return fmt.Errorf("authentication input is not ready")
+	}
+	select {
+	case s.authAnswerCh <- append([]byte(nil), data...):
+		return nil
+	default:
+		return fmt.Errorf("authentication input queue is full")
+	}
+}
+
+// CancelConnect interrupts prompts and the owned SSH handshake. Handle teardown
+// remains with the Connect caller, so cancellation cannot race partial setup.
+func (s *SSHSession) CancelConnect() {
+	s.cancelConnect()
+}
+
 // Disconnect tears down the SSH session. It uses sync.Once so the entire
 // teardown sequence executes exactly once, regardless of how many goroutines
 // call Disconnect concurrently (session.Wait, readLoop error, keepalive
@@ -888,6 +942,7 @@ func (s *SSHSession) Write(data []byte) error {
 func (s *SSHSession) Disconnect() error {
 	s.quitOnce.Do(func() {
 		s.SetZmodemMode(false)
+		s.CancelConnect()
 		close(s.quit)
 		if s.x11Forwarder != nil {
 			s.x11Forwarder.stop()

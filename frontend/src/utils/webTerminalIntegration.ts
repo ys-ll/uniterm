@@ -39,12 +39,13 @@ export function initBrowserTerminalIntegration(): () => void {
     const panels = usePanelStore()
     const sessions = useSessionStore()
     const pending = new Set<string>()
+    const connecting = new Set<string>()
 
     // All launchers (including container/K8s exec and Panel's retry path)
-    // bind through this store. Mark the view immediately, then snapshot only
-    // after the host reports connected. Never infer a canonical grid from UI
+    // bind through this store. Snapshot connecting views too: SSH authentication
+    // prompts need a visible, writable terminal. Never infer a canonical grid from UI
     // config or start a second session in response to a creation event.
-    const attachConnectedPanel = async (panelId: string, id: string) => {
+    const attachLivePanel = async (panelId: string, id: string) => {
       if (pending.has(id) || sessions.sessions.get(id)?.web) return
       pending.add(id)
       try {
@@ -56,6 +57,7 @@ export function initBrowserTerminalIntegration(): () => void {
         await waitForBrowserEvents()
         if (stopped || panels.getPanel(panelId)?.sessionId !== id || sessions.sessions.get(id)?.web) return
         if (!session) throw new Error(`Text session is no longer available: ${id}`)
+        if (session.status !== 'connecting' && session.status !== 'connected') return
         sessions.attachSession(session)
         panels.updateStatus(panelId, session.status)
         await attachWebTerminal(session)
@@ -69,13 +71,22 @@ export function initBrowserTerminalIntegration(): () => void {
       for (const p of entries) {
         if (!p.sessionId || !isSharedTextSession(p.type)) continue
         panels.bindAttachedSession(p.id, p.sessionId)
-        if (p.status === 'connected') void attachConnectedPanel(p.id, p.sessionId).catch(report)
+        if (connecting.has(p.sessionId) || p.status === 'connected') void attachLivePanel(p.id, p.sessionId).catch(report)
       }
     }
     offs.push(watch(
       boundPanels, attachPanels,
       { immediate: true, flush: 'sync' },
     ))
+    // initSession also uses "connecting" before SessionStart's native attach
+    // ACK. Only a host event proves the authority is ready to snapshot.
+    offs.push(Events.On('session:status', ev => {
+      const { id, status } = ev.data as { id: string; status: string }
+      if (status === 'connecting') connecting.add(id)
+      else connecting.delete(id)
+      attachPanels()
+    }))
+    offs.push(Events.On('session:closed', ev => connecting.delete((ev.data as { id: string }).id)))
     offs.push(Events.On('web:resync', () => {
       void waitForBrowserEvents().then(async () => {
         if (stopped) return

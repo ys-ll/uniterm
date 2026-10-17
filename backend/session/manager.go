@@ -145,15 +145,24 @@ func (sm *SessionManager) Init() {
 }
 
 func (sm *SessionManager) Close(sessionID string) error {
+	sess, err := sm.Detach(sessionID)
+	if err != nil {
+		return err
+	}
+	return sess.Disconnect()
+}
+
+// Detach transfers teardown to a caller that still owns in-flight setup.
+func (sm *SessionManager) Detach(sessionID string) (Session, error) {
 	sm.mu.Lock()
 	sess, ok := sm.sessions[sessionID]
 	delete(sm.sessions, sessionID)
 	sm.mu.Unlock()
 
 	if !ok {
-		return fmt.Errorf("session not found: %s", sessionID)
+		return nil, fmt.Errorf("session not found: %s", sessionID)
 	}
-	return sess.Disconnect()
+	return sess, nil
 }
 
 func (sm *SessionManager) Get(sessionID string) (Session, bool) {

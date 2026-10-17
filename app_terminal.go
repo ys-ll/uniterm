@@ -182,14 +182,14 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 		return nil, err
 	}
 	s.SetOnDataCallback(func(data []byte) {
-		a.emit("session:data", map[string]interface{}{
+		a.emitSessionEvent(s, "session:data", map[string]interface{}{
 			"id":   s.ID(),
 			"data": string(data),
 		})
 	})
 
 	s.SetOnBinaryCallback(func(data []byte) {
-		a.emit("session:binary", map[string]interface{}{
+		a.emitSessionEvent(s, "session:binary", map[string]interface{}{
 			"id":   s.ID(),
 			"data": base64.StdEncoding.EncodeToString(data),
 		})
@@ -235,7 +235,7 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 			}
 		}
 
-		a.emit("session:status", payload)
+		a.emitSessionEvent(s, "session:status", payload)
 	})
 
 	// Database, Redis, and MongoDB sessions connect synchronously so
@@ -309,6 +309,28 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	return info, nil
 }
 
+// Connect may finish after Close detached its session. Late callbacks must not
+// recreate frontend session state after session:closed.
+func (a *App) emitSessionEvent(s session.Session, name string, payload map[string]any) {
+	if terminal, err := a.webTerminalFor(s.ID()); err == nil {
+		if name == "session:status" && payload["status"] == session.StatusConnected {
+			terminal.mu.Lock()
+			defer terminal.mu.Unlock()
+			if terminal.connecting {
+				// Session implementations may announce connected before Connect
+				// returns. Publish readiness only after final grid reconciliation.
+				terminal.connectedEvent = payload
+				return
+			}
+		}
+		terminal.delivery.Lock()
+		defer terminal.delivery.Unlock()
+	}
+	if current, ok := a.sessionManager.Get(s.ID()); ok && current == s {
+		a.emit(name, payload)
+	}
+}
+
 // launchConnectGoroutine starts the async Connect path. CreateSession
 // skips it for terminal session types (ssh, local, telnet, mosh, serial,
 // x11-desktop) — those instead drive the connection via SessionStart after
@@ -321,17 +343,52 @@ func (a *App) launchConnectGoroutine(s session.Session, sessionType string, conf
 	go func() {
 		if terminal != nil {
 			terminal.mu.Lock()
-			defer terminal.mu.Unlock()
 			if terminal.closed {
+				terminal.mu.Unlock()
 				return
 			}
+			terminal.connecting = true
+			terminal.mu.Unlock()
 		}
+		var connectErr error
 		defer func() {
 			if r := recover(); r != nil {
 				log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
-				a.failSessionConnect(s, fmt.Errorf("connection failed unexpectedly: %v", r))
+				connectErr = fmt.Errorf("connection failed unexpectedly: %v", r)
+			}
+			if terminal != nil {
+				terminal.mu.Lock()
+				defer terminal.mu.Unlock()
+				terminal.connecting = false
+				if terminal.closed {
+					// Close detached the session while Connect owned its handles.
+					// Tear down only after setup returns, including late success.
+					_ = s.Disconnect()
+					if a.tunnelService != nil {
+						a.tunnelService.Stop(s.ID())
+					}
+					return
+				}
+				if connectErr == nil {
+					// An auth-time resize may have followed Connect's initial-size
+					// read. Apply the latest grid before admitting normal input.
+					connectErr = s.Resize(terminal.info.Cols, terminal.info.Rows)
+				}
+				if connectErr != nil {
+					terminal.closed = true
+				} else if terminal.connectedEvent != nil {
+					a.emit("session:status", terminal.connectedEvent)
+					terminal.connectedEvent = nil
+				}
+			}
+			if connectErr != nil {
+				a.failSessionConnect(s, connectErr)
 			}
 		}()
+		if clone, ok := s.(interface{ IsChannelClone() bool }); ok && clone.IsChannelClone() {
+			connectErr = s.Connect(config)
+			return
+		}
 
 		// ── SSH Tunnel (jump host) ──────────────────────────────
 		// Set up the local-port-forward through the jump host BEFORE
@@ -343,10 +400,18 @@ func (a *App) launchConnectGoroutine(s session.Session, sessionType string, conf
 		// CreateSession would be discarded along with the local config
 		// copy.
 		if err := a.setupJumpHostTunnel(s.ID(), sessionType, &config); err != nil {
-			a.failSessionConnect(s, err)
+			connectErr = err
 			return
 		}
 		// ── End SSH Tunnel ──────────────────────────────────────
+		if terminal != nil {
+			terminal.mu.Lock()
+			closed := terminal.closed
+			terminal.mu.Unlock()
+			if closed {
+				return
+			}
+		}
 
 		// RDP TCP pre-check: fail fast before creating the ActiveX window.
 		if sessionType == "rdp" {
@@ -358,16 +423,14 @@ func (a *App) launchConnectGoroutine(s session.Session, sessionType string, conf
 			tcpConn, tcpErr := net.DialTimeout("tcp", addr, 5*time.Second)
 			if tcpErr != nil {
 				log.Writef("[launchConnect] RDP TCP pre-check to %s failed: %v", addr, tcpErr)
-				a.failSessionConnect(s, fmt.Errorf("Cannot reach %s: %v", addr, tcpErr))
+				connectErr = fmt.Errorf("Cannot reach %s: %v", addr, tcpErr)
 				return
 			}
 			tcpConn.Close()
 			log.Writef("[launchConnect] RDP TCP pre-check to %s succeeded", addr)
 		}
 
-		if err := s.Connect(config); err != nil {
-			a.failSessionConnect(s, err)
-		}
+		connectErr = s.Connect(config)
 	}()
 }
 
@@ -507,13 +570,13 @@ func (a *App) DuplicateSSHChannel(sourceSessionID string, config session.Connect
 
 	a.sessionCaptureFor(s)
 	s.SetOnDataCallback(func(data []byte) {
-		a.emit("session:data", map[string]interface{}{
+		a.emitSessionEvent(s, "session:data", map[string]interface{}{
 			"id":   s.ID(),
 			"data": string(data),
 		})
 	})
 	s.SetOnBinaryCallback(func(data []byte) {
-		a.emit("session:binary", map[string]interface{}{
+		a.emitSessionEvent(s, "session:binary", map[string]interface{}{
 			"id":   s.ID(),
 			"data": base64.StdEncoding.EncodeToString(data),
 		})
@@ -528,7 +591,7 @@ func (a *App) DuplicateSSHChannel(sourceSessionID string, config session.Connect
 				payload["remoteOS"] = remoteOS
 			}
 		}
-		a.emit("session:status", payload)
+		a.emitSessionEvent(s, "session:status", payload)
 	})
 
 	a.sessionManager.Add(s)
@@ -597,22 +660,7 @@ func (a *App) SessionStart(ctx context.Context, sessionID string, config session
 	// redundant second tunnel from the (unused) config.
 	if c, ok := s.(interface{ IsChannelClone() bool }); ok && c.IsChannelClone() {
 		terminal.started = true
-		go func() {
-			terminal.mu.Lock()
-			defer terminal.mu.Unlock()
-			if terminal.closed {
-				return
-			}
-			defer func() {
-				if r := recover(); r != nil {
-					log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
-					a.failSessionConnect(s, fmt.Errorf("connection failed unexpectedly: %v", r))
-				}
-			}()
-			if err := s.Connect(config); err != nil {
-				a.failSessionConnect(s, err)
-			}
-		}()
+		a.launchConnectGoroutine(s, config.Type, config)
 		return nil
 	}
 	// Terminal session types defer Connect() until SessionStart, and the
@@ -643,12 +691,23 @@ func (a *App) CloseSession(sessionID string) error {
 		return fmt.Errorf("session manager not initialized")
 	}
 	defer a.closeWebFileSession(sessionID)
-	if terminal, err := a.webTerminalFor(sessionID); err == nil {
+	terminal, _ := a.webTerminalFor(sessionID)
+	if terminal != nil {
 		terminal.mu.Lock()
 		defer terminal.mu.Unlock()
 		terminal.closed = true
 	}
 	defer a.forgetWebTerminal(sessionID)
+	if terminal != nil && terminal.connecting {
+		// Disconnect must not race partially initialized session handles.
+		// Remove it now; the Connect owner performs the eventual teardown.
+		_, err := a.sessionManager.Detach(sessionID)
+		if ssh, ok := terminal.session.(*session.SSHSession); ok {
+			ssh.CancelConnect()
+		}
+		a.removeCapture(sessionID)
+		return err
+	}
 	if a.tunnelService != nil {
 		a.tunnelService.Stop(sessionID)
 	}

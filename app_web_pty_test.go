@@ -53,7 +53,7 @@ func TestWebLocalPTYSharedStreamGridAndDisconnect(t *testing.T) {
 	if err := a.SessionStart(context.Background(), info.ID, cfg); err != nil {
 		t.Fatal(err)
 	}
-	// GetWebSessions waits for the serialized Connect before returning status.
+	// Inventory advertises connected only after setup and grid reconciliation.
 	deadline := time.Now().Add(3 * time.Second)
 	for a.GetWebSessions()[0].Status != session.StatusConnected {
 		if time.Now().After(deadline) {

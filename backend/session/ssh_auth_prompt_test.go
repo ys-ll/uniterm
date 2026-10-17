@@ -3,7 +3,34 @@ package session
 import (
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestSSHAuthInputRejectsUnavailableCancelledAndFullQueue(t *testing.T) {
+	s := NewSSHSession("auth-input")
+	if s.Authenticating() || s.WriteAuthInput([]byte("early")) == nil {
+		t.Fatal("accepted authentication input without a channel")
+	}
+	s.authAnswerCh = make(chan []byte, 1)
+	if err := s.WriteAuthInput([]byte("first")); err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() { result <- s.Write([]byte("overflow")) }()
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("full authentication queue accepted input")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("full authentication queue blocked input/close serialization")
+	}
+	s.CancelConnect()
+	<-s.authAnswerCh
+	if s.Authenticating() || s.WriteAuthInput([]byte("late")) == nil {
+		t.Fatal("cancelled authentication accepted input")
+	}
+}
 
 // A rejected keyboard-interactive answer must print "Permission denied, please
 // try again." before the next prompt (matching the OpenSSH client), so the
