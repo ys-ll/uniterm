@@ -20,6 +20,8 @@ vi.mock('../../bindings/github.com/ys-ll/uniterm/app', () => ({
   SessionWrite: mock.write,
   RegisterSessionForPanel: vi.fn(async () => {}), UnregisterSession: vi.fn(async () => {}),
   DisableSessionOutputLog: vi.fn(async () => {}), CloseSession: vi.fn(async () => {}),
+  LoadBusinessConfig: vi.fn(async () => ({ revision: 'test', json: '{"connections":[],"groups":[]}' })),
+  SaveBusinessConfig: vi.fn(),
 }))
 vi.mock('../stores/settingsStore', () => ({ useSettingsStore: () => ({ settings: { terminal: {}, customTerminalThemes: [] }, resolvedAppTheme: 'dark' }) }))
 vi.mock('../stores/localStateStore', () => ({ useLocalStateStore: () => ({ state: {} }) }))

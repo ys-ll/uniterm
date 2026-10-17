@@ -88,18 +88,23 @@ export async function launchConnection(config: ConnectionConfig, opts: LaunchOpt
 // app:connect-sftp window event all land here. Unlike launchConnection this
 // forces the SFTP spec regardless of config.type.
 export async function launchFileBrowser(config: ConnectionConfig, opts: LaunchOptions = {}) {
-  const persist = opts.persist ?? true
+  // Event callers may supply a config-less attached panel. It is a view, not a
+  // connection config, and must never reach persistence or session creation.
+  if (!config?.host) { msg.warning(t('conn.hostRequired')); return }
+  // A browser companion is another view of the connection, not a save action.
+  const persist = opts.persist ?? !isWebMode()
   if (persist) persistConnection(config)
-  await runSpec('sftp', config, SPECS.sftp, opts)
+  await runSpec('sftp', config, SPECS.sftp, { ...opts, persist })
 }
 
 // Open the monitor view for a config (SSH host monitor companion, and the
 // app:connect-monitor window event). Forces the monitor spec regardless of
 // config.type.
 export async function launchMonitor(config: ConnectionConfig, opts: LaunchOptions = {}) {
-  const persist = opts.persist ?? true
+  if (!config?.host) { msg.warning(t('conn.hostRequired')); return }
+  const persist = opts.persist ?? !isWebMode()
   if (persist) persistConnection(config)
-  await runSpec('monitor', config, SPECS.monitor, opts)
+  await runSpec('monitor', config, SPECS.monitor, { ...opts, persist })
 }
 
 // Open the WSL distro's file browser (wsl-file session over //wsl.localhost).

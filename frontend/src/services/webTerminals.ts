@@ -1,6 +1,7 @@
 import { usePanelStore } from '../stores/panelStore'
 import { useTabStore } from '../stores/tabStore'
 import { useSessionStore } from '../stores/sessionStore'
+import { useConnectionStore } from '../stores/connectionStore'
 import { attachWebTerminal, disposeTerminal } from './terminalManager'
 import { isWebMode } from '../utils/webMode'
 import type { WebSession } from './webTerminalBridge'
@@ -24,6 +25,16 @@ export async function attachBrowserSession(session: WebSession): Promise<string>
   panels.bindAttachedSession(panel.id, session.id)
   panels.updateStatus(panel.id, session.status)
   useSessionStore().attachSession(session)
+  if (session.connectionId) {
+    const connections = useConnectionStore()
+    // Refresh restoration precedes App.onMounted's store load. Keep this view
+    // out of the tab/sidebar until its saved reference has been resolved.
+    if (!connections.connections.some(c => c.id === session.connectionId)) await connections.load()
+    const current = panels.getPanel(panel.id)
+    if (current?.sessionId !== session.id) return panel.id
+    const config = connections.connections.find(c => c.id === session.connectionId)
+    current.config = config ? JSON.parse(JSON.stringify(config)) : null
+  }
   const tab = tabs.createTerminalTab(panel.title, panel.id)
   panels.movePanelToTab(panel.id, tab.id)
   await attachWebTerminal(session)
