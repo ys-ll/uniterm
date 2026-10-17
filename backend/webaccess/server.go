@@ -441,6 +441,9 @@ func sameOrigin(r *http.Request) bool {
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request, gen context.Context) {
 	if r.Method == "GET" {
+		// no-referrer makes Chrome send Origin:null for this form on insecure
+		// LAN HTTP, where Sec-Fetch-Site is also unavailable.
+		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; form-action 'self'; frame-ancestors 'none'")
 		io.WriteString(w, `<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>uniTerm login</title><h1>uniTerm</h1><form method="post" action="/web/login"><label>Access token <input type="password" name="token" required autocomplete="current-password" maxlength="4096"></label><button>Sign in</button></form></html>`)

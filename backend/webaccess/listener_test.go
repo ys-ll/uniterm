@@ -3,6 +3,7 @@ package webaccess
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"testing"
 )
@@ -11,27 +12,30 @@ import (
 func holdListenerPorts(t *testing.T, host string) []net.Listener {
 	t.Helper()
 	for attempt := 0; attempt < 100; attempt++ {
-		first, err := net.Listen("tcp4", net.JoinHostPort(host, "0"))
+		// Keep the fixture outside default ephemeral ranges: concurrent browser
+		// client connections can claim released ephemeral slots before Configure.
+		port := 20000 + rand.IntN(10000)
+		first, err := net.Listen("tcp4", fmt.Sprintf("%s:%d", host, port))
 		if err != nil {
+			if addressInUse(err) {
+				continue
+			}
 			t.Fatal(err)
 		}
-		port := first.Addr().(*net.TCPAddr).Port
 		listeners := []net.Listener{first}
-		if port <= 65532 {
-			for offset := 1; offset < 4; offset++ {
-				var l net.Listener
-				if offset == 1 {
-					l, err = net.Listen("tcp4", fmt.Sprintf("%s:%d", host, port+offset))
-				} else {
-					// A reusable bind can succeed over TIME_WAIT or another
-					// interface; reserve genuinely free slots for the new servers.
-					l, err = listenExclusive("tcp4", fmt.Sprintf("0.0.0.0:%d", port+offset))
-				}
-				if err != nil {
-					break
-				}
-				listeners = append(listeners, l)
+		for offset := 1; offset < 4; offset++ {
+			var l net.Listener
+			if offset == 1 {
+				l, err = net.Listen("tcp4", fmt.Sprintf("%s:%d", host, port+offset))
+			} else {
+				// A reusable bind can succeed over TIME_WAIT or another
+				// interface; reserve genuinely free slots for the new servers.
+				l, err = listenExclusive("tcp4", fmt.Sprintf("0.0.0.0:%d", port+offset))
 			}
+			if err != nil {
+				break
+			}
+			listeners = append(listeners, l)
 		}
 		if len(listeners) == 4 {
 			t.Cleanup(func() {

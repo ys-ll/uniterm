@@ -234,6 +234,42 @@ func TestLoopbackOriginHostAndReconfigure(t *testing.T) {
 	}
 }
 
+func TestLoginFormReferrerPolicyAndOriginChecks(t *testing.T) {
+	s, _ := testServer(t)
+	if err := s.Configure(Config{Enabled: true, Host: "0.0.0.0", StartPort: freePort(t)}, "login-policy-test-token"); err != nil {
+		t.Fatal(err)
+	}
+	form := request(t, s, "GET", "/web/login", "", "", nil)
+	if form.StatusCode != 200 || form.Header.Get("Referrer-Policy") != "same-origin" || !strings.Contains(form.Header.Get("Content-Security-Policy"), "form-action 'self'") {
+		t.Fatal("login form must preserve its same-origin signal and restrict form submission")
+	}
+	other := request(t, s, "GET", "/web/bootstrap", "", "", nil)
+	if other.Header.Get("Referrer-Policy") != "no-referrer" {
+		t.Fatal("login policy override escaped the login document")
+	}
+	base := s.Status().URLs[0]
+	for _, tc := range []struct{ name, origin, host string }{
+		{"missing origin", "", ""},
+		{"opaque origin", "null", ""},
+		{"cross origin", "http://other.invalid", ""},
+		{"unlisted host", "http://other.invalid", "other.invalid"},
+	} {
+		r := httptest.NewRequest("POST", base+"/web/login", strings.NewReader(`{"token":"login-policy-test-token"}`))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Origin", tc.origin)
+		// A plausible Referer alone must not authorize an originless mutation.
+		r.Header.Set("Referer", base+"/web/login")
+		if tc.host != "" {
+			r.Host = tc.host
+		}
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		if w.Code != http.StatusForbidden || w.Header().Get("Set-Cookie") != "" {
+			t.Fatalf("%s login was not rejected: %d", tc.name, w.Code)
+		}
+	}
+}
+
 func TestMultipleInstancesLogoutDisableAndFailedReconfigure(t *testing.T) {
 	first, _ := testServer(t)
 	second, dir := testServer(t)
