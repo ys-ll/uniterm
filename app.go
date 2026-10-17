@@ -199,6 +199,8 @@ func NewApp(webviewDataPath string) *App {
 	}
 	a.webAccess = webaccess.New()
 	a.webTransport = newWebTransport(a.webAccess)
+	a.registerWebFileRoutes(a.webAccess.Handle)
+	a.registerWebRemoteDesktopRoutes(a.webAccess.Handle)
 
 	// Transfer progress is published as Wails events, not OSC sequences in the
 	// terminal data stream. MCP file tools additionally hook completion
@@ -853,6 +855,8 @@ func (a *App) shutdown() {
 	if a.webAccess != nil {
 		a.webAccess.Close()
 	}
+	a.closeWebRemoteDesktop()
+	a.closeWebFiles()
 	a.webTermMu.Lock()
 	a.webTermClosing = true
 	for key, req := range a.webRequests {

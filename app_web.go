@@ -14,8 +14,12 @@ type WebAccessStatus = webaccess.Status
 
 func (a *App) GetWebAccessStatus() WebAccessStatus { return a.webAccess.Status() }
 func (a *App) ConfigureWebAccess(config WebAccessConfig, token string) (WebAccessStatus, error) {
+	previous := a.webAccess.Status()
 	err := a.webAccess.Configure(config, token)
 	status := a.webAccess.Status()
+	if previous.Running && (!status.Running || status.Config != previous.Config || err == nil && token != "") {
+		a.closeWebRemoteDesktop()
+	}
 	a.emit("web:access-status", status)
 	return status, err
 }

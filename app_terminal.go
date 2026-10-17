@@ -196,6 +196,9 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	})
 
 	s.SetOnStatusChangeCallback(func(status session.SessionStatus) {
+		if status == session.StatusDisconnected || status == session.StatusError {
+			a.closeWebFileSession(s.ID())
+		}
 		payload := map[string]interface{}{
 			"id":     s.ID(),
 			"status": status,
@@ -639,6 +642,7 @@ func (a *App) CloseSession(sessionID string) error {
 	if a.sessionManager == nil {
 		return fmt.Errorf("session manager not initialized")
 	}
+	defer a.closeWebFileSession(sessionID)
 	if terminal, err := a.webTerminalFor(sessionID); err == nil {
 		terminal.mu.Lock()
 		defer terminal.mu.Unlock()

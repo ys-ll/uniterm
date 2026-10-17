@@ -162,6 +162,7 @@ func (a *App) K8sExecSession(ctx context.Context, connID, namespace, pod, contai
 	sess.SetOnStatusChangeCallback(func(status session.SessionStatus) {
 		if status == session.StatusDisconnected || status == session.StatusError {
 			release()
+			a.closeWebFileSession(id)
 		}
 		a.emit("session:status", map[string]interface{}{
 			"id":     sess.ID(),
@@ -473,6 +474,7 @@ func (a *App) ContainerExecSession(ctx context.Context, connectionID, containerI
 	sess.SetOnStatusChangeCallback(func(status session.SessionStatus) {
 		if status == session.StatusDisconnected || status == session.StatusError {
 			release()
+			a.closeWebFileSession(id)
 		}
 		a.emit("session:status", map[string]interface{}{
 			"id":     sess.ID(),
@@ -542,6 +544,7 @@ func (a *App) createContainerFileSession(config session.ConnectionConfig) (*sess
 	sess.SetOnStatusChangeCallback(func(status session.SessionStatus) {
 		if status == session.StatusDisconnected || status == session.StatusError {
 			release()
+			a.closeWebFileSession(id)
 		}
 		a.emit("session:status", map[string]interface{}{
 			"id":     sess.ID(),
