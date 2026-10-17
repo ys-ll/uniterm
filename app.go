@@ -84,7 +84,12 @@ type App struct {
 	credentialStore *credentials.Store
 	storesReady     bool
 	chatCancel      atomic.Pointer[context.CancelFunc] // F-308: active stream cancellation, per-call swap so overlap is safe
-	moveResizeCh    chan string                        // defer EventsEmit from WndProc
+	// ponytail: one config transaction at a time; split by store only if measured
+	// contention warrants it. Rekey and sync must exclude ordinary saves.
+	businessMu              stdsync.Mutex
+	businessRestartRequired bool
+	updateMu                stdsync.Mutex
+	moveResizeCh            chan string // defer EventsEmit from WndProc
 	// F-043: foreground flag — true while the window is visible and the
 	// user is interacting; background goroutines (keepalive, output_log
 	// flush, k8s watches, auto-sync) should consult IsForeground before
@@ -423,6 +428,11 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 		// Auto-sync on startup if enabled
 		if syncSvc.IsAutoSyncEnabled() {
 			go func() {
+				a.businessMu.Lock()
+				defer a.businessMu.Unlock()
+				if a.businessRestartRequired {
+					return
+				}
 				result, err := syncSvc.Sync()
 				if err != nil {
 					log.Writef("Auto-sync on startup failed: %v", err)
@@ -888,6 +898,12 @@ func (a *App) GetFavoriteConnections() []string {
 }
 
 func (a *App) SaveFavoriteConnections(ids []string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveFavoriteConnections(ids)
+}
+
+func (a *App) saveFavoriteConnections(ids []string) error {
 	if a.favoriteStore == nil {
 		return fmt.Errorf("favorite store not initialized")
 	}
@@ -905,6 +921,12 @@ func (a *App) SaveFavoriteConnections(ids []string) error {
 // ConnectionStore methods
 
 func (a *App) SaveConnections(data session.ConnectionStoreData) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveConnections(data)
+}
+
+func (a *App) saveConnections(data session.ConnectionStoreData) error {
 	if a.connectionStore == nil {
 		return fmt.Errorf("connection store not initialized")
 	}
@@ -931,6 +953,12 @@ func (a *App) LoadIdentities() (session.IdentityStoreData, error) {
 }
 
 func (a *App) SaveIdentities(data session.IdentityStoreData) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveIdentities(data)
+}
+
+func (a *App) saveIdentities(data session.IdentityStoreData) error {
 	if a.identityStore == nil {
 		return fmt.Errorf("identity store not initialized")
 	}
@@ -945,6 +973,12 @@ func (a *App) LoadProxies() (session.ProxyStoreData, error) {
 }
 
 func (a *App) SaveProxies(data session.ProxyStoreData) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveProxies(data)
+}
+
+func (a *App) saveProxies(data session.ProxyStoreData) error {
 	if a.proxyStore == nil {
 		return fmt.Errorf("proxy store not initialized")
 	}
@@ -989,6 +1023,8 @@ func (a *App) ParseImportFile(format, srcPath, password string) (*importer.Impor
 // reusing existing groups by path. The saved result is broadcast via the
 // existing store:connections:changed event.
 func (a *App) ApplyImport(data session.ConnectionStoreData) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.connectionStore == nil {
 		return fmt.Errorf("connection store not initialized")
 	}
@@ -997,12 +1033,18 @@ func (a *App) ApplyImport(data session.ConnectionStoreData) error {
 		return err
 	}
 	merged := importer.MergeImported(existing, data)
-	return a.SaveConnections(merged)
+	return a.saveConnections(merged)
 }
 
 // TunnelStore methods
 
 func (a *App) SaveTunnels(data session.TunnelStoreData) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveTunnels(data)
+}
+
+func (a *App) saveTunnels(data session.TunnelStoreData) error {
 	if a.tunnelStore == nil {
 		return fmt.Errorf("tunnel store not initialized")
 	}
@@ -1388,6 +1430,12 @@ func (a *App) autoStartTunnels() {
 // LocalStateStore methods — sidecar visibility that stays local, never synced.
 
 func (a *App) SaveLocalState(state store.LocalState) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveLocalState(state)
+}
+
+func (a *App) saveLocalState(state store.LocalState) error {
 	if a.localStateStore == nil {
 		return fmt.Errorf("local state store not initialized")
 	}
@@ -1591,6 +1639,11 @@ func (a *App) triggerAutoSync() {
 		return
 	}
 	go func() {
+		a.businessMu.Lock()
+		defer a.businessMu.Unlock()
+		if a.businessRestartRequired {
+			return
+		}
 		result, err := a.syncService.Sync()
 		if err != nil {
 			log.Writef("Auto-sync failed: %v", err)
@@ -1635,6 +1688,12 @@ func (a *App) SyncGetConfig() (sync.SyncConfig, error) {
 
 // SyncSaveConfig saves the sync configuration.
 func (a *App) SyncSaveConfig(config sync.SyncConfig, token string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveSyncConfig(config, token)
+}
+
+func (a *App) saveSyncConfig(config sync.SyncConfig, token string) error {
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
@@ -1646,6 +1705,11 @@ func (a *App) SyncSaveConfig(config sync.SyncConfig, token string) error {
 
 // SyncNow runs an immediate sync.
 func (a *App) SyncNow() (*sync.SyncResult, error) {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	if a.businessRestartRequired {
+		return nil, fmt.Errorf("data directory changed; restart before syncing")
+	}
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
 	}
@@ -1671,11 +1735,23 @@ func (a *App) SyncNow() (*sync.SyncResult, error) {
 
 // SyncResolveConflict resolves a sync conflict.
 func (a *App) SyncResolveConflict(useLocal bool) (*sync.SyncResult, error) {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	if a.businessRestartRequired {
+		return nil, fmt.Errorf("data directory changed; restart before syncing")
+	}
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
 	}
 	if !a.waitSyncReady(time.Second) {
 		return nil, fmt.Errorf("sync service still initializing")
+	}
+	config, err := a.syncService.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	if config.LastSyncStatus != "conflict" {
+		return nil, fmt.Errorf("CONFIG_CONFLICT: sync conflict already changed or resolved; run sync again")
 	}
 	result, err := a.syncService.ResolveConflict(useLocal)
 	if err != nil {
@@ -1700,6 +1776,8 @@ func (a *App) SyncTestConnection() error {
 
 // SyncConfigureRepo sets up a new or existing sync repository.
 func (a *App) SyncConfigureRepo(repoURL, username, token, masterPassword string) (*sync.SyncResult, error) {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
 	}
@@ -1729,6 +1807,8 @@ func (a *App) SyncTestRemote(backend string, remote sync.RemoteConfig, secret st
 // SyncConfigureRemote configures a snapshot remote (webdav/sftp/s3/smb)
 // as the sync backend.
 func (a *App) SyncConfigureRemote(backend string, remote sync.RemoteConfig, secret, masterPassword string) (*sync.SyncResult, error) {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.syncService == nil {
 		return nil, fmt.Errorf("sync service not initialized")
 	}
@@ -1745,6 +1825,8 @@ func (a *App) SyncConfigureRemote(backend string, remote sync.RemoteConfig, secr
 
 // SyncChangePassword re-encrypts synced files with a new master password.
 func (a *App) SyncChangePassword(oldPassword, newPassword string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
@@ -1770,6 +1852,8 @@ func (a *App) SyncVerifyPassword(password, username, token string) error {
 // remote folder and username are display-only in the edit dialog —
 // changing the sync target must go through delete + re-configure.
 func (a *App) SyncUpdateRemotePassword(secret, masterPassword string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
@@ -1781,6 +1865,8 @@ func (a *App) SyncUpdateRemotePassword(secret, masterPassword string) error {
 
 // SyncDeleteRepo removes the sync repository configuration.
 func (a *App) SyncDeleteRepo() error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.syncService == nil {
 		return fmt.Errorf("sync service not initialized")
 	}
@@ -1793,13 +1879,51 @@ func (a *App) SyncDeleteRepo() error {
 // AI Session Store methods
 
 func (a *App) SaveAISessions(data store.AISessionData) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	if a.businessRestartRequired {
+		return fmt.Errorf("data directory changed; restart before saving")
+	}
 	if a.aiSessionStore == nil {
 		return fmt.Errorf("AI session store not initialized")
 	}
-	return a.aiSessionStore.Save(data)
+	// Compatibility entry point: omissions in a client's snapshot are not deletes.
+	// Existing shards require the revision returned by LoadAISessions.
+	for _, entry := range data.Sessions {
+		if _, err := a.aiSessionStore.Upsert(entry, entry.Revision); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *App) SaveAIConversation(entry store.AISessionEntry, revision string) (string, error) {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	if a.businessRestartRequired {
+		return "", fmt.Errorf("data directory changed; restart before saving")
+	}
+	if a.aiSessionStore == nil {
+		return "", fmt.Errorf("AI session store not initialized")
+	}
+	return a.aiSessionStore.Upsert(entry, revision)
+}
+
+func (a *App) DeleteAIConversation(id, revision string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	if a.businessRestartRequired {
+		return fmt.Errorf("data directory changed; restart before saving")
+	}
+	if a.aiSessionStore == nil {
+		return fmt.Errorf("AI session store not initialized")
+	}
+	return a.aiSessionStore.Delete(id, revision)
 }
 
 func (a *App) LoadAISessions() (store.AISessionData, error) {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.aiSessionStore == nil {
 		return store.AISessionData{}, fmt.Errorf("AI session store not initialized")
 	}
@@ -1809,6 +1933,12 @@ func (a *App) LoadAISessions() (store.AISessionData, error) {
 // SettingsStore methods
 
 func (a *App) SaveSettings(settings store.AppSettings) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveSettings(settings)
+}
+
+func (a *App) saveSettings(settings store.AppSettings) error {
 	if a.settingsStore == nil {
 		return fmt.Errorf("settings store not initialized")
 	}
@@ -1841,6 +1971,12 @@ func (a *App) LoadAIModels() (store.AIStoreData, error) {
 }
 
 func (a *App) SaveAIModels(cfg store.AIStoreData) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveAIModels(cfg)
+}
+
+func (a *App) saveAIModels(cfg store.AIStoreData) error {
 	if a.aiConfigStore == nil {
 		return fmt.Errorf("ai config store not initialized")
 	}
@@ -1854,6 +1990,12 @@ func (a *App) SaveAIModels(cfg store.AIStoreData) error {
 // QuickCommandsStore methods
 
 func (a *App) SaveQuickCommands(data store.QuickCommandData) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	return a.saveQuickCommands(data)
+}
+
+func (a *App) saveQuickCommands(data store.QuickCommandData) error {
 	if a.quickCommandsStore == nil {
 		return fmt.Errorf("quick commands store not initialized")
 	}
@@ -2229,13 +2371,20 @@ var updateManager = update.NewManager()
 
 // emitUpdateProgress forwards update progress payloads to the frontend.
 func (a *App) emitUpdateProgress(p update.Progress) {
-	a.app.Event.Emit("update:progress", p)
+	a.emit("update:progress", p)
 }
 
 // DownloadUpdate downloads and verifies the best available update asset from
 // the ordered candidate list (primary source first, mirror as fallback).
 // Progress is streamed to the frontend via the update:progress event.
 func (a *App) DownloadUpdate(assets []update.UpdateAsset) error {
+	if !a.updateMu.TryLock() {
+		return fmt.Errorf("an update operation is already in progress")
+	}
+	defer a.updateMu.Unlock()
+	if updateManager.Pending() != nil {
+		return fmt.Errorf("an update is already staged; apply it before downloading another")
+	}
 	if devBuild {
 		return fmt.Errorf("updates are disabled in development builds")
 	}
@@ -2251,6 +2400,10 @@ func (a *App) DownloadUpdate(assets []update.UpdateAsset) error {
 // NSIS installer after this process exits (the installer relaunches the app),
 // so it just quits instead of relaunching.
 func (a *App) ApplyUpdate() error {
+	if !a.updateMu.TryLock() {
+		return fmt.Errorf("an update operation is already in progress")
+	}
+	defer a.updateMu.Unlock()
 	if err := updateManager.Apply(a.emitUpdateProgress); err != nil {
 		return err
 	}
@@ -2335,6 +2488,11 @@ func (a *App) GetDataDirInfo() (DataDirInfo, error) {
 // flag). Returns an error if the target is not writable or, for a non-migrate
 // change into an existing dir, the new dir's credentials cannot be unlocked.
 func (a *App) SetDataDir(kind, customDir string, migrate bool) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
+	if a.businessRestartRequired {
+		return fmt.Errorf("data directory already changed; restart required")
+	}
 	target, err := dataDirFor(kind, customDir)
 	if err != nil {
 		return err
@@ -2396,6 +2554,7 @@ func (a *App) SetDataDir(kind, customDir string, migrate bool) error {
 			return err
 		}
 	}
+	a.businessRestartRequired = true
 	return errors.New("restart required") // frontend prompts restart
 }
 
@@ -2415,6 +2574,8 @@ func (a *App) GetCredentialStatus() (CredentialStatus, error) {
 }
 
 func (a *App) SetupCredentials(mode, masterPassword string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.credentialStore == nil {
 		return errors.New("credential store not initialized")
 	}
@@ -2422,6 +2583,8 @@ func (a *App) SetupCredentials(mode, masterPassword string) error {
 }
 
 func (a *App) UnlockCredentials(masterPassword string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	if a.credentialStore == nil {
 		return errors.New("credential store not initialized")
 	}
@@ -2429,6 +2592,8 @@ func (a *App) UnlockCredentials(masterPassword string) error {
 }
 
 func (a *App) SwitchCredentialMode(targetMode, masterPassword string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	cs := a.credentialStore
 	if cs == nil || !cs.Status().Unlocked {
 		return errors.New("credentials locked")
@@ -2481,6 +2646,8 @@ func (a *App) SwitchCredentialMode(targetMode, masterPassword string) error {
 }
 
 func (a *App) ChangeMasterPassword(oldPassword, newPassword string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	cs := a.credentialStore
 	if cs == nil {
 		return errors.New("credential store not initialized")
@@ -2510,6 +2677,8 @@ func (a *App) ChangeMasterPassword(oldPassword, newPassword string) error {
 }
 
 func (a *App) ResetCredentials() error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	cs := a.credentialStore
 	if cs == nil {
 		return errors.New("credential store not initialized")

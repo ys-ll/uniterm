@@ -40,11 +40,13 @@ type connection struct {
 	id           string
 	client       *http.Client
 	base         string
-	token        string      // exec 等 WebSocket 场景复用的 bearer token
-	tlsConfig    *tls.Config // 复用 REST client 的 TLS 配置
-	dialOverride DialFunc    // 可选的 dial 劫持（SSH 隧道）
+	token        string              // exec 等 WebSocket 场景复用的 bearer token
+	tlsConfig    *tls.Config         // 复用 REST client 的 TLS 配置
+	dialOverride DialFunc            // 可选的 dial 劫持（SSH 隧道）
 	watches      map[string]struct{} // 属于本 conn 的 watchID 集合，Disconnect 时统一停
 	onClose      func()              // Disconnect 时触发（例如拆 SSH 隧道）；只调一次
+	refs         int
+	detached     bool
 }
 
 type watchHandle struct {
@@ -219,8 +221,12 @@ func (m *Manager) Disconnect(connID string) {
 			logsToStop = append(logsToStop, sid)
 		}
 	}
-	onClose := conn.onClose
-	delete(m.conns, connID)
+	conn.detached = true
+	var onClose func()
+	if conn.refs == 0 {
+		onClose = conn.onClose
+		delete(m.conns, connID)
+	}
 	m.mu.Unlock()
 
 	for _, wid := range toStop {
@@ -232,6 +238,30 @@ func (m *Manager) Disconnect(connID string) {
 	if onClose != nil {
 		onClose()
 	}
+}
+
+// Keep the API client/tunnel available while a separate exec/file tab uses it.
+func (m *Manager) Retain(id string) (func(), error) {
+	m.mu.Lock()
+	c := m.conns[id]
+	if c == nil {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("k8s connection not found: %s", id)
+	}
+	c.refs++
+	m.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.mu.Lock()
+			c.refs--
+			closeConn := c.detached && c.refs == 0
+			m.mu.Unlock()
+			if closeConn {
+				m.Disconnect(id)
+			}
+		})
+	}, nil
 }
 
 func (m *Manager) Request(ctx context.Context, connID, method, path string, body []byte, contentType string) (int, []byte, error) {

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { LoadLocalState, SaveLocalState } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { LoadLocalState, SaveLocalState } from '../services/businessConfig'
 import type { MCPSettings } from '../types/mcp'
 import { DEFAULT_MCP_SETTINGS } from '../types/mcp'
 import type { SavedTabsSnapshot } from '../types/tabSnapshot'

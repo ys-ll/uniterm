@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import type { AppSettings, AIModelConfig, CustomTerminalTheme } from '../types/settings'
 import { DEFAULT_SETTINGS, normalizeKeyBindings } from '../types/settings'
-import { SaveSettings, LoadSettings, GetAvailableShells, SetDefaultSessionLogDir } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetAvailableShells, SetDefaultSessionLogDir } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { SaveSettings, LoadSettings, configChanged } from '../services/businessConfig'
 import { Events } from '@wailsio/runtime'
 import { setLocale } from '../i18n'
 import { useAIConfigStore } from './aiConfigStore'
@@ -16,6 +17,7 @@ let unsubAiChanged: (() => void) | null = null
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>({ ...DEFAULT_SETTINGS })
   const loaded = ref(false)
+  let applyingRemote = false
   const availableShells = ref<string[]>([])
 
   const theme = computed(() => settings.value.theme)
@@ -69,7 +71,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const aiCfg = useAIConfigStore()
     aiCfg.maxTurns = settings.value.ai.maxTurns
     aiCfg.models = settings.value.ai.models
-    aiCfg.save()
+    // SaveBusinessConfig("settings") commits this slice under the same guard.
   }
 
   // Apply the UI font baseline to the rem root and cache it for the
@@ -102,6 +104,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function init() {
+    applyingRemote = true
     try {
       const loadedSettings = await LoadSettings()
       if (loadedSettings) {
@@ -130,6 +133,8 @@ export const useSettingsStore = defineStore('settings', () => {
     // respect it. Fire-and-forget; the backend has a safe empty fallback.
     SetDefaultSessionLogDir(settings.value.terminal.sessionLogDir || '').catch(() => {})
     setLocale(settings.value.language)
+    await nextTick()
+    applyingRemote = false
   }
 
   // Reload settings after the credential store is unlocked (e.g. after a
@@ -137,6 +142,7 @@ export const useSettingsStore = defineStore('settings', () => {
   // decrypted once the store is unlocked; re-running LoadSettings re-fetches
   // them instead of leaving the initial load's empty fallback in place.
   async function reload() {
+    applyingRemote = true
     try {
       const loadedSettings = await LoadSettings()
       if (loadedSettings) {
@@ -151,6 +157,8 @@ export const useSettingsStore = defineStore('settings', () => {
     applyUiFontSize()
     applyTheme()
     setLocale(settings.value.language)
+    await nextTick()
+    applyingRemote = false
   }
 
   async function refreshAvailableShells() {
@@ -162,6 +170,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function save() {
+    if (applyingRemote) return
     try {
       await SaveSettings(settings.value)
       // Mirror the syncable AI slice into ai.json (skipped when unchanged).
@@ -295,27 +304,11 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Listen for settings changes from sync
   unsubSettingsChanged?.()
-  unsubSettingsChanged =Events.On('store:settings:changed', (ev) => { const data: AppSettings = ev.data; 
-    if (data) {
-      settings.value = mergeSettings(data)
-      loaded.value = true
-      applyUiFontSize()
-      applyTheme()
-    }
-  })
+  unsubSettingsChanged = Events.On('store:settings:changed', () => { void configChanged('settings') })
 
   // AI config changed via a sync pull — refresh the local composition.
   unsubAiChanged?.()
-  unsubAiChanged = Events.On('store:ai:changed', (ev) => {
-    const data = ev.data as { maxTurns?: number; models?: AIModelConfig[] } | null
-    if (data) {
-      const aiCfg = useAIConfigStore()
-      aiCfg.maxTurns = data.maxTurns ?? DEFAULT_SETTINGS.ai.maxTurns
-      aiCfg.models = data.models?.length ? data.models : aiCfg.models
-      recomposeAi()
-      lastSavedAiJson = JSON.stringify({ maxTurns: settings.value.ai.maxTurns, models: settings.value.ai.models })
-    }
-  })
+  unsubAiChanged = Events.On('store:ai:changed', () => { void configChanged('settings') })
 
   function dispose() {
     unsubSettingsChanged?.()

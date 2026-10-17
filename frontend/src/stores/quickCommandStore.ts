@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { SaveQuickCommands, LoadQuickCommands } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { SaveQuickCommands, LoadQuickCommands } from '../services/businessConfig'
+import { requestId } from '../utils/requestId'
 
 export interface QuickCommand {
   id: string
@@ -23,9 +24,8 @@ export interface QuickCommandData {
   commands: QuickCommand[]
 }
 
-let idCounter = 0
 function genId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${++idCounter}`
+  return `${prefix}-${requestId()}`
 }
 
 // Expand/collapse bookkeeping for the quick-commands panel, kept pure so it

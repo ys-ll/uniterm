@@ -127,6 +127,65 @@ func injectCacheControl(reqBody map[string]interface{}) {
 // events for each token while collecting the full message. It returns the
 // complete message JSON when the stream ends (backward-compatible).
 func (a *App) ChatCompletion(apiKey, baseURL, model string, requestJSON string, protocol string, userAgent string, proxyID string, sessionID string) (string, error) {
+	return a.chatCompletion(aiRequest{}, apiKey, baseURL, model, requestJSON, protocol, userAgent, proxyID, sessionID)
+}
+
+// ChatCompletionScoped keeps the generated RPC's cancellable context and routes
+// every stream event to this request, including failures before streaming starts.
+func (a *App) ChatCompletionScoped(ctx context.Context, requestID, apiKey, baseURL, model, requestJSON, protocol, userAgent, proxyID, sessionID string) (string, error) {
+	if requestID == "" || len(requestID) > 128 || strings.ContainsAny(requestID, ":\r\n") {
+		return "", fmt.Errorf("invalid AI request ID")
+	}
+	return a.chatCompletion(aiRequest{ctx: ctx, id: requestID}, apiKey, baseURL, model, requestJSON, protocol, userAgent, proxyID, sessionID)
+}
+
+type aiRequest struct {
+	ctx  context.Context
+	id   string
+	emit func(string, ...any)
+}
+
+func (a *App) aiEmitter(r aiRequest) func(string, ...any) {
+	sink := r.emit
+	if sink == nil {
+		sink = a.emit
+	}
+	return func(name string, data ...any) {
+		if r.id != "" {
+			name += ":" + r.id
+		}
+		sink(name, data...)
+	}
+}
+
+func (a *App) aiStream(requests []aiRequest) (context.Context, context.CancelFunc, func(string, ...any)) {
+	r := aiRequest{}
+	if len(requests) > 0 {
+		r = requests[0]
+	}
+	if r.ctx == nil {
+		r.ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(r.ctx, 600*time.Second)
+	// Legacy callers retain CancelChatStream; it cannot cancel a scoped call.
+	if r.id == "" {
+		myCancel := cancel
+		a.chatCancel.Store(&myCancel)
+		return ctx, func() { cancel(); a.chatCancel.CompareAndSwap(&myCancel, nil) }, a.aiEmitter(r)
+	}
+	return ctx, cancel, a.aiEmitter(r)
+}
+
+func (a *App) chatCompletion(request aiRequest, apiKey, baseURL, model, requestJSON, protocol, userAgent, proxyID, sessionID string) (result string, err error) {
+	if request.id != "" {
+		defer func() {
+			emit := a.aiEmitter(request)
+			if err != nil {
+				emit("ai:error", map[string]string{"error": err.Error()})
+			}
+			emit("ai:end", map[string]bool{"ok": err == nil})
+		}()
+	}
 	// Parse the incoming request body (always Anthropic format from frontend)
 	var reqBody map[string]interface{}
 	if err := json.Unmarshal([]byte(requestJSON), &reqBody); err != nil {
@@ -151,11 +210,11 @@ func (a *App) ChatCompletion(apiKey, baseURL, model string, requestJSON string, 
 
 	switch protocol {
 	case "openai":
-		return a.chatCompletionOpenAI(apiKey, baseURL, model, reqBody, userAgent, sessionID, client)
+		return a.chatCompletionOpenAI(apiKey, baseURL, model, reqBody, userAgent, sessionID, client, request)
 	case "responses":
-		return a.chatCompletionResponses(apiKey, baseURL, model, reqBody, userAgent, client)
+		return a.chatCompletionResponses(apiKey, baseURL, model, reqBody, userAgent, client, request)
 	}
-	return a.chatCompletionAnthropic(apiKey, baseURL, model, reqBody, userAgent, client)
+	return a.chatCompletionAnthropic(apiKey, baseURL, model, reqBody, userAgent, client, request)
 }
 
 // llmClientFor returns the HTTP client for the model's proxy selection:
@@ -208,7 +267,7 @@ func proxyTransportURL(p *session.SocksProxy) (*url.URL, error) {
 }
 
 // chatCompletionAnthropic handles the native Anthropic Messages API with SSE streaming.
-func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string, client *http.Client) (string, error) {
+func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string, client *http.Client, requests ...aiRequest) (string, error) {
 	// Computed once so a non-200 response can be reported as a readable
 	// attachment error when the request carried images (FR-6).
 	hasImages := requestHasImageAttachment(reqBody)
@@ -230,16 +289,8 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 		url = base + "/v1/messages"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	ctx, cancel, emit := a.aiStream(requests)
 	defer cancel()
-
-	// F-308: atomic pointer swap so overlapping ChatCompletion calls
-	// don't clobber each other's cancel function.
-	myCancel := cancel
-	a.chatCancel.Store(&myCancel)
-	defer func() {
-		a.chatCancel.CompareAndSwap(&myCancel, nil)
-	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(modifiedJSON))
 	if err != nil {
@@ -303,7 +354,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			currentBlockIndex++
 			if block, ok := event["content_block"].(map[string]interface{}); ok {
 				currentBlock = block
-				a.emit("ai:block_start", map[string]interface{}{
+				emit("ai:block_start", map[string]interface{}{
 					"index":         currentBlockIndex,
 					"content_block": block,
 				})
@@ -321,7 +372,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 					}
 					currentBlock["text"] = currentBlock["text"].(string) + text
 				}
-				a.emit("ai:token", map[string]interface{}{
+				emit("ai:token", map[string]interface{}{
 					"text":  text,
 					"index": currentBlockIndex,
 				})
@@ -336,7 +387,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 				} else {
 					currentBlock["thinking"] = thinking
 				}
-				a.emit("ai:thinking", aiThinkingEvent{
+				emit("ai:thinking", aiThinkingEvent{
 					Text:  thinking,
 					Index: currentBlockIndex,
 				})
@@ -379,7 +430,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 			}
 			if delta, ok := event["delta"].(map[string]interface{}); ok {
 				if stopReason, ok := delta["stop_reason"].(string); ok {
-					a.emit("ai:done", map[string]interface{}{
+					emit("ai:done", map[string]interface{}{
 						"message": map[string]interface{}{
 							"role":    messageRole,
 							"content": contentBlocks,
@@ -600,7 +651,7 @@ func isOpenCodeGoBaseURL(baseURL string) bool {
 // chatCompletionOpenAI converts the Anthropic-format request to OpenAI,
 // calls the OpenAI Chat Completions API with SSE streaming, and converts
 // the response back to Anthropic format so the frontend sees no difference.
-func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string, sessionID string, client *http.Client) (string, error) {
+func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string, sessionID string, client *http.Client, requests ...aiRequest) (string, error) {
 	// Computed once so a non-200 response can be reported as a readable
 	// attachment error when the request carried images (FR-6).
 	hasImages := requestHasImageAttachment(reqBody)
@@ -650,21 +701,8 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 		return "", fmt.Errorf("marshal openai request: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	ctx, cancel, emit := a.aiStream(requests)
 	defer cancel()
-
-	// F-308: register our cancel in the App-level pointer and only
-	// clear it on the way out if no one replaced us. The previous code
-	// stored a single context.CancelFunc under a mutex and unconditionally
-	// nil'd it on defer; when two ChatCompletion calls overlapped, call A's
-	// defer wiped call B's cancel and CancelChatStream became a no-op for B.
-	myCancel := cancel
-	a.chatCancel.Store(&myCancel)
-	defer func() {
-		// CAS the slot back to nil, but only if it still points at our
-		// own cancel — a newer call may have already taken over the slot.
-		a.chatCancel.CompareAndSwap(&myCancel, nil)
-	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestJSON))
 	if err != nil {
@@ -741,7 +779,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 
 	// Emit message_start at the beginning
 	// F-320: typed payload (frontend reads event.message.role).
-	a.emit("ai:message_start", aiMessageStartEvent{
+	emit("ai:message_start", aiMessageStartEvent{
 		Role: "assistant",
 	})
 
@@ -756,14 +794,14 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			// Emit content_block_stop for any open block
 			if currentBlock != nil {
 				flushCurrentTextBlock()
-				a.emit("ai:content_block_stop", aiContentBlockStopEvent{
+				emit("ai:content_block_stop", aiContentBlockStopEvent{
 					Index: currentBlockIndex,
 				})
 			}
 			// Close any open tool_use blocks
 			for idx, tc := range activeToolCalls {
 				contentBlocks = append(contentBlocks, tc)
-				a.emit("ai:content_block_stop", aiContentBlockStopEvent{
+				emit("ai:content_block_stop", aiContentBlockStopEvent{
 					Index: idx,
 				})
 			}
@@ -771,7 +809,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 
 			// Emit message_delta and message_stop
 			// F-320: typed payload.
-			a.emit("ai:done", aiDoneEvent{
+			emit("ai:done", aiDoneEvent{
 				Message: map[string]interface{}{
 					"role":    messageRole,
 					"content": contentBlocks,
@@ -805,7 +843,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				// Close previous block if any
 				if currentBlock != nil {
 					flushCurrentTextBlock()
-					a.emit("ai:content_block_stop", aiContentBlockStopEvent{
+					emit("ai:content_block_stop", aiContentBlockStopEvent{
 						Index: currentBlockIndex,
 					})
 				}
@@ -815,13 +853,13 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 					"thinking": "",
 				}
 				reasoningBuf.Reset()
-				a.emit("ai:block_start", aiBlockStartEvent{
+				emit("ai:block_start", aiBlockStartEvent{
 					Index:        currentBlockIndex,
 					ContentBlock: map[string]interface{}{"type": "thinking"},
 				})
 			}
 			reasoningBuf.WriteString(delta.ReasoningContent)
-			a.emit("ai:thinking", aiThinkingEvent{
+			emit("ai:thinking", aiThinkingEvent{
 				Text:  delta.ReasoningContent,
 				Index: currentBlockIndex,
 			})
@@ -833,7 +871,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				// Close previous block if any
 				if currentBlock != nil {
 					flushCurrentTextBlock()
-					a.emit("ai:content_block_stop", aiContentBlockStopEvent{
+					emit("ai:content_block_stop", aiContentBlockStopEvent{
 						Index: currentBlockIndex,
 					})
 				}
@@ -844,7 +882,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				}
 				currentTextBuf.Reset()
 				// F-320: typed payload.
-				a.emit("ai:block_start", aiBlockStartEvent{
+				emit("ai:block_start", aiBlockStartEvent{
 					Index:        currentBlockIndex,
 					ContentBlock: currentBlock,
 				})
@@ -852,7 +890,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			currentTextBuf.WriteString(delta.Content)
 			// F-320: typed struct + dropped unused fields — see
 			// chatCompletionAnthropic for rationale.
-			a.emit("ai:token", aiTokenEvent{
+			emit("ai:token", aiTokenEvent{
 				Text:  delta.Content,
 				Index: currentBlockIndex,
 			})
@@ -869,7 +907,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				// Close current text block if open
 				if currentBlock != nil {
 					flushCurrentTextBlock()
-					a.emit("ai:content_block_stop", aiContentBlockStopEvent{
+					emit("ai:content_block_stop", aiContentBlockStopEvent{
 						Index: currentBlockIndex,
 					})
 				}
@@ -881,7 +919,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 					"input": "",
 				}
 				// F-320: typed payload.
-				a.emit("ai:block_start", aiBlockStartEvent{
+				emit("ai:block_start", aiBlockStartEvent{
 					Index: currentBlockIndex,
 					ContentBlock: map[string]interface{}{
 						"type": "tool_use",
@@ -904,7 +942,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				}
 				buf.WriteString(args)
 				// F-320: typed payload.
-				a.emit("ai:input_json_delta", aiInputJsonDeltaEvent{
+				emit("ai:input_json_delta", aiInputJsonDeltaEvent{
 					PartialJSON: args,
 				})
 			}
@@ -916,7 +954,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			// Close any open text block
 			if currentBlock != nil {
 				flushCurrentTextBlock()
-				a.emit("ai:content_block_stop", aiContentBlockStopEvent{
+				emit("ai:content_block_stop", aiContentBlockStopEvent{
 					Index: currentBlockIndex,
 				})
 			}
@@ -939,7 +977,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 					}
 				}
 				contentBlocks = append(contentBlocks, tc)
-				a.emit("ai:content_block_stop", aiContentBlockStopEvent{
+				emit("ai:content_block_stop", aiContentBlockStopEvent{
 					Index: idx,
 				})
 			}
@@ -957,7 +995,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 			}
 
 			// F-320: typed payload.
-			a.emit("ai:done", aiDoneEvent{
+			emit("ai:done", aiDoneEvent{
 				Message: map[string]interface{}{
 					"role":    messageRole,
 					"content": contentBlocks,
@@ -1100,7 +1138,7 @@ func convertAnthropicMessageToResponses(msg map[string]interface{}) []map[string
 // Responses API, calls /responses with SSE streaming, and converts the response
 // events back to Anthropic-format events so the frontend sees no difference.
 // Stateless: full history is sent as `input` each turn; reasoning items are ignored.
-func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string, client *http.Client) (string, error) {
+func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map[string]interface{}, userAgent string, client *http.Client, requests ...aiRequest) (string, error) {
 	// Computed once so a non-200 response can be reported as a readable
 	// attachment error when the request carried images (FR-6).
 	hasImages := requestHasImageAttachment(reqBody)
@@ -1146,21 +1184,8 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 		return "", fmt.Errorf("marshal responses request: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+	ctx, cancel, emit := a.aiStream(requests)
 	defer cancel()
-
-	// F-308: register our cancel in the App-level pointer and only
-	// clear it on the way out if no one replaced us. The previous code
-	// stored a single context.CancelFunc under a mutex and unconditionally
-	// nil'd it on defer; when two ChatCompletion calls overlapped, call A's
-	// defer wiped call B's cancel and CancelChatStream became a no-op for B.
-	myCancel := cancel
-	a.chatCancel.Store(&myCancel)
-	defer func() {
-		// CAS the slot back to nil, but only if it still points at our
-		// own cancel — a newer call may have already taken over the slot.
-		a.chatCancel.CompareAndSwap(&myCancel, nil)
-	}()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestJSON))
 	if err != nil {
@@ -1208,7 +1233,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	// F-320: typed payload.
-	a.emit("ai:message_start", aiMessageStartEvent{
+	emit("ai:message_start", aiMessageStartEvent{
 		Role: "assistant",
 	})
 
@@ -1223,7 +1248,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 		}
 		// F-320: typed payload with json.RawMessage so the
 		// already-marshaled message bytes pass through untouched.
-		a.emit("ai:done", struct {
+		emit("ai:done", struct {
 			Message    json.RawMessage `json:"message"`
 			StopReason string          `json:"stop_reason"`
 		}{
@@ -1260,7 +1285,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 				blockByOutputIdx[ev.OutputIndex] = block
 				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
 				// F-320: typed payload.
-				a.emit("ai:block_start", aiBlockStartEvent{
+				emit("ai:block_start", aiBlockStartEvent{
 					Index:        nextBlockIndex,
 					ContentBlock: block,
 				})
@@ -1271,7 +1296,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 				block := map[string]interface{}{"type": "thinking", "thinking": ""}
 				blockByOutputIdx[ev.OutputIndex] = block
 				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
-				a.emit("ai:block_start", aiBlockStartEvent{
+				emit("ai:block_start", aiBlockStartEvent{
 					Index:        nextBlockIndex,
 					ContentBlock: map[string]interface{}{"type": "thinking"},
 				})
@@ -1286,7 +1311,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 				blockByOutputIdx[ev.OutputIndex] = block
 				idxByOutputIdx[ev.OutputIndex] = nextBlockIndex
 				// F-320: typed payload.
-				a.emit("ai:block_start", aiBlockStartEvent{
+				emit("ai:block_start", aiBlockStartEvent{
 					Index: nextBlockIndex,
 					ContentBlock: map[string]interface{}{
 						"type": "tool_use",
@@ -1315,7 +1340,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			buf.WriteString(ev.Delta)
 			// F-320: typed struct + dropped unused fields — see
 			// chatCompletionAnthropic for rationale.
-			a.emit("ai:token", aiTokenEvent{
+			emit("ai:token", aiTokenEvent{
 				Text:  ev.Delta,
 				Index: idxByOutputIdx[ev.OutputIndex],
 			})
@@ -1331,7 +1356,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 				reasoningBufs[ev.OutputIndex] = buf
 			}
 			buf.WriteString(ev.Delta)
-			a.emit("ai:thinking", aiThinkingEvent{
+			emit("ai:thinking", aiThinkingEvent{
 				Text:  ev.Delta,
 				Index: idxByOutputIdx[ev.OutputIndex],
 			})
@@ -1351,7 +1376,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			}
 			buf.WriteString(ev.Delta)
 			// F-320: typed payload.
-			a.emit("ai:input_json_delta", aiInputJsonDeltaEvent{
+			emit("ai:input_json_delta", aiInputJsonDeltaEvent{
 				PartialJSON: ev.Delta,
 			})
 
@@ -1391,7 +1416,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 			}
 			contentBlocks = append(contentBlocks, block)
 			// F-320: typed payload.
-			a.emit("ai:content_block_stop", aiContentBlockStopEvent{
+			emit("ai:content_block_stop", aiContentBlockStopEvent{
 				Index: idxByOutputIdx[ev.OutputIndex],
 			})
 			delete(blockByOutputIdx, ev.OutputIndex)
@@ -2084,8 +2109,21 @@ func (a *App) StartMCPClient() {
 
 // ListMCPClients returns every persisted external server config.
 func (a *App) ListMCPClients() ([]store.MCPClientConfig, error) {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	a.ensureMCPClient()
-	return a.mcpClientStore.Load()
+	all, err := a.mcpClientStore.Load()
+	if err != nil {
+		return nil, err
+	}
+	for i := range all {
+		all[i].Revision = ""
+		all[i].Revision, err = store.Revision(all[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return all, nil
 }
 
 // SaveMCPClient upserts one external server by name, persists, and reloads
@@ -2104,6 +2142,8 @@ func (a *App) UpdateMCPClient(originalName string, cfg store.MCPClientConfig) er
 }
 
 func (a *App) saveMCPClient(cfg store.MCPClientConfig, originalName string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	cfg.Name = strings.TrimSpace(cfg.Name)
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -2123,12 +2163,23 @@ func (a *App) saveMCPClient(cfg store.MCPClientConfig, originalName string) erro
 	}
 	for i := range all {
 		if (originalName == "" && all[i].Name == cfg.Name) || all[i].Name == originalName {
+			revision, err := store.Revision(all[i])
+			if err != nil {
+				return err
+			}
+			if revision != cfg.Revision {
+				return store.ErrConflict
+			}
+			cfg.Revision = ""
 			all[i] = cfg
 			replaced = true
 			break
 		}
 	}
 	if !replaced {
+		if cfg.Revision != "" {
+			return store.ErrConflict
+		}
 		if originalName != "" {
 			return errors.New("MCP client no longer exists")
 		}
@@ -2145,6 +2196,8 @@ func (a *App) saveMCPClient(cfg store.MCPClientConfig, originalName string) erro
 
 // RemoveMCPClient deletes a persisted server and closes its live connection.
 func (a *App) RemoveMCPClient(name string) error {
+	a.businessMu.Lock()
+	defer a.businessMu.Unlock()
 	mgr := a.ensureMCPClient()
 	all, err := a.mcpClientStore.Load()
 	if err != nil {

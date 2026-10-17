@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { AIModelConfig } from '../types/settings'
 import { DEFAULT_SETTINGS } from '../types/settings'
-import { LoadAIModels, SaveAIModels } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { LoadAIModels, SaveAIModels } from '../services/businessConfig'
 
 // aiConfigStore backs ai.json — the syncable slice of the AI settings
 // (model catalog + agent turn limit). settingsStore composes this into

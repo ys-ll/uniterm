@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { LoadIdentities, SaveIdentities } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { LoadIdentities, SaveIdentities, configChanged } from '../services/businessConfig'
 import { Events } from '@wailsio/runtime'
 import type { Identity, IdentityStoreData } from '../types/identity'
 
@@ -30,9 +30,7 @@ export const useIdentityStore = defineStore('identity', () => {
   // Reload from disk when the backend pushes updated identity data (e.g. after
   // a cloud sync pull), so the keychain isn't stale until restart.
   unsubIdentitiesChanged?.()
-  unsubIdentitiesChanged =Events.On('store:identities:changed', (ev) => { const data: IdentityStoreData = ev.data; 
-    if (data?.identities) identities.value = data.identities
-   })
+  unsubIdentitiesChanged = Events.On('store:identities:changed', () => { void configChanged('identities') })
 
   function dispose() {
     unsubIdentitiesChanged?.()

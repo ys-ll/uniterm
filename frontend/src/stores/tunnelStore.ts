@@ -2,8 +2,10 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { Events } from '@wailsio/runtime'
 import {
-  LoadTunnels, SaveTunnels, StartTunnel, StopTunnel, ListTunnelStates,
+  StartTunnel, StopTunnel, ListTunnelStates,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { LoadTunnels, SaveTunnels, configChanged } from '../services/businessConfig'
+import { requestId } from '../utils/requestId'
 import { msg } from '../services/message'
 import { t } from '../i18n'
 // Module-level un-subscribers for tunnel:state / store:tunnels:changed listeners.
@@ -54,9 +56,8 @@ export interface TunnelState {
   error?: string
 }
 
-let idCounter = 0
 function genId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${++idCounter}`
+  return `${prefix}-${requestId()}`
 }
 
 export const useTunnelStore = defineStore('tunnels', () => {
@@ -116,10 +117,7 @@ export const useTunnelStore = defineStore('tunnels', () => {
      })
     // Cross-window sync.
     unsubTunnelsChanged?.()
-    unsubTunnelsChanged =Events.On('store:tunnels:changed', (ev) => { const data: { groups?: TunnelGroup[]; tunnels?: Tunnel[] } = ev.data; 
-      groups.value = data.groups || []
-      tunnels.value = data.tunnels || []
-     })
+    unsubTunnelsChanged = Events.On('store:tunnels:changed', () => { void configChanged('tunnels') })
     // Subscribe before the snapshot so an auto-start/reconnect transition
     // cannot be missed or overwritten by an older snapshot response.
     try {

@@ -2,8 +2,6 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useI18n } from '../i18n'
 import {
-  SyncGetConfig,
-  SyncSaveConfig,
   SyncNow,
   SyncResolveConflict,
   SyncTestConnection,
@@ -14,6 +12,7 @@ import {
   SyncChangePassword,
   SyncDeleteRepo,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { SyncGetConfig, SyncSaveConfig, configChanged } from '../services/businessConfig'
 import { Events } from '@wailsio/runtime'
 import { SyncConfig } from '../../bindings/github.com/ys-ll/uniterm/backend/sync/models'
 import { backendErrorText } from '../utils/backendError'
@@ -328,7 +327,7 @@ export const useSyncStore = defineStore('sync', () => {
   // Reload config when auto-sync completes
   unsubSyncCompleted?.()
   unsubSyncCompleted =Events.On('sync:completed', () => {
-    loadConfig()
+    void configChanged('sync')
   })
 
   function dispose() {

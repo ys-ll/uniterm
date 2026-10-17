@@ -140,9 +140,14 @@ func (a *App) K8sExecSession(ctx context.Context, connID, namespace, pod, contai
 	if a.k8sManager == nil {
 		return nil, fmt.Errorf("k8s manager not initialized")
 	}
+	release, err := a.k8sManager.Retain(connID)
+	if err != nil {
+		return nil, err
+	}
 	// initial size fallback; real size arrives via Resize after the frontend mounts xterm
 	wsConn, err := a.k8sManager.DialExec(connID, namespace, pod, container, 80, 24)
 	if err != nil {
+		release()
 		return nil, err
 	}
 	id := uuid.New().String()
@@ -155,11 +160,17 @@ func (a *App) K8sExecSession(ctx context.Context, connID, namespace, pod, contai
 		})
 	})
 	sess.SetOnStatusChangeCallback(func(status session.SessionStatus) {
+		if status == session.StatusDisconnected || status == session.StatusError {
+			release()
+		}
 		a.emit("session:status", map[string]interface{}{
 			"id":     sess.ID(),
 			"status": status,
 		})
 	})
+	if !sess.IsConnected() {
+		release()
+	}
 	a.sessionManager.Add(sess)
 	if err := a.registerWebTerminal(sess, session.ConnectionConfig{ID: connID, Name: pod, InitialCols: 80, InitialRows: 24}); err != nil {
 		_ = a.sessionManager.Close(id)
@@ -193,7 +204,16 @@ func readKubeconfigSource(source string, sourceIsPath bool) ([]byte, error) {
 // 与 CreateSession 的单层隧道行为一致。
 // sshUser/sshPassword/tunnelUser/tunnelPassword 为前端统一凭据补全弹窗
 // （useCredentials）提交的临时账密：只填空缺，不覆盖已存储或身份库解析的值。
-func (a *App) ContainerConnect(connectionID, sshUser, sshPassword, tunnelUser, tunnelPassword string) error {
+func (a *App) ContainerConnect(connectionID, sshUser, sshPassword, tunnelUser, tunnelPassword string) (string, error) {
+	handle := uuid.NewString()
+	if err := a.connectContainer(handle, connectionID, sshUser, sshPassword, tunnelUser, tunnelPassword); err != nil {
+		return "", err
+	}
+	return handle, nil
+}
+
+// Saved connection IDs identify configuration, never a live provider or tunnel.
+func (a *App) connectContainer(handle, connectionID, sshUser, sshPassword, tunnelUser, tunnelPassword string) error {
 	if a.containerManager == nil || a.connectionStore == nil {
 		return fmt.Errorf("container manager not initialized")
 	}
@@ -217,7 +237,7 @@ func (a *App) ContainerConnect(connectionID, sshUser, sshPassword, tunnelUser, t
 	rt := container.Runtime(cfg.ContainerRuntime)
 
 	if cfg.ContainerTransport == "local" {
-		return a.containerManager.ConnectLocal(connectionID, rt, "")
+		return a.containerManager.ConnectLocal(handle, rt, "")
 	}
 
 	var sshCfg *session.ConnectionConfig
@@ -265,24 +285,24 @@ func (a *App) ContainerConnect(connectionID, sshUser, sshPassword, tunnelUser, t
 	// sshCfg.Host/Port 指向本地监听口。
 	hasTunnel := sshCfg.TunnelSSHConnID != ""
 	if hasTunnel {
-		if err := a.setupJumpHostTunnel(connectionID, "container", sshCfg); err != nil {
+		if err := a.setupJumpHostTunnel(handle, "container", sshCfg); err != nil {
 			return err
 		}
 	}
-	if err := a.containerManager.ConnectSSH(connectionID, rt, "", *sshCfg); err != nil {
+	if err := a.containerManager.ConnectSSH(handle, rt, "", *sshCfg); err != nil {
 		if hasTunnel && a.tunnelService != nil {
-			a.tunnelService.Stop(connectionID) // 与其它连接一致：连接失败时回收隧道
+			a.tunnelService.Stop(handle)
 		}
 		return err
+	}
+	if hasTunnel && a.tunnelService != nil {
+		a.containerManager.SetOnClose(handle, func() { a.tunnelService.Stop(handle) })
 	}
 	return nil
 }
 
 func (a *App) ContainerDisconnect(connectionID string) {
 	a.containerManager.Disconnect(connectionID)
-	if a.tunnelService != nil {
-		a.tunnelService.Stop(connectionID) // 无同名隧道时为 no-op
-	}
 }
 
 func (a *App) ContainerList(connectionID string) ([]container.Container, error) {
@@ -432,9 +452,14 @@ func (a *App) ContainerExecSession(ctx context.Context, connectionID, containerI
 	if a.containerManager == nil {
 		return nil, fmt.Errorf("container manager not initialized")
 	}
+	release, err := a.containerManager.Retain(connectionID)
+	if err != nil {
+		return nil, err
+	}
 	// initial size fallback; real size arrives via Resize after the frontend mounts xterm
 	pty, err := a.containerManager.Exec(connectionID, containerID, shell, 80, 24)
 	if err != nil {
+		release()
 		return nil, err
 	}
 	id := uuid.New().String()
@@ -446,11 +471,17 @@ func (a *App) ContainerExecSession(ctx context.Context, connectionID, containerI
 		})
 	})
 	sess.SetOnStatusChangeCallback(func(status session.SessionStatus) {
+		if status == session.StatusDisconnected || status == session.StatusError {
+			release()
+		}
 		a.emit("session:status", map[string]interface{}{
 			"id":     sess.ID(),
 			"status": status,
 		})
 	})
+	if !sess.IsConnected() {
+		release()
+	}
 	a.sessionManager.Add(sess)
 	if err := a.registerWebTerminal(sess, session.ConnectionConfig{ID: connectionID, Name: containerID, ShellPath: shell, InitialCols: 80, InitialRows: 24}); err != nil {
 		_ = a.sessionManager.Close(id)
@@ -477,9 +508,18 @@ func (a *App) createContainerFileSession(config session.ConnectionConfig) (*sess
 	//（k8s 复用 config.ID 作为 k8s 连接 key，config.ContainerID 为 Pod 名）
 	id := uuid.New().String()
 	var sess session.Session
+	var release func()
 	if p, err := a.containerManager.Provider(config.ID); err == nil {
+		release, err = a.containerManager.Retain(config.ID)
+		if err != nil {
+			return nil, err
+		}
 		sess = session.NewContainerFileSession(id, container.NewFileBackend(p, config.ContainerID), config.ContainerID, config.Name)
 	} else if config.ContainerNamespace != "" {
+		release, err = a.k8sManager.Retain(config.ID)
+		if err != nil {
+			return nil, err
+		}
 		backend := k8s.NewFileBackend(a.k8sManager, config.ID, config.ContainerNamespace, config.ContainerID, "")
 		sess = session.NewContainerFileSession(id, backend, config.ContainerID, config.Name)
 	} else {
@@ -500,12 +540,16 @@ func (a *App) createContainerFileSession(config session.ConnectionConfig) (*sess
 		})
 	})
 	sess.SetOnStatusChangeCallback(func(status session.SessionStatus) {
+		if status == session.StatusDisconnected || status == session.StatusError {
+			release()
+		}
 		a.emit("session:status", map[string]interface{}{
 			"id":     sess.ID(),
 			"status": status,
 		})
 	})
 	if err := sess.Connect(config); err != nil {
+		release()
 		return nil, err
 	}
 	a.sessionManager.Add(sess)

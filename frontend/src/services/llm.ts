@@ -1,4 +1,5 @@
-import { ChatCompletion } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { ChatCompletionScoped } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { requestId } from '../utils/requestId'
 import { Events } from '@wailsio/runtime'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAIStore } from '../stores/aiStore'
@@ -13,6 +14,9 @@ export interface ChatOptions {
     input_schema: object
   }>
   onChunk?: (chunk: string) => void
+  onToken?: (chunk: string) => void
+  onThinking?: (chunk: string) => void
+  signal?: AbortSignal
   onToolUse?: (tool: { id: string; name: string; input: Record<string, unknown> }) => void
 }
 
@@ -97,7 +101,8 @@ export async function chat(options: ChatOptions): Promise<void> {
   const aiStore = useAIStore()
   const activeModel = settingsStore.activeModel
 
-  const sessionId = aiStore.currentSessionId || `uniterm-${Date.now()}`
+  const sessionId = aiStore.currentSessionId || requestId()
+  const id = requestId()
 
   const apiKey = activeModel?.apiKey || ''
   const baseURL = activeModel?.baseURL || ''
@@ -126,12 +131,22 @@ export async function chat(options: ChatOptions): Promise<void> {
   // Accumulate tokens as a fallback; do NOT forward them to onChunk here (the
   // agent already listens to ai:token and would double-append).
   let streamedText = ''
-  const unsubToken =Events.On('ai:token', (ev) => { const data: any = ev.data; 
+  const unsubToken = Events.On(`ai:token:${id}`, (ev) => { const data: any = ev.data;
     const text = typeof data === 'string' ? data : (data?.text ?? data?.Text ?? '')
-    if (text) streamedText += text
+    if (text && !options.signal?.aborted) {
+      streamedText += text
+      options.onToken?.(text)
+    }
    })
+  const unsubThinking = Events.On(`ai:thinking:${id}`, (ev) => {
+    const data: any = ev.data
+    if (!options.signal?.aborted) options.onThinking?.(typeof data === 'string' ? data : data?.text || '')
+  })
+  let cancel: (() => void) | undefined
   try {
-    responseText = await ChatCompletion(
+    if (options.signal?.aborted) throw new ChatCancelledError()
+    const call = ChatCompletionScoped(
+      id,
       apiKey,
       baseURL,
       model,
@@ -141,7 +156,11 @@ export async function chat(options: ChatOptions): Promise<void> {
       proxyId,
       sessionId
     )
+    cancel = () => { void call.cancel() }
+    options.signal?.addEventListener('abort', cancel, { once: true })
+    responseText = await call
   } catch (e: any) {
+    if (options.signal?.aborted || e instanceof ChatCancelledError) throw new ChatCancelledError()
     const raw = e?.message || String(e)
     if (isCancellationError(raw)) {
       throw new ChatCancelledError()
@@ -152,6 +171,8 @@ export async function chat(options: ChatOptions): Promise<void> {
     throw new Error(formatAPIError(raw))
   } finally {
     unsubToken?.()
+    unsubThinking?.()
+    if (cancel) options.signal?.removeEventListener('abort', cancel)
   }
 
   let json: any

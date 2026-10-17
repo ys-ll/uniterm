@@ -10,42 +10,11 @@ import { useSkillStore } from '../stores/skillStore'
 import { loadRemoteMCPTools, toAgentToolEntry, callRemoteMCPTool, isRemoteMCPTool } from './mcpTools'
 import { GetSkillFile, ListSkillFiles } from '../../bindings/github.com/ys-ll/uniterm/app'
 import type { AIAttachment, AIMessage } from '../types/ai'
-import { Events } from '@wailsio/runtime'
 import {
   InputValidationError,
   validateRequiredString,
   validateObject,
 } from '../utils/runtimeTypeCheck'
-
-// Global token listener management: only one runAgent instance should receive
-// ai:token events at a time. Registering a new listener automatically cancels
-// the previous one, preventing duplicate streaming into multiple assistant
-// messages when a stop/continue sequence races. F-315: each register call
-// bumps a generation counter; the returned cleanup only clears module state
-// when its generation still matches, so an early-return path that gets
-// superseded by a re-entry (approveTool → runAgent; rejectTool / answer /
-// dismissQuestion setTimeout→runAgent) can't accidentally clobber a newer
-// pair by running its stale cleanup.
-let activeTokenUnsubscribe: (() => void) | null = null
-let activeAssistantMsg: AIMessage | null = null
-let activeGeneration = 0
-
-function registerTokenListener(callback: (data: any) => void): () => void {
-  activeTokenUnsubscribe?.()
-  activeTokenUnsubscribe =Events.On('ai:token', (ev) => callback(ev.data))
-  activeGeneration++
-  const myGeneration = activeGeneration
-  return () => {
-    if (myGeneration !== activeGeneration) return
-    activeTokenUnsubscribe?.()
-    activeTokenUnsubscribe = null
-    activeAssistantMsg = null
-  }
-}
-
-function setActiveAssistantMsg(msg: AIMessage | null) {
-  activeAssistantMsg = msg
-}
 
 function getActivePanel() {
   const tabStore = useTabStore()
@@ -512,19 +481,23 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
 
   // Track whether streaming already delivered text, to skip onChunk duplication
   let streamedText = ''
+  let activeAssistantMsg: AIMessage | null = null
+  const controller = new AbortController()
+  const cancel = () => controller.abort()
+  store.setStreamCancel(cancel)
 
   // Register stream event listener (fires from Go backend SSE events)
-  const cleanupTokenListener = registerTokenListener((data: any) => {
-    if (store.stopRequested) return
-    if (activeAssistantMsg && data.text) {
+  const onToken = (text: string) => {
+    if (controller.signal.aborted || store.stopRequested) return
+    if (activeAssistantMsg && text) {
       if (turnThinkingStart && activeAssistantMsg.thinking && !activeAssistantMsg.thinkingDurationMs) {
         finalizeThinkingDuration(activeAssistantMsg)
       }
-      activeAssistantMsg.content += data.text
-      streamedText += data.text
+      activeAssistantMsg.content += text
+      streamedText += text
       store.status = 'outputting'
     }
-  })
+  }
 
   // Reasoning/thinking deltas (ai:thinking). Streamed into the store's live
   // buffer (clickable "Thinking..." box) and appended to the current assistant
@@ -532,10 +505,8 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
   // began so the box can show a live elapsed timer and the finished block can
   // record its total duration.
   let turnThinkingStart = 0
-  const unsubThinking = Events.On('ai:thinking', (ev) => {
-    if (store.stopRequested) return
-    const data: any = ev.data
-    const text = typeof data === 'string' ? data : (data?.text ?? '')
+  const onThinking = (text: string) => {
+    if (controller.signal.aborted || store.stopRequested) return
     if (!text) return
     if (!turnThinkingStart) {
       turnThinkingStart = Date.now()
@@ -545,7 +516,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     if (activeAssistantMsg) {
       activeAssistantMsg.thinking = (activeAssistantMsg.thinking || '') + text
     }
-  })
+  }
 
   // Freeze the live elapsed timer / stamp the duration once thinking ends
   // (the model has started emitting visible output or tool calls).
@@ -556,14 +527,14 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     turnThinkingStart = 0
   }
   function cleanupStreamListeners() {
-    cleanupTokenListener()
-    unsubThinking?.()
-    setActiveAssistantMsg(null)
+    store.clearStreamCancel(cancel)
+    activeAssistantMsg = null
   }
 
   // External MCP client tools: fetched once per run and merged into the tool
   // set. A failing/external server degrades to an empty list (see mcpTools).
   const remoteTools = await loadRemoteMCPTools()
+  if (!store.isStreamCurrent(cancel)) return
   const mergedTools = [...AVAILABLE_TOOLS, ...remoteTools.map(toAgentToolEntry)]
 
   let turnCount = 0
@@ -614,7 +585,8 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       role: 'assistant',
       content: ''
     })
-    setActiveAssistantMsg(assistantMsg)
+    activeAssistantMsg = assistantMsg
+    streamedText = ''
 
     const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
 
@@ -622,6 +594,9 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       system: buildSystemPrompt(),
       messages: store.conversation,
       tools: mergedTools,
+      signal: controller.signal,
+      onToken,
+      onThinking,
       onChunk: (chunk: string) => {
         if (store.stopRequested) return
         if (streamedText) return // already handled by ai:token events
@@ -635,6 +610,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     try {
       store.status = 'thinking'
       await chat(chatOptions)
+      if (!store.isStreamCurrent(cancel)) return
       // Preserve raw API message blocks for conversation history
       if (chatOptions._rawApiMsg) {
         assistantMsg._rawApiMsg = chatOptions._rawApiMsg
@@ -652,6 +628,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       // Save immediately so the complete assistant content and raw API message are persisted
       store.doSave()
     } catch (e: any) {
+      if (!store.isStreamCurrent(cancel)) return
       const errMsg = e.message ?? String(e)
       // Convert the failed assistant placeholder to a display-only tool message.
       // This keeps the error visible in the UI without polluting the API conversation.

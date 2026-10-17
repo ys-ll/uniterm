@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, reactive, watch } from 'vue'
 import type { AIAttachment, AIMessage, ExecutionMode, AISession, AIAgentStatus } from '../types/ai'
-import { SaveAISessions, LoadAISessions } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { SaveAIConversation, DeleteAIConversation, LoadAISessions } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { requestId } from '../utils/requestId'
+import { msg } from '../services/message'
 import { buildUserContent, redactAttachmentsForLog } from '../services/attachments'
 import { useLocalStateStore } from './localStateStore'
 import { useTabStore } from './tabStore'
@@ -125,6 +127,7 @@ async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], curre
     const data = await LoadAISessions() as any
     const sessions: AISession[] = (data.sessions || []).map((s: any) => ({
       id: s.id,
+      revision: s.revision || '',
       name: s.name,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
@@ -147,7 +150,8 @@ async function loadSessionsFromBackend(): Promise<{ sessions: AISession[], curre
       }))
     }))
     return { sessions, currentSessionId: data.currentSessionId || null }
-  } catch {
+  } catch (error) {
+    msg.error(`AI history could not be loaded: ${String(error)}`)
     return { sessions: [], currentSessionId: null }
   }
 }
@@ -166,10 +170,26 @@ export const useAIStore = defineStore('ai', () => {
   // elapsed timer in the thinking box. 0 = not currently thinking.
   const thinkingStartedAt = ref<number>(0)
   const stopRequested = ref(false)
+  let streamCancel: (() => void) | null = null
+  function setStreamCancel(cancel: () => void) { streamCancel?.(); streamCancel = cancel }
+  function clearStreamCancel(cancel: () => void) { if (streamCancel === cancel) streamCancel = null }
+  function isStreamCurrent(cancel: () => void) { return streamCancel === cancel }
   const sessions = ref<AISession[]>([])
   const currentSessionId = ref<string | null>(null)
   const lastDebugInfo = ref<{ request: string; error: string } | null>(null)
   const initialized = ref(false)
+  const saved = new Map<string, { revision: string; json: string }>()
+  let saves = Promise.resolve()
+  const saveError = ref('')
+
+  function enqueueSave(action: () => Promise<void>) {
+    saves = saves.then(action).catch(error => {
+      const text = `AI history was not saved. Your local messages are retained; export a copy before reloading. ${String(error)}`
+      if (saveError.value !== text) msg.error(text)
+      saveError.value = text
+    })
+    return saves
+  }
   const pendingCommand = ref<{
     messageId: string
     toolId: string
@@ -354,6 +374,10 @@ export const useAIStore = defineStore('ai', () => {
     sessions.value = data.sessions
       .filter(s => s.messages.length > 0)
       .sort((a, b) => b.updatedAt - a.updatedAt)
+    saved.clear()
+    for (const session of sessions.value) {
+      saved.set(session.id, { revision: session.revision || '', json: JSON.stringify(serializeSession(session)) })
+    }
     // Always start with a fresh session after restart
     currentSessionId.value = null
     initialized.value = true
@@ -390,40 +414,56 @@ export const useAIStore = defineStore('ai', () => {
   }
 
 
-  async function doSave() {
-    try {
-      const data = {
-        sessions: sessions.value.map(s => ({
-          id: s.id,
-          name: s.name,
-          createdAt: s.createdAt,
-          updatedAt: s.updatedAt,
-          messages: s.messages.map(m => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            thinking: m.thinking || '',
-            createdAt: m.createdAt || 0,
-            thinkingDurationMs: m.thinkingDurationMs || 0,
-            tool_call_id: m.tool_call_id || '',
-            tool_calls: m.tool_calls || [],
-            pendingTools: m.pendingTools || [],
-            attachments: m.attachments?.length ? m.attachments : undefined,
-            _rawApiMsg: m._rawApiMsg ? JSON.stringify(m._rawApiMsg) : '',
-          }))
-        })),
-        currentSessionId: currentSessionId.value || '',
-      }
-      await SaveAISessions(data as any)
-    } catch {
-      // ignore save errors
+  function serializeSession(s: AISession) {
+    return {
+      id: s.id,
+      name: s.name,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      messages: s.messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        thinking: m.thinking || '',
+        createdAt: m.createdAt || 0,
+        thinkingDurationMs: m.thinkingDurationMs || 0,
+        tool_call_id: m.tool_call_id || '',
+        tool_calls: m.tool_calls || [],
+        pendingTools: m.pendingTools || [],
+        attachments: m.attachments?.length ? m.attachments : undefined,
+        _rawApiMsg: m._rawApiMsg ? JSON.stringify(m._rawApiMsg) : '',
+      }))
     }
+  }
+
+  function doSave() {
+    const active = sessions.value.find(s => s.id === currentSessionId.value)
+    if (active) active.messages = [...messages.value]
+    const snapshots = sessions.value.filter(s => s.messages.length || saved.has(s.id))
+      .map(s => JSON.stringify(serializeSession(s)))
+    return enqueueSave(async () => {
+      const errors: unknown[] = []
+      for (const json of snapshots) {
+        const entry = JSON.parse(json)
+        if (!sessions.value.some(s => s.id === entry.id)) continue
+        const previous = saved.get(entry.id)
+        if (previous?.json === json) continue
+        try {
+          const revision = await SaveAIConversation(entry, previous?.revision || '')
+          saved.set(entry.id, { json, revision })
+        } catch (error) {
+          errors.push(error)
+        }
+      }
+      if (errors.length) throw new Error(errors.map(String).join('; '))
+      saveError.value = ''
+    })
   }
 
   function createSession(name?: string) {
     const now = Date.now()
     const session: AISession = {
-      id: `session-${now}`,
+      id: `session-${requestId()}`,
       name: name || t('ai.newSession'),
       createdAt: now,
       updatedAt: now,
@@ -432,10 +472,8 @@ export const useAIStore = defineStore('ai', () => {
     sessions.value.unshift(session)
     currentSessionId.value = session.id
     messages.value = []
-    // Trim to max 15 sessions
-    if (sessions.value.length > 15) {
-      sessions.value = sessions.value.slice(0, 15)
-    }
+    // Retention is explicit deletion: a client's local list cannot evict
+    // conversations that another client is still editing.
     clearQueue()
     // The terminal binding is per-conversation: starting a new session drops
     // the lock so the next conversation re-locks onto the active terminal.
@@ -458,17 +496,16 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   function deleteSession(sessionId: string) {
-    const idx = sessions.value.findIndex(s => s.id === sessionId)
-    if (idx === -1) return
-    sessions.value.splice(idx, 1)
-    doSave()
-    if (currentSessionId.value === sessionId) {
-      if (sessions.value.length > 0) {
-        switchSession(sessions.value[0].id)
-      } else {
-        createSession()
+    return enqueueSave(async () => {
+      const previous = saved.get(sessionId)
+      if (previous) await DeleteAIConversation(sessionId, previous.revision)
+      saved.delete(sessionId)
+      sessions.value = sessions.value.filter(s => s.id !== sessionId)
+      if (currentSessionId.value === sessionId) {
+        if (sessions.value.length) switchSession(sessions.value[0].id)
+        else createSession()
       }
-    }
+    })
   }
 
   // Issue #756: drop one message (and its tool-result pairs) from the current
@@ -534,6 +571,7 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   function stop() {
+    streamCancel?.()
     stopRequested.value = true
     isRunning.value = false
     clearQueue()
@@ -744,6 +782,9 @@ export const useAIStore = defineStore('ai', () => {
     systemPrompt,
     stopRequested,
     stop,
+    setStreamCancel,
+    clearStreamCancel,
+    isStreamCurrent,
     resetStop,
     sessions,
     currentSessionId,
@@ -764,6 +805,7 @@ export const useAIStore = defineStore('ai', () => {
     setPendingQuestion,
     clearPendingQuestion,
     initialized,
+    saveError,
     init,
     lastPanelContext,
     setLastPanelContext,

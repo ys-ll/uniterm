@@ -8,7 +8,7 @@ vi.mock('@wailsio/runtime', async (importOriginal) => ({
 }))
 
 vi.mock('../services/containerClient', () => ({
-  connect: vi.fn().mockResolvedValue(undefined),
+  connect: vi.fn().mockResolvedValue('runtime1'),
   disconnect: vi.fn(),
   list: vi.fn().mockResolvedValue([
     { id: 'a1', name: 'web', image: 'nginx', state: 'running', status: 'Up', ports: '', createdAt: '' },
@@ -72,7 +72,7 @@ describe('containerStore', () => {
     const store = useContainerStore()
     await store.open(tab)
     await store.action('tab1', 'a1', 'stop')
-    expect(client.action).toHaveBeenCalledWith('conn1', 'a1', 'stop')
+    expect(client.action).toHaveBeenCalledWith('runtime1', 'a1', 'stop')
     expect(client.list).toHaveBeenCalledTimes(2)
   })
 
@@ -80,7 +80,22 @@ describe('containerStore', () => {
     const store = useContainerStore()
     await store.open(tab)
     store.close('tab1')
-    expect(client.disconnect).toHaveBeenCalledWith('conn1')
+    expect(client.disconnect).toHaveBeenCalledWith('runtime1')
     expect(store.sessions['tab1']).toBeUndefined()
+  })
+
+  it('releases only the late runtime handle when a tab closes during connect', async () => {
+    let finish!: (id: string) => void
+    vi.mocked(client.connect).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const store = useContainerStore()
+    const opening = store.open(tab)
+    store.close(tab.id)
+    await store.open({ ...tab, id: 'second' })
+    finish('late-runtime')
+    await opening
+    expect(client.disconnect).toHaveBeenCalledWith('late-runtime')
+    expect(client.disconnect).not.toHaveBeenCalledWith('runtime1')
+    expect(client.disconnect).not.toHaveBeenCalledWith('conn1')
+    expect(store.sessions.second.connId).toBe('runtime1')
   })
 })

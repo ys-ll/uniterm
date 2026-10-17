@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { GetFavoriteConnections, SaveFavoriteConnections } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetFavoriteConnections, SaveFavoriteConnections, configChanged } from '../services/businessConfig'
 import { Events } from '@wailsio/runtime'
 
 // Module-level un-subscriber for the cross-window store:favorites:changed listener.
@@ -75,12 +75,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
 
   // Listen for cross-window favorites sync.
   unsubFavoritesChanged?.()
-  unsubFavoritesChanged = Events.On('store:favorites:changed', (ev) => {
-    const data = ev.data as string[] | undefined
-    if (Array.isArray(data)) {
-      favoriteIds.value = data
-    }
-  })
+  unsubFavoritesChanged = Events.On('store:favorites:changed', () => { void configChanged('favorites') })
 
   // Load once on first store use — favorites are needed by the sidebar and
   // the start page, and neither should block rendering on the roundtrip.

@@ -24,8 +24,9 @@ export const useContainerStore = defineStore('container', {
   state: () => ({ sessions: {} as Record<string, ContainerSession> }),
   actions: {
     async open(tab: ContainerTab, creds?: ContainerConnectCreds) {
+      this.close(tab.id)
       this.sessions[tab.id] = {
-        connId: tab.connectionId, runtime: tab.runtime,
+        connId: '', runtime: tab.runtime,
         containers: [], images: [], namespaces: [], namespace: 'default',
         loading: true, refreshing: false, imagesLoading: false, error: '',
         info: null,
@@ -39,12 +40,13 @@ export const useContainerStore = defineStore('container', {
         return
       }
       try {
-        await client.connect(tab.connectionId, creds)
+        const handle = await client.connect(tab.connectionId, creds)
         if (this.sessions[tab.id] !== s) {
           // 连接期间 tab 已关闭：回收后端连接
-          client.disconnect(tab.connectionId)
+          await client.disconnect(handle)
           return
         }
+        s.connId = handle
         // 连接成功即结束"连接中"状态，列表各自异步加载：
         // 大节点上 docker ps -a 可能要几十秒，不能让整页卡在加载屏。
         s.loading = false
@@ -143,10 +145,12 @@ export const useContainerStore = defineStore('container', {
     // Mirrors K8sTabContent.openTerminal: exec params go on the panel config so
     // Panel.vue / TabItem.vue can redial the stream on reconnect / duplicate.
     async openContainerExec(tab: ContainerTab, c: ContainerInfo, shell = 'sh') {
-      const info = await client.execSession(tab.connectionId, c.id, shell)
+      const connId = this.sessions[tab.id]?.connId
+      if (!connId) return
+      const info = await client.execSession(connId, c.id, shell)
       const cfg = {
         id: '', name: c.name, type: 'container-exec' as any, host: '', port: 0, user: '', authType: 'password' as any,
-        containerExecConnId: tab.connectionId, containerExecContainerId: c.id, containerExecShell: shell,
+        containerExecConnId: connId, containerExecContainerId: c.id, containerExecShell: shell,
       }
       const panelStore = usePanelStore()
       const tabStore = useTabStore()
@@ -162,9 +166,11 @@ export const useContainerStore = defineStore('container', {
     // 打开容器文件浏览器：container-file 会话走 CreateSession（App 层拦截），
     // 面板/标签复用协议无关的 'sftp' 双栏文件浏览器（同 wsl-file 模式）。
     async openContainerFiles(tab: ContainerTab, c: ContainerInfo) {
+      const connId = this.sessions[tab.id]?.connId
+      if (!connId) return
       const { launchContainerFileBrowser } = await import('../composables/connectionLauncher')
       const config = {
-        id: tab.connectionId, name: c.name, type: 'container-file' as any, host: '', port: 0, user: '', authType: 'password' as any,
+        id: connId, name: c.name, type: 'container-file' as any, host: '', port: 0, user: '', authType: 'password' as any,
         containerId: c.id,
       }
       await launchContainerFileBrowser(config as any, { persist: false })
@@ -172,7 +178,7 @@ export const useContainerStore = defineStore('container', {
     close(tabId: string) {
       const s = this.sessions[tabId]
       if (!s) return
-      client.disconnect(s.connId)
+      if (s.connId) void client.disconnect(s.connId)
       delete this.sessions[tabId]
     },
   },

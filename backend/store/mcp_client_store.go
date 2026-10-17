@@ -21,6 +21,8 @@ const (
 // MCPClientConfig is one external MCP server connection, as persisted in
 // mcp_clients.json.
 type MCPClientConfig struct {
+	// RPC edit token; stripped before persistence so existing file format stays compatible.
+	Revision string `json:"revision,omitempty"`
 	// Name is the user-facing label and the stable key used to namespace its
 	// tools (mcp__<name>__<tool>). Required, unique, non-empty.
 	Name string `json:"name"`
@@ -108,6 +110,7 @@ func (s *MCPClientStore) saveLocked(clients []MCPClientConfig, force bool) error
 	seen := make(map[string]bool)
 	clean := make([]MCPClientConfig, 0, len(clients))
 	for _, cfg := range clients {
+		cfg.Revision = ""
 		cfg.Name = strings.TrimSpace(cfg.Name)
 		if cfg.Name == "" || seen[cfg.Name] {
 			continue

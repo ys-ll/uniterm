@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -19,6 +20,7 @@ type AISessionData struct {
 }
 
 type AISessionEntry struct {
+	Revision  string           `json:"revision,omitempty"`
 	ID        string           `json:"id"`
 	Name      string           `json:"name"`
 	CreatedAt int64            `json:"createdAt"`
@@ -81,6 +83,12 @@ func (s *AISessionStore) shardPath(id string) string {
 // from F-103. Orphan shards (sessions no longer in data) are removed.
 // F-103.
 func (s *AISessionStore) Save(data AISessionData) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.save(data)
+}
+
+func (s *AISessionStore) save(data AISessionData) error {
 	if err := os.MkdirAll(s.shardDir(), 0755); err != nil {
 		return err
 	}
@@ -88,6 +96,7 @@ func (s *AISessionStore) Save(data AISessionData) error {
 	wanted := make(map[string]struct{}, len(data.Sessions))
 	for i := range data.Sessions {
 		sess := data.Sessions[i]
+		sess.Revision = ""
 		if sess.ID == "" {
 			continue
 		}
@@ -100,16 +109,12 @@ func (s *AISessionStore) Save(data AISessionData) error {
 		// shard's content is unchanged (lastSavedHash comes from the
 		// per-shard hash cache). The wanted set above is still recorded, so
 		// skipped shards survive the orphan cleanup below.
-		s.mu.Lock()
 		last := s.shardHashes[name]
-		s.mu.Unlock()
 		h, err := saveEncryptedFile(aiSessionFileName, filepath.Join(s.shardDir(), name+".json"), &sess, nil, last)
-		s.mu.Lock()
 		if s.shardHashes == nil {
 			s.shardHashes = make(map[string]string)
 		}
 		s.shardHashes[name] = h
-		s.mu.Unlock()
 		if err != nil {
 			return fmt.Errorf("write shard %s: %w", sess.ID, err)
 		}
@@ -135,9 +140,7 @@ func (s *AISessionStore) Save(data AISessionData) error {
 			continue
 		}
 		_ = os.Remove(filepath.Join(s.shardDir(), name))
-		s.mu.Lock()
 		delete(s.shardHashes, id)
-		s.mu.Unlock()
 	}
 
 	return nil
@@ -147,6 +150,12 @@ func (s *AISessionStore) Save(data AISessionData) error {
 // one-time migration from the legacy ai-sessions.json file if present.
 // F-103.
 func (s *AISessionStore) Load() (AISessionData, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.load()
+}
+
+func (s *AISessionStore) load() (AISessionData, error) {
 	if err := s.migrateLegacy(); err != nil {
 		// Migration failures must not block load — log via returned error
 		// only if caller cares; otherwise fall through to shard scan.
@@ -176,12 +185,15 @@ func (s *AISessionStore) Load() (AISessionData, error) {
 		}
 		// Seed the per-shard skip-state so an unchanged first Save after
 		// startup doesn't rewrite the shard.
-		s.mu.Lock()
 		if s.shardHashes == nil {
 			s.shardHashes = make(map[string]string)
 		}
 		s.shardHashes[e.Name()[:len(e.Name())-len(".json")]] = hash
-		s.mu.Unlock()
+		sess.Revision = ""
+		sess.Revision, err = Revision(sess)
+		if err != nil {
+			return out, err
+		}
 		out.Sessions = append(out.Sessions, sess)
 	}
 
@@ -201,9 +213,87 @@ func (s *AISessionStore) migrateLegacy() error {
 		return nil
 	}
 	if len(legacy.Sessions) > 0 {
-		if err := s.Save(legacy); err != nil {
+		if err := s.save(legacy); err != nil {
 			return err
 		}
 	}
 	return os.Remove(s.filePath())
+}
+
+func validConversationID(id string) bool {
+	return id != "" && id != "." && id != ".." && len(id) <= 128 && filepath.Base(id) == id && !strings.ContainsAny(id, `/\\`)
+}
+
+// Mutate only the named shard. Omitted conversations are never deletions.
+func (s *AISessionStore) Upsert(entry AISessionEntry, expected string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !validConversationID(entry.ID) {
+		return "", fmt.Errorf("invalid conversation ID")
+	}
+	if err := s.migrateLegacy(); err != nil {
+		return "", err
+	}
+	current, _, _, exists, err := loadEncryptedFile[AISessionEntry](aiSessionFileName, s.shardPath(entry.ID), nil)
+	if err != nil {
+		return "", err
+	}
+	revision := ""
+	if exists {
+		current.Revision = ""
+		revision, err = Revision(current)
+		if err != nil {
+			return "", err
+		}
+	}
+	entry.Revision = ""
+	next, err := Revision(entry)
+	if err != nil {
+		return "", err
+	}
+	if revision != expected {
+		if revision == next {
+			return revision, nil
+		} // retry after a lost response
+		return "", ErrConflict
+	}
+	if err := os.MkdirAll(s.shardDir(), 0755); err != nil {
+		return "", err
+	}
+	hash, err := saveEncryptedFile(aiSessionFileName, s.shardPath(entry.ID), &entry, nil, "")
+	if err == nil {
+		if s.shardHashes == nil {
+			s.shardHashes = make(map[string]string)
+		}
+		s.shardHashes[entry.ID] = hash
+	}
+	return next, err
+}
+
+func (s *AISessionStore) Delete(id, expected string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !validConversationID(id) {
+		return fmt.Errorf("invalid conversation ID")
+	}
+	if err := s.migrateLegacy(); err != nil {
+		return err
+	}
+	entry, _, _, exists, err := loadEncryptedFile[AISessionEntry](aiSessionFileName, s.shardPath(id), nil)
+	if err != nil || !exists {
+		return err
+	}
+	entry.Revision = ""
+	revision, err := Revision(entry)
+	if err != nil {
+		return err
+	}
+	if expected != revision {
+		return ErrConflict
+	}
+	if err := os.Remove(s.shardPath(id)); err != nil {
+		return err
+	}
+	delete(s.shardHashes, id)
+	return nil
 }

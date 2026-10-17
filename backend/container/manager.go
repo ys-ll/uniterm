@@ -24,6 +24,8 @@ type conn struct {
 	provider *Provider
 	ssh      *ssh.Client // local 为 nil
 	onClose  func()
+	refs     int
+	detached bool
 }
 
 type streamHandle struct {
@@ -90,7 +92,13 @@ func (m *Manager) ConnectSSH(id string, rt Runtime, ns string, cfg session.Conne
 func (m *Manager) Disconnect(id string) {
 	m.mu.Lock()
 	c, ok := m.conns[id]
-	delete(m.conns, id)
+	closeConn := ok && c.refs == 0
+	if ok {
+		c.detached = true
+	}
+	if closeConn {
+		delete(m.conns, id)
+	}
 	var streams []*streamHandle
 	for sid, s := range m.streams {
 		if s.connID == id {
@@ -102,7 +110,7 @@ func (m *Manager) Disconnect(id string) {
 	for _, s := range streams {
 		_ = s.stream.Close()
 	}
-	if ok {
+	if closeConn {
 		if c.ssh != nil {
 			_ = c.ssh.Close()
 		}
@@ -110,6 +118,39 @@ func (m *Manager) Disconnect(id string) {
 			c.onClose()
 		}
 	}
+}
+
+func (m *Manager) SetOnClose(id string, close func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if c := m.conns[id]; c != nil {
+		c.onClose = close
+	}
+}
+
+// Exec/file sessions retain the runner when their management page is closed.
+// The returned release is idempotent because EOF and explicit close can race.
+func (m *Manager) Retain(id string) (func(), error) {
+	m.mu.Lock()
+	c := m.conns[id]
+	if c == nil {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("container connection not found: %s", id)
+	}
+	c.refs++
+	m.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.mu.Lock()
+			c.refs--
+			closeConn := c.detached && c.refs == 0
+			m.mu.Unlock()
+			if closeConn {
+				m.Disconnect(id)
+			}
+		})
+	}, nil
 }
 
 func (m *Manager) Provider(id string) (*Provider, error) {

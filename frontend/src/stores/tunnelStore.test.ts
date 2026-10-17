@@ -12,6 +12,7 @@ const backend = vi.hoisted(() => ({
 const onEvent = vi.hoisted(() => vi.fn())
 
 vi.mock('../../bindings/github.com/ys-ll/uniterm/app', () => backend)
+vi.mock('../services/businessConfig', () => ({ LoadTunnels: backend.LoadTunnels, SaveTunnels: backend.SaveTunnels, configChanged: vi.fn() }))
 vi.mock('@wailsio/runtime', () => ({ Events: { On: onEvent } }))
 vi.mock('../services/message', () => ({ msg: { error: vi.fn() } }))
 vi.mock('../i18n', () => ({ t: (key: string) => key }))

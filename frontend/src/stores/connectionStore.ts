@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { SaveConnections, LoadConnections } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { SaveConnections, LoadConnections, configChanged } from '../services/businessConfig'
 import { Events } from '@wailsio/runtime'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 
@@ -327,12 +327,7 @@ export const useConnectionStore = defineStore('connection', () => {
 
   // Listen for cross-window connection sync
   unsubConnectionsChanged?.()
-  unsubConnectionsChanged =Events.On('store:connections:changed', (ev) => { const data: { groups?: ConnectionGroup[]; connections?: ConnectionConfig[] } = ev.data; 
-    if (data) {
-      if (data.groups) groups.value = data.groups
-      if (data.connections) connections.value = data.connections
-    }
-   })
+  unsubConnectionsChanged = Events.On('store:connections:changed', () => { void configChanged('connections') })
 
   function dispose() {
     unsubConnectionsChanged?.()

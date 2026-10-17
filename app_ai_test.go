@@ -879,6 +879,12 @@ func TestMCPClientUpdateRenamesWithoutCreatingDuplicate(t *testing.T) {
 	if err := a.SaveMCPClient(cfg); err != nil {
 		t.Fatal(err)
 	}
+	listed, err := a.ListMCPClients()
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("list: %v %v", listed, err)
+	}
+	cfg = listed[0]
+	stale := cfg
 	cfg.Name = "after"
 	cfg.Args = []string{"-y", "updated", "path with spaces"}
 	if err := a.UpdateMCPClient("before", cfg); err != nil {
@@ -890,6 +896,7 @@ func TestMCPClientUpdateRenamesWithoutCreatingDuplicate(t *testing.T) {
 	}
 	other := cfg
 	other.Name = "other"
+	other.Revision = ""
 	if err := a.SaveMCPClient(other); err != nil {
 		t.Fatal(err)
 	}
@@ -898,6 +905,9 @@ func TestMCPClientUpdateRenamesWithoutCreatingDuplicate(t *testing.T) {
 	}
 	if err := a.UpdateMCPClient("missing", cfg); err == nil {
 		t.Fatal("stale edit created a client")
+	}
+	if err := a.SaveMCPClient(stale); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("stale edit resurrected renamed client: %v", err)
 	}
 	all, err = a.mcpClientStore.Load()
 	if err != nil || len(all) != 2 {

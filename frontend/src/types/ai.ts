@@ -64,6 +64,7 @@ export interface AIMessage {
 }
 
 export interface AISession {
+  revision?: string
   id: string
   name: string
   createdAt: number

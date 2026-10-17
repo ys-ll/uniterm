@@ -325,7 +325,7 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useI18n } from '../i18n'
 import { runAgent, approveTool, rejectTool, continueAgent, answerQuestion, dismissQuestion } from '../services/agent'
-import { CancelChatStream, SaveFileDialogFiltered, WriteFileBase64, ReadLocalAttachmentFile } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { SaveFileDialogFiltered, WriteFileBase64, ReadLocalAttachmentFile } from '../../bindings/github.com/ys-ll/uniterm/app'
 import type { AIAttachment, ExecutionMode } from '../types/ai'
 import {
   ATTACHMENT_FILE_ACCEPT,
@@ -1773,7 +1773,6 @@ function onStop() {
     aiStore.clearQueue()
     return
   }
-  CancelChatStream().catch(() => { /* ignore */ })
   aiStore.stop()
 }
 

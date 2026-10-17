@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { LoadProxies, SaveProxies } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { LoadProxies, SaveProxies, configChanged } from '../services/businessConfig'
 import { Events } from '@wailsio/runtime'
 import type { Proxy, ProxyStoreData } from '../types/proxy'
 
@@ -30,9 +30,7 @@ export const useProxyStore = defineStore('proxy', () => {
   // Reload from disk when the backend pushes updated proxy data (e.g. after a
   // cloud sync pull), so the list isn't stale until restart.
   unsubProxiesChanged?.()
-  unsubProxiesChanged =Events.On('store:proxies:changed', (ev) => { const data: ProxyStoreData = ev.data; 
-    if (data?.proxies) proxies.value = data.proxies
-   })
+  unsubProxiesChanged = Events.On('store:proxies:changed', () => { void configChanged('proxies') })
 
   function dispose() {
     unsubProxiesChanged?.()
