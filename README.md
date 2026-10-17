@@ -210,6 +210,8 @@ sudo rpm -i uniterm.rpm
 2. For another device, choose **Local network (0.0.0.0)** and save a generated or fixed login token. The browser signs in with that token. A saved token also requires login on loopback; replacing it signs out existing browsers.
 3. Choose **Existing terminals** to join a running text terminal, or open a new connection. Both desktop and browser can type; the last actively used view controls the terminal size. Refreshing or closing the browser view preserves the host terminal. Closing the session on the desktop ends it for browsers too.
 
+Reloading restores the open text-terminal views, their current screen, and up to 1,000 recent history rows. The desktop keeps its configured history limit.
+
 The browser reuses the AI sidebar, database client, file manager, VNC and SPICE. AI requests run independently per client; VNC/SPICE open independent connections. For a native SPICE TCP server, use `tcp://host` and its port. File uploads/downloads use the device running the browser; the **Host filesystem** pane still refers to the desktop computer. RDP and X11 windows use the desktop app.
 
 Web access is off by default and belongs to the running desktop instance. Signed-in browsers are trusted operators of that instance. Keep the desktop app running while using its browser URL.
