@@ -9,6 +9,12 @@ import type { WebTerminalSnapshot } from './webTerminalBridge'
 // saved attributes, OSC8, image tiles, hidden cursor, tabs and several modes.
 // Cell storage is included as a bounded sidecar, not inferred from ANSI text.
 const FORMAT = 'xterm-6.0.0-uniterm.1/serialize-0.14.0/image-0.9.0/v1'
+// Snapshot history is a suffix of at most 1000 physical rows, with 4 MiB
+// reserved for its base64 cells (3 uint32s/cell = 16 encoded bytes). Never
+// capture the desktop's whole 5000–50000-row buffer just to check its size.
+const MAX_HISTORY_LINES = 1000
+const HISTORY_CELL_BYTES = 4 * 1024 * 1024
+const MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
 const bufferKeys = ['x', 'y', 'ybase', 'ydisp', 'scrollTop', 'scrollBottom', 'savedX', 'savedY', 'savedCharset', 'tabs']
 const inputKeys = ['_windowTitle', '_iconName', '_windowTitleStack', '_iconNameStack']
 const clone = <T>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value))
@@ -59,12 +65,16 @@ function restoreAttr(core: any, target: any, data: any): void {
   target.extended = restoreExtended(core, data.extended)
 }
 
-function captureBuffer(buffer: any): any {
+function captureBuffer(buffer: any, start = 0): any {
   return {
     ...pick(buffer, bufferKeys),
+    ybase: buffer.ybase - start,
+    ydisp: Math.max(0, buffer.ydisp - start),
+    // InputHandler.saveCursor stores ybase+y, not a screen-relative row.
+    savedY: Math.max(0, buffer.savedY - start),
     savedCurAttrData: clone(buffer.savedCurAttrData),
-    lines: Array.from({ length: buffer.lines.length }, (_, i) => {
-      const line = buffer.lines.get(i)
+    lines: Array.from({ length: buffer.lines.length - start }, (_, i) => {
+      const line = buffer.lines.get(start + i)
       return { data: encode(line._data.subarray(0, line.length * 3)), combined: clone(line._combined), extended: clone(line._extendedAttrs), wrapped: line.isWrapped }
     }),
   }
@@ -85,13 +95,22 @@ function restoreBuffer(core: any, buffer: any, data: any): void {
   }
 }
 
-function captureLinks(core: any): any[] {
-  return [...core._oscLinkService._dataByLinkId].map(([id, entry]: any) => ({
-    id, data: clone(entry.data), lines: entry.lines.map((marker: any) => ({
-      line: marker.line,
-      buffer: core._bufferService.buffers.normal.markers.includes(marker) ? 'normal' : 'alt',
-    })),
-  }))
+function captureLinks(core: any, normalStart: number): any[] {
+  const { normal, alt } = core._bufferService.buffers
+  const normalMarkers = new Set(normal.markers)
+  const activeIds = new Set([core._inputHandler._curAttrData.extended.urlId, normal.savedCurAttrData.extended.urlId, alt.savedCurAttrData.extended.urlId])
+  const links = []
+  for (const [id, entry] of core._oscLinkService._dataByLinkId) {
+    const lines = []
+    for (const marker of entry.lines) {
+      const buffer = normalMarkers.has(marker) ? 'normal' : 'alt'
+      const line = marker.line - (buffer === 'normal' ? normalStart : 0)
+      if (line >= 0) lines.push({ line, buffer })
+    }
+    // An open OSC8 may continue after all its existing cells were cropped.
+    if (lines.length || activeIds.has(id)) links.push({ id, data: clone(entry.data), lines })
+  }
+  return links
 }
 
 function restoreLinks(core: any, links: any[]): void {
@@ -113,12 +132,25 @@ function restoreLinks(core: any, links: any[]): void {
   }
 }
 
-function captureImages(addon?: ImageAddon): any {
+function captureImages(addon: ImageAddon | undefined, core: any, normalStart: number): any {
   if (!addon) return undefined
   const a = addon as any
   const storage = a._storage
   if (!storage?._images) throw new Error('Unsupported ImageAddon snapshot internals')
-  const images = [...storage._images].map(([id, image]: any) => {
+  const tiles = new Map<number, number>()
+  for (const [buffer, start] of [[core._bufferService.buffers.normal, normalStart], [core._bufferService.buffers.alt, 0]]) {
+    for (let y = start; y < buffer.lines.length; y++) {
+      const line = buffer.lines.get(y)
+      for (const [col, attr] of Object.entries<any>(line._extendedAttrs)) {
+        // Extended-attribute objects can outlive erased cells in this fork.
+        if ((line.getBg(Number(col)) & 0x10000000) && attr.imageId >= 0) tiles.set(attr.imageId, (tiles.get(attr.imageId) ?? 0) + 1)
+      }
+    }
+  }
+  const images = []
+  for (const [id, image] of storage._images) {
+    const tileCount = tiles.get(id)
+    if (!tileCount) continue
     if (!image.orig) throw new Error('Image data was evicted before snapshot')
     const canvas = document.createElement('canvas')
     canvas.width = image.orig.width
@@ -126,8 +158,9 @@ function captureImages(addon?: ImageAddon): any {
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Cannot capture terminal image canvas')
     ctx.drawImage(image.orig, 0, 0)
-    return { id, png: canvas.toDataURL('image/png'), origCellSize: image.origCellSize, tileCount: image.tileCount, bufferType: image.bufferType, marker: image.marker?.line }
-  })
+    const marker = image.marker ? Math.max(0, image.marker.line - (image.bufferType === 'normal' ? normalStart : 0)) : undefined
+    images.push({ id, png: canvas.toDataURL('image/png'), origCellSize: image.origCellSize, tileCount, bufferType: image.bufferType, marker })
+  }
   // Sixel palette persists between images, even when their cells were erased.
   const sixel = [...a._handlers.values()].find((h: any) => '_dec' in h) as any
   const decoder = sixel?._dec
@@ -174,38 +207,66 @@ async function restoreImages(terminal: Terminal, addon: ImageAddon | undefined, 
 
 export interface SnapshotAddons { image?: ImageAddon; progress?: ProgressAddon }
 
+function captureExtra(extra: Record<string, any>, normal: any, start: number): Record<string, any> {
+  if (!start) return clone(extra)
+  const lineOffset = (extra.lineOffset ?? 0) + start
+  const entries = extra.entries?.filter(([row]: [number, unknown]) => row >= lineOffset && row < (extra.lineOffset ?? 0) + normal.lines.length)
+  // A cut can bisect a wrapped logical line. Anchor its original number/time
+  // at the first retained row; all other registry keys stay absolute.
+  if (entries && normal.lines.get(start)?.isWrapped) {
+    let first = start
+    while (first > 0 && normal.lines.get(first).isWrapped) first--
+    const meta = extra.entries.find(([row]: [number, unknown]) => row === (extra.lineOffset ?? 0) + first)?.[1]
+    if (meta && !entries.some(([row]: [number, unknown]) => row === lineOffset)) entries.unshift([lineOffset, meta])
+  }
+  return clone({ ...extra, lineOffset, ...(entries ? { entries } : {}) })
+}
+
 /** Called inside stream.run: no output or canonical resize can cross this
  * boundary while PNGs/sidecars are captured. The returned sequence is parsed. */
 export function captureTerminalSnapshot(id: string, stream: TerminalStream, addons: SnapshotAddons = {}, extra: Record<string, any> = {}): WebTerminalSnapshot {
   const terminal = stream.terminal
   const core = coreOf(terminal)
   if (core._inputHandler._parser.currentState !== 0) throw new Error('Snapshot requires parser Ground')
+  const { normal, alt } = core._bufferService.buffers
+  let history = Math.min(normal.ybase, MAX_HISTORY_LINES, Math.floor(HISTORY_CELL_BYTES / (terminal.cols * 16)))
   const serializer = new SerializeAddon()
   terminal.loadAddon(serializer)
-  const ansi = serializer.serialize()
-  serializer.dispose()
-  const state = {
-    format: FORMAT, pending: stream.frames.pending, outputOptions: clone(stream.options),
-    scrollback: terminal.options.scrollback,
-    normal: captureBuffer(core._bufferService.buffers.normal), alt: captureBuffer(core._bufferService.buffers.alt),
-    active: terminal.buffer.active.type,
-    input: pick(core._inputHandler, inputKeys), attr: clone(core._inputHandler._curAttrData),
-    precedingJoinState: core._inputHandler._parser.precedingJoinState,
-    charset: pick(core._charsetService, ['charset', 'glevel', '_charsets']),
-    modes: clone(core.coreService.modes), decModes: clone(core.coreService.decPrivateModes),
-    cursorHidden: core.coreService.isCursorHidden,
-    mouse: { protocol: core.coreMouseService.activeProtocol, encoding: core.coreMouseService.activeEncoding },
-    options: pick(terminal.options, ['cursorStyle', 'cursorBlink', 'applicationCursorKeys', 'convertEol'].filter(k => (terminal.options as any)[k] !== undefined)),
-    links: captureLinks(core), images: captureImages(addons.image),
-    progress: addons.progress ? clone(addons.progress.progress) : undefined,
-    // OSC palette changes, including restore defaults, are presentation state.
-    colors: core._themeService ? pick(core._themeService.colors, ['foreground', 'background', 'cursor', 'ansi']) : undefined,
-    restoreColors: core._themeService ? clone(core._themeService._restoreColors) : undefined,
-    extra,
-  }
-  const snapshot = { sessionId: id, sequence: stream.sequence, cols: terminal.cols, rows: terminal.rows, ansi, state }
-  if (new TextEncoder().encode(JSON.stringify(snapshot)).length > 16 * 1024 * 1024) throw new Error('Exact terminal snapshot exceeds 16 MiB')
-  return snapshot
+  try {
+    for (;;) {
+      const start = normal.ybase - history
+      const ansi = serializer.serialize({ scrollback: Math.max(0, normal.lines.length - start - terminal.rows) })
+      const state = {
+        format: FORMAT, pending: stream.frames.pending, outputOptions: clone(stream.options),
+        // Preserve remaining headroom so both emulators begin trimming on the
+        // same future scroll. This also preserves the fork's saved-cursor behavior
+        // at a full buffer; desktop options and buffers are never modified here.
+        scrollback: terminal.options.scrollback! - start,
+        normal: captureBuffer(normal, start), alt: captureBuffer(alt),
+        active: terminal.buffer.active.type,
+        input: pick(core._inputHandler, inputKeys), attr: clone(core._inputHandler._curAttrData),
+        precedingJoinState: core._inputHandler._parser.precedingJoinState,
+        charset: pick(core._charsetService, ['charset', 'glevel', '_charsets']),
+        modes: clone(core.coreService.modes), decModes: clone(core.coreService.decPrivateModes),
+        cursorHidden: core.coreService.isCursorHidden,
+        mouse: { protocol: core.coreMouseService.activeProtocol, encoding: core.coreMouseService.activeEncoding },
+        options: pick(terminal.options, ['cursorStyle', 'cursorBlink', 'applicationCursorKeys', 'convertEol'].filter(k => (terminal.options as any)[k] !== undefined)),
+        links: captureLinks(core, start), nextLinkId: core._oscLinkService._nextId,
+        images: captureImages(addons.image, core, start),
+        progress: addons.progress ? clone(addons.progress.progress) : undefined,
+        // OSC palette changes, including restore defaults, are presentation state.
+        colors: core._themeService ? pick(core._themeService.colors, ['foreground', 'background', 'cursor', 'ansi']) : undefined,
+        restoreColors: core._themeService ? clone(core._themeService._restoreColors) : undefined,
+        extra: captureExtra(extra, normal, start),
+      }
+      const snapshot = { sessionId: id, sequence: stream.sequence, cols: terminal.cols, rows: terminal.rows, ansi, state }
+      if (new TextEncoder().encode(JSON.stringify(snapshot)).length <= MAX_SNAPSHOT_BYTES) return snapshot
+      // Attrs/links/images count too. Retry only the already-bounded suffix;
+      // neither current screen may be cut to make an oversized snapshot fit.
+      if (!history) throw new Error('Exact terminal snapshot exceeds 16 MiB')
+      history = Math.floor(history / 2)
+    }
+  } finally { serializer.dispose() }
 }
 
 export async function restoreTerminalSnapshot(stream: TerminalStream, snapshot: WebTerminalSnapshot, addons: SnapshotAddons = {}): Promise<void> {
@@ -226,6 +287,7 @@ export async function restoreTerminalSnapshot(stream: TerminalStream, snapshot: 
   restoreBuffer(core, core._bufferService.buffers.alt, s.alt)
   await restoreImages(terminal, addons.image, s.images)
   restoreLinks(core, s.links)
+  core._oscLinkService._nextId = s.nextLinkId ?? core._oscLinkService._nextId
   Object.assign(core._inputHandler, s.input)
   restoreAttr(core, core._inputHandler._curAttrData, s.attr)
   Object.assign(core._charsetService, s.charset)
