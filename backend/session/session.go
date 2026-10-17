@@ -409,6 +409,7 @@ type baseSession struct {
 	onDataCallback   func([]byte)
 	onBinaryCallback func([]byte)
 	onStatusCallback func(SessionStatus)
+	onOutputGap      func()
 	// statusListeners are ADDITIONAL status observers (AddStatusListener),
 	// fired after onStatusCallback. Cross-cutting concerns (the Android
 	// foreground-keepalive counter) register here so they survive the App
@@ -514,6 +515,14 @@ func (s *baseSession) SetOnDataCallback(cb func([]byte)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onDataCallback = cb
+}
+
+// SetOnOutputGap reports a lossy upstream queue to the terminal authority.
+// A framebuffer after missing bytes must not be advertised as an exact snapshot.
+func (s *baseSession) SetOnOutputGap(cb func()) {
+	s.mu.Lock()
+	s.onOutputGap = cb
+	s.mu.Unlock()
 }
 
 func (s *baseSession) SetOnStatusChangeCallback(cb func(SessionStatus)) {
@@ -622,9 +631,11 @@ func (s *baseSession) setStatus(st SessionStatus) {
 // Called by terminal session types from Connect. Idempotent.
 func (s *baseSession) startEmitLoop() {
 	s.emitOnce.Do(func() {
+		s.emitMu.Lock()
 		s.emitQuit = make(chan struct{})
 		s.emitDone = make(chan struct{})
 		s.emitCond = sync.NewCond(&s.emitMu)
+		s.emitMu.Unlock()
 		go s.emitLoop()
 	})
 }
@@ -740,6 +751,12 @@ func (s *baseSession) drainEmitQueue() [][]byte {
 	s.emitMu.Unlock()
 	if dropped > 0 {
 		log.Writef("session %s: emit queue overflow, dropped %d stale chunk(s)", s.id, dropped)
+		s.mu.RLock()
+		gap := s.onOutputGap
+		s.mu.RUnlock()
+		if gap != nil {
+			gap()
+		}
 	}
 	return chunks
 }

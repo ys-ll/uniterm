@@ -228,6 +228,7 @@ func main() {
 
 	w3app := application.New(application.Options{
 		Name:       "uniTerm",
+		Transport:  app.webTransport,
 		Assets:     application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		OnShutdown: app.shutdown,
 		// Single-instance: a second GUI launch acquires the OS lock, notifies

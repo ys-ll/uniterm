@@ -23,6 +23,7 @@ import (
 	"github.com/ys-ll/uniterm/backend/sync"
 	"github.com/ys-ll/uniterm/backend/update"
 	"github.com/ys-ll/uniterm/backend/utils"
+	"github.com/ys-ll/uniterm/backend/webaccess"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"net"
@@ -45,6 +46,12 @@ type App struct {
 	window               *application.WebviewWindow
 	notifier             *notifications.NotificationService // system notifications (MCP approval prompts)
 	sessionManager       *session.SessionManager
+	webAccess            *webaccess.Server
+	webTransport         *webTransport
+	webTermMu            stdsync.Mutex
+	webTermClosing       bool
+	webTerminals         map[string]*webTerminal
+	webRequests          map[string]*webTerminalRequest
 	k8sManager           *k8s.Manager
 	containerManager     *container.Manager
 	connectionStore      *store.ConnectionStore
@@ -184,6 +191,8 @@ func NewApp(webviewDataPath string) *App {
 		containerManager:   container.NewManager(),
 		errCh:              make(chan error, 16),
 	}
+	a.webAccess = webaccess.New()
+	a.webTransport = newWebTransport(a.webAccess)
 
 	// Transfer progress is published as Wails events, not OSC sequences in the
 	// terminal data stream. MCP file tools additionally hook completion
@@ -203,12 +212,29 @@ func NewApp(webviewDataPath string) *App {
 	return a
 }
 
-// emit is a v3 helper that forwards an event to the frontend. It no-ops when
-// the application reference is not yet attached (e.g. in unit tests that build
-// an App without a running Wails runtime), matching the previous
-// `if a.ctx != nil` defensiveness.
+// emit queues events through Wails, ordering terminal output against grid
+// changes. Standalone backend tests exercise the same transport directly.
 func (a *App) emit(name string, data ...any) {
+	if len(data) == 1 && (name == "session:data" || name == "session:binary" || name == "session:status" || name == "session:gap") {
+		if payload, ok := data[0].(map[string]any); ok {
+			if id, ok := payload["id"].(string); ok {
+				if terminal, err := a.webTerminalFor(id); err == nil {
+					terminal.events.Lock()
+					defer terminal.events.Unlock()
+				}
+			}
+		}
+	}
 	if a.app == nil {
+		if a.webTransport != nil {
+			var payload any
+			if len(data) == 1 {
+				payload = data[0]
+			} else if len(data) > 1 {
+				payload = data
+			}
+			a.webTransport.DispatchWailsEvent(&application.CustomEvent{Name: name, Data: payload})
+		}
 		return
 	}
 	a.app.Event.Emit(name, data...)
@@ -417,6 +443,11 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 	}
 
 	a.storesReady = true
+	if a.webAccess != nil {
+		if err := a.webAccess.Load(dataDir); err != nil {
+			a.sendStartupErr(fmt.Errorf("web access: %w", err))
+		}
+	}
 
 	// External-agent MCP server: auto-start when enabled in settings.
 	a.mcpApprovals = make(map[string]chan mcpApprovalVerdict)
@@ -807,6 +838,19 @@ func (a *App) watchForeground(ctx context.Context) {
 }
 
 func (a *App) shutdown() {
+	if a.webAccess != nil {
+		a.webAccess.Close()
+	}
+	a.webTermMu.Lock()
+	a.webTermClosing = true
+	for key, req := range a.webRequests {
+		delete(a.webRequests, key)
+		req.result <- WebTerminalSnapshot{}
+	}
+	a.webTermMu.Unlock()
+	for _, terminal := range a.GetWebSessions() {
+		_ = a.CloseSession(terminal.ID)
+	}
 	a.unsubclassMainWindow()
 	if a.mcpServer != nil {
 		a.mcpServer.Stop()

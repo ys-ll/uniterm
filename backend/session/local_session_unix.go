@@ -132,7 +132,8 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 	s.cmd.Env = ensureTerminalEnv(os.Environ(), ExplicitTermType(config.TermType))
 	s.cmd.Dir = workDir
 
-	ptyFile, err := pty.Start(s.cmd)
+	cols, rows := s.getInitialSize(80, 24)
+	ptyFile, err := pty.StartWithSize(s.cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 	if err != nil {
 		s.setStatus(StatusError)
 		return fmt.Errorf("start pty: %w", err)
@@ -150,10 +151,6 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 	}()
 
 	s.setStatus(StatusConnected)
-
-	if cols, rows := s.GetPendingSize(); cols > 0 && rows > 0 {
-		_ = pty.Setsize(s.pty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
-	}
 
 	s.startEmitLoop()
 	go s.readLoop()

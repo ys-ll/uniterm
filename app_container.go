@@ -13,6 +13,7 @@ import (
 	"github.com/ys-ll/uniterm/backend/container"
 	"github.com/ys-ll/uniterm/backend/k8s"
 	"github.com/ys-ll/uniterm/backend/session"
+	"github.com/ys-ll/uniterm/backend/webaccess"
 )
 
 // K8sContextInfo 是前端可见的 context 元信息。
@@ -135,7 +136,7 @@ func (a *App) K8sStopLogStream(streamID string) {
 	a.k8sManager.StopLogStream(streamID)
 }
 
-func (a *App) K8sExecSession(connID, namespace, pod, container string) (*session.SessionInfo, error) {
+func (a *App) K8sExecSession(ctx context.Context, connID, namespace, pod, container string) (*session.SessionInfo, error) {
 	if a.k8sManager == nil {
 		return nil, fmt.Errorf("k8s manager not initialized")
 	}
@@ -160,6 +161,17 @@ func (a *App) K8sExecSession(connID, namespace, pod, container string) (*session
 		})
 	})
 	a.sessionManager.Add(sess)
+	if err := a.registerWebTerminal(sess, session.ConnectionConfig{ID: connID, Name: pod, InitialCols: 80, InitialRows: 24}); err != nil {
+		_ = a.sessionManager.Close(id)
+		return nil, err
+	}
+	if webaccess.IsBrowser(ctx) {
+		if _, err := a.requestWebTerminal(ctx, id, true); err != nil {
+			_ = a.CloseSession(id)
+			return nil, err
+		}
+	}
+	sess.StartOutput()
 	return &session.SessionInfo{ID: id, Type: "container-exec", Title: pod, Status: session.StatusConnected}, nil
 }
 
@@ -416,7 +428,7 @@ func (a *App) ContainerStopStream(streamID string) {
 	a.containerManager.StopStream(streamID)
 }
 
-func (a *App) ContainerExecSession(connectionID, containerID, shell string) (*session.SessionInfo, error) {
+func (a *App) ContainerExecSession(ctx context.Context, connectionID, containerID, shell string) (*session.SessionInfo, error) {
 	if a.containerManager == nil {
 		return nil, fmt.Errorf("container manager not initialized")
 	}
@@ -440,6 +452,17 @@ func (a *App) ContainerExecSession(connectionID, containerID, shell string) (*se
 		})
 	})
 	a.sessionManager.Add(sess)
+	if err := a.registerWebTerminal(sess, session.ConnectionConfig{ID: connectionID, Name: containerID, ShellPath: shell, InitialCols: 80, InitialRows: 24}); err != nil {
+		_ = a.sessionManager.Close(id)
+		return nil, err
+	}
+	if webaccess.IsBrowser(ctx) {
+		if _, err := a.requestWebTerminal(ctx, id, true); err != nil {
+			_ = a.CloseSession(id)
+			return nil, err
+		}
+	}
+	sess.StartOutput()
 	return &session.SessionInfo{ID: id, Type: "container-exec", Title: containerID, Status: session.StatusConnected}, nil
 }
 

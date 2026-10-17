@@ -972,11 +972,17 @@ type tapSource interface {
 // surface. Data taps are additive (AddDataTap) so the frontend's own stream
 // subscription is never replaced.
 type ptyAdapter struct {
+	a    *App
 	s    session.Session
 	taps tapSource
 }
 
-func (p ptyAdapter) Write(data []byte) error { return p.s.Write(data) }
+func (p ptyAdapter) Write(data []byte) error {
+	if p.a != nil {
+		return p.a.writeSession(p.s.ID(), data)
+	}
+	return p.s.Write(data)
+}
 
 func (p ptyAdapter) OnData(cb func([]byte)) func() {
 	if p.taps != nil {
@@ -1036,7 +1042,7 @@ func (a *App) StartForeground(sessionID, command string, idleMs, hardLimitMs int
 	if !ok {
 		return "", errors.New("session not found: " + sessionID)
 	}
-	pty := ptyAdapter{s: s}
+	pty := ptyAdapter{a: a, s: s}
 	if taps, ok := s.(tapSource); ok {
 		pty.taps = taps
 	}
@@ -1083,7 +1089,7 @@ func (a *App) StartForegroundCapture(sessionID string, idleMs, hardLimitMs int) 
 	if !ok {
 		return "", fmt.Errorf("session not found: %s", sessionID)
 	}
-	p := ptyAdapter{s: s}
+	p := ptyAdapter{a: a, s: s}
 	if taps, ok := s.(tapSource); ok {
 		p.taps = taps
 	}
@@ -1211,5 +1217,5 @@ func (a *App) SendKey(sessionID, text, control string, sendEnter bool) error {
 	default:
 		return fmt.Errorf("unknown control %q (want ctrl_c|ctrl_d|enter)", control)
 	}
-	return s.Write([]byte(data))
+	return a.writeSession(s.ID(), []byte(data))
 }

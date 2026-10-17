@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/store"
+	"github.com/ys-ll/uniterm/backend/webaccess"
 )
 
 // SessionManager methods
@@ -27,6 +29,11 @@ import (
 func (a *App) CreateSession(sessionType string, config session.ConnectionConfig) (*session.SessionInfo, error) {
 	if a.sessionManager == nil {
 		return nil, fmt.Errorf("session manager not initialized")
+	}
+	if textTerminal(sessionType) && (config.InitialCols != 0 || config.InitialRows != 0) {
+		if err := validWebSize(config.InitialCols, config.InitialRows); err != nil {
+			return nil, err
+		}
 	}
 	log.Writef("[CreateSession] type=%s, dbType=%s, host=%s, port=%d, user=%s, dbName=%s, name=%s",
 		sessionType, config.DBType, config.Host, config.Port, config.User, config.DBName, config.Name)
@@ -170,6 +177,10 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	}
 
 	a.sessionCaptureFor(s)
+	if err := a.registerWebTerminal(s, config); err != nil {
+		_ = a.sessionManager.Close(s.ID())
+		return nil, err
+	}
 	s.SetOnDataCallback(func(data []byte) {
 		a.emit("session:data", map[string]interface{}{
 			"id":   s.ID(),
@@ -247,7 +258,7 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	} else if sessionType == "x11-desktop" {
 		// x11-desktop uses its own X11DesktopConnect entry point; the
 		// generic Connect goroutine must never call s.Connect() here.
-	} else if sessionType == "ssh" || sessionType == "local" || sessionType == "wsl" || sessionType == "telnet" || sessionType == "mosh" || sessionType == "serial" {
+	} else if textTerminal(sessionType) {
 		// Terminal session types that mount xterm: defer Connect until
 		// SessionStart is called after the frontend measures real cols/rows.
 		// Without this gap Claude Code draws tables at the 80x24 default
@@ -300,10 +311,22 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 // x11-desktop) — those instead drive the connection via SessionStart after
 // the frontend measures cols/rows.
 func (a *App) launchConnectGoroutine(s session.Session, sessionType string, config session.ConnectionConfig) {
+	terminal, _ := a.webTerminalFor(s.ID())
+	if textTerminal(s.Type()) && terminal == nil {
+		return
+	}
 	go func() {
+		if terminal != nil {
+			terminal.mu.Lock()
+			defer terminal.mu.Unlock()
+			if terminal.closed {
+				return
+			}
+		}
 		defer func() {
 			if r := recover(); r != nil {
 				log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
+				a.failSessionConnect(s, fmt.Errorf("connection failed unexpectedly: %v", r))
 			}
 		}()
 
@@ -368,6 +391,7 @@ func (a *App) failSessionConnect(s session.Session, err error) {
 	if a.sessionManager != nil {
 		_ = a.sessionManager.Close(s.ID())
 	}
+	a.forgetWebTerminal(s.ID())
 }
 
 // setupJumpHostTunnel establishes an SSH jump-host tunnel for the given
@@ -450,6 +474,11 @@ func (a *App) setupJumpHostTunnel(sessionID string, sessionType string, config *
 // repeated. The new session defers its channel attach until SessionStart,
 // like CreateSession's terminal types.
 func (a *App) DuplicateSSHChannel(sourceSessionID string, config session.ConnectionConfig) (*session.SessionInfo, error) {
+	if config.InitialCols != 0 || config.InitialRows != 0 {
+		if err := validWebSize(config.InitialCols, config.InitialRows); err != nil {
+			return nil, err
+		}
+	}
 	if a.sessionManager == nil {
 		return nil, fmt.Errorf("session manager not initialized")
 	}
@@ -500,6 +529,10 @@ func (a *App) DuplicateSSHChannel(sourceSessionID string, config session.Connect
 	})
 
 	a.sessionManager.Add(s)
+	if err := a.registerWebTerminal(s, config); err != nil {
+		_ = a.sessionManager.Close(s.ID())
+		return nil, err
+	}
 	log.Writef("[DuplicateSSHChannel] channel clone created, id=%s from=%s", s.ID(), sourceSessionID)
 	return &session.SessionInfo{
 		ID:     s.ID(),
@@ -515,7 +548,7 @@ func (a *App) DuplicateSSHChannel(sourceSessionID string, config session.Connect
 // terminal and measuring the real cols/rows, so the PTY is created at
 // the correct dimensions from the first byte — no 80x24 default phase
 // where Claude Code can draw tables at the wrong column count.
-func (a *App) SessionStart(sessionID string, config session.ConnectionConfig) error {
+func (a *App) SessionStart(ctx context.Context, sessionID string, config session.ConnectionConfig) error {
 	if a.sessionManager == nil {
 		return fmt.Errorf("session manager not initialized")
 	}
@@ -523,20 +556,54 @@ func (a *App) SessionStart(sessionID string, config session.ConnectionConfig) er
 	if !ok {
 		return fmt.Errorf("session %s not found", sessionID)
 	}
+	terminal, err := a.webTerminalFor(sessionID)
+	if err != nil {
+		return err
+	}
+	if config.InitialCols != 0 || config.InitialRows != 0 {
+		if err := validWebSize(config.InitialCols, config.InitialRows); err != nil {
+			return err
+		}
+	}
+	// Native callers already mounted their authority. Browser callers must ask
+	// the desktop to attach before any read loop can emit its first byte.
+	if webaccess.IsBrowser(ctx) {
+		if _, err := a.requestWebTerminal(ctx, sessionID, true); err != nil {
+			return err
+		}
+	}
+	terminal.mu.Lock()
+	defer terminal.mu.Unlock()
+	if terminal.closed {
+		return webError("session_closed", "terminal is closed")
+	}
+	if terminal.started {
+		return nil
+	}
+	config.Type = s.Type()
 	// Re-stash the latest measured size in case the deferred config
 	// carries the real cols/rows the frontend discovered after mount.
 	if config.InitialCols > 0 && config.InitialRows > 0 {
 		s.SetPendingSize(config.InitialCols, config.InitialRows)
+		terminal.info.Cols, terminal.info.Rows = config.InitialCols, config.InitialRows
+		a.emit("session:resize", map[string]any{"id": sessionID, "cols": config.InitialCols, "rows": config.InitialRows, "activeClient": terminal.info.ActiveClient})
 	}
 	// Channel clones (issue #983) attach to an already-authenticated client:
 	// skip identity/proxy resolution and jump-host tunnel setup — no dial
 	// happens, and a clone of a tunneled session would otherwise spin up a
 	// redundant second tunnel from the (unused) config.
 	if c, ok := s.(interface{ IsChannelClone() bool }); ok && c.IsChannelClone() {
+		terminal.started = true
 		go func() {
+			terminal.mu.Lock()
+			defer terminal.mu.Unlock()
+			if terminal.closed {
+				return
+			}
 			defer func() {
 				if r := recover(); r != nil {
 					log.Writef("session %s connect panic: %v\n%s", s.ID(), r, string(debug.Stack()))
+					a.failSessionConnect(s, fmt.Errorf("connection failed unexpectedly: %v", r))
 				}
 			}()
 			if err := s.Connect(config); err != nil {
@@ -563,6 +630,7 @@ func (a *App) SessionStart(sessionID string, config session.ConnectionConfig) er
 		return err
 	}
 	config = mc
+	terminal.started = true
 	a.launchConnectGoroutine(s, config.Type, config)
 	return nil
 }
@@ -571,6 +639,12 @@ func (a *App) CloseSession(sessionID string) error {
 	if a.sessionManager == nil {
 		return fmt.Errorf("session manager not initialized")
 	}
+	if terminal, err := a.webTerminalFor(sessionID); err == nil {
+		terminal.mu.Lock()
+		defer terminal.mu.Unlock()
+		terminal.closed = true
+	}
+	defer a.forgetWebTerminal(sessionID)
 	if a.tunnelService != nil {
 		a.tunnelService.Stop(sessionID)
 	}
@@ -586,14 +660,7 @@ func (a *App) ListSessions() []session.SessionInfo {
 }
 
 func (a *App) SessionWrite(sessionID string, data string) error {
-	if a.sessionManager == nil {
-		return fmt.Errorf("session manager not initialized")
-	}
-	s, ok := a.sessionManager.Get(sessionID)
-	if !ok {
-		return fmt.Errorf("session not found: %s", sessionID)
-	}
-	return s.Write([]byte(data))
+	return a.writeSession(sessionID, []byte(data))
 }
 
 // SessionInjectCwdHook types the OSC-7 cwd hook into a running SSH login
@@ -612,10 +679,23 @@ func (a *App) SessionInjectCwdHook(sessionID string) error {
 	if !ok {
 		return fmt.Errorf("session type %s does not support on-demand cwd hook injection", s.Type())
 	}
+	if terminal, err := a.webTerminalFor(sessionID); err == nil {
+		terminal.mu.Lock()
+		defer terminal.mu.Unlock()
+		if terminal.closed {
+			return webError("session_closed", "terminal is closed")
+		}
+	}
 	return inj.InjectCwdHook()
 }
 
 func (a *App) SessionResize(sessionID string, cols, rows int) error {
+	if _, err := a.webTerminalFor(sessionID); err == nil {
+		return a.ResizeWebTerminal(sessionID, "desktop", cols, rows, false)
+	}
+	if err := validWebSize(cols, rows); err != nil {
+		return err
+	}
 	if a.sessionManager == nil {
 		return fmt.Errorf("session manager not initialized")
 	}
@@ -670,18 +750,11 @@ func (a *App) SessionEndZmodemWithTrailing(sessionID, base64Data string) error {
 }
 
 func (a *App) SessionWriteBinary(sessionID string, base64Data string) error {
-	if a.sessionManager == nil {
-		return fmt.Errorf("session manager not initialized")
-	}
-	s, ok := a.sessionManager.Get(sessionID)
-	if !ok {
-		return fmt.Errorf("session not found: %s", sessionID)
-	}
 	data, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
 		return fmt.Errorf("decode base64: %w", err)
 	}
-	return s.Write(data)
+	return a.writeSession(sessionID, data)
 }
 
 func (a *App) ReadFileBase64(path string) (string, error) {

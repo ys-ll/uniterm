@@ -23,6 +23,7 @@ type ContainerExecSession struct {
 	pty      ExecPTY
 	writeMu  sync.Mutex
 	quitOnce sync.Once
+	readOnce sync.Once
 }
 
 func NewContainerExecSession(id string, pty ExecPTY) *ContainerExecSession {
@@ -30,9 +31,13 @@ func NewContainerExecSession(id string, pty ExecPTY) *ContainerExecSession {
 		baseSession: baseSession{id: id, sessionType: "container-exec", status: StatusConnected},
 		pty:         pty,
 	}
-	s.startEmitLoop()
-	go s.readLoop()
 	return s
+}
+
+// StartOutput is called after the App installed callbacks and the desktop
+// authority attached. The protocol stream buffers/backpressures until then.
+func (s *ContainerExecSession) StartOutput() {
+	s.readOnce.Do(func() { s.startEmitLoop(); go s.readLoop() })
 }
 
 // Connect is a no-op: the exec stream is already established by the App layer.
