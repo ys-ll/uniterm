@@ -101,7 +101,7 @@
             <MenuItem @click="triggerExport(); moreMenuVisible = false">{{ t('terminal.export') }}</MenuItem>
             <MenuItem @click="triggerResetOutput(); moreMenuVisible = false">{{ t('terminal.resetOutput') }}</MenuItem>
             <MenuItem @click="triggerClearScrollback(); moreMenuVisible = false">{{ t('terminal.clearScrollback') }}</MenuItem>
-            <MenuItem @click="toggleOutputLog(); moreMenuVisible = false">
+            <MenuItem v-if="!isWebMode()" @click="toggleOutputLog(); moreMenuVisible = false">
               {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
             </MenuItem>
             <MenuItem v-if="isOutputLogOn" @click="openLogDir(); moreMenuVisible = false">
@@ -116,6 +116,9 @@
 
             <!-- ④ 关闭 -->
             <MenuDivider />
+            <MenuItem v-if="panelStore.isAttachedPanel(panel.id)" @click="terminateSharedSession">
+              {{ t('x11.tab.disconnect') }}
+            </MenuItem>
             <MenuItem :shortcut="menuShortcut('closePanel')" @click="emit('close', panel.id); moreMenuVisible = false">
               {{ t('tab.close') }}
             </MenuItem>
@@ -164,9 +167,11 @@ import {
 import { msg } from '../services/message'
 import { useI18n } from '../i18n'
 import type { Panel } from '../types/workspace'
-import { waitForTerminalSize } from '../services/terminalManager'
+import { waitForTerminalSize, refreshWebTerminal } from '../services/terminalManager'
 import { connectFileMenuKey } from '../utils/fileTransferUtils'
 import { isMobilePlatform } from '../utils/platform'
+import { isWebMode } from '../utils/webMode'
+import { terminateBrowserSession } from '../services/webTerminals'
 import type { ConnectionConfig } from '../types/session'
 import type { CredentialResult } from './CredentialPrompt.vue'
 import { Clipboard } from '@wailsio/runtime'
@@ -345,6 +350,7 @@ async function copyHostAddress() {
 }
 
 async function refreshOutputLogState() {
+  if (isWebMode()) return
   try {
     const info = await GetSessionOutputLogInfo(props.panel.id)
     isOutputLogOn.value = !!info.enabled
@@ -357,6 +363,7 @@ async function refreshOutputLogState() {
 }
 
 async function toggleOutputLog() {
+  if (isWebMode()) return
   try {
     if (isOutputLogOn.value) {
       await DisableSessionOutputLog(props.panel.id)
@@ -455,6 +462,12 @@ function cancelEdit() {
 let retryAttempt = 0
 
 function onSessionStatus(status: string) {
+  if (panelStore.isAttachedPanel(props.panel.id)) {
+    if (['connected', 'connecting', 'disconnected', 'error'].includes(status)) {
+      panelStore.updateStatus(props.panel.id, status as Panel['status'])
+    }
+    return
+  }
   if (status === 'retry') {
     // Manual retry — user pressed Enter
     retryConnection()
@@ -611,6 +624,10 @@ async function retryConnection() {
 // path, it first kills the in-flight attempt with CloseSession so a stale
 // "connecting" session can't linger in the backend.
 async function forceReconnect() {
+  if (panelStore.isAttachedPanel(props.panel.id)) {
+    if (props.panel.sessionId) await refreshWebTerminal(props.panel.sessionId).catch(error => msg.error(String(error)))
+    return
+  }
   if (!props.panel.config) return
   baseTerminalRef.value?.setRetryOnEnter(false)
   const oldId = props.panel.sessionId
@@ -642,6 +659,11 @@ function onReconnectEvent(e: Event) {
   if (panelId && panelId === props.panel.id) {
     forceReconnect()
   }
+}
+
+async function terminateSharedSession() {
+  moreMenuVisible.value = false
+  await terminateBrowserSession(props.panel.id).catch(error => msg.error(String(error)))
 }
 
 onMounted(() => {

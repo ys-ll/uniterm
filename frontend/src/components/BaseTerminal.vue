@@ -9,6 +9,7 @@
     @dragleave="onDragLeave"
     @drop="onDragDrop"
   >
+    <div v-if="sharingError" class="terminal-sharing-error" role="alert">{{ sharingError }}</div>
     <div class="terminal-area" @contextmenu="onTerminalContextMenu">
       <TerminalGutter
         ref="gutterRef"
@@ -17,7 +18,7 @@
         :show-timestamps="showTimestamps"
         :get-host="getTerminalHost"
       />
-      <div ref="terminalRef" class="terminal-host"></div>
+      <div ref="terminalRef" class="terminal-host" @pointerdown="claimTerminalSize"></div>
     </div>
 
     <div v-if="dragOver" class="drop-overlay">
@@ -139,9 +140,9 @@ import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, onActivated, on
 import type { Terminal } from '@xterm/xterm'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { SessionResize, SessionEndZmodem } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { SessionEndZmodem } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { queuedSessionWrite } from '../services/sessionWriter'
-import { WriteFileBase64, SaveFileDialog, FrontendLog, EnableSessionOutputLog, DisableSessionOutputLog, GetSessionOutputLogInfo, OpenPathInExplorer } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { WriteFileBase64, SaveFileDialog, EnableSessionOutputLog, DisableSessionOutputLog, GetSessionOutputLogInfo, OpenPathInExplorer } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useNativeFileDrop } from '../composables/useFilePanel'
 import { connectFileMenuKey } from '../utils/fileTransferUtils'
 import { isMobilePlatform } from '../utils/platform'
@@ -157,9 +158,8 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useTerminalMenu } from '../composables/useTerminalMenu'
 import { writeClipboard, readClipboardText } from '../composables/useClipboardWrite'
-import { filterTerminalInput, stripDeviceReplies } from '../utils/terminalInputFilter'
 import { isAuthFailureError } from '../utils/authError'
-import { DcsReassembler } from '../utils/dcsReassembler'
+import { isWebMode } from '../utils/webMode'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
@@ -173,23 +173,21 @@ import {
   transferTerminal,
   bumpOnDataGeneration,
   markTerminalActive,
+  resizeTerminalView,
+  presentTerminal,
+  setTerminalOutputBroker,
+  terminalSharingErrors,
 } from '../services/terminalManager'
 import { getXtermTheme } from '../composables/useTerminal'
 import { resolveXtermBackground, applyTerminalBgVar, resolveTerminalThemeName } from '../composables/useTerminalTheme'
-import { stripCursorBlink } from '../utils/cursor'
 import { applyBackspaceKey } from '../utils/terminalOptions'
 import { formatFontFamily } from '../utils/formatFontFamily'
 import { normalizePastedText, pasteWithScroll } from '../utils/terminalPaste'
-import {
-  sanitizeTerminalOutput,
-  sanitizeLiveTerminalOutput,
-} from '../utils/terminalSanitize'
 import { useTerminalInput } from '../composables/useTerminalInput'
 import { useSuggestions } from '../composables/useSuggestions'
 import TerminalSuggestion from './TerminalSuggestion.vue'
 import TerminalGutter from './TerminalGutter.vue'
 import { startZmodemService } from '../services/zmodemService'
-import { recordWrite, stampCommandLine, currentAbsoluteLine, clearRegistry } from '../services/terminalTimestamps'
 import { useZmodemStore } from '../stores/zmodemStore'
 import ZmodemTransfer from './ZmodemTransfer.vue'
 import TerminalScreenPreview from './TerminalScreenPreview.vue'
@@ -225,8 +223,7 @@ const zmodemStore = useZmodemStore()
 const localStateStore = useLocalStateStore()
 const { t } = useI18n()
 
-// Prevent deactivated (KeepAlive-cached) components from processing
-// terminal events. Only the active component should handle input/output.
+// Only active components handle UI/input; the manager always parses output.
 const isActive = ref(true)
 
 // Unique ref per BaseTerminal instance, so each instance independently
@@ -236,6 +233,7 @@ const isActive = ref(true)
 const terminalInstanceRef = crypto.randomUUID?.() ||
   Math.random().toString(36).slice(2, 10) +
   Date.now().toString(36)
+let boundTerminalId = props.sessionId || `pending:${terminalInstanceRef}`
 
 const terminalRef = ref<HTMLDivElement>()
 
@@ -244,22 +242,7 @@ const showLineNumbers = computed(() => settingsStore.settings.terminal.showLineN
 // Whether the timestamp column is enabled (from the persistent setting).
 const showTimestamps = computed(() => settingsStore.settings.terminal.showTimestamps ?? false)
 
-// Write terminal data and fold it into the logical-line registry for the
-// gutter's number/time columns: lines that just received characters get the
-// next sequential number and the arrival time; lines the cursor moved past
-// get their timestamp fixed to the completion time. `before` is an absolute
-// row index, so a trim inside the write doesn't skew the band.
-function writeStamped(data: string, onParsed?: () => void) {
-  const t = terminal
-  const sid = props.sessionId
-  if (!t || !sid) { t?.write(data, onParsed); return }
-  const ts = Date.now()
-  const before = currentAbsoluteLine(sid)
-  t.write(data, () => {
-    recordWrite(sid, before, ts)
-    onParsed?.()
-  })
-}
+const sharingError = computed(() => props.sessionId ? terminalSharingErrors.get(props.sessionId) : undefined)
 
 // Pass the xterm host element to the gutter so it can verify the terminal it
 // renders is attached to this very component (KeepAlive/drag can move it).
@@ -292,17 +275,6 @@ let onDataDispose: { dispose(): void } | null = null
 let keyHandlerDispose: { dispose(): void } | null = null
 let resizeObserver: ResizeObserver | null = null
 let intersectionObserver: IntersectionObserver | null = null
-// Track how many sessionStore chunks have been written to the terminal
-// so we can replay only missed data on KeepAlive reactivation.
-let writtenChunks = 0
-// While the gap replay re-parses stale device queries, xterm's
-// auto-generated replies (CPR/DSR/DA) must not reach the remote: the
-// mirror terminal already answered them in real time while this panel
-// was inactive, and a second reply arriving after the remote's read
-// timed out leaks its tail into the shell (the "0R" artifact).
-// Timestamp cap in case a parse callback never fires; cleared early
-// once the last replayed chunk reports parsed.
-let replySuppressUntil = 0
 // Viewport position (top line in the buffer) captured on KeepAlive
 // deactivation so reactivation can restore the user's scroll position
 // instead of jumping to the bottom. baseY at deactivation is also kept so
@@ -367,54 +339,20 @@ let splitResizing = false
 let suppressResizeUntil = 0
 let retryOnEnter = false
 let zmodemService: ReturnType<typeof startZmodemService> | null = null
+const ownedBrokerSessions = new Set<string>()
+let installZmodemBroker: ((id: string) => void) | null = null
 let isZmodemStarting = false
 let zmodemStartTimer: ReturnType<typeof setTimeout> | null = null
 let zmodemDirection: 'upload' | 'download' | undefined = undefined
 let zmodemCancellingUntil = 0
 let zmodemRestoringOutput = false
 let zmodemCompletionPending = false
-const zmodemDeferredOutput: string[] = []
+const zmodemDeferredOutput: { data: string; resolve: (data: string) => void }[] = []
 let exporting = false
-// Reassembles DCS (sixel image) sequences split across session:data chunks
-// so highlight's per-chunk segmenter never injects SGR codes into an open
-// DCS body. Every chunk this component renders must pass through it exactly
-// once, in order — including the KeepAlive gap replay below.
-const dcsReassembler = new DcsReassembler()
-
-function renderTerminalData(rawData: string, countChunk = true) {
-  if (!terminal) return
-  let data = stripCursorBlink(rawData, settingsStore.settings.terminal.cursorBlink ?? true).replace(/\x1b\[3J/g, '')
-  if (data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
-    const scrollClear = '\n'.repeat(terminal.rows) + '\x1b[H'
-    data = data.replace(/\x1b\[H\x1b\[2J/g, scrollClear)
-    data = data.replace(/\x1b\[2J/g, scrollClear)
-  }
-  data = sanitizeLiveTerminalOutput(data)
-  if (props.mode === 'sftp') {
-    const cleaned = data.replace(/\x1b\]633;S[^\x07]*\x07/g, '')
-    if (cleaned) writeStamped(cleaned)
-  } else {
-    // Keyword highlighting is applied by the overlay renderer, which scans
-    // the parsed buffer and lays decorations over matches — the data stream
-    // is written verbatim.
-    for (const seg of dcsReassembler.feed(data)) {
-      if (seg.dcs) {
-        // Complete DCS (sixel image, DECRQSS reply, …): write verbatim —
-        // SGR codes injected inside a DCS body would corrupt it.
-        writeStamped(seg.text)
-        continue
-      }
-      if (props.mode === 'ssh' && terminalInput) {
-        terminalInput.handleSessionData(seg.text)
-        if (terminalInput.isInAlternateScreen()) suggestions.close()
-      }
-      writeStamped(seg.text)
-    }
-  }
-  if (countChunk) writtenChunks++
-}
 
 function initZmodemService(sessionId: string) {
+  if (isWebMode()) return
+  if (getManagedTerminal(sessionId)?.outputBroker && !ownedBrokerSessions.has(sessionId)) return
   if (!sessionId || props.mode !== 'ssh') return
   // Don't create a duplicate zmodem service if a transfer is already
   // active for this session. The existing service (in a deactivated
@@ -430,7 +368,7 @@ function initZmodemService(sessionId: string) {
     onTerminalRestoreState: restoring => {
       zmodemRestoringOutput = restoring
       if (!restoring) {
-        for (const data of zmodemDeferredOutput.splice(0)) renderTerminalData(data)
+        for (const item of zmodemDeferredOutput.splice(0)) item.resolve(item.data)
         if (zmodemCompletionPending) {
           zmodemCompletionPending = false
           void disposeZmodemService(sessionId, true, false)
@@ -439,18 +377,18 @@ function initZmodemService(sessionId: string) {
       }
     },
     onWarning: warning => {
-      terminal?.write(`\r\n\x1b[33mZmodem: ${warning}\x1b[0m\r\n`)
+      write(`\r\n\x1b[33mZmodem: ${warning}\x1b[0m\r\n`)
     },
     onComplete: (files, hint) => {
       if (files.length > 0) {
-        terminal?.write(`\r\n\x1b[32mZmodem: ${files.length} file(s) transferred\x1b[0m\r\n`)
+        write(`\r\n\x1b[32mZmodem: ${files.length} file(s) transferred\x1b[0m\r\n`)
       }
       if (hint) {
-        terminal?.write(`\r\n\x1b[33m${hint}\x1b[0m\r\n`)
+        write(`\r\n\x1b[33m${hint}\x1b[0m\r\n`)
       }
       if (files.length === 0 && !hint) {
         // 取消或未选择文件：打印提示
-        terminal?.write(`\r\n\x1b[33mZmodem transfer cancelled\x1b[0m\r\n`)
+        write(`\r\n\x1b[33mZmodem transfer cancelled\x1b[0m\r\n`)
         // 等吞数据保护过期后再发送一次回车，确保 sz 已退出、bash 恢复前台后触发提示符
         const cancelUntil = Math.max(zmodemCancellingUntil, zmodemStore.getCancelUntil(sessionId))
         const remaining = Math.max(0, cancelUntil - Date.now())
@@ -471,7 +409,7 @@ function initZmodemService(sessionId: string) {
     },
     onError: (err) => {
       zmodemCompletionPending = false
-      terminal?.write(`\r\n\x1b[31mZmodem error: ${err}\x1b[0m\r\n`)
+      write(`\r\n\x1b[31mZmodem error: ${err}\x1b[0m\r\n`)
       zmodemStore.clearTransfers(sessionId)
       zmodemDirection = undefined
       void disposeZmodemService(sessionId, true, false)
@@ -481,6 +419,8 @@ function initZmodemService(sessionId: string) {
 }
 
 async function disposeZmodemService(sessionId: string, resetDirection = true, endSession = true) {
+  if (isWebMode()) return
+  if (getManagedTerminal(sessionId)?.outputBroker && !ownedBrokerSessions.has(sessionId)) return
   const service = zmodemService
   const serviceDisposed = service?.dispose()
   zmodemService = null
@@ -606,16 +546,6 @@ const searchCaseSensitive = ref(false)
 const searchRegex = ref(false)
 const searchWholeWord = ref(false)
 
-function sanitizeTerminalHistory(text: string): string {
-  const cleaned = sanitizeTerminalOutput(text)
-  // Forward debug info to backend log so we can inspect the raw garbage.
-  if (cleaned !== text) {
-    FrontendLog('sanitizeTerminalHistory', `raw last 400: ${JSON.stringify(text.slice(-400))}`)
-    FrontendLog('sanitizeTerminalHistory', `cleaned last 400: ${JSON.stringify(cleaned.slice(-400))}`)
-  }
-  return cleaned
-}
-
 // SFTP line buffer
 let inputBuffer = ''
 
@@ -628,6 +558,7 @@ function getTerminalOptions() {
     fontWeight: ts.fontWeight || 400,
     themeName: ts.theme || 'dark',
     scrollback: ts.maxHistoryLines || 2500,
+    sftp: props.mode === 'sftp',
   }
 }
 
@@ -700,26 +631,19 @@ function resize() {
       el.scrollTop = 0
     }
 
-    // Always fit first to update CSS dimensions on the .xterm element.
-    // Without this, stale inline pixel dimensions from a previous fit()
-    // prevent the terminal from filling the container after window resize
-    // (e.g. after duplicating a session tab).
-    fitAddon.fit()
-    if (terminal.cols <= 0 || terminal.rows <= 0) return
-
-    // Trust fitAddon.fit() — its measure already accounts for the scrollbar
-    // gutter; manual recomputation double-subtracts it.
-    terminal.resize(terminal.cols, terminal.rows)
-    // Full-viewport redraw — prevents canvas ghosting during rapid write bursts.
-    terminal.refresh(0, terminal.rows - 1)
-    SessionResize(sid, terminal.cols, terminal.rows).catch(() => {})
+    resizeTerminalView(sid)
   } else {
     getFitAddon()?.fit()
   }
 }
 
+function claimTerminalSize() {
+  if (props.sessionId) resizeTerminalView(props.sessionId, true)
+}
+
 function write(data: string) {
-  terminal?.write(data)
+  if (props.mode === 'sftp') { terminal?.write(data); return }
+  if (props.sessionId) presentTerminal(props.sessionId, { kind: 'write', data })
 }
 
 // Restore the scroll position captured on deactivation. Returns true when the
@@ -838,13 +762,7 @@ function shellLooksIdle(): boolean {
 function resetTerminalOutput() {
   if (!terminal) return
   const idle = shellLooksIdle()
-  const scrollback = terminal.options.scrollback
-  terminal.clear()
-  terminal.options.scrollback = 0
-  terminal.clear()
-  terminal.options.scrollback = scrollback
-  terminal.write('\r\x1b[H\x1b[2J')
-  if (props.sessionId) clearRegistry(props.sessionId)
+  if (props.sessionId) presentTerminal(props.sessionId, { kind: 'reset' })
   if (props.sessionId && idle && !zmodemStore.getActiveTransfer(props.sessionId)) {
     queuedSessionWrite(props.sessionId, '\n')
   }
@@ -853,21 +771,7 @@ function resetTerminalOutput() {
 // Clear scrollback only (issue #989): the visible screen stays; rows above
 // the viewport are dropped.
 function clearScrollback() {
-  if (!terminal) return
-  const buf = terminal.buffer.active
-  const above = buf.baseY
-  if (above > 0) {
-    terminal.scrollLines(-above)
-  }
-  // Same trick as reset: a 0-sized scrollback discards the rows that just
-  // scrolled out of the viewport.
-  const scrollback = terminal.options.scrollback
-  terminal.options.scrollback = 0
-  terminal.clear()
-  terminal.options.scrollback = scrollback
-  // Return the viewport to the (bottom) live screen.
-  terminal.scrollToBottom()
-  if (props.sessionId) clearRegistry(props.sessionId)
+  if (props.sessionId) presentTerminal(props.sessionId, { kind: 'clear' })
 }
 
 function setRetryOnEnter(value: boolean) {
@@ -921,9 +825,9 @@ function onSplitResizeEnd() {
   })
 }
 
-function writeTerminalInput(data: string, inAlternateScreen: boolean) {
+function writeTerminalInput(data: string, _inAlternateScreen: boolean) {
   const sid = props.sessionId
-  const filtered = filterTerminalInput(data, inAlternateScreen)
+  const filtered = data
   // Don't send empty input - avoids extra blank line when pressing Enter with no command
   if (!sid || !filtered) return
 
@@ -1173,17 +1077,13 @@ function onTerminalTouchEnd() {
 }
 
 onMounted(() => {
-  nativeDrop.bind()
+  if (!isWebMode()) nativeDrop.bind()
   if (!terminalRef.value) return
 
   // Acquire shared terminal from manager (or create if first mount)
   const opts = getTerminalOptions()
-  terminal = acquireTerminal(props.sessionId || '', terminalInstanceRef, opts, settingsStore.settings.customTerminalThemes)
-  // Publish component activity to the terminal manager: screen-buffer readers
-  // (AI output capture, prompt snapshots) must only trust the buffer while at
-  // least one visible component drives it — a deactivated panel's buffer is
-  // frozen because the live session:data handler below gates on isActive.
-  markTerminalActive(props.sessionId || '', terminalInstanceRef, true)
+  terminal = acquireTerminal(boundTerminalId, terminalInstanceRef, opts, settingsStore.settings.customTerminalThemes)
+  markTerminalActive(boundTerminalId, terminalInstanceRef, true)
   // Keyword highlighting scans the parsed buffer and overlays decorations;
   // the enable switch is re-read on every refresh, so toggling the setting
   // takes effect live. Applies to every terminal type.
@@ -1194,7 +1094,8 @@ onMounted(() => {
   const webLinksAddon = new WebLinksAddon(
     (event, uri) => {
       if (event.ctrlKey || event.metaKey) {
-        Browser.OpenURL(uri)
+        if (isWebMode()) window.open(uri, '_blank', 'noopener,noreferrer')
+        else Browser.OpenURL(uri)
       }
     },
     {
@@ -1223,7 +1124,7 @@ onMounted(() => {
   // addon loads; no need to set it here again.
 
   // Set up search results listener from shared SearchAddon
-  const managed = getManagedTerminal(props.sessionId || '')
+  const managed = getManagedTerminal(boundTerminalId)
   if (managed) {
     managed.searchAddon.onDidChangeResults((e) => {
       searchResultIndex.value = e.resultIndex
@@ -1232,7 +1133,7 @@ onMounted(() => {
   }
 
   // Attach terminal DOM to this component's container
-  attachTerminal(props.sessionId || '', terminalRef.value)
+  attachTerminal(boundTerminalId, terminalRef.value)
 
   // Touch panning: only wired on touch devices (see block above bindListeners)
   if (isMobileTouch && terminalRef.value) {
@@ -1262,36 +1163,15 @@ onMounted(() => {
   }
 
   if (props.mode === 'ssh' || props.mode === 'local') {
-    // Restore terminal content from session buffer on first mount only.
-    // Subsequent mounts reuse the shared terminal whose buffer already
-    // contains the correct content.
-    const sid = props.sessionId
-    const isNewTerminal = managed?.isNew
-    if (sid && isNewTerminal) {
-      const raw = sessionStore.getData(sid)
-      const history = sanitizeTerminalHistory(raw)
-      if (history) {
-        // Highlighting is applied by the overlay renderer scanning the
-        // buffer, so restored history is decorated the same way as
-        // newly arriving lines after a tab switch.
-        writeStamped(history)
-      }
-    }
-    // Always sync writtenChunks to prevent onActivated from replaying
-    // all session data when the terminal was reused (isNewTerminal=false).
-    if (sid) {
-      writtenChunks = sessionStore.getChunkCount(sid)
-    }
+    // The manager continuously parses even when this view is hidden. Browser
+    // attaches restore exact state through attachWebTerminal, never raw tails.
     // Force initial resize with retries — needed because cell dimensions
     // may not be available immediately, and for reused terminals the cols/rows
     // may hold stale dimensions from the previous container.
     ;[50, 150, 300, 600, 1000, 2000].forEach(d => setTimeout(() => {
       if (!terminal) return
-      getFitAddon()?.fit()
       const sessionId = props.sessionId
-      if (sessionId && terminal.cols > 0 && terminal.rows > 0) {
-        SessionResize(sessionId, terminal.cols, terminal.rows).catch(() => {})
-      }
+      if (sessionId) resizeTerminalView(sessionId)
     }, d))
   }
 
@@ -1324,17 +1204,8 @@ onMounted(() => {
         return
       }
 
-      // Gap-replay suppression: while stale queries from the replay are being
-      // re-parsed, drop xterm's auto-generated device replies. The mirror
-      // already answered them in real time (responder handoff, see
-      // terminalManager); a second reply reaches the remote after its read
-      // timed out and leaks into the shell. Keystrokes can never match these
-      // escape shapes, so real input is untouched.
-      if (Date.now() < replySuppressUntil) {
-        const cleaned = stripDeviceReplies(data)
-        if (!cleaned) return
-        data = cleaned
-      }
+      // Manager has already routed non-user replies to the desktop-only
+      // responder. Everything here is actual human input, including paste.
 
       // Mobile sticky Ctrl: transform the next soft-keyboard character into
       // the corresponding Ctrl combo (e.g. 'c' → ^C) when Ctrl is armed.
@@ -1361,7 +1232,7 @@ onMounted(() => {
       if ((data === '\r' || data === '\n') && terminalInput && !terminalInput.isInAlternateScreen()) {
         // Stamp the command line with the moment it was executed (timestamp
         // column). Must happen before handleInput clears the line buffer.
-        if (props.sessionId) stampCommandLine(props.sessionId, Date.now())
+        if (props.sessionId) presentTerminal(props.sessionId, { kind: 'stamp', timestamp: Date.now() })
         const line = terminalInput.lineBuffer.value.trim()
         if (/^(?:sudo\s+)?rz\b/.test(line)) {
           zmodemDirection = 'upload'
@@ -1555,68 +1426,52 @@ onMounted(() => {
       return
     }
     if (payload.id !== props.sessionId || !terminal) return
-
-    // 取消后 2 秒内吞掉所有数据，防止残余二进制乱码
-    if (Date.now() < zmodemCancellingUntil) {
-      return
+    if (props.mode === 'ssh' && terminalInput) {
+      terminalInput.handleSessionData(payload.data)
+      if (terminalInput.isInAlternateScreen()) suggestions.close()
     }
-
-    // Keep output arriving after EndZmodem behind the restored prompt.
-    if (zmodemRestoringOutput) {
-      zmodemDeferredOutput.push(payload.data)
-      return
-    }
-
-    // tab 切换后服务还没重建，但 store 里还有活跃传输（旧的 handleReceive 还在跑），先吞数据
-    const hasStoreTransfer = zmodemStore.getActiveTransfer(props.sessionId || '')
-    if (!zmodemService && hasStoreTransfer) {
-      return
-    }
-
-    // Zmodem detection: scan for HEX header in normal terminal output.
-    // Skip if the service was aborted (waiting for the next rz/sz command).
-    const activeZmodem = zmodemService && zmodemStore.getActiveTransfer(props.sessionId || '')
-    if (zmodemService && !activeZmodem && !zmodemService.isAborted?.()) {
-      if (isZmodemStarting) {
-        // Already detected header and waiting for SessionStartZmodem / on_detect.
-        // Feed subsequent data to sentry so it can complete detection without
-        // re-processing the header heuristic on every retry frame.
-        zmodemService.consume(payload.data)
-        return
-      }
-      // Real ZMODEM headers always contain the ZDLE control byte (0x18)
-      // before the frame type: `**` (ZPAD ZPAD) `\x18` (ZDLE) `[ABC]` then
-      // hex digits. Requiring the 0x18 avoids false positives on ordinary
-      // terminal output — e.g. vim rendering a file whose content happens to
-      // contain `**B<hex>` — which previously flipped the session into binary
-      // ZMODEM mode and made the sentry write protocol bytes back to the
-      // server, crashing the remote shell (issue #242).
-      const ZMODEM_HEX_RE = /\*{2,}\x18[ABC][0-9a-fA-F]{10,}/
-      if (ZMODEM_HEX_RE.test(payload.data)) {
-        console.debug('[zmodem] header detected, entering transfer mode')
-        isZmodemStarting = true
-        if (zmodemStartTimer) clearTimeout(zmodemStartTimer)
-        zmodemStartTimer = setTimeout(() => {
-          isZmodemStarting = false
-        }, 3000)
-        const sid = props.sessionId
-        if (sid) {
-          // Consume immediately to avoid losing data during async handoff
-          zmodemService.start(payload.data)
-        }
-        // Hide zmodem data from terminal
-        return
-      }
-    }
-
-    // If zmodem is active, skip writing data to terminal (data comes via session:binary)
-    if (activeZmodem) {
-      isZmodemStarting = false
-      return
-    }
-
-    renderTerminalData(payload.data)
   })
+
+  // The fixed desktop parser owns the file-protocol broker independently of
+  // visibility. File-transfer integration can replace this through the same
+  // manager hook; a browser must never run a second sentry or OSC52 writer.
+  installZmodemBroker = (brokerSessionId: string) => {
+    if (!brokerSessionId || isWebMode() || getManagedTerminal(brokerSessionId)?.outputBroker) return
+    ownedBrokerSessions.add(brokerSessionId)
+    setTerminalOutputBroker(brokerSessionId, (data) => {
+      if (Date.now() < zmodemCancellingUntil) return null
+      // Keep output arriving after EndZmodem behind its restored prompt.
+      if (zmodemRestoringOutput) {
+        return new Promise<string>(resolve => zmodemDeferredOutput.push({ data, resolve }))
+      }
+      const hasStoreTransfer = zmodemStore.getActiveTransfer(brokerSessionId)
+      if (!zmodemService && hasStoreTransfer) return null
+      const activeZmodem = zmodemService && hasStoreTransfer
+      if (zmodemService && !activeZmodem && !zmodemService.isAborted?.()) {
+        if (isZmodemStarting) {
+          zmodemService.consume(data)
+          return null
+        }
+        // Require ZDLE: ordinary text containing **B<hex> is not a transfer.
+        if (/\*{2,}\x18[ABC][0-9a-fA-F]{10,}/.test(data)) {
+          isZmodemStarting = true
+          if (zmodemStartTimer) clearTimeout(zmodemStartTimer)
+          zmodemStartTimer = setTimeout(() => { isZmodemStarting = false }, 3000)
+          zmodemService.start(data)
+          return null
+        }
+      }
+      if (activeZmodem) {
+        isZmodemStarting = false
+        return null
+      }
+      return data
+    }, () => {
+      void disposeZmodemService(brokerSessionId)
+      ownedBrokerSessions.delete(brokerSessionId)
+    })
+  }
+  if (props.sessionId) installZmodemBroker(props.sessionId)
 
   // SSH/Local: session status events
   if (props.mode === 'ssh' || props.mode === 'local') {
@@ -1632,9 +1487,6 @@ onMounted(() => {
         }
         // Force send current terminal size to sync the backend PTY after reconnect.
         // The new session defaults to 80x24; without this, apps like vim/k9s use the wrong size.
-        if (terminal && terminal.cols > 0 && terminal.rows > 0) {
-          SessionResize(props.sessionId, terminal.cols, terminal.rows).catch(() => {})
-        }
         resize()
       } else if (payload.status === 'error') {
         retryOnEnter = true
@@ -1643,7 +1495,7 @@ onMounted(() => {
           // 而不是让用户按回车再全量重连两次（issue #949）。
           props.onSessionStatus(isAuthFailureError(payload.errorMessage) ? 'auth_failed' : payload.status)
         }
-        terminal?.write('\r\n\x1b[31mConnection failed. Press Enter to retry.\x1b[0m\r\n')
+        write('\r\n\x1b[31mConnection failed. Press Enter to retry.\x1b[0m\r\n')
       } else if (payload.status === 'disconnected') {
         retryOnEnter = true
         if (props.onSessionStatus) {
@@ -1658,7 +1510,7 @@ onMounted(() => {
         // disabling it leaves selection broken, and the backend's
         // reset-on-Enter path needs a live session it no longer has.
         if (props.mode === 'local') {
-          terminal?.write(
+          write(
             '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l' +
             '\r\n\x1b[33mShell exited. Press Enter to restart.\x1b[0m\r\n'
           )
@@ -1798,34 +1650,8 @@ onMounted(() => {
 onActivated(() => {
   // Component restored from KeepAlive cache.
 
-  nativeDrop.bind()
+  if (!isWebMode()) nativeDrop.bind()
   markTerminalActive(props.sessionId || '', terminalInstanceRef, true)
-
-  // Replay session data that arrived while deactivated BEFORE
-  // setting isActive = true. The session:data handler gates on
-  // isActive, so new data would race with the gap replay and
-  // advance writtenChunks, making the gap undetectable.
-  // Uses a monotonic sequence number (getChunkCount), not an array
-  // index, so front-trimming of the sessionStore buffer during a
-  // long background session doesn't invalidate the tracking position.
-  if (props.sessionId) {
-    const total = sessionStore.getChunkCount(props.sessionId)
-    if (total > writtenChunks) {
-      const tail = sessionStore.getDataFromChunk(props.sessionId, writtenChunks)
-      // Route the gap replay through the DCS reassembler like the live
-      // path — a sixel sequence may span the deactivation boundary.
-      // Suppress auto device replies for the whole replay (see
-      // replySuppressUntil): the replayed gap contains the same queries the
-      // mirror answered while this panel was frozen.
-      replySuppressUntil = Date.now() + 10000
-      const segs = dcsReassembler.feed(tail)
-      for (let i = 0; i < segs.length; i++) {
-        writeStamped(segs[i].text, i === segs.length - 1 ? () => { replySuppressUntil = 0 } : undefined)
-      }
-      if (segs.length === 0) replySuppressUntil = 0
-      writtenChunks = total
-    }
-  }
 
   // Sync retryOnEnter from stored session status. The session:status
   // event is guarded by isActive (which was false during deactivation),
@@ -1845,7 +1671,7 @@ onActivated(() => {
   // reuses the cached BaseTerminal, but the terminal is in holding).
   if (terminalRef.value && props.sessionId) {
     attachTerminal(props.sessionId, terminalRef.value)
-    nextTick(() => getFitAddon()?.fit())
+    nextTick(resize)
   }
   // Re-register onData/keyHandler listeners that were disposed in onDeactivated.
   bindListeners?.()
@@ -1880,8 +1706,7 @@ onDeactivated(() => {
   // Mark inactive so session event handlers become no-ops.
   nativeDrop.unbind()
   isActive.value = false
-  // Buffer freezes from here (live session:data handler gates on isActive) —
-  // publish it so buffer readers stop trusting the screen.
+  // Only the view becomes inactive; the authority keeps parsing/responding.
   markTerminalActive(props.sessionId || '', terminalInstanceRef, false)
   // Reset IME composition state so the OS IME doesn't continue feeding
   // characters into the textarea while the terminal is hidden. Without
@@ -1905,40 +1730,27 @@ onDeactivated(() => {
   keyHandlerDispose?.dispose()
   keyHandlerDispose = null
 
-  // If a transfer is still active, keep the service running so the background
-  // transfer continues. Otherwise dispose and restore backend state.
-  const hasStoreTransfer = zmodemStore.getActiveTransfer(props.sessionId || '')
-  if (hasStoreTransfer) {
-    return
-  }
-  disposeZmodemService(props.sessionId || '')
+  // File broker remains attached to the continuously parsed authority.
 })
 
 // Watch sessionId changes to rebind session data
 watch(() => props.sessionId, (newId, oldId) => {
-  if (oldId && oldId !== newId) {
-    if (terminalRef.value) detachTerminal(oldId, terminalRef.value)
-    disposeZmodemService(oldId)
-    // Publish the active state before/after the terminal object moves between
-    // session ids: transferTerminal relocates the whole ManagedTerminal
-    // (activeRefs travel with it), so the old id must drop the ref first and
-    // the new id re-add it after.
-    markTerminalActive(oldId, terminalInstanceRef, false)
-    // Transfer the terminal to the new sessionId so scrollback is
-    // preserved across reconnects. releaseTerminal is intentionally
-    // skipped — we want to keep the same terminal instance alive.
-    if (newId) transferTerminal(oldId, newId)
-    markTerminalActive(newId || '', terminalInstanceRef, true)
+  if (boundTerminalId !== newId) {
+    if (terminalRef.value) detachTerminal(boundTerminalId, terminalRef.value)
+    if (ownedBrokerSessions.has(boundTerminalId)) setTerminalOutputBroker(boundTerminalId)
+    if (oldId && zmodemService) disposeZmodemService(oldId)
+    markTerminalActive(boundTerminalId, terminalInstanceRef, false)
+    if (!newId || !transferTerminal(boundTerminalId, newId)) releaseTerminal(boundTerminalId, terminalInstanceRef)
+    if (newId) boundTerminalId = newId
   }
-  // Reset write tracking when session changes so onActivated replay
-  // starts from the correct offset for the new session.
-  writtenChunks = 0
   // Reset saved scroll position — the new sessionId has a different buffer.
   savedViewportY = null
   savedBaseY = null
   if (newId && (props.mode === 'ssh' || props.mode === 'local')) {
     initZmodemService(newId)
-    terminal = getManagedTerminal(newId)?.terminal ?? null
+    terminal = acquireTerminal(newId, terminalInstanceRef, getTerminalOptions(), settingsStore.settings.customTerminalThemes)
+    installZmodemBroker?.(newId)
+    markTerminalActive(newId, terminalInstanceRef, isActive.value)
     if (terminalRef.value) {
       attachTerminal(newId, terminalRef.value)
     }
@@ -2082,7 +1894,9 @@ watch(() => settingsStore.settings.terminal, (ts) => {
   if (ts.fontSize) terminal.options.fontSize = ts.fontSize
   if (ts.fontFamily) terminal.options.fontFamily = formatFontFamily(ts.fontFamily, ts.fallbackFont)
   if (ts.fontWeight) terminal.options.fontWeight = ts.fontWeight
-  if (ts.maxHistoryLines) terminal.options.scrollback = ts.maxHistoryLines
+  if (props.sessionId && !isWebMode()) presentTerminal(props.sessionId, {
+    kind: 'configure', cursorBlink: ts.cursorBlink ?? true, scrollback: ts.maxHistoryLines ?? 2500,
+  })
   if (ts.theme) applyXtermTheme(ts.theme)
   if (typeof ts.cursorBlink === 'boolean') {
     terminal.options.cursorBlink = ts.cursorBlink
@@ -2090,7 +1904,7 @@ watch(() => settingsStore.settings.terminal, (ts) => {
     // terminal previously received \x1b[?12h from a remote shell, just
     // flipping the option may not stop the running blink animation.
     // Force-reset by feeding the cursor a DECRST 12 sequence.
-    if (!ts.cursorBlink) terminal.write('\x1b[?12l')
+    if (!ts.cursorBlink) write('\x1b[?12l')
   }
   if (ts.wordSeparator) {
     // xterm reads wordSeparator on each selection via rawOptions; assigning
@@ -2125,10 +1939,10 @@ watch(
 // so detachTerminal would see terminalRef.value === null and skip.
 // onBeforeUnmount fires while refs are still valid.
 onBeforeUnmount(() => {
-  if (props.sessionId && terminalRef.value) {
-    detachTerminal(props.sessionId, terminalRef.value)
+  if (terminalRef.value) {
+    detachTerminal(boundTerminalId, terminalRef.value)
   }
-  markTerminalActive(props.sessionId || '', terminalInstanceRef, false)
+  markTerminalActive(boundTerminalId, terminalInstanceRef, false)
 })
 
 onUnmounted(() => {
@@ -2150,9 +1964,7 @@ onUnmounted(() => {
   keyHandlerDispose = null
 
   // Release reference (delayed dispose: terminal survives 500ms)
-  if (props.sessionId) {
-    releaseTerminal(props.sessionId, terminalInstanceRef)
-  }
+  releaseTerminal(boundTerminalId, terminalInstanceRef)
 
   unsubscribe?.()
   statusUnsubscribe?.()
@@ -2179,7 +1991,7 @@ onUnmounted(() => {
   if (onVisibilityChange) document.removeEventListener('visibilitychange', onVisibilityChange)
   onVisibilityChange = null
   suggestions.close()
-  if (!zmodemStore.getActiveTransfer(props.sessionId || '')) {
+  if (!ownedBrokerSessions.has(boundTerminalId) && !zmodemStore.getActiveTransfer(props.sessionId || '')) {
     disposeZmodemService(props.sessionId || '')
   }
 })
@@ -2248,7 +2060,7 @@ async function pasteToSession(text: string) {
 const panel = computed(() => (props.panelId ? panelStore.getPanel(props.panelId) : undefined))
 const isSsh = computed(() => panel.value?.type === 'ssh')
 const supportsOutputLog = computed(() =>
-  !!panel.value && ['ssh', 'telnet', 'serial', 'mosh', 'local', 'wsl'].includes(panel.value.type),
+  !isWebMode() && !!panel.value && ['ssh', 'telnet', 'serial', 'mosh', 'local', 'wsl'].includes(panel.value.type),
 )
 
 const isOutputLogOn = ref(false)
@@ -2400,6 +2212,11 @@ defineExpose({
 </script>
 
 <style scoped>
+.terminal-sharing-error {
+  padding: 0.5rem;
+  color: var(--color-danger, #ef4444);
+  overflow-wrap: anywhere;
+}
 .base-terminal {
   flex: 1;
   display: flex;

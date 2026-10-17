@@ -1,100 +1,44 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('../../bindings/github.com/ys-ll/uniterm/app', () => ({ SessionWrite: vi.fn(async () => {}) }))
+vi.mock('./webTerminalBridge', () => ({ webTerminalBridge: { input: vi.fn(async () => {}), resize: vi.fn(async () => {}) } }))
+vi.mock('../utils/webMode', () => ({ isWebMode: vi.fn(() => false), webClientId: () => 'browser-1' }))
+import { SessionWrite } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { webTerminalBridge } from './webTerminalBridge'
+import { isWebMode } from '../utils/webMode'
+import { enqueueSessionOperation, queuedSessionWrite, queuedSessionReply, resizeSessionView, setSessionInputSizeProvider } from './sessionWriter'
 
-// ── Inline the queue logic to avoid vitest ESM module isolation issues ──
-// The queue is tiny; testing it in isolation is the goal. The production
-// module is tested implicitly through the build (all call sites compile).
-
-interface WriteQueue { buf: string; inFlight: boolean }
-const queues = new Map<string, WriteQueue>()
-
-let writeFn: (sessionId: string, data: string) => Promise<void> = () => Promise.resolve()
-
-function queuedSessionWrite(sessionId: string, data: string): void {
-  if (!sessionId || !data) return
-  let q = queues.get(sessionId)
-  if (!q) { q = { buf: '', inFlight: false }; queues.set(sessionId, q) }
-  q.buf += data
-  if (q.inFlight) return
-  q.inFlight = true
-  const drain = (): void => {
-    if (q!.buf === '') {
-      q!.inFlight = false
-      if (queues.get(sessionId) === q) queues.delete(sessionId)
-      return
-    }
-    const batch = q!.buf; q!.buf = ''
-    Promise.resolve()
-      .then(() => writeFn(sessionId, batch))
-      .catch(() => {})
-      .then(drain)
-  }
-  drain()
-}
-
-function deferred() {
-  let resolve!: () => void; let reject!: (r?: unknown) => void
-  const promise = new Promise<void>((res, rej) => { resolve = res; reject = rej })
-  return { promise, resolve, reject }
-}
-
-// Flush one microtask so Promise.resolve().then() callbacks execute.
-const tick = () => new Promise<void>(r => setTimeout(r, 0))
-
-describe('queuedSessionWrite', () => {
-  it('sends the first write immediately and merges the rest once it settles', async () => {
-    const mock = vi.fn().mockResolvedValue(undefined)
-    writeFn = mock
-    const first = deferred()
-    mock.mockReturnValueOnce(first.promise)
-
-    queuedSessionWrite('s1', 'a')
-    queuedSessionWrite('s1', 'b')
-    queuedSessionWrite('s1', 'c')
-
-    // First write is dispatched after one microtask (Promise.resolve().then).
-    await tick()
-    expect(mock).toHaveBeenCalledTimes(1)
-    expect(mock).toHaveBeenCalledWith('s1', 'a')
-
-    first.resolve()
-    await vi.waitFor(() => expect(mock).toHaveBeenCalledTimes(2))
-    expect(mock.mock.calls[1]).toEqual(['s1', 'bc'])
+describe('actual session input writer', () => {
+  beforeEach(() => vi.clearAllMocks())
+  it('orders human input, source replies and passive resize without reply ownership changes', async () => {
+    const calls: string[] = []
+    let release!: () => void
+    vi.mocked(webTerminalBridge.input).mockImplementationOnce(async () => {
+      calls.push('input:start')
+      await new Promise<void>(resolve => { release = resolve })
+      calls.push('input:end')
+    })
+    vi.mocked(SessionWrite).mockImplementationOnce(async () => { calls.push('reply') })
+    vi.mocked(webTerminalBridge.resize).mockImplementationOnce(async () => { calls.push('resize') })
+    setSessionInputSizeProvider('s', () => ({ cols: 100, rows: 31 }))
+    queuedSessionWrite('s', 'a')
+    queuedSessionReply('s', '\x1b[1;1R')
+    const resized = resizeSessionView('s', 80, 24)
+    await vi.waitFor(() => expect(calls).toEqual(['input:start']))
+    release()
+    await resized
+    expect(calls).toEqual(['input:start', 'input:end', 'reply', 'resize'])
+    expect(webTerminalBridge.input).toHaveBeenCalledWith('s', 'desktop', 'a', 100, 31, false)
+    expect(SessionWrite).toHaveBeenCalledWith('s', '\x1b[1;1R')
+    expect(webTerminalBridge.resize).toHaveBeenCalledWith('s', 'desktop', 80, 24, false)
   })
 
-  it('keeps draining after a failed write', async () => {
-    const mock = vi.fn().mockResolvedValue(undefined)
-    writeFn = mock
-    const first = deferred()
-    mock.mockReturnValueOnce(first.promise)
-
-    queuedSessionWrite('s2', 'x')
-    queuedSessionWrite('s2', 'y')
-
-    first.reject(new Error('session gone'))
-    await vi.waitFor(() => expect(mock).toHaveBeenCalledTimes(2))
-    expect(mock.mock.calls[1]).toEqual(['s2', 'y'])
-  })
-
-  it('queues sessions independently', async () => {
-    const mock = vi.fn().mockResolvedValue(undefined)
-    writeFn = mock
-    const first = deferred()
-    mock.mockReturnValueOnce(first.promise).mockResolvedValue(undefined)
-
-    queuedSessionWrite('s3', 'a')
-    queuedSessionWrite('s4', 'x')
-
-    await tick()
-    expect(mock).toHaveBeenCalledTimes(2)
-    expect(mock.mock.calls[0]).toEqual(['s3', 'a'])
-    expect(mock.mock.calls[1]).toEqual(['s4', 'x'])
-  })
-
-  it('ignores empty input', () => {
-    const mock = vi.fn().mockResolvedValue(undefined)
-    writeFn = mock
-    queuedSessionWrite('', 'a')
-    queuedSessionWrite('s5', '')
-    expect(mock).not.toHaveBeenCalled()
+  it('uses browser identity, base64 binary input and never replies from a browser', async () => {
+    vi.mocked(isWebMode).mockReturnValue(true)
+    queuedSessionReply('b', 'query response')
+    queuedSessionWrite('b', '\x1b[M\xff !', true)
+    await enqueueSessionOperation('b', async () => {})
+    expect(SessionWrite).not.toHaveBeenCalled()
+    expect(webTerminalBridge.input).toHaveBeenCalledWith('b', 'browser-1', btoa('\x1b[M\xff !'), 0, 0, true)
+    vi.mocked(isWebMode).mockReturnValue(false)
   })
 })

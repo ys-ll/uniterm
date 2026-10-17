@@ -1,47 +1,44 @@
 import { SessionWrite } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode, webClientId } from '../utils/webMode'
+import { webTerminalBridge } from './webTerminalBridge'
 
-// Wails v3 dispatches every JS binding call in its own goroutine
-// (pkg/application/application.go: `event := <-windowMessageBuffer;
-// go a.handleWindowMessage(event)`), so two SessionWrite calls issued in
-// quick succession can reach the PTY out of order — under fast typing,
-// characters appear swapped. Serialize per session on the JS side: at most
-// one write in flight, the next batch is only sent after the previous one
-// settles. Concatenation plus single-flight makes PTY delivery order exactly
-// match call order, and merges keystroke-sized writes into fewer IPC calls.
+// Wails calls run in independent goroutines. Serialize input, replies and
+// resize requests per session; an automatic reply must never claim its grid.
+export const writeFn: { current: (id: string, data: string) => Promise<unknown> } = { current: SessionWrite }
+const tails = new Map<string, Promise<unknown>>()
+const sizes = new Map<string, { measure: () => { cols: number; rows: number }; shared: boolean }>()
 
-// Wrapping the binding in an object allows tests to swap it without fighting
-// vitest's ESM module namespace immutability.
-export const writeFn: { current: typeof SessionWrite } = { current: SessionWrite }
-
-interface WriteQueue {
-  buf: string
-  inFlight: boolean
+export function setSessionInputSizeProvider(id: string, provider?: () => { cols: number; rows: number }, shared = true): void {
+  if (provider) sizes.set(id, { measure: provider, shared })
+  else sizes.delete(id)
 }
 
-const queues = new Map<string, WriteQueue>()
+export function enqueueSessionOperation(id: string, operation: () => Promise<unknown>): Promise<void> {
+  const task = (tails.get(id) ?? Promise.resolve()).catch(() => {}).then(operation).then(() => {})
+  tails.set(id, task)
+  const finish = () => { if (tails.get(id) === task) tails.delete(id) }
+  task.then(finish, finish)
+  return task
+}
 
-export function queuedSessionWrite(sessionId: string, data: string): void {
-  if (!sessionId || !data) return
-  let q = queues.get(sessionId)
-  if (!q) {
-    q = { buf: '', inFlight: false }
-    queues.set(sessionId, q)
-  }
-  q.buf += data
-  if (q.inFlight) return
-  q.inFlight = true
-  const drain = (): void => {
-    if (q!.buf === '') {
-      q!.inFlight = false
-      if (queues.get(sessionId) === q) queues.delete(sessionId)
-      return
-    }
-    const batch = q!.buf
-    q!.buf = ''
-    Promise.resolve()
-      .then(() => writeFn.current(sessionId, batch))
-      .catch(() => {})
-      .then(drain)
-  }
-  drain()
+function report(id: string, error: unknown): void {
+  console.error('[terminal input]', id, error)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('terminal:sharing-error', { detail: { id, error: String(error) } }))
+}
+
+export function queuedSessionWrite(id: string, data: string, binary = false): void {
+  if (!id || !data) return
+  const size = sizes.get(id)
+  const { cols = 0, rows = 0 } = size?.measure() ?? {}
+  void enqueueSessionOperation(id, () => size?.shared === false ? writeFn.current(id, data) : webTerminalBridge.input(id, isWebMode() ? webClientId() : 'desktop', binary ? btoa(data) : data, cols, rows, binary))
+    .catch(error => report(id, error))
+}
+
+export function queuedSessionReply(id: string, data: string): void {
+  if (isWebMode() || !id || !data) return
+  void enqueueSessionOperation(id, () => writeFn.current(id, data)).catch(error => report(id, error))
+}
+
+export function resizeSessionView(id: string, cols: number, rows: number, active = false): Promise<void> {
+  return enqueueSessionOperation(id, () => webTerminalBridge.resize(id, isWebMode() ? webClientId() : 'desktop', cols, rows, active))
 }

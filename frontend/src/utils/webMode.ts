@@ -12,3 +12,7 @@ export function isWebMode(): boolean {
 export function webClientId(): string {
   return typeof window !== 'undefined' ? window.__UNITERM_WEB__?.clientId || 'desktop' : 'desktop'
 }
+
+export function setWebClientId(id: string): void {
+  if (window.__UNITERM_WEB__) window.__UNITERM_WEB__.clientId = id
+}

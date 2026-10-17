@@ -124,6 +124,9 @@
 
       <!-- ④ 关闭标签操作 -->
       <MenuDivider />
+      <MenuItem v-if="tab.type === 'terminal' && panelStore.isAttachedPanel(tab.panelId)" @click="terminateSharedSession">
+        {{ t('x11.tab.disconnect') }}
+      </MenuItem>
       <MenuItem :class="{ disabled: tab.locked }" :shortcut="menuShortcut('closePanel')" @click="tab.locked ? null : closeTab()">
         {{ t('tab.close') }}
       </MenuItem>
@@ -164,6 +167,8 @@ import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
 import { Clipboard } from '@wailsio/runtime'
 import { isMobilePlatform } from '../utils/platform'
+import { isWebMode } from '../utils/webMode'
+import { terminateBrowserSession } from '../services/webTerminals'
 import { SquareTerminal, FolderUp, X, ArrowDownUp, Lock, Radio } from '@lucide/vue'
 
 const props = defineProps<{
@@ -338,6 +343,7 @@ const isDisconnected = computed(() => {
 const isOutputLogOn = ref(false)
 const outputLogPath = ref('')
 const supportsOutputLog = computed(() => {
+  if (isWebMode()) return false
   if (props.tab.type !== 'terminal') return false
   const p = panelStore.getPanel((props.tab as TerminalTab).panelId)
   return !!p && ['ssh', 'telnet', 'serial', 'mosh', 'local'].includes(p.type)
@@ -534,6 +540,11 @@ function closeTab() {
   closeContextMenu()
 }
 
+async function terminateSharedSession() {
+  closeContextMenu()
+  if (props.tab.type === 'terminal') await terminateBrowserSession(props.tab.panelId).catch(error => msg.error(String(error)))
+}
+
 function closeOther() {
   const allTabs = tabStore.tabs
   const currentIdx = allTabs.findIndex(t => t.id === props.tab.id)
@@ -604,6 +615,11 @@ async function onSaveWorkspace() {
 // terminals, the desktop tab-content components for rdp/vnc/spice/x11) can
 // force-disconnect and re-initiate the connection.
 function onReconnect() {
+  if (props.tab.type === 'terminal' && panelStore.isAttachedPanel(props.tab.panelId)) {
+    window.dispatchEvent(new CustomEvent('panel:reconnect', { detail: { panelId: props.tab.panelId } }))
+    closeContextMenu()
+    return
+  }
   closeContextMenu()
   const panelId = 'panelId' in props.tab ? props.tab.panelId : ''
   if (!panelId) return

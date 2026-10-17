@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import { Events } from '@wailsio/runtime'
 import type { SessionStatus } from '../types/session'
 import { useZmodemStore } from './zmodemStore'
+import type { WebSession } from '../services/webTerminalBridge'
 
 interface SessionData {
   id: string
@@ -10,6 +11,7 @@ interface SessionData {
   // Detected remote OS (e.g. "windows-openssh") reported by the backend on
   // connect. Empty when unknown or not applicable.
   remoteOS?: string
+  web?: WebSession
   data: string[]
   // Monotonically increasing count of chunks ever appended to this session.
   // Unlike data.length, it is NOT reset when `data` is trimmed from the front,
@@ -133,6 +135,14 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  function attachSession(session: WebSession) {
+    initSession(session.id)
+    const s = sessionState.sessions.get(session.id)!
+    s.status = session.status
+    s.remoteOS = session.remoteOS
+    s.web = session
+  }
+
   function getStatus(id: string): SessionStatus {
     const s = sessionState.sessions.get(id)
     return s ? s.status : 'disconnected'
@@ -215,6 +225,7 @@ export const useSessionStore = defineStore('session', () => {
   return {
     sessions: sessionState.sessions,
     initSession,
+    attachSession,
     updateStatus,
     getStatus,
     getRemoteOS,

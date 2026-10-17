@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { reactive } from 'vue'
 import type { Panel, PanelStatus, ConnectionConfig } from '../types/workspace'
 import { DisableSessionOutputLog, RegisterSessionForPanel, UnregisterSession } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode } from '../utils/webMode'
 
 export interface TransferFileState {
   path: string
@@ -55,6 +56,7 @@ const panelState = reactive<{
 })
 
 export const usePanelStore = defineStore('panel', () => {
+  const attachedPanels = reactive(new Set<string>())
   function makeTitleUnique(title: string, excludePanelId?: string): string {
     const others = [...panelState.panels.values()]
       .filter(p => p.id !== excludePanelId)
@@ -94,11 +96,12 @@ export const usePanelStore = defineStore('panel', () => {
     // Close any active output log so the footer banner is written and
     // the file handle is released. Fire-and-forget; the backend logs
     // any error via its own facilities.
-    DisableSessionOutputLog(id).catch(() => {})
-    if (p?.sessionId) {
+    if (!isWebMode() && !attachedPanels.has(id)) DisableSessionOutputLog(id).catch(() => {})
+    if (p?.sessionId && !isWebMode() && !attachedPanels.has(id)) {
       UnregisterSession(p.sessionId).catch(() => {})
     }
     panelState.panels.delete(id)
+    attachedPanels.delete(id)
   }
 
   function getPanel(id: string): Panel | undefined {
@@ -110,6 +113,7 @@ export const usePanelStore = defineStore('panel', () => {
     if (!p) return
     const prev = p.sessionId
     p.sessionId = sessionId
+    if (isWebMode() || attachedPanels.has(panelId)) return
     // Tell the backend which panel this session belongs to so per-panel
     // output logging survives reconnects. The previous session's binding
     // is dropped best-effort — if it's already gone the backend no-ops.
@@ -119,6 +123,15 @@ export const usePanelStore = defineStore('panel', () => {
     if (sessionId) {
       RegisterSessionForPanel(sessionId, panelId).catch(() => {})
     }
+  }
+
+  function bindAttachedSession(panelId: string, sessionId: string) {
+    attachedPanels.add(panelId)
+    bindSession(panelId, sessionId)
+  }
+
+  function isAttachedPanel(panelId: string): boolean {
+    return attachedPanels.has(panelId)
   }
 
   function updateStatus(panelId: string, status: PanelStatus) {
@@ -226,6 +239,8 @@ export const usePanelStore = defineStore('panel', () => {
     removePanel,
     getPanel,
     bindSession,
+    bindAttachedSession,
+    isAttachedPanel,
     updateStatus,
     updateTitle,
     setOutputLog,
