@@ -211,14 +211,25 @@ func (s *Server) Configure(config Config, token string) error {
 
 func (s *Server) failLocked(err error) error { s.lastError = err.Error(); return err }
 
-// listenFrom retains the successful listener; only EADDRINUSE advances the port.
+func listenExclusive(network, address string) (net.Listener, error) {
+	lc := net.ListenConfig{Control: func(_, _ string, c syscall.RawConn) error {
+		var optionErr error
+		if err := c.Control(func(fd uintptr) { optionErr = setExclusiveListener(fd) }); err != nil {
+			return err
+		}
+		return os.NewSyscallError("setsockopt", optionErr)
+	}}
+	return lc.Listen(context.Background(), network, address)
+}
+
+// listenFrom retains the successful listener; only bind conflicts advance the port.
 func listenFrom(host string, port int, listen func(string, string) (net.Listener, error)) (net.Listener, error) {
 	for p := port; p <= 65535; p++ {
 		l, err := listen("tcp4", net.JoinHostPort(host, strconv.Itoa(p)))
 		if err == nil {
 			return l, nil
 		}
-		if !errors.Is(err, syscall.EADDRINUSE) {
+		if !addressInUse(err) {
 			return nil, fmt.Errorf("listen on %s:%d: %w", host, p, err)
 		}
 	}
@@ -232,7 +243,7 @@ func (s *Server) startLocked() error {
 	if s.assets == nil {
 		return s.failLocked(errors.New("Wails assets are not ready"))
 	}
-	l, err := listenFrom(s.settings.Config.Host, s.settings.Config.StartPort, net.Listen)
+	l, err := listenFrom(s.settings.Config.Host, s.settings.Config.StartPort, listenExclusive)
 	if err != nil {
 		return s.failLocked(err)
 	}
