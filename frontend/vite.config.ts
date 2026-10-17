@@ -12,7 +12,10 @@ export default defineConfig({
   // top-level await (used by @novnc/novnc). `build.target` alone only affects
   // the production bundle; without this the `wails3 dev` Vite server crashes.
   build: {
-    target: 'esnext'
+    target: 'esnext',
+    rollupOptions: {
+      input: { app: 'index.html', web: 'web.html' },
+    },
   },
   esbuild: {
     target: 'esnext'

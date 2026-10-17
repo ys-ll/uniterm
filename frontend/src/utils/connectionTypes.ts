@@ -10,6 +10,7 @@
 // new-connection form card. Pure UI tab kinds (workspace, settings, start)
 // are not connection types and stay local to their consumers.
 import type { Component } from 'vue'
+import { supportsConnectionType } from './nativeCapabilities'
 import {
   Activity, AppWindow, ArrowLeftRight, Box, Boxes, Cable, Cloud, Database, DatabaseSearch,
   DatabaseZap, FileBox, FileUp, FolderOpen, FolderUp, Folders, Globe, HardDrive, Laptop,
@@ -44,7 +45,7 @@ export interface ConnectionTypeInfo {
   formHidden?: boolean
 }
 
-export const CONNECTION_TYPES: ConnectionTypeInfo[] = [
+export const CONNECTION_TYPES: ConnectionTypeInfo[] = ([
   // Terminal
   { type: 'ssh', label: 'SSH', icon: SquareTerminal, category: 'terminal', defaultPort: 22, connectMenuKey: 'sidebar.connectSSH' },
   { type: 'telnet', label: 'Telnet', icon: Terminal, category: 'terminal', defaultPort: 23, connectMenuKey: 'sidebar.connectTelnet' },
@@ -95,7 +96,8 @@ export const CONNECTION_TYPES: ConnectionTypeInfo[] = [
   { type: 'workspace', label: 'Workspace', icon: LayoutDashboard, category: 'other', formHidden: true, connectMenuKey: 'workspace.openSaved' },
   { type: 'settings', label: 'Settings', icon: Settings, category: 'other', formHidden: true },
   { type: 'start', label: 'Start', icon: SquarePlus, category: 'other', formHidden: true },
-]
+] as ConnectionTypeInfo[]).map(info => supportsConnectionType(info.type)
+  ? info : { ...info, formHidden: true, connectMenuKey: undefined })
 
 export const CATEGORY_ORDER: ConnectionCategory[] = ['terminal', 'filetransfer', 'remote', 'sql', 'nosql', 'container']
 

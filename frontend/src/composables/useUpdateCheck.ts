@@ -5,6 +5,7 @@ import { CheckForUpdate, GetAppInfo, DownloadUpdate, ApplyUpdate } from '../../b
 import { useI18n, locale } from '../i18n'
 import { useSettingsStore } from '../stores/settingsStore'
 import { isMobilePlatform } from '../utils/platform'
+import { isWebMode } from '../utils/webMode'
 import { Events } from '@wailsio/runtime'
 import type { UpdateInfo } from '../types/settings'
 
@@ -60,6 +61,7 @@ function bindProgressEvents() {
 // backend relaunches the app (or quits for the installer channel), so the
 // last state the user sees is "restarting".
 async function startUpdate() {
+  if (isWebMode()) return
   const info = updateInfo.value
   if (!info || info.assets.length === 0) {
     updateError.value = 'no assets'
@@ -81,6 +83,7 @@ async function startUpdate() {
 }
 
 function openUpdateDialog() {
+  if (isWebMode()) return
   updatePhase.value = 'idle'
   updateError.value = ''
   updateDialogVisible.value = true
@@ -162,6 +165,7 @@ function stopTimer() {
 }
 
 async function checkForUpdate(showStatus = false): Promise<UpdateInfo | null> {
+  if (isWebMode()) return null
   checking.value = true
   const updateSource = resolveSource()
   try {
@@ -213,7 +217,7 @@ function initAutoCheck() {
   }).catch(() => {})
   // Mobile updates by installing a new APK; the in-app update check would
   // only fetch desktop assets. Skip auto-check scheduling entirely.
-  if (isMobilePlatform()) return
+  if (isWebMode() || isMobilePlatform()) return
   // Wait for persisted settings before scheduling network requests. Reading
   // the temporary default here would ignore a stored `false`.
   const settings = useSettingsStore()

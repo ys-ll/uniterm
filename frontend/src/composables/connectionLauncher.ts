@@ -18,6 +18,7 @@ import { fileTransferProto } from '../utils/fileTransferUtils'
 import { parseWslFromShell } from '../utils/shellLabel'
 import { t } from '../i18n'
 import { msg } from '../services/message'
+import { supportsConnectionType } from '../utils/nativeCapabilities'
 import type { ConnectionConfig, MemberConnectResult } from '../types/session'
 
 // App.vue-provided dependencies: the credential dialog and the start-tab
@@ -60,6 +61,10 @@ export function persistConnection(config: ConnectionConfig, wasEdit = false) {
 }
 
 export async function launchConnection(config: ConnectionConfig, opts: LaunchOptions = {}) {
+  if (!supportsConnectionType(config.type)) {
+    msg.warning(t('web.nativeConnectionOnly'))
+    return
+  }
   const persist = opts.persist ?? true
   if (persist) {
     persistConnection(config, opts.wasEdit ?? false)

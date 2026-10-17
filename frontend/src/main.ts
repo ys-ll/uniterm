@@ -9,8 +9,10 @@ import './style.css'
 import { Window } from '@wailsio/runtime'
 import { useSettingsStore } from './stores/settingsStore'
 import { setLocale } from './i18n'
+import { isWebMode } from './utils/webMode'
 
-Window.SetTitle('uniTerm')
+if (isWebMode()) document.title = 'uniTerm'
+else Window.SetTitle('uniTerm')
 
 // Set ElDialog draggable by default
 if (ElDialog.props) {
@@ -141,6 +143,7 @@ function restoreEditableSelection(snapshot: EditableSelectionSnapshot) {
 }
 
 document.addEventListener('mousedown', (e) => {
+  if (isWebMode()) return
   if (e.button !== 2 || !isEditableTarget(e.target)) {
     if (e.button === 0) rightClickSelection = null
     return
@@ -165,6 +168,8 @@ document.addEventListener('select', (e) => {
 }, true)
 
 document.addEventListener('contextmenu', (e) => {
+  // Browser text menus provide user-initiated copy/paste on insecure LAN HTTP.
+  if (isWebMode()) return
   const target = e.target as HTMLElement
   // Read-only log-path toast: offer copy/select-all on its plain text.
   const copyable = target.closest('.msg-copyable') as HTMLElement | null

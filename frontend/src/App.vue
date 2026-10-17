@@ -11,7 +11,12 @@
       @toggle-ai-lock="onToggleAiLock"
       @tab-dragstart="onTabDragStart"
       @new-local-terminal="createNewTab"
+      @open-web-sessions="webSessionsVisible = true"
     />
+    <div v-if="web && (webTerminalError || browserConnection.error)" class="web-status" role="status">
+      {{ webTerminalError || browserConnection.error }}
+    </div>
+    <BrowserSessionPicker v-if="web" v-model:visible="webSessionsVisible" />
     <div class="main-content">
       <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onSidebarConnect" @connect-to-workspace="({ config, workspaceId }: any) => onConnect(config, undefined, undefined, true, workspaceId)" @create-workspace="(configs: any) => onCreateWorkspaceFromConfigs(configs)" @connect-only="onConnectOnly" />
       <div class="tab-area">
@@ -150,11 +155,11 @@
     />
 
     <SyncConflictDialog />
-    <UpdateDialog />
+    <UpdateDialog v-if="!web" />
     <WorkspaceSaveDialog />
-    <DataDirDialog v-model:visible="dataDirVisible" :first-run="credStore.firstRun || credStore.dataDirInfo.firstRun" @done="onDataDirDone" />
-    <EncryptionModeDialog v-model:visible="encryptVisible" :existing-secrets="credStore.status.existingSecrets" @done="onEncryptDone" />
-    <CredentialUnlockDialog v-model:visible="unlockVisible" @done="onUnlockDone" @reset="onReset" />
+    <DataDirDialog v-if="!web" v-model:visible="dataDirVisible" :first-run="credStore.firstRun || credStore.dataDirInfo.firstRun" @done="onDataDirDone" />
+    <EncryptionModeDialog v-if="!web" v-model:visible="encryptVisible" :existing-secrets="credStore.status.existingSecrets" @done="onEncryptDone" />
+    <CredentialUnlockDialog v-if="!web" v-model:visible="unlockVisible" @done="onUnlockDone" @reset="onReset" />
     <MobileKeyBar v-if="keyBarSessionId" :key="keyBarSessionId" :session-id="keyBarSessionId" />
   </div>
   </el-config-provider>
@@ -172,12 +177,17 @@ import es from 'element-plus/es/locale/lang/es'
 import fr from 'element-plus/es/locale/lang/fr'
 import ru from 'element-plus/es/locale/lang/ru'
 import AppHeader from './components/AppHeader.vue'
+import BrowserSessionPicker from './components/BrowserSessionPicker.vue'
+import { isWebMode } from './utils/webMode'
+import { browserConnection } from './utils/browserRuntime'
+import { initBrowserTerminalIntegration } from './utils/webTerminalIntegration'
+import { shouldCloseSession } from './utils/nativeCapabilities'
 import Sidebar from './components/Sidebar.vue'
 import TerminalTabContent from './components/TerminalTabContent.vue'
 import MobileKeyBar from './components/MobileKeyBar.vue'
-import { isMobilePlatform } from './utils/platform'
+import { detectPlatformSync, isMobilePlatform } from './utils/platform'
 import { startAndroidKeepAlive, stopAndroidKeepAlive } from './utils/androidKeepAlive'
-import { writeClipboard } from './composables/useClipboardWrite'
+import { writeClipboard, readClipboardText } from './composables/useClipboardWrite'
 import SettingsTabContent from './components/SettingsTabContent.vue'
 import WorkspaceContent from './components/WorkspaceContent.vue'
 import FileTabContent from './components/FileTabContent.vue'
@@ -237,7 +247,7 @@ import { msg } from './services/message'
 import { unregisterTransferRoute } from './services/transferTaskCenter'
 import type { ConnectionConfig } from './types/session'
 import type { PanelType } from './types/workspace'
-import { Application, Clipboard, Events } from '@wailsio/runtime'
+import { Application, Events } from '@wailsio/runtime'
 import { parseQuickConnect } from './utils/quickConnect'
 import { getShellLabel as getShellLabelBase, parseWslFromShell } from './utils/shellLabel'
 import { reconnectFileTransferPanel } from './composables/usePanelReconnect'
@@ -247,6 +257,16 @@ import { installTabSnapshotSaver, restoreTabsSnapshot } from './composables/tabS
 import { createWorkspaceFromSelection } from './composables/createWorkspace'
 
 const bgDataUrl = ref('')
+const web = isWebMode()
+const webSessionsVisible = ref(false)
+const webTerminalError = ref('')
+let webTerminalsReady = false
+
+function canCreateTerminal(): boolean {
+  if (!web || webTerminalsReady && browserConnection.connected) return true
+  msg.error(webTerminalError.value || t('web.eventsUnavailable'))
+  return false
+}
 
 async function loadBackgroundImage() {
   const ls = localStateStore.state
@@ -334,6 +354,7 @@ function hasLiveSessions(): boolean {
 }
 
 function onVisibilityChange() {
+  if (web) return
   if (document.visibilityState === 'hidden') {
     if (hasLiveSessions()) {
       startAndroidKeepAlive('uniTerm', t('app.backgroundKeepAlive'))
@@ -348,7 +369,7 @@ onUnmounted(() => {
     document.removeEventListener('focusout', onDocFocusOut)
     document.removeEventListener('visibilitychange', onVisibilityChange)
   }
-  stopAndroidKeepAlive()
+  if (!web) stopAndroidKeepAlive()
 })
 
 const keyBarSessionId = computed(() => {
@@ -438,6 +459,7 @@ async function onReset() {
 }
 
 async function checkCredentials() {
+  if (web) return
   credStore.watchEvents()
   await credStore.loadDataDir()
   await credStore.loadStatus()
@@ -464,6 +486,7 @@ function getActiveRdpSessionId(): string | null {
 }
 
 function rdpSyncPosition() {
+  if (web) return
   if (rdpOverlayCount.value > 0) return
   // While in native ActiveX full screen, don't fight it with SetPosition.
   if (rdpFullScreen.value) return
@@ -530,6 +553,7 @@ function clearRdpSnapshotBg() {
 }
 
 function RDPHideForOverlay() {
+  if (web) return
 	rdpOverlayCount.value++
 	if (rdpOverlayCount.value === 1) {
 		const sid = getActiveRdpSessionId()
@@ -558,6 +582,7 @@ function RDPHideForOverlay() {
 }
 
 function RDPShowForOverlay() {
+  if (web) return
 	if (rdpOverlayCount.value > 0) rdpOverlayCount.value--
 	if (rdpRestoreTimer) clearTimeout(rdpRestoreTimer)
 	rdpRestoreTimer = setTimeout(() => {
@@ -782,7 +807,8 @@ function inputMenuPaste() {
   const selection = inputMenuSelection
   closeInputMenu()
   if (!el || !selection) return
-  Clipboard.Text().then(text => {
+  readClipboardText().then(text => {
+    if (!text) return
     if (el.isContentEditable) {
       restoreInputMenuSelection(el, selection)
       insertTextAtContentEditable(el, text)
@@ -901,7 +927,7 @@ function onPlatformSystemShortcut(e: KeyboardEvent) {
       return
     }
   }
-  if (!isMac || !e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+  if (web || !isMac || !e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
   const key = e.key.toLowerCase()
   if (key === 'q') {
     e.preventDefault()
@@ -934,11 +960,19 @@ onMounted(async () => {
   if (tabStore.tabs.length === 0) {
     tabStore.createStartTab()
   }
+  try {
+    webTerminalsReady = await initBrowserTerminalIntegration()
+  } catch (e) {
+    webTerminalError.value = e instanceof Error ? e.message : String(e)
+  }
+  if (web) webSessionsVisible.value = true
   // Reopen-last-session prompt (issue #937): ask before touching tabs, then
   // start recording so the snapshot always mirrors what's open. Not awaited —
   // the dialog must not block the rest of the mount sequence.
-  maybeRestoreLastTabs()
-  installTabSnapshotSaver()
+  if (!web) {
+    maybeRestoreLastTabs()
+    installTabSnapshotSaver()
+  }
   // Pre-load noVNC so VNC tab switches don't pay the dynamic import cost.
   import('@novnc/novnc').then((m: any) => {
     ;(window as any).__novnc_RFB = m.default || m
@@ -950,7 +984,7 @@ onMounted(async () => {
   // macOS system shortcuts (Cmd+Q / Cmd+W) — the digit shortcuts in
   // onPlatformSystemShortcut are armed on every platform.
   try {
-    const platform = await GetPlatform()
+    const platform = web ? detectPlatformSync() : await GetPlatform()
     isMac = platform === 'darwin'
     // Expose for platform-specific CSS (e.g. dialog close-button styles)
     document.documentElement.dataset.platform = platform
@@ -966,6 +1000,8 @@ onMounted(async () => {
   // (issue #285) — see composables/useFocusTerminal.ts for the policy.
   uninstallFocusRestore = installTerminalFocusRestore()
 
+  // Only the native frontend owns window/tray/approval/session-takeover hooks.
+  if (!web) {
   // RDP overlay tracking
   window.addEventListener('rdp:overlay-push', RDPHideForOverlay)
   window.addEventListener('rdp:overlay-pop', RDPShowForOverlay)
@@ -1040,6 +1076,8 @@ onMounted(async () => {
       }, 300)
     }
   })
+
+  }
 
   // Panel/Tab/StartTab menu actions
   // Sidebar connection dropped onto a workspace panel: connect it and split
@@ -1195,14 +1233,14 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
     if (t.type === 'workspace' && t.panelIds.length > 1) {
       const panelId = t.activePanelId || t.panelIds[t.panelIds.length - 1]
       const p = panelStore.getPanel(panelId)
-      if (p?.sessionId) CloseSession(p.sessionId).catch(() => {})
+      if (p?.sessionId && shouldCloseSession(p.type)) CloseSession(p.sessionId).catch(() => {})
       companionStore.disposeForPanel(panelId).catch(() => {})
       tabStore.removePanelFromWorkspaceTab(t.id, panelId)
       panelStore.removePanel(panelId)
     } else if (t.type === 'workspace' && t.panelIds.length === 1) {
       const panelId = t.panelIds[0]
       const p = panelStore.getPanel(panelId)
-      if (p?.sessionId) CloseSession(p.sessionId).catch(() => {})
+      if (p?.sessionId && shouldCloseSession(p.type)) CloseSession(p.sessionId).catch(() => {})
       companionStore.disposeForPanel(panelId).catch(() => {})
       tabStore.removePanelFromWorkspaceTab(t.id, panelId)
       panelStore.removePanel(panelId)
@@ -1333,7 +1371,7 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
     const panelIds = tab.type === 'workspace' ? tab.panelIds : 'panelId' in tab ? [tab.panelId] : []
     const hasConnected = panelIds.some(pid => {
       const p = panelStore.getPanel(pid)
-      if (!p?.sessionId) return false
+      if (!p?.sessionId || !shouldCloseSession(p.type)) return false
       return sessionStore.getStatus(p.sessionId) === 'connected'
     })
     if (hasConnected) {
@@ -1419,7 +1457,7 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
   // Terminal sessions must be explicitly closed to terminate the connection/shell process
   if (tab && tab.type === 'terminal') {
     const p = panelStore.getPanel(tab.panelId)
-    if (p?.sessionId) {
+    if (p?.sessionId && shouldCloseSession(p.type)) {
       try { await CloseSession(p.sessionId) } catch (_) {}
     }
   }
@@ -1427,7 +1465,7 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
   if (tab && tab.type === 'workspace') {
     for (const pid of tab.panelIds) {
       const p = panelStore.getPanel(pid)
-      if (p?.sessionId) {
+      if (p?.sessionId && shouldCloseSession(p.type)) {
         try { await CloseSession(p.sessionId) } catch (_) {}
       }
     }
@@ -1473,7 +1511,7 @@ async function closeTabBatch(tabIds: string[]) {
     const panelIds = tab.type === 'workspace' ? tab.panelIds : 'panelId' in tab ? [tab.panelId] : []
     const hit = panelIds.some(pid => {
       const p = panelStore.getPanel(pid)
-      if (!p?.sessionId) return false
+      if (!p?.sessionId || !shouldCloseSession(p.type)) return false
       return sessionStore.getStatus(p.sessionId) === 'connected'
     })
     return hit ? n + 1 : n
@@ -1584,6 +1622,7 @@ configureLauncher({ ensureCredentials, closeStartAndReposition })
 // this is the startup half: prompt (when the setting is on) and re-open the
 // recorded tabs through the regular connect flows.
 async function maybeRestoreLastTabs() {
+  if (web) return
   if (!settingsStore.settings.restoreTabsPrompt) return
   const snapshot = localStateStore.state.lastTabsSnapshot
   if (!snapshot?.tabs?.length) return
@@ -1640,10 +1679,11 @@ interface WorkspacePlacement {
   insertBefore: boolean
 }
 async function connectTerminalSession(config: ConnectionConfig, persist: boolean, prev: any, targetWorkspaceId?: string, placement?: WorkspacePlacement): Promise<{ status: 'ok' | 'cancelled' | 'failed'; panelId?: string }> {
+  if (!canCreateTerminal()) return { status: 'failed' }
   // Credential check
   const resolved = await ensureCredentials(config)
   if (!resolved) return { status: 'cancelled' }
-  config = resolved
+  config = web ? { ...resolved, x11Forwarding: false } : resolved
 
   // Create session BEFORE panel so the terminal has a sessionId when it first
   // fires SessionResize. Otherwise the resize is silently dropped because the
@@ -1708,10 +1748,9 @@ async function connectTerminalSession(config: ConnectionConfig, persist: boolean
     await SessionStart(sessionId, config)
   } catch (e) {
     console.error('Failed to start session:', e)
-    // Session is registered in the backend but never connected — close it
-    // so it doesn't leak until app shutdown. UI rollback is the caller's
-    // responsibility (this helper is reused across connect / duplicate).
-    CloseSession(sessionId).catch(() => {})
+    // A lost Web response does not prove the host failed to start its PTY.
+    // Leave shared text sessions under desktop authority on network errors.
+    if (shouldCloseSession(config.type)) CloseSession(sessionId).catch(() => {})
   }
   return { status: 'ok', panelId: panel.id }
 }
@@ -1886,6 +1925,7 @@ function onTabDragStart(_e: DragEvent, _tabId: string) {
 }
 
 async function createLocalTerminal(shellPath?: string, keepOpen?: boolean) {
+  if (!canCreateTerminal()) return
   const panel = panelStore.createPanel(null, 'local')
   const shellName = getShellLabel(shellPath)
   panelStore.updateTitle(panel.id, shellName)
@@ -1931,7 +1971,7 @@ async function createLocalTerminal(shellPath?: string, keepOpen?: boolean) {
       await SessionStart(info.id, config)
     } catch (e) {
       console.error('Failed to start local session:', e)
-      CloseSession(info.id).catch(() => {})
+      if (shouldCloseSession('local')) CloseSession(info.id).catch(() => {})
     }
   } catch (e) {
     console.error('Failed to create local terminal:', e)
@@ -1942,6 +1982,7 @@ async function createLocalTerminal(shellPath?: string, keepOpen?: boolean) {
 // WSL terminal: a dedicated session type (`wsl`) that launches wsl.exe inside
 // the distro and supports the file sidebar via its companion WSL file session.
 async function createWslTerminal(distro: string, keepOpen?: boolean) {
+  if (!canCreateTerminal()) return
   const shellPath = 'wsl://' + distro
   const panel = panelStore.createPanel(null, 'wsl')
   const shellName = getShellLabel(shellPath)
@@ -1982,7 +2023,7 @@ async function createWslTerminal(distro: string, keepOpen?: boolean) {
       await SessionStart(info.id, config)
     } catch (e) {
       console.error('Failed to start wsl session:', e)
-      CloseSession(info.id).catch(() => {})
+      if (shouldCloseSession('wsl')) CloseSession(info.id).catch(() => {})
     }
   } catch (e) {
     console.error('Failed to create wsl terminal:', e)
@@ -1994,13 +2035,13 @@ async function createWslTerminal(distro: string, keepOpen?: boolean) {
 // Position updates are only sent to the active RDP session (see rdpSyncPosition),
 // so background sessions are tucked under the webview and don't respond to drag.
 watch(() => activeTab.value, (newTab, oldTab) => {
-  if (oldTab?.type === 'rdp') {
+  if (!web && oldTab?.type === 'rdp') {
     const p = panelStore.getPanel(oldTab.panelId)
     if (p?.sessionId) RDPHide(p.sessionId)
   }
   // Clear pending restore timer on tab switch
   if (rdpRestoreTimer) { clearTimeout(rdpRestoreTimer); rdpRestoreTimer = null }
-  if (newTab?.type === 'rdp') {
+  if (!web && newTab?.type === 'rdp') {
     rdpResetTracking()
     const sid = panelStore.getPanel(newTab.panelId)?.sessionId
     if (sid) nextTick(() => RDPShow(sid))
@@ -2047,6 +2088,7 @@ watch(
   border: 1px solid var(--border-subtle);
   position: relative;
 }
+.web-status { padding: 0.5rem 1rem; background: var(--bg-elevated); color: var(--warning); font-size: 0.8125rem; }
 .main-content {
   display: flex;
   flex: 1;

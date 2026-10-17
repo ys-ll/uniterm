@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { isWebMode } from './webMode'
 
 // Platform detection shared by components that adapt desktop-only UI
 // (window controls and keyboard hints) for mobile.
@@ -21,7 +22,7 @@ export function isMobilePlatform(p: UiPlatform = detectPlatformSync()): boolean 
 }
 
 export function supportsLocalTerminal(p: UiPlatform = detectPlatformSync()): boolean {
-  return p !== 'ios'
+  return isWebMode() || p !== 'ios'
 }
 
 // Phone-shaped viewport: a touch platform whose window is phone-narrow.

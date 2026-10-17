@@ -21,6 +21,9 @@
     </div>
 
     <div class="settings-panel">
+      <div v-if="!web && settingsStore.activeCategory === 'web'" class="settings-section">
+        <WebAccessSettings />
+      </div>
       <!-- 基础设置 -->
       <div v-if="settingsStore.activeCategory === 'basic'" class="settings-section">
         <h2 class="section-title">{{ t('settings.appearance') }}</h2>
@@ -76,7 +79,7 @@
           </div>
 
           <!-- No OS window title bar on mobile -->
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!web && !isMobile" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.systemTitleBar') }}</div>
               <div class="setting-desc">{{ t('settings.systemTitleBarDesc') }}</div>
@@ -89,7 +92,7 @@
             </div>
           </div>
 
-          <div class="setting-card">
+          <div v-if="!web" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.bgEnable') }}</div>
               <div class="setting-desc">{{ t('settings.bgEnableDesc') }}</div>
@@ -102,7 +105,7 @@
             </div>
           </div>
 
-          <template v-if="localStateStore.state.backgroundEnabled">
+          <template v-if="!web && localStateStore.state.backgroundEnabled">
             <div class="setting-card">
               <div class="setting-info">
                 <div class="setting-title">{{ t('settings.bgImage') }}</div>
@@ -261,7 +264,7 @@
           </div>
 
           <!-- Mobile apps don't "quit" (back button = background) -->
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!web && !isMobile" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.closeAppPrompt') }}</div>
             </div>
@@ -271,7 +274,7 @@
           </div>
 
           <!-- Reopen last session's tabs at startup (issue #937) -->
-          <div class="setting-card">
+          <div v-if="!web" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.restoreTabsPrompt') }}</div>
               <div class="setting-desc">{{ t('settings.restoreTabsPromptDesc') }}</div>
@@ -282,7 +285,7 @@
           </div>
 
           <!-- No local CLI editors on mobile -->
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!web && !isMobile" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.externalEditor') }}</div>
               <div class="setting-desc">{{ t('settings.externalEditorDesc') }}</div>
@@ -311,7 +314,7 @@
 
         <!-- Hidden entirely on mobile: data dir is OS-managed and keychain
              encryption is the only supported mode, so nothing is configurable -->
-        <template v-if="!isMobile">
+        <template v-if="!web && !isMobile">
           <h2 class="section-title">{{ t('settings.storageSecurity') }}</h2>
           <div class="settings-group">
           <div class="setting-card">
@@ -705,7 +708,7 @@
           </div>
 
           <!-- Local dirs are not user-selectable under mobile scoped storage -->
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!web && !isMobile" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.zmodemDownloadDir') }}</div>
               <div class="setting-desc">{{ t('settings.zmodemDownloadDirDesc') }}</div>
@@ -729,7 +732,7 @@
             </div>
           </div>
 
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!web && !isMobile" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.sessionLogDir') }}</div>
               <div class="setting-desc">{{ t('settings.sessionLogDirDesc', { path: defaultLogDir }) }}</div>
@@ -974,25 +977,25 @@
             {{ t('settings.version') }}: {{ updateCheck.updateInfo?.current || '...' }}
           </div>
           <div class="about-links">
-            <a href="#" class="about-link" @click.prevent="Browser.OpenURL('https://uniterm.net')">
+            <a href="https://uniterm.net" target="_blank" rel="noopener noreferrer" class="about-link" @click.prevent="openExternalLink('https://uniterm.net')">
               <Globe :size="'0.875rem'" class="about-link-icon" />
               {{ t('settings.homepage') }}
             </a>
-            <a href="#" class="about-link" @click.prevent="Browser.OpenURL(locale === 'zh-CN' ? 'https://uniterm.net/guide/zh/introduction' : 'https://uniterm.net/guide/en/introduction')">
+            <a :href="locale === 'zh-CN' ? 'https://uniterm.net/guide/zh/introduction' : 'https://uniterm.net/guide/en/introduction'" target="_blank" rel="noopener noreferrer" class="about-link" @click.prevent="openExternalLink(locale === 'zh-CN' ? 'https://uniterm.net/guide/zh/introduction' : 'https://uniterm.net/guide/en/introduction')">
               <BookOpen :size="'0.875rem'" class="about-link-icon" />
               {{ t('settings.userManual') }}
             </a>
-            <a href="#" class="about-link" @click.prevent="Browser.OpenURL('https://github.com/ys-ll/uniterm')">
+            <a href="https://github.com/ys-ll/uniterm" target="_blank" rel="noopener noreferrer" class="about-link" @click.prevent="openExternalLink('https://github.com/ys-ll/uniterm')">
               <GitHubLogo class="about-link-icon" />
               GitHub
             </a>
-            <a href="#" class="about-link" @click.prevent="Browser.OpenURL('https://gitee.com/ys-l/uniterm')">
+            <a href="https://gitee.com/ys-l/uniterm" target="_blank" rel="noopener noreferrer" class="about-link" @click.prevent="openExternalLink('https://gitee.com/ys-l/uniterm')">
               <GiteeLogo class="about-link-icon" />
               Gitee
             </a>
           </div>
           <!-- In-app update download is desktop-only; mobile updates via APK -->
-          <div v-if="!isMobile" class="about-update-actions">
+          <div v-if="!web && !isMobile" class="about-update-actions">
             <el-button
              
               :loading="updateCheck.checking"
@@ -1001,14 +1004,14 @@
               {{ updateCheck.checking ? t('settings.checking') : t('settings.checkUpdate') }}
             </el-button>
           </div>
-          <div v-if="!isMobile" class="about-auto-check">
+          <div v-if="!web && !isMobile" class="about-auto-check">
             <el-checkbox
               v-model="updateCheck.autoCheck"
             >
               {{ t('settings.autoCheckUpdate') }}
             </el-checkbox>
           </div>
-          <div v-if="!isMobile" class="about-update-source">
+          <div v-if="!web && !isMobile" class="about-update-source">
             <span class="about-update-source-label">{{ t('settings.updateSource') }}</span>
             <el-select
               v-model="updateCheck.source"
@@ -1148,8 +1151,8 @@
         </template>
 
         <!-- 系统全局热键（托盘等，系统级生效） -->
-        <h2 class="section-title">{{ t('shortcut.globalHotkeys') }}</h2>
-        <table class="kb-table">
+        <h2 v-if="!web" class="section-title">{{ t('shortcut.globalHotkeys') }}</h2>
+        <table v-if="!web" class="kb-table">
           <thead>
             <tr>
               <th>{{ t('shortcut.colFunction') }}</th>
@@ -1254,7 +1257,7 @@
       </div>
 
       <!-- MCP 服务器(外部 AI agent) — 无 Android 后端,入口已在移动端隐藏 -->
-      <div v-if="settingsStore.activeCategory === 'mcp'" class="settings-section">
+      <div v-if="!web && settingsStore.activeCategory === 'mcp'" class="settings-section">
         <h2 class="section-title">{{ t('settings.mcpSection') }}</h2>
         <p class="section-desc">{{ t('settings.mcpSectionDesc') }}</p>
 
@@ -1550,7 +1553,7 @@
     <CustomThemeEditor v-model="themeEditorVisible" :source-theme-id="themeEditorSourceId" />
 
     <!-- Config dialogs -->
-    <DataDirDialog v-model:visible="dataDirVisible" :first-run="false" @done="onDataDirChange" />
+    <DataDirDialog v-if="!web" v-model:visible="dataDirVisible" :first-run="false" @done="onDataDirChange" />
 
     <el-dialog append-to-body v-model="showSetupMaster" :title="t('config.setupMasterTitle')" width="27.5rem">
       <el-form label-width="6.25rem" class="settings-form" @submit.prevent="doSetupMaster">
@@ -1646,8 +1649,10 @@ import { useTunnelStore } from '../stores/tunnelStore'
 import { useTunnelCredentials } from '../composables/useTunnelCredentials'
 import type { Tunnel, TunnelMode } from '../stores/tunnelStore'
 import type { Identity } from '../types/identity'
-import { Browser } from '@wailsio/runtime'
-import { isMobilePlatform, supportsLocalTerminal } from '../utils/platform'
+import WebAccessSettings from './WebAccessSettings.vue'
+import { isWebMode } from '../utils/webMode'
+import { openExternalLink } from '../utils/nativeCapabilities'
+import { detectPlatformSync, isMobilePlatform, supportsLocalTerminal } from '../utils/platform'
 import type { Proxy } from '../types/proxy'
 import { uiPx } from '../utils/uiScale'
 
@@ -1661,6 +1666,7 @@ const { resolveTunnelCredentials } = useTunnelCredentials()
 // system-managed data dir — settings that only make sense on the desktop are
 // hidden there via `v-if="!isMobile"` / category filtering below.
 const isMobile = isMobilePlatform()
+const web = isWebMode()
 
 async function onGitBashPathChange() {
   await settingsStore.save()
@@ -1691,9 +1697,11 @@ const dataDirTypeLabel = computed(() => {
 })
 
 function openDataDirChange() {
+  if (web) return
   dataDirVisible.value = true   // reuse DataDirDialog (change mode: migrate checkbox visible)
 }
 function onDataDirChange(restart: boolean) {
+  if (web) return
   if (restart) {
     RelaunchApp()
   }
@@ -1976,11 +1984,13 @@ watch(() => localStateStore.state.mcp, (v) => {
 }, { immediate: true })
 
 async function refreshMcpState() {
+  if (web) return
   try { mcpStatus.value = await GetMCPStatus() } catch { mcpStatus.value = { running: false, port: 0 } }
   try { mcpTokens.value = (await ListMCPTokens()) || [] } catch { mcpTokens.value = [] }
 }
 
 async function saveMcp() {
+  if (web) return
   mcpSaving.value = true
   try {
     await localStateStore.update({
@@ -2220,20 +2230,20 @@ watch(() => settingsStore.activeCategory, category => {
 
 onMounted(async () => {
   try {
-    platform.value = await GetPlatform()
+    platform.value = web ? detectPlatformSync() : await GetPlatform()
   } catch {
     platform.value = ''
   }
   // Populate the external-editor dropdown with editors actually installed on
   // this host; fall back to the curated presets if detection returns nothing.
   try {
-    const editors = await ListExternalEditors()
+    const editors = web ? [] : await ListExternalEditors()
     detectedEditors.value = (editors || []).map(e => ({ label: e.label, value: e.value }))
   } catch {
     detectedEditors.value = []
   }
   try {
-    const fonts = await GetAllFonts()
+    const fonts = web ? [] : await GetAllFonts()
     if (fonts && fonts.length > 0) {
       allFonts.value = fonts
       // Migrate a legacy full-stack fontFamily down to its bare family name so
@@ -2289,6 +2299,7 @@ const defaultLogDir = ref('')
 const defaultWordSeparator = '\\ :;~`!@#$%^&*()=+|[]{}\'",<>?'
 
 async function pickLogDir() {
+  if (web) return
   try {
     const chosen = await OpenDirectoryDialog()
     if (chosen) {
@@ -2301,6 +2312,7 @@ async function pickLogDir() {
 }
 
 async function pickZmodemDownloadDir() {
+  if (web) return
   try {
     const chosen = await OpenDirectoryDialog()
     if (chosen) {
@@ -2313,7 +2325,7 @@ async function pickZmodemDownloadDir() {
 }
 
 watch(() => settingsStore.openCategory, (cat) => {
-  if (cat && (cat === 'basic' || cat === 'terminal' || cat === 'ai' || cat === 'sync' || cat === 'about' || (cat === 'keyboard' && !isMobile) || cat === 'identities' || cat === 'proxies' || cat === 'tunnels')) {
+  if (cat && categories.value.some(category => category.key === cat)) {
     settingsStore.activeCategory = cat
     settingsStore.openCategory = null
   }
@@ -2712,7 +2724,7 @@ const categories = computed(() => {
     ...(!isMobile ? [{ key: 'keyboard', label: t('shortcut.title'), icon: Keyboard }] : []),
     { key: 'ai', label: t('settings.ai'), icon: MessageCircleMore },
     // MCP server has no mobile backend — hidden from the category list there.
-    ...(!isMobile ? [{ key: 'mcp', label: t('settings.mcp'), icon: Server }] : []),
+    ...(!web && !isMobile ? [{ key: 'mcp', label: t('settings.mcp'), icon: Server }, { key: 'web', label: t('web.settingsTitle'), icon: Globe }] : []),
     ...(!isMobile ? [{ key: 'mcp-client', label: t('settings.mcpClient'), icon: Plug }] : []),
     { key: 'skills', label: t('settings.skillsAndCommands'), icon: Wrench },
     { key: 'identities', label: t('settings.identities'), icon: Key },
@@ -2727,7 +2739,7 @@ const categories = computed(() => {
 // A persisted 'keyboard' active category would show an empty settings page on
 // mobile — fall back to basic.
 watch(categories, (cats) => {
-  if (isMobile && settingsStore.activeCategory === 'keyboard' && !cats.some(c => c.key === 'keyboard')) {
+  if (!cats.some(c => c.key === settingsStore.activeCategory)) {
     settingsStore.activeCategory = 'basic'
   }
 }, { immediate: true })
@@ -2975,6 +2987,7 @@ async function refreshBgPreview() {
 }
 
 async function chooseBackground() {
+  if (web) return
   const path = await OpenFileDialogFiltered(
     t('settings.bgChoose'),
     'Images',
@@ -2991,6 +3004,7 @@ async function chooseBackground() {
 }
 
 async function clearBackground() {
+  if (web) return
   await ClearBackgroundImage()
   await localStateStore.update({ backgroundImage: '' })
   bgPreview.value = ''
@@ -2999,6 +3013,7 @@ async function clearBackground() {
 // The window frame is fixed at startup (Wails limitation) — changing it needs
 // a restart. Persist the choice, then offer to quit so the user can reopen.
 async function onToggleSystemTitleBar(v: boolean) {
+  if (web) return
   await localStateStore.update({ systemTitleBar: v })
   try {
     await ElMessageBox.confirm(

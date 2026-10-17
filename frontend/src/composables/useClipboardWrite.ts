@@ -1,4 +1,6 @@
 import { Clipboard } from '@wailsio/runtime'
+import { isWebMode } from '../utils/webMode'
+import { clipboardDialog } from '../utils/browserClipboard'
 
 // Write/read the OS clipboard with layered fallbacks.
 //
@@ -54,17 +56,17 @@ const wailsWriter: ClipboardWriter = async (text) => {
 const isApplePlatform = () => /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 const isAndroidPlatform = () => /Android/.test(navigator.userAgent)
 
-export const writeClipboard: ClipboardWriter = typeof Clipboard.SetText !== 'function'
-  ? browserWriter // standalone path when Wails is absent (dev outside the runtime)
-  : async (text) => {
-      // Wails must go first on macOS (#827, see above) and on Android: the
-      // WebView's navigator.clipboard.writeText resolves successfully there but
-      // only writes the renderer-internal clipboard — the system ClipboardManager
-      // (what Wails reads, and what every other app sees) stays untouched, so a
-      // browser-first copy lands nowhere. Verified in-device on an emulator.
-      if (isApplePlatform() || isAndroidPlatform()) return wailsWriter(text)
-      return (await browserWriter(text)) || wailsWriter(text)
-    }
+export const writeClipboard: ClipboardWriter = async (text) => {
+  if (isWebMode()) return (await browserWriter(text)) || Boolean(await clipboardDialog('copy', text))
+  if (typeof Clipboard.SetText !== 'function') return browserWriter(text)
+  // Wails must go first on macOS (#827, see above) and on Android: the
+  // WebView's navigator.clipboard.writeText resolves successfully there but
+  // only writes the renderer-internal clipboard — the system ClipboardManager
+  // (what Wails reads, and what every other app sees) stays untouched, so a
+  // browser-first copy lands nowhere. Verified in-device on an emulator.
+  if (isApplePlatform() || isAndroidPlatform()) return wailsWriter(text)
+  return (await browserWriter(text)) || wailsWriter(text)
+}
 
 // Read with one delayed retry. An empty result can mean the clipboard was
 // momentarily locked by another process (clipboard managers, IME history) and
@@ -73,6 +75,15 @@ export const writeClipboard: ClipboardWriter = typeof Clipboard.SetText !== 'fun
 const READ_RETRY_DELAY_MS = 120
 
 export async function readClipboardText(): Promise<string> {
+  if (isWebMode()) {
+    try {
+      // Do not time out the browser's permission prompt and open a second
+      // dialog beneath it. An empty successful read is a valid clipboard.
+      return await navigator.clipboard.readText()
+    } catch {
+      return String(await clipboardDialog('paste'))
+    }
+  }
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0) await new Promise(resolve => setTimeout(resolve, READ_RETRY_DELAY_MS))
     let text = ''

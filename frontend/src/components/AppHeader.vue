@@ -19,6 +19,10 @@
       <el-icon><PanelLeft :size="'0.875rem'" /></el-icon>
     </button>
 
+    <button v-if="web" class="header-btn" @click="emit('open-web-sessions')" :title="t('web.existingTerminals')" :aria-label="t('web.existingTerminals')">
+      <el-icon><SquareTerminal :size="14" /></el-icon>
+    </button>
+
 
     <!-- Tabs list -->
     <div class="header-tabs">
@@ -109,7 +113,7 @@
 
         <!-- AI模型 / MCP / 密钥库 / 代理 -->
         <MenuItem @click="openCategory('ai')">{{ t('settings.ai') }}</MenuItem>
-        <MenuItem v-if="!isMobilePlatform(platform.value)" @click="openCategory('mcp')">{{ t('settings.mcp') }}</MenuItem>
+        <MenuItem v-if="!web && !isMobilePlatform(platform)" @click="openCategory('mcp')">{{ t('settings.mcp') }}</MenuItem>
         <MenuItem @click="openCategory('identities')">{{ t('settings.identities') }}</MenuItem>
         <MenuItem @click="openCategory('proxies')">{{ t('settings.proxies') }}</MenuItem>
         <MenuItem @click="openCategory('tunnels')">{{ t('settings.tunnels') }}</MenuItem>
@@ -127,7 +131,9 @@
         <MenuItem @click="openCategory('sync')">{{ t('settings.sync') }}</MenuItem>
         <MenuItem @click="openCategory('about')">{{ t('settings.about') }}</MenuItem>
         <!-- In-app update download is desktop-only -->
-        <MenuItem v-if="!isMobilePlatform(platform.value)" @click="checkUpdate">{{ t('settings.checkUpdate') }}</MenuItem>
+        <MenuItem v-if="!web && !isMobilePlatform(platform)" @click="openCategory('web')">{{ t('web.settingsTitle') }}</MenuItem>
+        <MenuItem v-if="!web && !isMobilePlatform(platform)" @click="checkUpdate">{{ t('settings.checkUpdate') }}</MenuItem>
+        <MenuItem v-if="web" @click="logout">{{ t('web.signOut') }}</MenuItem>
       </Menu>
 
       <ImportDialog v-model:visible="showImportDialog" />
@@ -147,7 +153,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, h } from 'vue'
-import { Menu as MenuIcon, PanelLeft, Bot } from '@lucide/vue'
+import { Menu as MenuIcon, PanelLeft, Bot, SquareTerminal } from '@lucide/vue'
 import { ElMessageBox, ElCheckbox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { useTabStore } from '../stores/tabStore'
@@ -170,8 +176,22 @@ import MenuSubmenu from './MenuSubmenu.vue'
 import MenuDivider from './MenuDivider.vue'
 import { Application, Screens, System, Window } from '@wailsio/runtime'
 import { SaveWindowState } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode } from '../utils/webMode'
+import { stopBrowserEvents } from '../utils/browserRuntime'
+import { msg } from '../services/message'
+import { backendErrorText } from '../utils/backendError'
 
 const { t } = useI18n()
+const web = isWebMode()
+
+async function logout() {
+  try {
+    const response = await fetch('/web/logout', { method: 'POST', credentials: 'same-origin' })
+    if (!response.ok) throw new Error(t('web.logoutFailed'))
+    stopBrowserEvents()
+    window.location.assign('/web/login')
+  } catch (e) { msg.error(backendErrorText(e)) }
+}
 const tabStore = useTabStore()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
@@ -256,6 +276,7 @@ function openCategory(category?: string) {
 }
 
 function checkUpdate() {
+  if (web) return
   updateCheck.checkForUpdate(true)
   closeSettingsMenu()
 }
@@ -303,6 +324,7 @@ const emit = defineEmits<{
   'toggle-ai-lock': [panelId: string]
   'tab-dragstart': [e: DragEvent, tabId: string]
   'new-local-terminal': []
+  'open-web-sessions': []
 }>()
 
 const platform = ref(detectPlatformSync())
@@ -315,11 +337,13 @@ const isMaximised = ref(false)
 // snapshot lands, fall back to the live store value (the frameless default).
 const showWindowControls = computed(
   () =>
+    !web &&
     !(systemTitleBarAtStartup.value ?? localStateStore.state.systemTitleBar) &&
     !isMobilePlatform(platform.value)
 )
 
 async function updateMaximisedState() {
+  if (web) return
   try {
     isMaximised.value = await Window.IsMaximised()
   } catch {
@@ -328,10 +352,12 @@ async function updateMaximisedState() {
 }
 
 function onMinimise() {
+  if (web) return
   Window.Minimise()
 }
 
 async function onMaximise() {
+  if (web) return
   if (platform.value === 'linux') {
     await linuxMaximise()
   } else {
@@ -369,6 +395,7 @@ async function linuxMaximise() {
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
 async function saveWindowState() {
+  if (web) return
   try {
     // Do not save geometry when minimised — the position is off-screen
     // and the size is the tiny taskbar thumbnail.
@@ -383,6 +410,7 @@ async function saveWindowState() {
 }
 
 async function onClose() {
+  if (web) return
   if (hasActiveConnections.value) {
     if (!settingsStore.settings.closeAppPrompt) {
       // skip dialog, proceed to quit
@@ -417,6 +445,7 @@ async function onClose() {
 }
 
 function onDblClick(e: MouseEvent) {
+  if (web) return
   const target = e.target as HTMLElement
   if (target.closest('button, input, textarea, select, a, [role="button"], .tab-item, .tab-more, .window-controls')) return
   onMaximise()
@@ -430,6 +459,7 @@ function onWindowResize() {
 }
 
 onMounted(async () => {
+  if (web) return
   try {
     const env = await System.Environment()
     const p = env.OS.toLowerCase()

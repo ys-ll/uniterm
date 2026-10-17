@@ -20,6 +20,9 @@ const { mockClipboardSetText, mockClipboardText } = vi.hoisted(() => ({
   mockClipboardText: vi.fn(),
 }))
 
+const { dialog } = vi.hoisted(() => ({ dialog: vi.fn() }))
+vi.mock('../utils/browserClipboard', () => ({ clipboardDialog: dialog }))
+
 vi.mock('@wailsio/runtime', () => ({
   Clipboard: {
     SetText: (...args: unknown[]) => mockClipboardSetText(...args),
@@ -162,5 +165,38 @@ describe('readClipboardText', () => {
     const text = await pending
     expect(text).toBe('')
     expect(mockClipboardText).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('browser clipboard isolation', () => {
+  beforeEach(() => {
+    vi.stubGlobal('window', { __UNITERM_WEB__: { instanceId: 'host', clientId: 'visitor' } })
+    mockClipboardSetText.mockReset()
+    mockClipboardText.mockReset()
+    dialog.mockReset()
+    stubNavigatorMember('userAgent', MAC_UA)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('uses the visiting browser clipboard even on Apple platforms', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const readText = vi.fn().mockResolvedValue('visitor text')
+    stubNavigatorMember('clipboard', { writeText, readText })
+    expect(await writeClipboard('copy')).toBe(true)
+    expect(await readClipboardText()).toBe('visitor text')
+    expect(writeText).toHaveBeenCalledWith('copy')
+    expect(mockClipboardSetText).not.toHaveBeenCalled()
+    expect(mockClipboardText).not.toHaveBeenCalled()
+  })
+
+  it('offers explicit copy/paste on insecure LAN HTTP without accessing the host clipboard', async () => {
+    stubNavigatorMember('clipboard', undefined)
+    dialog.mockResolvedValueOnce(false).mockResolvedValueOnce('pasted by visitor')
+    expect(await writeClipboard('sensitive text')).toBe(false)
+    expect(dialog).toHaveBeenCalledWith('copy', 'sensitive text')
+    expect(await readClipboardText()).toBe('pasted by visitor')
+    expect(dialog).toHaveBeenCalledWith('paste')
+    expect(mockClipboardSetText).not.toHaveBeenCalled()
+    expect(mockClipboardText).not.toHaveBeenCalled()
   })
 })

@@ -82,8 +82,7 @@ import { Decoration, DecorationSet } from '@codemirror/view'
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab, undo, redo } from '@codemirror/commands'
 import { RegExpCursor } from '@codemirror/search'
-import { Clipboard } from '@wailsio/runtime'
-import { writeClipboard } from '../composables/useClipboardWrite'
+import { writeClipboard, readClipboardText } from '../composables/useClipboardWrite'
 import { useI18n } from '../i18n'
 import { CaseSensitive, ChevronDown, ChevronUp, ChevronsDownUp, Regex, Replace, ReplaceAll, WholeWord, X } from '@lucide/vue'
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter, foldKeymap, StreamLanguage } from '@codemirror/language'
@@ -380,9 +379,8 @@ function onSearchBarKeydown(e: KeyboardEvent) {
   }
 }
 
-// Clipboard ops, Wails-first (same paths the terminal uses: writeClipboard
-// falls back to the browser API; Clipboard.Text avoids the macOS paste
-// confirmation prompt that navigator.clipboard.readText pops). Copy/cut are
+// Shared clipboard helpers select the visitor's clipboard in Web mode.
+// Desktop uses the native clipboard to avoid WebView paste prompts. Copy/cut are
 // no-ops with an empty selection; cut/paste are blocked on readonly editors.
 async function copySelection(): Promise<boolean> {
   if (!view) return false
@@ -405,7 +403,7 @@ async function pasteFromClipboard(): Promise<boolean> {
   if (!view || props.readonly) return false
   let text = ''
   try {
-    text = typeof Clipboard.Text === 'function' ? await Clipboard.Text() : await navigator.clipboard.readText()
+    text = await readClipboardText()
   } catch {
     return false
   }

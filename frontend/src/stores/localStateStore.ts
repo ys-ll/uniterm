@@ -4,6 +4,7 @@ import { LoadLocalState, SaveLocalState } from '../services/businessConfig'
 import type { MCPSettings } from '../types/mcp'
 import { DEFAULT_MCP_SETTINGS } from '../types/mcp'
 import type { SavedTabsSnapshot } from '../types/tabSnapshot'
+import { isWebMode } from '../utils/webMode'
 
 // Shape of the backend's LocalState store (bindings are untyped JS, so the
 // type is declared here and must stay in sync with backend/store).
@@ -61,8 +62,31 @@ const DEFAULT: LocalState = {
   lastTabsSnapshot: null,
 } as LocalState
 
+// Only view preferences cross a browser refresh. Never import native window
+// state, MCP configuration or reconnectable desktop tab snapshots.
+const WEB_FIELDS = [
+  'sidebarVisible', 'aiSidebarVisible', 'sidebarWidth', 'aiSidebarWidth',
+  'collapsedGroupIds', 'collapsedQuickCommandGroupIds', 'sftpHiddenColumns',
+] as const
+
+function browserViewState(value: Partial<LocalState>): Partial<LocalState> {
+  return Object.fromEntries(WEB_FIELDS.flatMap(key => {
+    const v = value[key]
+    const valid = Array.isArray(DEFAULT[key])
+      ? Array.isArray(v) && v.every(item => typeof item === 'string')
+      : typeof v === typeof DEFAULT[key] && (typeof v !== 'number' || Number.isFinite(v) && v >= 0)
+    return valid ? [[key, v]] : []
+  }))
+}
+
+function browserStorageKey(): string {
+  const id = window.__UNITERM_WEB__?.instanceId
+  if (!id) throw new Error('Browser bootstrap must complete before loading view state')
+  return `uniterm:web:${id}:view`
+}
+
 export const useLocalStateStore = defineStore('localState', () => {
-  const state = ref<LocalState>({ ...DEFAULT })
+  const state = ref<LocalState>(structuredClone(DEFAULT))
   const loaded = ref(false)
   let initPromise: Promise<void> | null = null
 
@@ -71,8 +95,10 @@ export const useLocalStateStore = defineStore('localState', () => {
     if (!initPromise) {
       initPromise = (async () => {
         try {
-          const s = await LoadLocalState()
-          state.value = { ...DEFAULT, ...s } as LocalState
+          const s = isWebMode()
+            ? browserViewState(JSON.parse(localStorage.getItem(browserStorageKey()) || '{}') || {})
+            : await LoadLocalState()
+          state.value = { ...structuredClone(DEFAULT), ...s } as LocalState
         } catch {
           // keep defaults
         } finally {
@@ -84,6 +110,16 @@ export const useLocalStateStore = defineStore('localState', () => {
   }
 
   async function update(patch: Partial<LocalState>) {
+    if (isWebMode()) {
+      // Wait for the browser's own preferences so early sidebar watchers
+      // cannot overwrite stored widths before startup has loaded them.
+      await init()
+      state.value = { ...state.value, ...browserViewState(patch) }
+      try {
+        localStorage.setItem(browserStorageKey(), JSON.stringify(browserViewState(state.value)))
+      } catch { /* Private browsing / full storage: keep this view in memory. */ }
+      return
+    }
     state.value = { ...state.value, ...patch } as LocalState
     try {
       await SaveLocalState(state.value as LocalState)
