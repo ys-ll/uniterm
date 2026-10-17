@@ -14,10 +14,9 @@ func Parse(format, srcPath string, opts ParseOptions) (*ImportResult, error) {
 	if format == FormatOpenSSH && srcPath == "" {
 		srcPath = defaultSSHConfigPath()
 	}
-	if format == FormatDBeaver && srcPath == "" {
-		// parseDBeaver resolves the platform-default workspace itself; pass a
-		// sentinel so the generic ReadFile below is skipped.
-		return parseDBeaver("", opts)
+	if format == FormatDBeaver {
+		// This parser accepts directories as well as data-sources.json.
+		return parseDBeaver(srcPath, opts)
 	}
 	data, err := os.ReadFile(srcPath)
 	if err != nil {

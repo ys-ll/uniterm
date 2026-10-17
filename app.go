@@ -41,6 +41,7 @@ import (
 )
 
 type App struct {
+	webFiles             webFileStore
 	ctx                  context.Context
 	app                  *application.App
 	window               *application.WebviewWindow
@@ -203,6 +204,7 @@ func NewApp(webviewDataPath string) *App {
 	// terminal data stream. MCP file tools additionally hook completion
 	// events to synchronously wait on their transfer tasks.
 	session.TransferEventSink = func(sid string, payload map[string]any) {
+		a.webFileTransferEvent(sid, payload)
 		a.mcpDispatchTransferEvent(payload)
 		a.emit("sftp:transfer", payload)
 	}

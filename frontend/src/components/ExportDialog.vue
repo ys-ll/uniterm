@@ -25,6 +25,8 @@ import { ref, watch } from 'vue'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
 import { ExportConnections, SaveFileDialogFiltered } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode } from '../utils/webMode'
+import { fileRPC, downloadFileStage, type FileStage } from '../services/webFiles'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'done'): void }>()
@@ -43,11 +45,15 @@ function onCancel() { emit('update:visible', false) }
 async function onExport() {
   if (!password.value) { msg.error(t('importExport.configPassword')); return }
   if (password.value !== confirmPassword.value) { msg.error(t('importExport.passwordMismatch')); return }
-  const dest = await SaveFileDialogFiltered(t('importExport.exportTitle'), 'uniterm-connections.utm', 'uniTerm (*.utm)', '*.utm')
-  if (!dest) return
   exporting.value = true
   try {
-    await ExportConnections(dest, password.value)
+    if (isWebMode()) {
+      downloadFileStage(await fileRPC<FileStage>('WebFilesExportConnections', password.value))
+    } else {
+      const dest = await SaveFileDialogFiltered(t('importExport.exportTitle'), 'uniterm-connections.utm', 'uniTerm (*.utm)', '*.utm')
+      if (!dest) return
+      await ExportConnections(dest, password.value)
+    }
     msg.success(t('importExport.exported'))
     emit('done')
     emit('update:visible', false)

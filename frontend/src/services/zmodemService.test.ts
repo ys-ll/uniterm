@@ -53,6 +53,7 @@ vi.mock('zmodem.js/src/zmodem_browser', () => ({
 vi.mock('@wailsio/runtime', () => ({
   Events: {
     On: vi.fn((_name: string, handler: (ev: any) => void) => {
+      if (_name !== 'session:binary') return () => {}
       runtimeState.binaryHandler = handler
       return () => { runtimeState.binaryHandler = null }
     }),
@@ -86,6 +87,11 @@ vi.mock('../stores/zmodemStore', () => ({
 }))
 
 import { startZmodemService } from './zmodemService'
+import { nativeZmodemChoice, finishNativeZmodem } from './webZmodem'
+vi.mock('./webZmodem', () => ({
+  nativeZmodemChoice: vi.fn().mockResolvedValue({ requestId: '' }),
+  finishNativeZmodem: vi.fn().mockResolvedValue(undefined),
+}))
 
 const BATCH = 64 * 1024
 
@@ -170,6 +176,50 @@ describe('startZmodemService', () => {
     mockSessionEndZmodem.mockResolvedValue(undefined)
     mockSessionEndZmodemWithTrailing.mockResolvedValue(undefined)
     mockStore.getPendingUploadFiles.mockReturnValue(undefined)
+  })
+
+  it('uses the browser receive stage and publishes ready only after host writes finish', async () => {
+    const s = makeDownload([[1, 2, 3]])
+    vi.mocked(nativeZmodemChoice).mockResolvedValueOnce({ requestId: 'req', clientId: 'browser-a', sessionId: 's1', direction: 'download', directory: '/host/stage/ZMODEM' })
+    let finishWrite!: () => void
+    mockAppendFileBase64.mockImplementationOnce(() => new Promise<void>(resolve => { finishWrite = resolve }))
+    startZmodemService({ sessionId: 's1' })
+    sentryInstances[0].on_detect({ confirm: () => s.zsession })
+    await sleepTicks()
+    expect(mockOpenDirectoryDialog).not.toHaveBeenCalled()
+    expect(mockAppendFileBase64).toHaveBeenCalledWith('/host/stage/ZMODEM/large.bin', 'AQID', 0)
+    expect(finishNativeZmodem).not.toHaveBeenCalled()
+    finishWrite()
+    await sleepTicks()
+    expect(finishNativeZmodem).toHaveBeenCalledWith('req', '')
+  })
+
+  it('refuses to start a second parser in a browser', () => {
+    vi.stubGlobal('window', { __UNITERM_WEB__: { clientId: 'browser' } })
+    try { expect(() => startZmodemService({ sessionId: 'shared' })).toThrow('desktop') }
+    finally { vi.unstubAllGlobals() }
+    expect(sentryInstances).toHaveLength(0)
+  })
+
+  it('routes staged visitor uploads through the native parser and original binary writer', async () => {
+    vi.useFakeTimers()
+    const { zsession } = makeUpload()
+    zsession.send_offer.mockResolvedValue({ send: vi.fn(), end: vi.fn().mockResolvedValue(undefined) })
+    zsession.close.mockResolvedValue(undefined)
+    mockFileSize.mockResolvedValue(3)
+    mockReadFileChunkBase64.mockResolvedValue('AQID')
+    vi.mocked(nativeZmodemChoice).mockResolvedValueOnce({ requestId: 'upload-request', clientId: 'browser-a', sessionId: 's1', direction: 'upload', paths: ['/host/stage/visitor.bin'] })
+    startZmodemService({ sessionId: 's1' })
+    sentryInstances[0].on_detect({ confirm: () => zsession })
+    sentryInstances[0].sender([0, 255, 3])
+    await sleepTicks()
+    await vi.runOnlyPendingTimersAsync()
+    vi.useRealTimers()
+    expect(mockOpenMultipleFilesDialog).not.toHaveBeenCalled()
+    expect(mockReadFileChunkBase64).toHaveBeenCalledWith('/host/stage/visitor.bin', 0, 3)
+    expect(mockSessionWriteBinary).toHaveBeenCalledWith('s1', 'AP8D')
+    expect(mockSessionWrite).not.toHaveBeenCalled()
+    expect(finishNativeZmodem).toHaveBeenCalledWith('upload-request', '')
   })
 
   it('buffers small sz chunks into a single batched disk write', async () => {

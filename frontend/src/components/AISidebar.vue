@@ -325,7 +325,8 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useI18n } from '../i18n'
 import { runAgent, approveTool, rejectTool, continueAgent, answerQuestion, dismissQuestion } from '../services/agent'
-import { SaveFileDialogFiltered, WriteFileBase64, ReadLocalAttachmentFile } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { ReadLocalAttachmentFile } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { saveTextFile } from '../services/webFiles'
 import type { AIAttachment, ExecutionMode } from '../types/ai'
 import {
   ATTACHMENT_FILE_ACCEPT,
@@ -912,12 +913,7 @@ async function onMsgCtxExport() {
   try {
     const md = aiStore.exportSessionMarkdown(id)
     const safe = s.name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)
-    const path = await SaveFileDialogFiltered(t('ai.exportMd'), `${safe}.md`, 'Markdown File', '*.md')
-    if (!path) return
-    const bytes = new TextEncoder().encode(md)
-    let bin = ''
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
-    await WriteFileBase64(path, btoa(bin))
+    if (!await saveTextFile(md, `${safe}.md`, t('ai.exportMd'), '*.md')) return
     ElMessage.success(t('ai.exportDone', { name: s.name }))
   } catch (e: any) {
     ElMessage.error(e?.message || String(e))

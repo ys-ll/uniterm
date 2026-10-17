@@ -755,6 +755,8 @@ import { useProxyStore } from '../stores/proxyStore'
 import { useI18n } from '../i18n'
 import type { ConnectionConfig, PostLoginExpectStep, SSHAlgoConfig } from '../types/session'
 import { OpenFileDialog, OpenFileDialogFiltered, OpenPrivateKeyFile, OpenKubeconfigFile, GetPlatform, ListSerialPorts, TestConnection, GetDefaultSSHKeyPaths } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode } from '../utils/webMode'
+import { pickPersistentHostCopy, openTextFile } from '../services/webFiles'
 import { ElInput } from 'element-plus'
 import { msg } from '../services/message'
 import { Plus, Trash2, ChevronRight, FolderOpen, Eye, EyeOff, RefreshCw, CircleCheck, CircleX, KeyRound } from '@lucide/vue'
@@ -1612,7 +1614,7 @@ async function reloadK8sContexts() {
 
 async function selectKeyFile() {
   try {
-    const selected = await OpenFileDialog('~/.ssh')
+    const selected = isWebMode() ? await pickPersistentHostCopy() : await OpenFileDialog('~/.ssh')
     if (selected) form.keyPath = selected
   } catch (e) {
     console.error('select key file:', e)
@@ -1623,8 +1625,10 @@ async function selectKeyFile() {
 // stored in the Host field.
 async function selectSqliteFile() {
   try {
-    const selected = await OpenFileDialogFiltered(t('db.sqlitePickTitle'), 'SQLite Database', '*.sqlite;*.sqlite3;*.db;*.db3')
+    const selected = isWebMode() ? await pickPersistentHostCopy('.sqlite,.sqlite3,.db,.db3')
+      : await OpenFileDialogFiltered(t('db.sqlitePickTitle'), 'SQLite Database', '*.sqlite;*.sqlite3;*.db;*.db3')
     if (selected) form.host = selected
+    if (selected && isWebMode()) msg.info('SQLite uses this saved host copy. Changes are not written back to the device file.')
   } catch (e) {
     console.error('select sqlite file:', e)
   }
@@ -1649,7 +1653,7 @@ async function useDefaultKeyPath() {
 
 async function importKeyText() {
   try {
-    const content = await OpenPrivateKeyFile()
+    const content = isWebMode() ? (await openTextFile('Private key', '*.*', 1024 * 1024))?.text : await OpenPrivateKeyFile()
     if (content) {
       form.keyContent = content
       keyContentRevealed.value = true
@@ -1661,7 +1665,7 @@ async function importKeyText() {
 
 async function importKubeconfigText() {
   try {
-    const content = await OpenKubeconfigFile()
+    const content = isWebMode() ? (await openTextFile('Kubeconfig', '*.*', 1024 * 1024))?.text : await OpenKubeconfigFile()
     if (content) {
       form.k8sConfigInline = content
       k8sConfigRevealed.value = true
@@ -1673,7 +1677,7 @@ async function importKubeconfigText() {
 
 async function pickKubeconfigFile() {
   try {
-    const selected = await OpenFileDialog('~/.kube')
+    const selected = isWebMode() ? await pickPersistentHostCopy() : await OpenFileDialog('~/.kube')
     if (selected) form.k8sConfigPath = selected
   } catch (e) {
     console.error('pick kubeconfig:', e)

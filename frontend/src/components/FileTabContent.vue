@@ -28,6 +28,9 @@
           @back="onLocalBack"
           @forward="onLocalForward"
           @up="onLocalUp"
+          @upload="localPanel.onUpload()"
+          @upload-directory="localPanel.onUpload(true)"
+          @download-to="localPanel.onDownloadTo"
           @navigate="onLocalNavigate"
           @send-to-other="onSendToRemote"
           @rename="onLocalRename"
@@ -88,6 +91,7 @@
           :supports-symlink="remoteSupportsSymlink"
           @chmod="(item: FileItem) => onChmod(item, 'remote')"
           @upload="onUpload"
+          @upload-directory="remotePanel.onUpload(true)"
           @download-to="onDownloadTo"
           @edit="onEditFile"
           @edit-external="onEditExternal"
@@ -106,6 +110,7 @@
         />
       </div>
     </div>
+    <WebFileTransfers :uploading="remotePanel.deviceUploading.value || localPanel.deviceUploading.value" @cancel-upload="remotePanel.cancelDeviceUpload(); localPanel.cancelDeviceUpload()" />
     <!-- The panel bar is always visible; collapsing hides only the task list
          (the persisted flag now tracks "list expanded", default collapsed). -->
     <TransferPanel
@@ -167,6 +172,8 @@
 </template>
 
 <script setup lang="ts">
+import WebFileTransfers from './WebFileTransfers.vue'
+import { isWebMode } from '../utils/webMode'
 import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch } from 'vue'
 
 import { msg } from '../services/message'
@@ -637,6 +644,10 @@ function clearDragState() {
 async function onDropLocal(e: DragEvent) {
   e.preventDefault()
   clearDragState()
+  if (isWebMode() && e.dataTransfer?.files.length) {
+    try { await localPanel.uploadDeviceDrop(e.dataTransfer) } catch (e) { msg.error(String(e)) }
+    return
+  }
   const data = e.dataTransfer?.getData('application/sftp-file')
   if (!data) return
   try {
@@ -657,7 +668,12 @@ async function onDropRemote(e: DragEvent) {
   const dt = e.dataTransfer
   const hasFileItems = !!(dt && dt.items && [...dt.items].some(it => it.kind === 'file'))
   const hasRawFiles = !!(dt && dt.files && dt.files.length > 0)
-  if (hasFileItems || hasRawFiles) return
+  if (hasFileItems || hasRawFiles) {
+    if (isWebMode() && dt) {
+      try { await remotePanel.uploadDeviceDrop(dt) } catch (e) { msg.error(String(e)) }
+    }
+    return
+  }
 
   // Internal SFTP file drag
   const data = e.dataTransfer?.getData('application/sftp-file')

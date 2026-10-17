@@ -1,4 +1,6 @@
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onScopeDispose } from 'vue'
+import { isWebMode } from '../utils/webMode'
+import { pickDeviceFiles, deviceDropEntries, stageDeviceFiles, dismissFileStage, fileRPC, trackWebDownload, restoreWebDownloads, watchDownload, webDownloads, removeWebDownload, type DeviceEntry, type FileStage } from '../services/webFiles'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
 import {
@@ -310,6 +312,11 @@ export function useFilePanel(opts: FilePanelOptions) {
   const { openGeneric } = dialogs
   const localStateStore = useLocalStateStore()
   const settingsStore = useSettingsStore()
+  const deviceUploading = ref(false)
+  let deviceUpload: AbortController | undefined
+  const cancelDeviceUpload = () => deviceUpload?.abort()
+  onScopeDispose(cancelDeviceUpload)
+  restoreWebDownloads()
 
   // --- Remote clipboard (copy / cut / paste) ---
 
@@ -545,10 +552,59 @@ export function useFilePanel(opts: FilePanelOptions) {
 
   // --- Upload / download ----------------------------------------------------
 
-  async function onUpload() {
+  async function uploadDeviceDrop(dt: DataTransfer) {
+    const id = sid(), destination = cwd.value
+    const entries = await deviceDropEntries(dt)
+    if (sid() !== id || cwd.value !== destination) throw new Error('Upload destination changed; drop files again')
+    await uploadDeviceEntries(entries)
+  }
+
+  async function uploadDeviceEntries(entries: DeviceEntry[]) {
+    const id = sid(), destination = cwd.value
+    if (!id || !entries.length || deviceUploading.value) return
+    const roots = [...new Set(entries.map(e => e.path.split('/')[0]))]
+    const action = await conflicts.resolveConflicts(roots, files.value.map(f => f.name))
+    if (action === 'cancel') return
+    const existing = files.value.map(f => f.name)
+    deviceUpload = new AbortController()
+    deviceUploading.value = true
+    try {
+      for (const root of roots) {
+        deviceUpload.signal.throwIfAborted()
+        const stage = await stageDeviceFiles(entries.filter(e => e.path === root || e.path.startsWith(root + '/')), deviceUpload.signal)
+        let submitted = false
+        try {
+          // S3 buckets/SMB shares belong to this page's independent session.
+          // Never commit a queued selection after that page navigated away.
+          if (sid() !== id || cwd.value !== destination) throw new Error('Upload destination changed; choose files again')
+          deviceUpload.signal.throwIfAborted()
+          const name = action === 'rename' ? autoRename(root, existing) : root
+          existing.push(name)
+          if (opts.bookmarkMode === 'local') {
+            await fileRPC('WebFilesCopyToHost', stage.id, root, id, joinPath(destination, name))
+            refresh()
+          } else {
+            await fileRPC('WebFilesPut', stage.id, root, id, joinPath(destination, name))
+            submitted = true // existing task UI now owns remote pause/cancel/retry
+          }
+        } finally { if (!submitted) await dismissFileStage(stage.id) }
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') msg.error(String(e))
+    } finally { deviceUploading.value = false; deviceUpload = undefined }
+  }
+
+  async function onUpload(directory = false) {
     const id = sid()
     if (!id) return
     try {
+      if (isWebMode()) {
+        const destination = cwd.value
+        const entries = await pickDeviceFiles({ multiple: true, directory })
+        if (sid() !== id || cwd.value !== destination) throw new Error('Upload destination changed; choose files again')
+        await uploadDeviceEntries(entries)
+        return
+      }
       const localPaths = await OpenMultipleFilesDialog(opts.localCwd?.() || '')
       if (!localPaths?.length) return
       const names = localPaths.map(fp => fp.replace(/\\/g, '/').split('/').pop() || 'upload')
@@ -565,7 +621,7 @@ export function useFilePanel(opts: FilePanelOptions) {
         ops.put(id, localPaths[i], joinPath(cwd.value, name), false)
       }
     } catch (e) {
-      console.error('upload:', e)
+      msg.error(String(e))
     }
   }
 
@@ -573,6 +629,17 @@ export function useFilePanel(opts: FilePanelOptions) {
     const id = sid()
     if (!id) return
     try {
+      if (isWebMode()) {
+        const source = cwd.value
+        for (const item of items.filter(i => i.name !== '..')) {
+          if (sid() !== id || cwd.value !== source) throw new Error('Download source changed')
+          const stage = opts.bookmarkMode === 'local'
+            ? await fileRPC<FileStage>('WebFilesHostDownload', joinPath(source, item.name))
+            : await fileRPC<FileStage>('WebFilesGet', id, joinPath(source, item.name), item.name, item.isDir)
+          trackWebDownload(stage, item.name)
+        }
+        return
+      }
       const dir = await OpenDirectoryDialog(opts.localCwd?.() || '')
       if (!dir) return
 
@@ -602,7 +669,7 @@ export function useFilePanel(opts: FilePanelOptions) {
         ops.get(id, remotePath, localPath, item.isDir)
       }
     } catch (e) {
-      console.error('downloadTo:', e)
+      msg.error(String(e))
     }
   }
 
@@ -697,6 +764,7 @@ export function useFilePanel(opts: FilePanelOptions) {
     }
     try {
       await SftpRetryTransfer(id, spec, buildSkipList(task))
+      if (isWebMode()) for (const download of webDownloads.value) void watchDownload(download.id)
     } catch (e) {
       console.error('retry transfer:', e)
     }
@@ -706,6 +774,9 @@ export function useFilePanel(opts: FilePanelOptions) {
   function onDismissTask(taskId: string) {
     const id = sid()
     if (!id) return
+    if (isWebMode()) {
+      for (const d of webDownloads.value.filter(d => d.sessionId === id && d.taskId === taskId)) void removeWebDownload(d.id).catch(() => {})
+    }
     SftpDismissTransfer(id, taskId).catch(() => {})
   }
 
@@ -716,7 +787,7 @@ export function useFilePanel(opts: FilePanelOptions) {
       if (st === 'done' || st === 'error' || st === 'cancelled') {
         // The backend only retains failed tasks; tell it to drop each one
         // before the UI forgets the task id.
-        if (st === 'error') onDismissTask(tasks[i].id)
+        onDismissTask(tasks[i].id)
         tasks.splice(i, 1)
       }
     }
@@ -760,6 +831,7 @@ export function useFilePanel(opts: FilePanelOptions) {
     // file actions
     onRename, onDelete, onMkdir, onNewFile, onSymlink,
     onUpload, onDownloadTo,
+    uploadDeviceEntries, uploadDeviceDrop, deviceUploading, cancelDeviceUpload,
     onEditFile, onEditExternal, onOpenWithSystem,
     // transfer panel
     onCancelTransfer, onPauseTransfer, onResumeTransfer,
@@ -1000,6 +1072,7 @@ export function useNativeFileDrop(opts: {
   let unsub: (() => void) | null = null
 
   function bind() {
+    if (isWebMode()) return
     if (bound) return
     try {
       unsub = Events.On('common:WindowFilesDropped', (ev) => {

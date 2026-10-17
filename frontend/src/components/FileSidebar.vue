@@ -43,6 +43,7 @@
           @up="onUp"
           @refresh="onRefresh"
           @upload="onUpload"
+          @upload-directory="onUpload(true)"
           @download-to="onDownloadTo"
           @rename="onRename"
           @delete="onDelete"
@@ -68,6 +69,8 @@
           @copy-path-to-terminal="onCopyPathToTerminal"
         />
       </div>
+
+      <WebFileTransfers :uploading="deviceUploading" @cancel-upload="cancelDeviceUpload" />
 
       <!-- Transfer history / progress panel (pinned at the sidebar bottom).
            Defaults to collapsed; a new transfer expands it (see the watcher). -->
@@ -148,6 +151,8 @@
 </template>
 
 <script setup lang="ts">
+import WebFileTransfers from './WebFileTransfers.vue'
+import { isWebMode } from '../utils/webMode'
 import { ExternalLink, FolderSync } from '@lucide/vue'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from '../i18n'
@@ -274,9 +279,12 @@ const nativeDrop = useNativeFileDrop({
 const bindFileDrop = nativeDrop.bind
 const unbindFileDrop = nativeDrop.unbind
 
-function onDropUpload(e: DragEvent) {
+async function onDropUpload(e: DragEvent) {
   e.preventDefault()
   clearDragState()
+  if (isWebMode() && e.dataTransfer) {
+    try { await uploadDeviceDrop(e.dataTransfer) } catch (e) { msg.error(String(e)) }
+  }
   // OS file drops are owned by the Wails native file-drop event
   // (common:WindowFilesDropped, routed by element id) and uploaded by
   // absolute path. Nothing to do on the HTML5 side.
@@ -406,6 +414,7 @@ const {
   onCancelTransfer, onPauseTransfer, onResumeTransfer, onRetryTransfer, clearFinishedTransfers,
   onSaveBookmark, onRemoveBookmark,
   uploadPaths,
+  uploadDeviceDrop, deviceUploading, cancelDeviceUpload,
 } = useFilePanel({
   sid: () => sessionId.value ?? undefined,
   cwd,

@@ -180,7 +180,8 @@ import { ref, watch, computed, nextTick, h } from 'vue'
 import { Database, Table2, Eye, ChevronRight, ChevronDown, RefreshCw, MoreHorizontal } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { ElMessageBox } from 'element-plus'
-import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { openTextFile, saveTextFile } from '../services/webFiles'
 import { msg } from '../services/message'
 import { writeClipboard } from '../composables/useClipboardWrite'
 import Menu from './Menu.vue'
@@ -461,9 +462,7 @@ async function exportTable(withStructure: boolean, withData: boolean) {
   const tableName = ctxTableName.value
   try {
     const sql = await DumpTable(props.sessionId, dbName, tableName, withStructure, withData)
-    const path = await SaveFileDialogFiltered(t('db.exportSQL'), tableName + '.sql', 'SQL File', '*.sql')
-    if (!path) return
-    await WriteFileBase64(path, encodeBase64(sql))
+    if (!await saveTextFile(sql, tableName + '.sql', t('db.exportSQL'), '*.sql')) return
     msg.success(t('db.exportDone', { name: tableName }))
   } catch (e: any) {
     msg.error(e?.message || String(e))
@@ -490,39 +489,27 @@ function isDialogCancel(e: unknown): boolean {
   return String(e).toLowerCase().includes('cancel')
 }
 
-function decodeBase64(b64: string): string {
-  try {
-    const bin = atob(b64)
-    const bytes = new Uint8Array(bin.length)
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-    return new TextDecoder('utf-8').decode(bytes)
-  } catch {
-    return ''
-  }
-}
-
 const runningSqlFile = ref(false)
 
 async function onCtxRunSqlFile() {
   ctxMenuVisible.value = false
   const dbName = ctxDbName.value
-  let path = ''
+  let picked: { name: string; text: string } | null
   try {
-    path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
+    picked = await openTextFile(t('db.runSqlFile'), '*.sql')
   } catch (e) {
     if (!isDialogCancel(e)) msg.error((e as any)?.message || String(e))
     return
   }
-  if (!path) return
+  if (!picked) return
   try {
     runningSqlFile.value = true
-    const b64 = await ReadFileBase64(path)
-    const text = decodeBase64(b64)
+    const text = picked.text
     const result = await ExecuteSQLScript(props.sessionId, dbName, text)
     if (result?.failedLine) {
       showScriptFailure(result)
     } else {
-      const name = path.split(/[\\/]/).pop() || path
+      const name = picked.name
       msg.success(t('db.scriptExecuted', { n: result?.executed ?? 0 }) + ` · ${t('db.affectedRows')}: ${result?.affectedTotal ?? 0} · ${name}`)
     }
   } catch (e: any) {
@@ -576,13 +563,6 @@ async function onCopyTable() {
     console.error('Failed to copy table:', e)
     msg.error(e?.message || String(e))
   }
-}
-
-function encodeBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text)
-  let bin = ''
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
-  return btoa(bin)
 }
 
 // ── Confirm dialog ──

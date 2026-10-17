@@ -20,13 +20,17 @@
           <el-option label="virt-viewer (.vv)" value="virtviewer" />
         </el-select>
       </el-form-item>
-      <el-form-item v-if="format !== 'openssh' && format !== 'dbeaver'" :label="t('importExport.file')">
+      <el-form-item v-if="isWebMode() || (format !== 'openssh' && format !== 'dbeaver')" :label="t('importExport.file')">
         <div style="display:flex;gap:0.5rem;width:100%">
           <el-input v-model="srcPath" readonly :placeholder="t('importExport.chooseFile')" style="flex:1" />
           <el-button @click="pickFile">{{ t('importExport.chooseFile') }}</el-button>
         </div>
       </el-form-item>
-      <el-form-item v-if="format === 'dbeaver'" :label="t('importExport.file')">
+      <p v-if="isWebMode() && (format === 'dbeaver' || format === 'windterm')">
+        Select the configuration directory including credentials-config.json (DBeaver) or user.config and its sessions subdirectory (WindTerm). Relative layout is preserved.
+      </p>
+      <p v-if="isWebMode()">Paths in imported connections refer to the host filesystem. Use connection file pickers to save device files as host copies.</p>
+      <el-form-item v-if="format === 'dbeaver' && !isWebMode()" :label="t('importExport.file')">
         <div style="display:flex;gap:0.5rem;width:100%">
           <el-input v-model="srcPath" readonly :placeholder="t('importExport.dbeaverPathHint')" style="flex:1" />
           <el-button @click="pickDBeaverDir">{{ t('importExport.chooseFile') }}</el-button>
@@ -38,7 +42,7 @@
     </el-form>
     <template #footer>
       <el-button @click="onCancel">{{ t('common.cancel') }}</el-button>
-      <el-button type="primary" :loading="importing" :disabled="!srcPath && format !== 'openssh' && format !== 'dbeaver'" @click="onImport">{{ t('importExport.import') }}</el-button>
+      <el-button type="primary" :loading="importing" :disabled="!srcPath && (isWebMode() || (format !== 'openssh' && format !== 'dbeaver'))" @click="onImport">{{ t('importExport.import') }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -48,6 +52,8 @@ import { ref, watch } from 'vue'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
 import { ParseImportFile, ApplyImport, OpenFileDialogFiltered, OpenDirectoryDialog } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode } from '../utils/webMode'
+import { pickDeviceFiles, withDevicePaths, fileRPC, type DeviceEntry } from '../services/webFiles'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'done', count: number): void }>()
@@ -57,6 +63,8 @@ const format = ref('uniterm')
 const srcPath = ref('')
 const password = ref('')
 const importing = ref(false)
+let deviceEntries: DeviceEntry[] = []
+watch(format, () => { srcPath.value = ''; deviceEntries = [] })
 
 const FILTERS: Record<string, { display: string; pattern: string }> = {
   uniterm: { display: 'uniTerm (*.utm)', pattern: '*.utm' },
@@ -76,6 +84,16 @@ watch(() => props.visible, (v) => {
 function onCancel() { emit('update:visible', false) }
 
 async function pickFile() {
+  if (isWebMode()) {
+    try {
+      deviceEntries = await pickDeviceFiles({ directory: format.value === 'dbeaver' || format.value === 'windterm', multiple: true })
+      const candidates = deviceEntries.filter(e => format.value === 'dbeaver' ? e.path.endsWith('/data-sources.json') || e.path === 'data-sources.json'
+        : format.value === 'windterm' ? e.path.endsWith('.sessions') : !!e.file)
+      if (candidates.length !== 1) { deviceEntries = []; srcPath.value = ''; throw new Error('Select one main configuration file, with its sidecars') }
+      srcPath.value = candidates[0].path
+    } catch (e) { msg.error(String(e)) }
+    return
+  }
   const f = FILTERS[format.value]
   if (!f) return
   const p = await OpenFileDialogFiltered(t('importExport.importType'), f.display, f.pattern)
@@ -92,8 +110,11 @@ async function onImport() {
   try {
     // DBeaver with an empty path means "auto-detect the default workspace".
     const path = (format.value === 'dbeaver' && !srcPath.value) ? '' : srcPath.value
-    const result = await ParseImportFile(format.value, path,
+    const parse = (path: string) => ParseImportFile(format.value, path,
       (format.value === 'uniterm' || format.value === 'windterm' || format.value === 'mremoteng') ? password.value : '')
+    const result = isWebMode()
+      ? await withDevicePaths(deviceEntries, async s => parse(await fileRPC<string>('WebFilesPath', s.id, path)))
+      : await parse(path)
     await ApplyImport({ groups: result.groups || [], connections: result.connections || [] } as any)
     const count = (result.connections || []).length
     if (result.warnings && result.warnings.length) {

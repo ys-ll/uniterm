@@ -85,6 +85,7 @@ func (a *App) SftpRetryTransfer(sessionID string, spec session.TransferSpec, ski
 
 // SftpDismissTransfer removes a retained failed task from the backend.
 func (a *App) SftpDismissTransfer(sessionID, taskID string) error {
+	defer a.dismissWebFileTask(sessionID, taskID)
 	fs, err := a.getSftp(sessionID)
 	if err != nil {
 		return err

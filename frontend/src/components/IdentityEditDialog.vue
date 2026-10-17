@@ -85,6 +85,8 @@ import { ref, reactive, watch } from 'vue'
 import { useI18n } from '../i18n'
 import { ElMessage } from 'element-plus'
 import { OpenFileDialog, OpenPrivateKeyFile } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode } from '../utils/webMode'
+import { pickPersistentHostCopy, openTextFile } from '../services/webFiles'
 import { backendErrorText } from '../utils/backendError'
 import { FolderOpen, Eye, EyeOff } from '@lucide/vue'
 import { useIdentityStore } from '../stores/identityStore'
@@ -130,14 +132,14 @@ watch(() => props.visible, (v) => {
 
 async function selectKeyFile() {
   try {
-    const p = await OpenFileDialog('~/.ssh')
+    const p = isWebMode() ? await pickPersistentHostCopy() : await OpenFileDialog('~/.ssh')
     if (p) form.keyPath = p
   } catch (e) { console.error('select key file:', e) }
 }
 
 async function importKeyText() {
   try {
-    const content = await OpenPrivateKeyFile()
+    const content = isWebMode() ? (await openTextFile('Private key', '*.*', 1024 * 1024))?.text : await OpenPrivateKeyFile()
     if (content) {
       form.keyContent = content
       keyContentRevealed.value = true
@@ -177,4 +179,3 @@ async function save() {
   margin-left: 0.5rem;
 }
 </style>
-

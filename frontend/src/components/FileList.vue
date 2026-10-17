@@ -6,6 +6,7 @@
     @keydown="onListKeydown"
     @click="onListClick"
   >
+    <div v-if="isWebMode()" class="filter-bar">{{ mode === 'local' ? 'Host filesystem' : 'Remote filesystem' }}</div>
     <div class="filter-bar">
       <el-input
         v-model="filterText"
@@ -40,8 +41,11 @@
       </button>
       <!-- Transfer group: upload. -->
       <span v-if="flatToolbar && mode === 'remote'" class="toolbar-divider" />
-      <button v-if="mode === 'remote'" class="filter-icon-btn" @click="emit('upload')" :title="t('sftp.upload')">
+      <button v-if="mode === 'remote' || isWebMode()" class="filter-icon-btn" @click="emit('upload')" :title="isWebMode() ? 'Upload files from this device' : t('sftp.upload')">
         <el-icon><Upload :size="'0.875rem'" /></el-icon>
+      </button>
+      <button v-if="isWebMode()" class="filter-icon-btn" @click="emit('uploadDirectory')" title="Upload directory from this device">
+        <el-icon><Folder :size="14" /></el-icon>
       </button>
       <!-- Create group: new file / directory / link. Flat keeps every action
            on the bar, so there is no more-menu in this layout. -->
@@ -155,8 +159,8 @@
         <template v-if="menuType === 'file'">
           <MenuItem @click="doEdit">{{ t('sftp.edit') }}</MenuItem>
           <!-- No external editor / system-app association in the mobile sandbox -->
-          <MenuItem v-if="!isMobilePlatform()" @click="doEditExternal">{{ t('sftp.editExternal') }}</MenuItem>
-          <MenuItem v-if="!isMobilePlatform()" @click="doOpenWithSystem">{{ t('sftp.openWithSystem') }}</MenuItem>
+          <MenuItem v-if="!isMobilePlatform()" @click="doEditExternal">{{ t('sftp.editExternal') }}{{ isWebMode() ? ' (host)' : '' }}</MenuItem>
+          <MenuItem v-if="!isMobilePlatform()" @click="doOpenWithSystem">{{ t('sftp.openWithSystem') }}{{ isWebMode() ? ' (host)' : '' }}</MenuItem>
           <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
           <MenuItem @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
           <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
@@ -167,10 +171,10 @@
           <MenuItem @click="doSelectAll">{{ t('sftp.selectAll') }}</MenuItem>
           <MenuDivider />
           <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ sendToLabel }}</MenuItem>
           <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
           <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
-          <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          <MenuItem v-if="isWebMode() || (mode === 'remote' && !isMobilePlatform())" @click="doDownloadTo">{{ isWebMode() ? 'Download to this device' : t('sftp.downloadTo') }}</MenuItem>
           <MenuDivider />
           <MenuItem @click="doRename">{{ t('sftp.rename') }}</MenuItem>
           <MenuItem @click="doDelete">{{ t('sftp.delete') }}</MenuItem>
@@ -189,10 +193,10 @@
           <MenuItem @click="doSelectAll">{{ t('sftp.selectAll') }}</MenuItem>
           <MenuDivider />
           <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ sendToLabel }}</MenuItem>
           <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
           <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
-          <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          <MenuItem v-if="isWebMode() || (mode === 'remote' && !isMobilePlatform())" @click="doDownloadTo">{{ isWebMode() ? 'Download to this device' : t('sftp.downloadTo') }}</MenuItem>
           <MenuDivider />
           <MenuItem @click="doRename">{{ t('sftp.rename') }}</MenuItem>
           <MenuItem @click="doDelete">{{ t('sftp.delete') }}</MenuItem>
@@ -207,10 +211,10 @@
           <MenuItem @click="doSelectAll">{{ t('sftp.selectAll') }}</MenuItem>
           <MenuDivider />
           <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ sendToLabel }}</MenuItem>
           <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
           <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
-          <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          <MenuItem v-if="isWebMode() || (mode === 'remote' && !isMobilePlatform())" @click="doDownloadTo">{{ isWebMode() ? 'Download to this device' : t('sftp.downloadTo') }}</MenuItem>
           <MenuDivider />
           <MenuItem v-if="mode === 'remote'" class="disabled">{{ t('sftp.renameDisabled') }}</MenuItem>
           <MenuItem v-if="mode === 'local'" @click="doRename">{{ t('sftp.rename') }}</MenuItem>
@@ -280,6 +284,7 @@ import MenuDivider from './MenuDivider.vue'
 import { uiPx } from '../utils/uiScale'
 import { isMobilePlatform } from '../utils/platform'
 import { useLocalStateStore } from '../stores/localStateStore'
+import { isWebMode } from '../utils/webMode'
 
 export interface FileItem {
   name: string
@@ -336,6 +341,7 @@ const emit = defineEmits<{
   symlink: []
   chmod: [item: FileItem]
   upload: []
+  uploadDirectory: []
   downloadTo: [items: FileItem[]]
   cancelLoad: []
   cancelPaste: []
@@ -379,6 +385,7 @@ const moreMenuVisible = ref(false)
 const tableRef = ref<any>(null)
 
 const sendToKey = computed(() => props.mode === 'local' ? 'sftp.sendToRemote' : 'sftp.sendToLocal')
+const sendToLabel = computed(() => isWebMode() ? (props.mode === 'local' ? 'Send to remote pane' : 'Send to host pane') : t(sendToKey.value))
 const flatToolbar = computed(() => props.toolbarLayout === 'flat')
 // Name column default width: the narrow sidebar (compact layout) uses 2/3 of
 // the dual-pane default so one column doesn't dominate the little space.
@@ -799,18 +806,33 @@ async function doCopyPath() {
   ctxMenuVisible.value = false
   const text = buildSelectedPathsText()
   if (!text) return
-  await navigator.clipboard.writeText(text).catch(() => {})
-  msg.success(t('sftp.pathCopied'))
+  if (await copyFilePath(text)) msg.success(t('sftp.pathCopied'))
 }
 
 async function doCopyPathToTerminal() {
   ctxMenuVisible.value = false
   const text = buildSelectedPathsText()
   if (!text) return
-  await navigator.clipboard.writeText(text).catch(() => {})
+  await copyFilePath(text)
   // The host types the text at its terminal's prompt (no trailing newline);
   // silently no-ops when no terminal panel exists for this session.
   emit('copyPathToTerminal', text)
+}
+
+// File-view fallback for trusted HTTP LAN pages without secure Clipboard API.
+// The shell's common clipboard helper can replace this at integration.
+async function copyFilePath(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard) { await navigator.clipboard.writeText(text); return true }
+  } catch { /* try the user-activated document copy below */ }
+  const input = document.createElement('textarea')
+  input.value = text
+  input.style.position = 'fixed'
+  input.style.opacity = '0'
+  document.body.append(input)
+  input.select()
+  try { return document.execCommand('copy') } catch { return false }
+  finally { input.remove() }
 }
 
 function doRename() { emit('rename', selectedItems.value[0]); ctxMenuVisible.value = false }

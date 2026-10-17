@@ -86,6 +86,8 @@ import { FileUp, CircleCheck } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { useSkillStore } from '../stores/skillStore'
 import { OpenFileDialogFiltered, OpenDirectoryDialog, ImportSkillFromZip, ImportSkillFromDir } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebMode } from '../utils/webMode'
+import { pickDeviceFiles, withDevicePaths, fileRPC } from '../services/webFiles'
 
 const { t } = useI18n()
 const store = useSkillStore()
@@ -221,6 +223,7 @@ async function onCreate() {
 // 通过 Wails 原生对话框选 zip / 文件夹，走后端导入（支持文件夹型 skill）
 async function importZip() {
   try {
+    if (isWebMode()) { await importDeviceSkill(false); return }
     const path = await OpenFileDialogFiltered(t('settings.skillsImportZip'), 'Skill', '*.zip;*.skill')
     if (!path) return
     const name = await ImportSkillFromZip(path)
@@ -234,6 +237,7 @@ async function importZip() {
 
 async function importDir() {
   try {
+    if (isWebMode()) { await importDeviceSkill(true); return }
     const path = await OpenDirectoryDialog()
     if (!path) return
     const name = await ImportSkillFromDir(path)
@@ -243,6 +247,19 @@ async function importDir() {
   } catch (e: any) {
     ElMessage.error(e?.message || 'Import failed')
   }
+}
+
+async function importDeviceSkill(directory: boolean) {
+  const entries = await pickDeviceFiles({ directory, accept: directory ? '' : '.zip,.skill' })
+  if (!entries.length) return
+  const relative = directory ? entries[0].path.split('/')[0] : entries[0].path
+  const name = await withDevicePaths(entries, async s => {
+    const hostPath = await fileRPC<string>('WebFilesPath', s.id, relative)
+    return directory ? ImportSkillFromDir(hostPath) : ImportSkillFromZip(hostPath)
+  })
+  await store.reload()
+  ElMessage.success(t('settings.skillsImportOk', { name }))
+  emit('created')
 }
 </script>
 

@@ -100,7 +100,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import type { CustomTerminalTheme, TerminalThemeColors } from '../types/settings'
 import { parseItermColors, buildItermColors } from '../composables/itermcolorsParser'
-import { OpenFileDialogFiltered, SaveFileDialogFiltered, ReadFileBase64, WriteFileBase64 } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { openTextFile, saveTextFile } from '../services/webFiles'
 
 const props = defineProps<{
   modelValue: boolean
@@ -213,19 +213,18 @@ async function onDelete() {
 }
 
 async function onImport() {
-  let path: string
+  let picked: { name: string; text: string } | null
   try {
-    path = await OpenFileDialogFiltered(t('theme.importItermcolors'), 'iTerm2 Color Preset', '*.itermcolors')
+    picked = await openTextFile(t('theme.importItermcolors'), '*.itermcolors')
   } catch {
     return
   }
-  if (!path) return
+  if (!picked) return
   try {
-    const b64 = await ReadFileBase64(path)
-    const xml = atob(b64)
+    const xml = picked.text
     draft.value.colors = parseItermColors(xml, draft.value.colors)
     if (!draft.value.name.trim() || draft.value.name === t('theme.newDefaultName')) {
-      const base = path.split(/[\\/]/).pop() || ''
+      const base = picked.name
       draft.value.name = base.replace(/\.itermcolors$/i, '') || draft.value.name
     }
     msg.success(t('theme.importSuccess'))
@@ -236,16 +235,9 @@ async function onImport() {
 
 async function onExport() {
   const defaultName = `${draft.value.name.trim() || t('theme.newDefaultName')}.itermcolors`
-  let path: string
-  try {
-    path = await SaveFileDialogFiltered(t('theme.exportItermcolors'), defaultName, 'iTerm2 Color Preset', '*.itermcolors')
-  } catch {
-    return
-  }
-  if (!path) return
   try {
     const xml = buildItermColors(draft.value.colors)
-    await WriteFileBase64(path, btoa(xml))
+    if (!await saveTextFile(xml, defaultName, t('theme.exportItermcolors'), '*.itermcolors')) return
     msg.success(t('theme.exportSuccess'))
   } catch {
     msg.error(t('theme.exportFailed'))

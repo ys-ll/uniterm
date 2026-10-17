@@ -216,7 +216,8 @@ import SyntaxEditor from './SyntaxEditor.vue'
 import DBResultGrid from './DBResultGrid.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
-import { ExecuteQuery, ExecuteStatement, GetTables, GetTableSchema, DBDefaultTableQuery, DBInsertRow, DBUpdateRow, DBDeleteRow, ExecuteSQLScript, OpenFileDialogFiltered, ReadFileBase64, SaveFileDialogFiltered, WriteFileBase64 } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { ExecuteQuery, ExecuteStatement, GetTables, GetTableSchema, DBDefaultTableQuery, DBInsertRow, DBUpdateRow, DBDeleteRow, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { openTextFile, saveTextFile } from '../services/webFiles'
 import { chat } from '../services/llm'
 import { msg } from '../services/message'
 import { loadSqlHistory, pushSqlHistory } from '../composables/useDbSqlHistory'
@@ -344,22 +345,12 @@ async function onExportResults(format: 'csv' | 'txt' | 'json') {
   if (!queryResult.value?.rows.length) return
   try {
     const ext = format === 'json' ? 'json' : format === 'txt' ? 'txt' : 'csv'
-    const label = format === 'json' ? 'JSON File' : format === 'txt' ? 'Text File' : 'CSV File'
     const defaultName = `${props.tableName || 'query_result'}_${new Date().toISOString().slice(0, 10)}.${ext}`
-    const path = await SaveFileDialogFiltered(t('db.exportResults'), defaultName, label, `*.${ext}`)
-    if (!path) return
-    await WriteFileBase64(path, encodeBase64(buildExportText(format)))
-    msg.success(t('db.exportDone', { name: path.split('/').pop() || defaultName }))
+    if (!await saveTextFile(buildExportText(format), defaultName, t('db.exportResults'), `*.${ext}`)) return
+    msg.success(t('db.exportDone', { name: defaultName }))
   } catch (e: any) {
     msg.error(e?.message || String(e))
   }
-}
-
-function encodeBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text)
-  let bin = ''
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
-  return btoa(bin)
 }
 
 function refreshHistory() {
@@ -637,17 +628,16 @@ function isDialogCancel(e: unknown): boolean {
 const sqlFileEditorLimit = 1 << 20
 
 async function onOpenScriptFile() {
-  let path = ''
+  let picked: { name: string; text: string } | null
   try {
-    path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
+    picked = await openTextFile(t('db.runSqlFile'), '*.sql')
   } catch (e) {
     if (!isDialogCancel(e)) error.value = (e as any)?.message || String(e)
     return
   }
-  if (!path) return
+  if (!picked) return
   try {
-    const b64 = await ReadFileBase64(path)
-    const text = decodeBase64(b64)
+    const text = picked.text
     error.value = ''
     queryResult.value = null
     execResult.value = null
@@ -664,17 +654,6 @@ async function onOpenScriptFile() {
     if (!cancelled) error.value = e?.message || String(e)
   } finally {
     loading.value = false
-  }
-}
-
-function decodeBase64(b64: string): string {
-  try {
-    const bin = atob(b64)
-    const bytes = new Uint8Array(bin.length)
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-    return new TextDecoder('utf-8').decode(bytes)
-  } catch {
-    return ''
   }
 }
 

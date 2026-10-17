@@ -138,7 +138,7 @@ func TestParseDBeaver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := parseDBeaver(dir, ParseOptions{})
+	res, err := Parse(FormatDBeaver, dir, ParseOptions{})
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

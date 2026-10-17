@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { isWebMode, webClientId } from '../utils/webMode'
+import { fileRPC } from '../services/webFiles'
 
 export type TransferDirection = 'upload' | 'download'
 export type TransferStatus = 'pending' | 'transferring' | 'completed' | 'cancelled' | 'error'
@@ -19,6 +21,14 @@ export interface TransferInfo {
 
 export const useZmodemStore = defineStore('zmodem', () => {
   const transfers = ref<Map<string, TransferInfo[]>>(new Map())
+  const publishedAt = new Map<string, number>()
+  function publish(info: TransferInfo) {
+    if (isWebMode()) return
+    const now = Date.now()
+    if (info.status === 'transferring' && now - (publishedAt.get(info.id) || 0) < 100) return
+    publishedAt.set(info.id, now)
+    void fileRPC('WebZmodemProgress', info.sessionId, info).catch(() => {})
+  }
 
   // Store abort functions so any BaseTerminal instance can cancel an
   // active transfer, even if the zmodem service lives in a different
@@ -60,6 +70,7 @@ export const useZmodemStore = defineStore('zmodem', () => {
   }
 
   function abortTransfer(sessionId: string) {
+    if (isWebMode()) { void fileRPC('WebZmodemCancel', sessionId, webClientId()); return }
     abortFns.get(sessionId)?.()
     abortFns.delete(sessionId)
   }
@@ -81,6 +92,7 @@ export const useZmodemStore = defineStore('zmodem', () => {
     const list = transfers.value.get(sessionId) || []
     list.push(info)
     transfers.value.set(sessionId, list)
+    publish(info)
   }
 
   function updateTransfer(sessionId: string, transferId: string, updates: Partial<TransferInfo>) {
@@ -89,6 +101,7 @@ export const useZmodemStore = defineStore('zmodem', () => {
     if (idx >= 0) {
       list[idx] = { ...list[idx], ...updates }
       transfers.value.set(sessionId, [...list])
+      publish(list[idx])
     }
   }
 

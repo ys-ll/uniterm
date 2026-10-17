@@ -13,6 +13,8 @@ import {
 import { Events } from '@wailsio/runtime'
 import { useZmodemStore } from '../stores/zmodemStore'
 import { queuedSessionWrite } from './sessionWriter'
+import { isWebMode } from '../utils/webMode'
+import { nativeZmodemChoice, finishNativeZmodem } from './webZmodem'
 
 const dialogLocks = new Set<string>()
 const TRANSFER_TIMEOUT_MS = 20_000
@@ -58,6 +60,13 @@ export interface ZmodemServiceOptions {
 }
 
 export function startZmodemService(options: ZmodemServiceOptions) {
+  if (isWebMode()) throw new Error('ZMODEM parser belongs to the desktop')
+  let brokerRequest = ''
+  const finishBroker = async (error = '') => {
+    const request = brokerRequest
+    brokerRequest = ''
+    if (request) await finishNativeZmodem(request, error)
+  }
   let binaryUnsub: (() => void) | null = null
   let currentZsession: import('zmodem.js/src/zmodem_browser').Session | null = null
   let aborted = false
@@ -96,6 +105,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
     if (notified) return
     notified = true
     watchdog.stop()
+    void finishBroker(files.length ? '' : 'cancelled').catch(error => options.onWarning?.(String(error)))
     if (hint === undefined) options.onComplete?.(files)
     else options.onComplete?.(files, hint)
   }
@@ -104,6 +114,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
     notified = true
     watchdog.stop()
     options.onError?.(errorMessage(error))
+    void finishBroker(errorMessage(error))
   }
 
   function sender(octets: number[]) {
@@ -351,6 +362,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       // call can overtake it and the remote shell will not print its next
       // prompt until the user presses Enter.
       await drainWrites()
+      await finishBroker(hint || '')
 
       // lsz can restore the tty and print the shell prompt in the SSH read
       // immediately after the chunk containing OO. Keep binary routing alive
@@ -428,10 +440,18 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       }
 
       const run = async () => {
+        const choice = await abortable(nativeZmodemChoice(sessionId, zsession.type === 'send' ? 'upload' : 'download').then(async choice => {
+          if (disposed || aborted) {
+            if (choice.requestId) await finishNativeZmodem(choice.requestId, 'aborted')
+            throw new Error('aborted')
+          }
+          return choice
+        }), abortCtl)
+        brokerRequest = choice.requestId || ''
         if (zsession.type === 'send') {
           const store = useZmodemStore()
           const pendingPaths = store.getPendingUploadFiles(sessionId)
-          const paths: string[] = pendingPaths && pendingPaths.length > 0
+          const paths: string[] = choice.paths?.length ? choice.paths : pendingPaths && pendingPaths.length > 0
             ? pendingPaths
             : await abortable(
               OpenMultipleFilesDialog().catch((err: unknown) => dialogCancelToEmpty<string[]>(err, [])),
@@ -449,7 +469,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
           let saveDirPromise: Promise<string> | null = null
           const getSaveDir = () => {
             if (!saveDirPromise) {
-              const configuredDir = options.getDefaultDownloadDir?.() || ''
+              const configuredDir = choice.directory || options.getDefaultDownloadDir?.() || ''
               saveDirPromise = configuredDir.trim()
                 ? Promise.resolve(configuredDir)
                 : abortable(
@@ -521,15 +541,21 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       binaryUnsub = null
       dialogLocks.delete(sessionId)
       options.onUnregister?.()
+      cancelUnsub()
+      await finishBroker('aborted')
       // Pair disposal with an ordered end even when the component is
       // unmounted before the pending start bridge call completes.
       try { await endBackendMode() } catch (_) {}
     },
     isAborted: () => aborted,
     abort: async () => {
-      try { await cancel() } catch (err) { notifyError(err) }
+      try { await cancel(); await finishBroker('cancelled') } catch (err) { notifyError(err) }
     },
   }
+
+  const cancelUnsub = Events.On('web:zmodem-cancel', ev => {
+    if (ev.data?.sessionId === sessionId && ev.data?.requestId === brokerRequest && brokerRequest) void svc.abort()
+  })
 
   options.onRegister?.(() => { void svc.abort() })
   return svc
