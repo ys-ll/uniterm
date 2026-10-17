@@ -54,11 +54,13 @@ import { msg } from '../services/message'
 import { ParseImportFile, ApplyImport, OpenFileDialogFiltered, OpenDirectoryDialog } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { isWebMode } from '../utils/webMode'
 import { pickDeviceFiles, withDevicePaths, fileRPC, type DeviceEntry } from '../services/webFiles'
+import { useConnectionStore } from '../stores/connectionStore'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'done', count: number): void }>()
 
 const { t } = useI18n()
+const connectionStore = useConnectionStore()
 const format = ref('uniterm')
 const srcPath = ref('')
 const password = ref('')
@@ -116,6 +118,9 @@ async function onImport() {
       ? await withDevicePaths(deviceEntries, async s => parse(await fileRPC<string>('WebFilesPath', s.id, path)))
       : await parse(path)
     await ApplyImport({ groups: result.groups || [], connections: result.connections || [] } as any)
+    // The broadcast only warns stale editors. Reload this client's merged data
+    // and revision explicitly before allowing the next connection save.
+    await connectionStore.load()
     const count = (result.connections || []).length
     if (result.warnings && result.warnings.length) {
       msg.warning(result.warnings.join('\n'))
