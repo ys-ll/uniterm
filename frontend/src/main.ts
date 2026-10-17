@@ -10,6 +10,7 @@ import { Window } from '@wailsio/runtime'
 import { useSettingsStore } from './stores/settingsStore'
 import { setLocale } from './i18n'
 import { isWebMode } from './utils/webMode'
+import { initBrowserTerminalIntegration } from './utils/webTerminalIntegration'
 
 if (isWebMode()) document.title = 'uniTerm'
 else Window.SetTitle('uniTerm')
@@ -29,15 +30,17 @@ const settingsStore = useSettingsStore()
 // navigator.language, zero IPC) so the first paint is already in the user's
 // language; init() re-resolves with the persisted preference once loaded.
 setLocale('system')
-// Fire settings init without awaiting: top-level await here used to block the
-// module's completion, which delayed the page load event, which delayed Wails'
-// window Show() — seconds of dock-icon-but-no-window on slow first paint. All
-// settings consumers are reactive (computed/watch/template), so values apply
-// themselves once init lands. applyTheme() on the loaded defaults runs before
-// mount anyway (init() calls it synchronously after its awaits settle).
-settingsStore.init()
-
-app.mount('#app')
+// Keep module evaluation non-blocking for Wails' page-load/window Show, but
+// install the sole desktop authority before any mounted UI can start a PTY.
+void settingsStore.init().then(() => {
+  const dispose = initBrowserTerminalIntegration()
+  app.onUnmount(dispose)
+  app.mount('#app')
+}).catch(error => {
+  const root = document.getElementById('app')!
+  root.setAttribute('role', 'alert')
+  root.textContent = error instanceof Error ? error.message : String(error)
+})
 
 // Global IME guard: swallow keydown/keyup events consumed by an IME
 // composition (e.g. Enter confirming a candidate word) before any

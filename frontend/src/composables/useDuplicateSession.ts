@@ -11,6 +11,7 @@ import { useTabStore } from '../stores/tabStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { waitForTerminalSize } from '../services/terminalManager'
 import { fileTransferProto } from '../utils/fileTransferUtils'
+import { shouldCloseSession } from '../utils/nativeCapabilities'
 import type { ConnectionConfig } from '../types/session'
 
 // The session-type argument to CreateSession isn't always tab.config.type:
@@ -136,7 +137,7 @@ export function useDuplicateSession() {
         }
         await SessionStart(info.id, config).catch((e) => {
           console.error('Failed to start duplicated session:', e)
-          CloseSession(info.id).catch(() => {})
+          if (shouldCloseSession(panel.type)) CloseSession(info.id).catch(() => {})
         })
       } catch (e) {
         console.error('Failed to duplicate session:', e)
@@ -195,7 +196,7 @@ export function useDuplicateSession() {
           }
           await SessionStart(info.id, config).catch((e: any) => {
             console.error('Failed to start channel clone:', e)
-            CloseSession(info.id).catch(() => {})
+            if (shouldCloseSession('ssh')) CloseSession(info.id).catch(() => {})
           })
         } catch (e) {
           console.error('Failed to start channel clone:', e)
@@ -215,7 +216,7 @@ export function useDuplicateSession() {
       }
       await SessionStart(info.id, config).catch((e: any) => {
         console.error('Failed to start channel clone:', e)
-        CloseSession(info.id).catch(() => {})
+        if (shouldCloseSession('ssh')) CloseSession(info.id).catch(() => {})
       })
     } catch (e) {
       console.error('Failed to start channel clone:', e)

@@ -99,6 +99,7 @@ describe('browser bootstrap and event bridge', () => {
     expect(browser.browserConnection.connected).toBe(true)
     browser.stopBrowserEvents()
     expect(stream.closed).toBe(true)
+    expect(order[order.length - 1]).toBe('offline')
     expect(fetchMock.mock.calls.every(([url]) => String(url) === '/web/bootstrap')).toBe(true)
   })
 

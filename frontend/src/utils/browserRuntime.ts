@@ -20,6 +20,7 @@ interface WebEvent {
 export const browserConnection = reactive({ connected: false, error: '' })
 let stream: EventSource | undefined
 let ready: Promise<void> | undefined
+let disconnect: (() => void) | undefined
 
 export async function loadWebBootstrap(): Promise<WebBootstrap> {
   const response = await fetch('/web/bootstrap', { credentials: 'same-origin', cache: 'no-store' })
@@ -65,6 +66,7 @@ export function startBrowserEvents(eventsUrl: string): Promise<void> {
     browserConnection.error = t('web.reconnecting')
     dispatch({ name: 'web:disconnected', data: null })
   }
+  disconnect = offline
   ready = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       if (!opened) {
@@ -137,6 +139,8 @@ export function waitForBrowserEvents(): Promise<void> {
 
 export function stopBrowserEvents() {
   stream?.close()
+  disconnect?.()
+  disconnect = undefined
   stream = undefined
   ready = undefined
   browserConnection.connected = false

@@ -180,7 +180,8 @@ import AppHeader from './components/AppHeader.vue'
 import BrowserSessionPicker from './components/BrowserSessionPicker.vue'
 import { isWebMode } from './utils/webMode'
 import { browserConnection } from './utils/browserRuntime'
-import { initBrowserTerminalIntegration } from './utils/webTerminalIntegration'
+import { webTerminalError } from './utils/webTerminalIntegration'
+import { detachBrowserPanel } from './services/webTerminals'
 import { shouldCloseSession } from './utils/nativeCapabilities'
 import Sidebar from './components/Sidebar.vue'
 import TerminalTabContent from './components/TerminalTabContent.vue'
@@ -259,11 +260,8 @@ import { createWorkspaceFromSelection } from './composables/createWorkspace'
 const bgDataUrl = ref('')
 const web = isWebMode()
 const webSessionsVisible = ref(false)
-const webTerminalError = ref('')
-let webTerminalsReady = false
-
 function canCreateTerminal(): boolean {
-  if (!web || webTerminalsReady && browserConnection.connected) return true
+  if (!web || browserConnection.connected) return true
   msg.error(webTerminalError.value || t('web.eventsUnavailable'))
   return false
 }
@@ -960,11 +958,6 @@ onMounted(async () => {
   if (tabStore.tabs.length === 0) {
     tabStore.createStartTab()
   }
-  try {
-    webTerminalsReady = await initBrowserTerminalIntegration()
-  } catch (e) {
-    webTerminalError.value = e instanceof Error ? e.message : String(e)
-  }
   if (web) webSessionsVisible.value = true
   // Reopen-last-session prompt (issue #937): ask before touching tabs, then
   // start recording so the snapshot always mirrors what's open. Not awaited —
@@ -1230,15 +1223,13 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
     const t = tabStore.activeTab
     if (!t) return
     if (t.locked) return
-    if (t.type === 'workspace' && t.panelIds.length > 1) {
+    if (t.type === 'workspace' && t.panelIds.length) {
       const panelId = t.activePanelId || t.panelIds[t.panelIds.length - 1]
-      const p = panelStore.getPanel(panelId)
-      if (p?.sessionId && shouldCloseSession(p.type)) CloseSession(p.sessionId).catch(() => {})
-      companionStore.disposeForPanel(panelId).catch(() => {})
-      tabStore.removePanelFromWorkspaceTab(t.id, panelId)
-      panelStore.removePanel(panelId)
-    } else if (t.type === 'workspace' && t.panelIds.length === 1) {
-      const panelId = t.panelIds[0]
+      if (detachBrowserPanel(panelId)) {
+        companionStore.disposeForPanel(panelId).catch(() => {})
+        tabStore.removePanelFromWorkspaceTab(t.id, panelId)
+        return
+      }
       const p = panelStore.getPanel(panelId)
       if (p?.sessionId && shouldCloseSession(p.type)) CloseSession(p.sessionId).catch(() => {})
       companionStore.disposeForPanel(panelId).catch(() => {})
@@ -1456,6 +1447,7 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
   }
   // Terminal sessions must be explicitly closed to terminate the connection/shell process
   if (tab && tab.type === 'terminal') {
+    detachBrowserPanel(tab.panelId)
     const p = panelStore.getPanel(tab.panelId)
     if (p?.sessionId && shouldCloseSession(p.type)) {
       try { await CloseSession(p.sessionId) } catch (_) {}
@@ -1464,6 +1456,7 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
   // Workspace: close each panel session
   if (tab && tab.type === 'workspace') {
     for (const pid of tab.panelIds) {
+      if (detachBrowserPanel(pid)) continue
       const p = panelStore.getPanel(pid)
       if (p?.sessionId && shouldCloseSession(p.type)) {
         try { await CloseSession(p.sessionId) } catch (_) {}
@@ -1488,7 +1481,7 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
     if (p?.sessionId) unregisterTransferRoute(p.sessionId)
     panelStore.removeTransferTasks(pid)
   })
-  panelIds.forEach(pid => panelStore.removePanel(pid))
+  panelIds.forEach(pid => { if (panelStore.getPanel(pid)) panelStore.removePanel(pid) })
   nextTick(() => {
     if (tabStore.tabs.length === 0) {
       tabStore.createStartTab()

@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useLocalStateStore } from './localStateStore'
 
 const { load, save } = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn() }))
-vi.mock('../../bindings/github.com/ys-ll/uniterm/app', () => ({ LoadLocalState: load, SaveLocalState: save }))
+vi.mock('../services/businessConfig', () => ({ LoadLocalState: load, SaveLocalState: save }))
 
 function storage() {
   const values = new Map<string, string>()

@@ -4,7 +4,7 @@
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
     <div class="catalog" :aria-busy="loading">
       <p v-if="!loading && !sessions.length">{{ t('web.noTerminals') }}</p>
-      <button v-for="session in sessions" :key="session.id" class="session" :disabled="attaching !== '' || !browserConnection.connected" @click="attach(session.id)">
+      <button v-for="session in sessions" :key="session.id" class="session" :disabled="attaching !== '' || !browserConnection.connected" @click="attach(session)">
         <span>{{ session.title || session.type }}</span>
         <small>{{ session.type }} · {{ session.status }} · {{ session.id }}</small>
       </button>
@@ -18,16 +18,17 @@
 
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
-import { Call, Events } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
 import { useI18n } from '../i18n'
 import { backendErrorText } from '../utils/backendError'
 import { attachBrowserTerminal } from '../utils/webTerminalIntegration'
-import { browserConnection } from '../utils/browserRuntime'
+import { browserConnection, waitForBrowserEvents } from '../utils/browserRuntime'
+import { webTerminalBridge, type WebSession } from '../services/webTerminals'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
 const { t } = useI18n()
-const sessions = ref<{ id: string; type: string; title: string; status: string }[]>([])
+const sessions = ref<WebSession[]>([])
 const loading = ref(false)
 const attaching = ref('')
 const error = ref('')
@@ -36,16 +37,19 @@ async function refresh() {
   if (loading.value) return
   loading.value = true
   error.value = ''
-  try { sessions.value = (await Call.ByName('main.App.GetWebSessions')) || [] }
+  try {
+    await waitForBrowserEvents()
+    sessions.value = (await webTerminalBridge.sessions()) || []
+  }
   catch (e) { error.value = backendErrorText(e) }
   finally { loading.value = false }
 }
 
-async function attach(id: string) {
-  attaching.value = id
+async function attach(session: WebSession) {
+  attaching.value = session.id
   error.value = ''
   try {
-    await attachBrowserTerminal(id)
+    await attachBrowserTerminal(session)
     emit('update:visible', false)
   } catch (e) { error.value = backendErrorText(e) }
   finally { attaching.value = '' }

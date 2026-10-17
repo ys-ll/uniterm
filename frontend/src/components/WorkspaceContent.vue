@@ -49,6 +49,7 @@ import PanelGrid from './PanelGrid.vue'
 import { CloseSession } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
+import { detachBrowserPanel } from '../services/webTerminals'
 
 const props = defineProps<{
   tab: WorkspaceTab
@@ -63,6 +64,11 @@ const { t } = useI18n()
 const { duplicateSession } = useDuplicateSession()
 
 async function closePanel(panelId: string) {
+  if (detachBrowserPanel(panelId)) {
+    companionStore.disposeForPanel(panelId).catch(() => {})
+    tabStore.removePanelFromWorkspaceTab(props.tab.id, panelId)
+    return
+  }
   const panel = panelStore.getPanel(panelId)
   const connected = !!panel?.sessionId && sessionStore.getStatus(panel.sessionId) === 'connected'
   if (connected) {
