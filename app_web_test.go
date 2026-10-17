@@ -206,8 +206,12 @@ func TestWebTerminalSharedInputOwnershipAndAppliedSize(t *testing.T) {
 	if err := a.SessionWriteBinary(s.id, "AP8="); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.SessionResize(s.id, 90, 20); err == nil || !strings.Contains(err.Error(), "inactive_client") {
-		t.Fatalf("passive desktop stole grid: %v", err)
+	sequence := a.webTransport.terminalSequence(s.id)
+	if err := a.SessionResize(s.id, 90, 20); err != nil {
+		t.Fatalf("passive layout observation must be harmless: %v", err)
+	}
+	if a.webTransport.terminalSequence(s.id) != sequence || s.cols != 100 || s.rows != 30 {
+		t.Fatal("passive desktop changed the terminal")
 	}
 	info := a.GetWebSessions()[0]
 	if info.Cols != 100 || info.Rows != 30 || info.ActiveClient != "browser" || info.ConnectionID != "saved-connection" {
@@ -225,7 +229,12 @@ func TestWebTerminalSharedInputOwnershipAndAppliedSize(t *testing.T) {
 	if err := a.ResizeWebTerminal(s.id, "desktop", 120, 40, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.ResizeWebTerminal(s.id, "browser", 90, 20, false); err == nil {
+	sequence = a.webTransport.terminalSequence(s.id)
+	if err := a.ResizeWebTerminal(s.id, "browser", 90, 20, false); err != nil {
+		t.Fatalf("passive browser observation must not block its next input: %v", err)
+	}
+	info = a.GetWebSessions()[0]
+	if info.ActiveClient != "desktop" || info.Cols != 120 || info.Rows != 40 || s.cols != 120 || s.rows != 40 || a.webTransport.terminalSequence(s.id) != sequence {
 		t.Fatal("inactive browser resized")
 	}
 	if err := a.WebTerminalInput(s.id, "browser", "", 65536, 24, false); err == nil {

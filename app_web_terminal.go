@@ -267,7 +267,10 @@ func (a *App) resizeWebTerminalLocked(t *webTerminal, clientID string, cols, row
 		return webError("session_closed", "terminal is closed")
 	}
 	if !active && t.info.ActiveClient != clientID {
-		return webError("inactive_client", "passive resize belongs to another client")
+		// Layout/font observers run on every attached view. Their stale size is
+		// advisory, not a failed input operation; only the active client applies
+		// it. A no-op also covers ownership changing while this RPC is queued.
+		return nil
 	}
 	t.events.Lock()
 	defer t.events.Unlock()
