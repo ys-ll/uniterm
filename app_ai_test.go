@@ -117,6 +117,9 @@ func TestIsOpenCodeGoBaseURL(t *testing.T) {
 		{"https://opencode.ai/zen/go/v1/", true},
 		{"https://opencode.ai/zen/go/v1/chat/completions", true},
 		{" https://OPENCODE.AI/zen/go/v1/ ", true},
+		{"https://opencode.ai/inference/go/openai/v1", true},
+		{"https://opencode.ai/inference/go/openai/v1/", true},
+		{"https://opencode.ai/inference/go/openai/v1/chat/completions", true},
 		{"https://api.openai.com/v1", false},
 		{"https://openrouter.ai/api/v1", false},
 		{"http://localhost:11434/v1", false},
@@ -125,6 +128,9 @@ func TestIsOpenCodeGoBaseURL(t *testing.T) {
 		{"https://opencode.ai/zen/v1", false},
 		{"https://opencode.ai/zen/go/v10", false},
 		{"https://opencode.ai/zen/go/v1-extra", false},
+		{"https://opencode.ai/inference/openai/v1", false},
+		{"https://opencode.ai/inference/go/openai/v10", false},
+		{"https://opencode.ai.example.com/inference/go/openai/v1", false},
 		{"https://opencode.ai/%zz", false},
 		{"", false},
 	}
@@ -151,6 +157,8 @@ func TestChatCompletionOpenAI_SessionHeader(t *testing.T) {
 		want      string
 	}{
 		{"OpenCode Go", "https://opencode.ai/zen/go/v1", "session-123", "session-123"},
+		{"OpenCode Go inference", "https://opencode.ai/inference/go/openai/v1", "session-123", "session-123"},
+		{"inference empty session", "https://opencode.ai/inference/go/openai/v1", "", ""},
 		{"empty session", "https://opencode.ai/zen/go/v1", "", ""},
 		{"OpenCode Zen", "https://opencode.ai/zen/v1", "session-123", ""},
 		{"OpenAI", "https://api.openai.com/v1", "session-123", ""},

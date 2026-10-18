@@ -645,7 +645,12 @@ func isOpenCodeGoBaseURL(baseURL string) bool {
 	}
 
 	path := strings.TrimRight(u.Path, "/")
-	return path == "/zen/go/v1" || strings.HasPrefix(path, "/zen/go/v1/")
+	for _, prefix := range []string{"/zen/go/v1", "/inference/go/openai/v1"} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // chatCompletionOpenAI converts the Anthropic-format request to OpenAI,
