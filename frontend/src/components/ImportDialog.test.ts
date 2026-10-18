@@ -53,7 +53,7 @@ async function client() {
   const app = createApp({})
   app.provide(ssrContextKey, {})
   // Run the real SFC setup/handler and stores with external I/O mocked.
-  const dialog = app.runWithContext(() => scope.run(() => ImportDialog.setup!({ visible: true }, {
+  const dialog = app.runWithContext(() => scope.run(() => ImportDialog.setup!({ visible: true, onDone: undefined, 'onUpdate:visible': undefined }, {
     attrs: {}, slots: {}, emit, expose: () => {},
   }))) as unknown as DialogState
   cleanups.push(() => { scope.stop(); store.dispose() })

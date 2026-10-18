@@ -309,9 +309,14 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	return info, nil
 }
 
-// Connect may finish after Close detached its session. Late callbacks must not
-// recreate frontend session state after session:closed.
+// Text-terminal Connect may finish after Close detached its session. Late
+// callbacks must not recreate frontend session state after session:closed.
 func (a *App) emitSessionEvent(s session.Session, name string, payload map[string]any) {
+	if !textTerminal(s.Type()) {
+		// Non-terminal Disconnect emits its normal status after manager removal.
+		a.emit(name, payload)
+		return
+	}
 	if terminal, err := a.webTerminalFor(s.ID()); err == nil {
 		if name == "session:status" && payload["status"] == session.StatusConnected {
 			terminal.mu.Lock()

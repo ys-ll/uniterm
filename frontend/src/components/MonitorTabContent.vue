@@ -1112,7 +1112,7 @@ const systemGroups = computed(() => {
 // local clock stays constant. (Same approach as MonitorOverviewSidebar.)
 const hostClockAt = ref(0)
 const clockNow = ref(0)
-let clockTimer: ReturnType<typeof setInterval> | null = null
+let clockTimer: number | null = null
 
 const hostClockText = computed(() => {
   const base = Number(systemInfo.value?.epochSec)

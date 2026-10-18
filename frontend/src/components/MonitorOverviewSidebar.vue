@@ -352,7 +352,7 @@ async function toggleDisks() {
 }
 
 let unsub: (() => void) | null = null
-let clockTimer: ReturnType<typeof setInterval> | null = null
+let clockTimer: number | null = null
 
 function bindListeners() {
   unsub?.()
