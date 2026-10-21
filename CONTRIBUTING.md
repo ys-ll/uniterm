@@ -59,6 +59,36 @@ wails build                 # Production build
 - Keep commits focused and atomic
 - Use the present tense ("Add feature", not "Added feature")
 
+### Commit Identity & AI Attribution
+
+CI checks every commit in a PR ([`commit-policy.yml`](.github/workflows/commit-policy.yml)):
+
+1. **The commit author and committer must be you** — not an AI agent or bot identity.
+   Configure your own name and email:
+   ```bash
+   git config user.name  "Your Name"
+   git config user.email "you@example.com"   # or <id>+<login>@users.noreply.github.com
+   ```
+   Commits authored as `Claude <noreply@anthropic.com>`, `github-actions[bot]`, etc. are rejected.
+2. **GitHub noreply commit emails must carry your own login** (`<id>+<login>@users.noreply.github.com`) — they are matched against the PR author.
+3. **Commit messages must not mention AI assistance** — no `Co-Authored-By: Claude`, no "generated with Claude Code / AI", no 🤖 markers. Write the message as your own words.
+
+You can run the check locally before pushing:
+```bash
+bash scripts/check-commits.sh <base-sha> <head-sha> <your-github-login>
+```
+
+### 提交身份与 AI 署名(CI 强制检查)
+
+1. **提交人与提交者必须是本人**——不得使用 `Claude <noreply@anthropic.com>`、`github-actions[bot]` 等 AI 代理或机器人身份提交。
+2. **GitHub noreply 邮箱必须与你本人的登录名一致**(`<id>+<登录名>@users.noreply.github.com`),CI 会与 PR 作者比对。
+3. **提交信息不得出现 AI 辅助相关字样**——禁止 `Co-Authored-By: Claude`、"generated with Claude Code / AI"、🤖 等标记,请用自己的话描述变更。
+
+推送前可本地自查:
+```bash
+bash scripts/check-commits.sh <base-sha> <head-sha> <你的GitHub登录名>
+```
+
 ## Pull Request Guidelines
 
 - PR descriptions are recommended to be **bilingual**: English first, then Chinese, separated by `---`
