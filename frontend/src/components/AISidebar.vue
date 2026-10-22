@@ -1579,7 +1579,11 @@ function aiAskSelection() {
 }
 
 function onNewSession() {
+  // A manually created session binds to the active host in place (#1036):
+  // binding (not following) so the fresh session is NOT pulled back to the
+  // host's previous conversation — it becomes that host's newest.
   aiStore.createSession()
+  aiStore.bindCurrentSessionToActiveConnection()
 }
 
 function onSessionCommand(sessionId: string) {

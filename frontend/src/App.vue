@@ -1786,6 +1786,13 @@ watch(() => activeTab.value, (newTab) => {
     const pid = tabStore.getActivePanelId()
     if (pid) nextTick(() => focusPanelTerminal(pid))
   }
+  // Keep the AI sidebar on the active host's conversation (#1036)
+  aiStore.followActiveConnection()
+})
+
+// Workspace tab: switching the focused panel is also a host change
+watch(() => tabStore.getActivePanelId(), () => {
+  aiStore.followActiveConnection()
 })
 
 watch(sidebarVisible, async () => {

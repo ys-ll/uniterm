@@ -25,6 +25,10 @@ type AISessionEntry struct {
 	UpdatedAt      int64             `json:"updatedAt"`
 	Messages       []AIMessageEntry  `json:"messages"`
 	ContextSummary *AIContextSummary `json:"contextSummary,omitempty"`
+	// ConnectionID is the host-binding key (issue #1036): the connection this
+	// session was created for, used to auto-switch sessions on tab switch.
+	// Absent on sessions written before the feature existed.
+	ConnectionID string `json:"connectionId,omitempty"`
 }
 
 // AIContextSummary is a checkpoint for API context only. Messages remain intact.

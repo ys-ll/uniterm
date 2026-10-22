@@ -81,6 +81,10 @@ export interface AISession {
   updatedAt: number
   messages: AIMessage[]
   contextSummary?: AIContextSummary
+  // Host binding key (issue #1036): the connection this session belongs to —
+  // a saved connection id, or a host:user:port fallback for ad-hoc ones.
+  // Sessions without it stay unbound (manual switching only).
+  connectionId?: string
 }
 
 export interface AIContextSummary {
