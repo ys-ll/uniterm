@@ -18,11 +18,12 @@ import (
 	stdsync "sync"
 	"time"
 
-	_ "golang.org/x/image/webp" // registered for image.DecodeConfig
 	"image"
 	_ "image/gif"  // registered for image.DecodeConfig
 	_ "image/jpeg" // registered for image.DecodeConfig
 	_ "image/png"  // registered for image.DecodeConfig
+
+	_ "golang.org/x/image/webp" // registered for image.DecodeConfig
 
 	"github.com/mattn/go-ieproxy"
 	"github.com/ys-ll/uniterm/backend/log"
@@ -2488,6 +2489,18 @@ func (a *App) RemoveMCPClient(name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	mgr.Reload(ctx)
+	return nil
+}
+
+// MCPReconnectClient closes and re-dials a single external server's live
+// connection by name. Useful when an SSE/streamable-http long connection
+// dropped and the user wants to restore it without waiting for the next tool
+// call to trigger an automatic retry.
+func (a *App) MCPReconnectClient(name string) error {
+	mgr := a.ensureMCPClient()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	mgr.Reconnect(ctx, name)
 	return nil
 }
 

@@ -1,0 +1,148 @@
+/* Shared styles for settings sub-components.
+   Imported via `@import './_shared.css'` inside each <style scoped> block so
+   Vue scopes the rules to the importing component's elements only. */
+
+.settings-section {
+  min-width: min(25rem, 100%);
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* Narrow windows (phone portrait): stack each setting card vertically so the
+   control gets the full row instead of squeezing the title into one char
+   per line. The sub-component root carries the `narrow` class. */
+.settings-section.narrow .setting-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.625rem;
+}
+
+.settings-section.narrow .setting-control {
+  min-width: 0;
+}
+
+.settings-section.narrow .setting-control .el-select,
+.settings-section.narrow .setting-control .editor-select.el-select {
+  width: 100%;
+}
+
+.section-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  margin: 1.25rem 0 1.25rem 0;
+  color: var(--text-primary);
+}
+
+.section-desc {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0.75rem 0;
+  line-height: 1.5;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.setting-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 1.125rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  transition: all 0.12s ease;
+  backdrop-filter: blur(0.5rem);
+}
+
+.setting-card:hover {
+  border-color: var(--border-hover);
+}
+
+.setting-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+  margin-bottom: 0.125rem;
+}
+
+.setting-desc {
+  font-size: 0.6875rem;
+  font-family: var(--font-ui);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.setting-control {
+  flex-shrink: 0;
+  min-width: 13.125rem;
+}
+
+/* Switch-only cards (e.g. the MCP enable toggle) hug the right edge
+   instead of honoring the wide select-oriented min-width. */
+.setting-control.switch-control {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Action-button controls (e.g. the model list's "Add model") hug the right
+   edge too — the select-oriented min-width leaves a lone button floating
+   mid-card otherwise. */
+.setting-control.action-control {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Keep the external-editor combobox the same width as the other select
+   controls instead of the default 100% (the free-input form stretches). */
+.setting-control .editor-select.el-select {
+  width: 13.125rem;
+}
+
+/* The append button's width adds to the input's, so pin the whole group to
+   the 13.125rem the sibling selects render at instead of letting it overflow. */
+.setting-control .dir-input {
+  width: 13.125rem;
+}
+
+.config-value {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.settings-form { display: flex; flex-direction: column; gap: 0.25rem; }
+.switch-mode-hint { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
+.verify-field { display: flex; flex-direction: column; gap: 0.25rem; width: 100%; }
+
+.form-error { color: var(--el-color-danger); font-size: 0.8125rem; margin-top: 0.5rem; }
+
+.setting-control .el-select,
+.setting-control .el-input-number {
+  width: 100%;
+}
+
+.theme-select-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.theme-select-row .el-select {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}

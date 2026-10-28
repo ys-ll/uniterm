@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ys-ll/uniterm/backend/store"
 	"io"
 	"net/http"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ys-ll/uniterm/backend/store"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/ys-ll/uniterm/backend/log"
@@ -505,6 +506,28 @@ func (m *Manager) TestConnection(ctx context.Context, cfg store.MCPClientConfig)
 	}
 	defer session.Close()
 	return listTools(dialCtx, session, cfg.Name)
+}
+
+// Reconnect closes and re-dials a single server's live connection by name.
+// When the server is disabled the existing connection is simply dropped.
+// A missing/unknown name is a no-op so the caller can fire-and-forget from the
+// settings UI without first checking the config list.
+func (m *Manager) Reconnect(ctx context.Context, name string) {
+	configs, err := m.store.Load()
+	if err != nil {
+		log.Writef("mcpclient: reconnect %q: load config: %v", name, err)
+		return
+	}
+	for _, cfg := range configs {
+		if cfg.Name != name {
+			continue
+		}
+		m.closeConn(name)
+		if cfg.Enabled {
+			m.ensureConn(ctx, cfg)
+		}
+		return
+	}
 }
 
 // CloseAll tears down every connection on app shutdown.
