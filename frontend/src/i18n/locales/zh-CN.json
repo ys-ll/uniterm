@@ -840,6 +840,7 @@
   "rdp.timeout": "连接超时，请检查主机地址和网络连接。",
   "remoteDesktop.resolution": "分辨率",
   "rdp.adaptive": "自适应（跟随窗口，调整大小会短暂重连）",
+  "rdp.fullscreen": "全屏",
   "remoteDesktop.fullscreen": "全屏",
   "remoteDesktop.fullscreenToolbar": "全屏工具条",
   "remoteDesktop.restore": "还原",

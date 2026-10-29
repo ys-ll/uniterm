@@ -840,6 +840,7 @@
   "rdp.timeout": "Connection timed out. Please check the host address and network connectivity.",
   "remoteDesktop.resolution": "Resolution",
   "rdp.adaptive": "Adaptive (follows window; resizing briefly reconnects)",
+  "rdp.fullscreen": "Fullscreen",
   "remoteDesktop.fullscreen": "Fullscreen",
   "remoteDesktop.fullscreenToolbar": "Fullscreen toolbar",
   "remoteDesktop.restore": "Restore",
