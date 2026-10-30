@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -29,6 +30,22 @@ func (p *Provider) LoadImage(ctx context.Context, archive io.Reader) (string, er
 	return strings.TrimSpace(string(out)), err
 }
 
+// imageReferenceRE approximates Docker's reference grammar (domain[:port]/path[:tag][@digest]):
+// path components are lowercase alphanumerics separated by . _ -. The optional
+// leading registry component must contain a dot or a port — mirroring Docker's
+// splitDockerDomain rule where a bare first segment like "UPPER/repo" is
+// treated as part of the (lowercase) path, not a host. The tag follows
+// Docker's [\w][\w.-]{0,127} rule; digests use the generic algorithm:hex form
+// rather than enumerating every hash algorithm.
+var imageReferenceRE = regexp.MustCompile(`^(?:[a-zA-Z0-9-]+(?:(?:\.[a-zA-Z0-9.-]+)+(?::[0-9]+)?|:[0-9]+)/)?(?:[a-z0-9]+(?:[._-][a-z0-9]+)*)(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*(?::[a-zA-Z0-9_][a-zA-Z0-9._-]{0,127})?(?:@[a-z0-9]+(?:[.+_-][a-z0-9]+)*:[a-fA-F0-9]{32,})?$`)
+
+// validImageReference rejects names Docker would refuse anyway (empty, "..",
+// uppercase repository, trailing slash, double slash), so the user gets the
+// error in uniTerm instead of parsing docker's output.
+func validImageReference(ref string) bool {
+	return len(ref) <= 255 && imageReferenceRE.MatchString(ref)
+}
+
 func (p *Provider) CommitImage(ctx context.Context, id string, opts CommitOptions) (string, error) {
 	if p.rt != RuntimeDocker {
 		return "", fmt.Errorf("container image commit is currently supported only for Docker")
@@ -37,8 +54,8 @@ func (p *Provider) CommitImage(ctx context.Context, id string, opts CommitOption
 	if id == "" || strings.HasPrefix(id, "-") {
 		return "", fmt.Errorf("container ID required")
 	}
-	if opts.Image == "" || strings.HasPrefix(opts.Image, "-") || strings.ContainsAny(opts.Image, " \t\r\n") {
-		return "", fmt.Errorf("target image name required (repository:tag)")
+	if !validImageReference(opts.Image) {
+		return "", fmt.Errorf("invalid target image name %q (expected repository[:tag])", opts.Image)
 	}
 	argv := []string{"docker", "commit"}
 	if opts.Author != "" {
