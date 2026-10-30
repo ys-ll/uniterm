@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +22,12 @@ import (
 // Newest entries only. Shell history files grow without bound and the whole
 // list is held in memory and scanned per keystroke.
 const shellHistoryLimit = 1000
+
+// shellHistoryTailBytes caps how much of the history file is read. The whole
+// file is never loaded: a multi-hundred-megabyte ~/.bash_history would
+// otherwise cause a memory spike for data the limit above throws away anyway.
+// parseShellHistory only needs the newest commands, which live at the end.
+const shellHistoryTailBytes = 4 << 20 // 4 MiB
 
 // zsh with EXTENDED_HISTORY writes ": <started>:<elapsed>;<command>".
 var zshTimestampPrefix = regexp.MustCompile(`^: \d+:\d*;`)
@@ -100,6 +108,39 @@ func parseShellHistory(raw string, limit int) []string {
 	return recent
 }
 
+// readShellHistoryTail reads at most limit bytes from the end of path and
+// reports whether the read was truncated. When the file is larger than the
+// limit the first (partial) line is dropped — the read starts mid-entry, so
+// that line is truncated garbage.
+func readShellHistoryTail(path string, limit int64) ([]byte, bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, false, err
+	}
+	if info.Size() <= limit {
+		raw, err := os.ReadFile(path)
+		return raw, false, err
+	}
+	if _, err := file.Seek(info.Size()-limit, 0); err != nil {
+		return nil, false, err
+	}
+	raw := make([]byte, limit)
+	n, err := io.ReadFull(file, raw)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return nil, false, err
+	}
+	raw = raw[:n]
+	if _, rest, found := bytes.Cut(raw, []byte("\n")); found {
+		return rest, true, nil
+	}
+	return raw, true, nil
+}
+
 // LoadShellHistory returns the local login shell's history, newest first.
 // A missing or unreadable file is not an error — it just means there is
 // nothing extra to suggest.
@@ -108,7 +149,7 @@ func (a *App) LoadShellHistory() ([]string, error) {
 	if path == "" {
 		return []string{}, nil
 	}
-	raw, err := os.ReadFile(path)
+	raw, _, err := readShellHistoryTail(path, shellHistoryTailBytes)
 	if err != nil {
 		return []string{}, nil
 	}

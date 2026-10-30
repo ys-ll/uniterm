@@ -1,8 +1,10 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -103,5 +105,38 @@ func TestShellHistoryPathFollowsShell(t *testing.T) {
 	t.Setenv("SHELL", "/bin/bash")
 	if got, want := shellHistoryPath(), filepath.Join(home, ".bash_history"); got != want {
 		t.Fatalf("bash: got %q, want %q", got, want)
+	}
+}
+
+func TestReadShellHistoryTail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history")
+
+	// Small file: returned whole, no truncation.
+	if err := os.WriteFile(path, []byte("first\nsecond\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	raw, truncated, err := readShellHistoryTail(path, 1024)
+	if err != nil || truncated || string(raw) != "first\nsecond\n" {
+		t.Fatalf("small file: %q truncated=%v err=%v", raw, truncated, err)
+	}
+
+	// File larger than the cap: only the tail survives and the partial first
+	// line ("ld" — the cut middle of "old-command") is dropped.
+	big := "old-command\n" + strings.Repeat("x", 100) + "\nnewer\nnewest\n"
+	if err := os.WriteFile(path, []byte(big), 0600); err != nil {
+		t.Fatal(err)
+	}
+	raw, truncated, err = readShellHistoryTail(path, 20)
+	if err != nil || !truncated {
+		t.Fatalf("big file: truncated=%v err=%v", truncated, err)
+	}
+	commands := parseShellHistory(string(raw), 10)
+	if len(commands) == 0 || commands[0] != "newest" {
+		t.Fatalf("tail lost newest entries: %q", commands)
+	}
+	for _, command := range commands {
+		if command == "old-command" || strings.HasPrefix(command, "x") {
+			t.Fatalf("head entry survived the tail read: %q", commands)
+		}
 	}
 }
