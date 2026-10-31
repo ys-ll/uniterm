@@ -25,6 +25,13 @@ func (a *App) findMainWindow() uintptr {
 
 func additionalWindowOptions(options application.WebviewWindowOptions) application.WebviewWindowOptions {
 	options.Mac.WebviewPreferences.FullscreenEnabled.Set(true)
+	// Keep the macOS native "traffic light" buttons (close/minimise/zoom) even
+	// though the window is frameless. The app draws its own title bar (see
+	// AppHeader.vue), so we hide the title text but keep FullSizeContent so the
+	// native buttons are the real AppKit ones — with true hover/focus/press
+	// animations and Dark/Light auto-adaptation — instead of the CSS facsimiles
+	// the frontend used to render.
+	options.Mac.TitleBar = application.MacTitleBarHidden
 	return options
 }
 

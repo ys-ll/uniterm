@@ -4,15 +4,14 @@
     :class="`platform-${platform}`"
     @dblclick="onDblClick"
   >
-    <!-- macOS: custom traffic lights (Wails frameless hides the native ones) -->
-    <WindowControls
-      v-if="showWindowControls && platform === 'darwin'"
-      variant="mac"
-      :is-maximised="isMaximised"
-      @minimise="onMinimise"
-      @maximise="onMaximise"
-      @close="onClose"
-    />
+    <!-- macOS: reserve the left gutter for the native traffic lights
+         (close/minimise/zoom). The backend keeps the real AppKit buttons
+         visible on the frameless window (app_darwin.go MacTitleBarHidden), so
+         we no longer render CSS facsimiles — just leave room for them. -->
+    <div
+      v-if="platform === 'darwin' && showMacTrafficLightGutter"
+      class="mac-traffic-light-gutter"
+    ></div>
 
     <!-- Connections button (icon only, leftmost) -->
     <button class="header-btn" @click="emit('toggle-sidebar')" :title="t('header.connections') + shortcutSuffix('toggleSidebar')">
@@ -343,6 +342,18 @@ const showWindowControls = computed(
     !isMobilePlatform(platform.value)
 )
 
+// On macOS the real AppKit traffic lights overlay the top-left of the
+// frameless web content (backend MacTitleBarHidden). We hide our own window
+// controls there and just leave a left gutter so the native buttons don't
+// collide with the Connections button. When the user opted into the full
+// system title bar, the traffic lights live in the system frame instead, so
+// no gutter is needed.
+const showMacTrafficLightGutter = computed(
+  () =>
+    platform.value === 'darwin' &&
+    !(systemTitleBarAtStartup.value ?? localStateStore.state.systemTitleBar)
+)
+
 async function updateMaximisedState() {
   try {
     isMaximised.value = await Window.IsMaximised()
@@ -536,6 +547,15 @@ onUnmounted(() => {
 
 .header-btn .el-icon {
   font-size: 0.875rem;
+}
+
+/* Left spacer that gives the macOS native traffic lights (close / minimise /
+   zoom) room to display over the frameless window. Width matches the stock
+   macOS titlebar insets; leave it draggable so double-click-to-maximise and
+   window drag keep working over the empty area. */
+.mac-traffic-light-gutter {
+  flex: 0 0 4.75rem;
+  --wails-draggable: drag;
 }
 
 .app-header :deep(.window-controls) {

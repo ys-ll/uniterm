@@ -16,5 +16,27 @@
     <string>1.0.0</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0.0</string>
+    <!-- Localization declaration. Together with the matching .lproj bundles
+         (see build/darwin/*.lproj) this lets AppKit localize the
+         framework-provided window-management menu (the traffic-light zoom
+         menu: Enter Full Screen / Move Window to Left/Right Side of Screen /
+         Zoom) to follow the system language. Without a matching localization
+         the menu falls back to the development region. -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+        <string>en</string>
+        <string>ja</string>
+        <string>ko</string>
+        <string>de</string>
+        <string>es</string>
+        <string>fr</string>
+        <string>ru</string>
+        <string>pt</string>
+        <string>vi</string>
+    </array>
 </dict>
 </plist>

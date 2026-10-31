@@ -1,0 +1,5 @@
+/* Simplified Chinese localization marker.
+   The presence of this .lproj directory is what makes AppKit select Simplified
+   Chinese for the framework-provided window-management menu (traffic-light
+   zoom: "进入全屏 / 将窗口移到屏幕的左侧 / 右侧 / 缩放"), which otherwise falls
+   back to English when the app declares no Chinese localization. */
