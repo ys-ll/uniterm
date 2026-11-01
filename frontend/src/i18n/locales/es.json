@@ -1982,6 +1982,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "Escaneo de red",
   "netscan.common.stop": "Detener",
+  "netscan.common.scanStalled": "El escaneo parece atascado y se ha reiniciado. Inténtalo de nuevo.",
   "netscan.ipScan.title": "Escaneo de IP",
   "netscan.ipScan.connectHint": "Haga clic para crear una conexión",
   "netscan.ipScan.deepScan": "Escaneo profundo",

@@ -1982,6 +1982,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "Quét mạng",
   "netscan.common.stop": "Dừng",
+  "netscan.common.scanStalled": "Quá trình quét có vẻ bị treo và đã được đặt lại. Vui lòng thử lại.",
   "netscan.ipScan.title": "Quét IP",
   "netscan.ipScan.connectHint": "Nhấp để tạo kết nối",
   "netscan.ipScan.deepScan": "Quét chuyên sâu",

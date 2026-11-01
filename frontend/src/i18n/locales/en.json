@@ -2013,6 +2013,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "Network Scan",
   "netscan.common.stop": "Stop",
+  "netscan.common.scanStalled": "Scan appears stalled and was reset. Please try again.",
   "netscan.ipScan.title": "IP Scan",
   "netscan.ipScan.connectHint": "Click to create a connection",
   "netscan.ipScan.deepScan": "Deep scan",

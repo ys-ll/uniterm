@@ -1982,6 +1982,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "Verificação de rede",
   "netscan.common.stop": "Parar",
+  "netscan.common.scanStalled": "A verificação parece travada e foi reiniciada. Tente novamente.",
   "netscan.ipScan.title": "Verificação de IP",
   "netscan.ipScan.connectHint": "Clique para criar uma conexão",
   "netscan.ipScan.deepScan": "Varredura profunda",

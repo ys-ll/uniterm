@@ -1982,6 +1982,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "네트워크 스캔",
   "netscan.common.stop": "중지",
+  "netscan.common.scanStalled": "스캔이 멈춘 것 같아 재설정했습니다. 다시 시도해 주세요.",
   "netscan.ipScan.title": "IP 스캔",
   "netscan.ipScan.connectHint": "클릭하여 연결 만들기",
   "netscan.ipScan.deepScan": "상세 스캔",

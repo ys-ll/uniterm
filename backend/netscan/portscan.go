@@ -113,12 +113,24 @@ func (m *Manager) runPortScan(ctx context.Context, id, host string, ports []int,
 		})
 	}
 
+scanLoop:
 	for _, p := range ports {
 		if ctx.Err() != nil {
 			break
 		}
 		wg.Add(1)
-		sem <- struct{}{}
+		// Acquire a worker slot without blocking forever: if every slot is
+		// taken by a probe that is still in flight (its DNS/TCP connect can
+		// take the full timeout), this select lets a cancellation through so
+		// Stop() is honoured and the done event reaches the frontend. Without
+		// it the loop would wedge on a full semaphore until a slow probe
+		// finishes, making the scan appear stuck and Stop unresponsive.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Done()
+			break scanLoop
+		}
 		go func(port int) {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -144,12 +156,18 @@ func (m *Manager) runPortScan(ctx context.Context, id, host string, ports []int,
 	if ctx.Err() == nil && len(filtered) > 0 {
 		total += len(filtered)
 		emitProgress(done.Load(), true)
+	retryLoop:
 		for _, p := range filtered {
 			if ctx.Err() != nil {
 				break
 			}
 			wg.Add(1)
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				wg.Done()
+				break retryLoop
+			}
 			go func(port int) {
 				defer wg.Done()
 				defer func() { <-sem }()
