@@ -9,6 +9,9 @@ export interface UseTerminalMenuOptions {
   onAskAI?: (text: string) => void
   /** Select the entire scrollback buffer. Host wires it to term.selectAll(). */
   onSelectAll?: () => void
+  /** Clear the current selection (used by the "copyOrPaste" right-click mode,
+   *  issue #1329: copy on right-click must also drop the highlight). */
+  clearSelection?: () => void
   /** Position + open the actual menu. The host wires this to its <Menu>
    *  instance (openAt), so the composable stays decoupled from the component
    *  and its viewport clamping lives in Menu. */
@@ -57,6 +60,20 @@ export function useTerminalMenu(options: UseTerminalMenuOptions): UseTerminalMen
       e.preventDefault()
       e.stopPropagation()
       pasteFromClipboard()
+      return
+    }
+    // Windows Terminal style (issue #1329): right-click on a selection copies
+    // it and clears the highlight, right-click with nothing selected pastes.
+    if (rightClickAction === 'copyOrPaste' && !forceMenu) {
+      e.preventDefault()
+      e.stopPropagation()
+      const text = options.getSelection()
+      if (text) {
+        writeClipboard(text)
+        options.clearSelection?.()
+      } else {
+        pasteFromClipboard()
+      }
       return
     }
     openMenu(e)

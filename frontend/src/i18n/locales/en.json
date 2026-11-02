@@ -522,6 +522,7 @@
   "settings.rightClick": "Right Click Action",
   "settings.rightClickMenu": "Show context menu",
   "settings.rightClickPaste": "Paste clipboard content",
+  "settings.rightClickCopyOrPaste": "Copy selection, otherwise paste",
   "settings.maxHistory": "Max History Lines",
   "settings.themeDesc": "Choose the interface theme",
   "settings.languageDesc": "Switch the display language",

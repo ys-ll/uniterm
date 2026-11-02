@@ -498,6 +498,7 @@
   "settings.rightClick": "Rechtsklick-Aktion",
   "settings.rightClickMenu": "Kontextmenü anzeigen",
   "settings.rightClickPaste": "Zwischenablage einfugen",
+  "settings.rightClickCopyOrPaste": "Auswahl kopieren, sonst einfügen",
   "settings.maxHistory": "Max. Verlaufszeilen",
   "settings.themeDesc": "Oberflächendesign auswählen",
   "settings.languageDesc": "Anzeigesprache wechseln",

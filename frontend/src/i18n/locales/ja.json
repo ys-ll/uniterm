@@ -498,6 +498,7 @@
   "settings.rightClick": "右クリックのアクション",
   "settings.rightClickMenu": "コンテキストメニューを表示",
   "settings.rightClickPaste": "クリップボードを貼り付け",
+  "settings.rightClickCopyOrPaste": "選択範囲をコピー、未選択なら貼り付け",
   "settings.maxHistory": "履歴行数の上限",
   "settings.themeDesc": "インターフェースのテーマを選択",
   "settings.languageDesc": "表示言語を切り替え",

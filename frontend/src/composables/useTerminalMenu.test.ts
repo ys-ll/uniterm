@@ -208,6 +208,58 @@ describe('useTerminalMenu.writeClipboard', () => {
   })
 })
 
+// Windows Terminal style (issue #1329): right-click on a selection copies it
+// and clears the highlight; right-click with nothing selected pastes.
+describe('useTerminalMenu.onContextMenu with rightClickAction "copyOrPaste"', () => {
+  let writeText: ReturnType<typeof vi.fn>
+  beforeEach(() => {
+    mockClipboardSetText.mockReset()
+    mockSettingsStore.settings.terminal.rightClickAction = 'copyOrPaste'
+    writeText = vi.fn().mockResolvedValue(undefined)
+    stubNavigatorWrite(writeText)
+    stubMacUserAgent()
+  })
+
+  it('copies the selection and clears the highlight instead of pasting', async () => {
+    mockClipboardSetText.mockResolvedValue(true)
+    const paste = vi.fn()
+    const clearSelection = vi.fn()
+    const m = useTerminalMenu({ getSelection: () => 'selected-text', onPaste: paste, clearSelection })
+    m.onContextMenu(new FakeMouseEvent() as any)
+    await flushAsync()
+    expect(mockClipboardSetText).toHaveBeenCalledWith('selected-text')
+    expect(clearSelection).toHaveBeenCalledOnce()
+    expect(paste).not.toHaveBeenCalled()
+    expect(m.menuVisible.value).toBe(false)
+  })
+
+  it('pastes clipboard text when nothing is selected', async () => {
+    const paste = vi.fn()
+    const clearSelection = vi.fn()
+    const m = useTerminalMenu({ getSelection: () => '', onPaste: paste, clearSelection })
+    vi.mocked(Clipboard.Text).mockResolvedValueOnce('clipboard-content')
+    m.onContextMenu(new FakeMouseEvent() as any)
+    await flushAsync()
+    expect(Clipboard.Text).toHaveBeenCalled()
+    expect(paste).toHaveBeenCalledWith('clipboard-content')
+    expect(mockClipboardSetText).not.toHaveBeenCalled()
+    expect(clearSelection).not.toHaveBeenCalled()
+    expect(m.menuVisible.value).toBe(false)
+  })
+
+  it.each([
+    ['Ctrl', (e: FakeMouseEvent) => { e.ctrlKey = true }],
+    ['Cmd/Meta', (e: FakeMouseEvent) => { e.metaKey = true }],
+  ])('opens the menu on %s + right-click even in "copyOrPaste" mode', (_label, setModifier) => {
+    const m = useTerminalMenu({ getSelection: () => 'selected-text', onPaste: vi.fn(), clearSelection: vi.fn() })
+    const ev = new FakeMouseEvent()
+    setModifier(ev)
+    m.onContextMenu(ev as any)
+    expect(m.menuVisible.value).toBe(true)
+    expect(m.hasSelection.value).toBe(true)
+  })
+})
+
 describe('useTerminalMenu.copySelection re-reads selection at click time', () => {
   let writeText: ReturnType<typeof vi.fn>
   beforeEach(() => {

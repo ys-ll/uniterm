@@ -498,6 +498,7 @@
   "settings.rightClick": "Acción del Clic Derecho",
   "settings.rightClickMenu": "Mostrar menú contextual",
   "settings.rightClickPaste": "Pegar portapapeles",
+  "settings.rightClickCopyOrPaste": "Copiar selección, si no pegar",
   "settings.maxHistory": "Máximo de Líneas de Historial",
   "settings.themeDesc": "Elija el tema de la interfaz",
   "settings.languageDesc": "Cambiar el idioma de la interfaz",

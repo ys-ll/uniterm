@@ -498,6 +498,7 @@
   "settings.rightClick": "Hành động chuột phải",
   "settings.rightClickMenu": "Hiện trình đơn ngữ cảnh",
   "settings.rightClickPaste": "Dán nội dung bộ nhớ tạm",
+  "settings.rightClickCopyOrPaste": "Sao chép vùng chọn, nếu không thì dán",
   "settings.maxHistory": "Số dòng lịch sử tối đa",
   "settings.themeDesc": "Chọn chủ đề giao diện",
   "settings.languageDesc": "Chuyển đổi ngôn ngữ hiển thị",

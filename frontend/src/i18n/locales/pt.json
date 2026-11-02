@@ -498,6 +498,7 @@
   "settings.rightClick": "Ação do clique direito",
   "settings.rightClickMenu": "Mostrar menu de contexto",
   "settings.rightClickPaste": "Colar conteúdo da área de transferência",
+  "settings.rightClickCopyOrPaste": "Copiar seleção, caso contrário colar",
   "settings.maxHistory": "Máx. de linhas de histórico",
   "settings.themeDesc": "Escolha o tema da interface",
   "settings.languageDesc": "Alterne o idioma de exibição",
