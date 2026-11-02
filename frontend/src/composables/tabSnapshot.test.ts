@@ -18,8 +18,10 @@ vi.mock('./savedWorkspace', () => ({ openSavedWorkspace: vi.fn(), serializeWorks
 import { LoadSettings, LoadLocalState, SaveLocalState, LoadAIModels, GetAvailableShells, SetDefaultSessionLogDir } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useLocalStateStore } from '../stores/localStateStore'
-import { maybeRestoreLastTabs } from './tabSnapshot'
+import { useConnectionStore } from '../stores/connectionStore'
+import { maybeRestoreLastTabs, restoreTabsSnapshot } from './tabSnapshot'
 import type { RestoreDeps } from './tabSnapshot'
+import { launchConnection } from './connectionLauncher'
 
 const snapshot = {
   tabs: [{ kind: 'terminal' as const, name: 'Local', connectionId: '', type: 'local', shellPath: '/bin/zsh' }],
@@ -87,5 +89,36 @@ describe('startup tab restore', () => {
     const confirm = vi.fn()
     await maybeRestoreLastTabs(confirm, { connectTerminal: vi.fn(), connectMember: vi.fn() })
     expect(confirm).not.toHaveBeenCalled()
+  })
+})
+
+// Issue #1336: a tab renamed from the context menu must come back under its
+// custom name, not under the connection's name (the launcher titles tabs from
+// config.name).
+describe('restore keeps renamed tab names', () => {
+  const hostTab = { kind: 'terminal' as const, name: 'prod-db', connectionId: 'c1', type: 'ssh', shellPath: '' }
+
+  beforeEach(() => {
+    useConnectionStore().connections.push({
+      id: 'c1', name: 'user@host', type: 'ssh', host: 'host', port: 22, user: 'user', authType: 'password',
+    } as any)
+  })
+
+  it('restores the saved custom name of a host-backed tab', async () => {
+    const deps: RestoreDeps = { connectTerminal: vi.fn(), connectMember: vi.fn() }
+    await restoreTabsSnapshot({ tabs: [hostTab] }, deps)
+    expect(launchConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c1', name: 'prod-db' }),
+      { persist: false, connectTerminal: deps.connectTerminal },
+    )
+  })
+
+  it('falls back to the connection name when the snapshot has no name', async () => {
+    const deps: RestoreDeps = { connectTerminal: vi.fn(), connectMember: vi.fn() }
+    await restoreTabsSnapshot({ tabs: [{ ...hostTab, name: '' }] }, deps)
+    expect(launchConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c1', name: 'user@host' }),
+      expect.anything(),
+    )
   })
 })

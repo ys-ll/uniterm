@@ -139,7 +139,9 @@ export async function restoreTabsSnapshot(snapshot: SavedTabsSnapshot, deps: Res
         ? connectionStore.connections.find(c => c.id === entry.connectionId)
         : undefined
       if (host) {
-        await launchConnection({ ...host }, { persist: false, connectTerminal: deps.connectTerminal })
+        // Title the tab with the name the user renamed it to; the launcher
+        // titles tabs from config.name (persist:false keeps the store untouched).
+        await launchConnection({ ...host, name: entry.name || host.name }, { persist: false, connectTerminal: deps.connectTerminal })
         continue
       }
       // Self-contained local/wsl panel: rebuild from type + shellPath.
