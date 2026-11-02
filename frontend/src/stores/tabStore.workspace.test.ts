@@ -248,3 +248,19 @@ describe('tabStore.buildGridLayout', () => {
     expect(leaves).toEqual(['p1', 'p2', 'p3', 'p4', 'p5'])
   })
 })
+
+// Issue #1336 (补充说明): F2 asks the active tab's TabItem to open its rename box.
+describe('tabStore tab rename request', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('tracks which tab was asked to rename and clears the request', () => {
+    const store = useTabStore()
+    expect(store.renamingTabId).toBeNull()
+    store.beginTabRename('tab-1')
+    expect(store.renamingTabId).toBe('tab-1')
+    store.endTabRename()
+    expect(store.renamingTabId).toBeNull()
+  })
+})

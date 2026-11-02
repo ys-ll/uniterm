@@ -518,6 +518,7 @@ function startEdit() {
 function confirmEdit() {
   if (!editing.value) return
   editing.value = false
+  tabStore.endTabRename()
   const newName = editName.value.trim()
   if (newName && newName !== props.tab.name) {
     tabStore.renameTab(props.tab.id, newName)
@@ -526,7 +527,13 @@ function confirmEdit() {
 
 function cancelEdit() {
   editing.value = false
+  tabStore.endTabRename()
 }
+
+// F2 (issue #1336): the store asks the active tab to open its rename box.
+watch(() => tabStore.renamingTabId, id => {
+  if (id === props.tab.id && !editing.value) startEdit()
+})
 
 function toggleLock() {
   tabStore.toggleTabLock(props.tab.id)

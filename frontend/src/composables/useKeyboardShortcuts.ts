@@ -169,6 +169,13 @@ export function onGlobalKeydown(e: KeyboardEvent) {
   fire(e, normalize(e), shortcutMap)
 }
 
+// Issue #1336 (补充说明): bare F2 starts renaming the active tab. Deliberately
+// not a ShortcutAction — that would drag the settings schema and its Go parity
+// along for one fixed key.
+export function isTabRenameShortcut(e: KeyboardEvent): boolean {
+  return e.key === 'F2' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
+}
+
 export function onTerminalKey(e: KeyboardEvent): boolean {
   const normalized = normalize(e)
   if (fire(e, normalized, shortcutMap)) return false
