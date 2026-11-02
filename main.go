@@ -194,17 +194,6 @@ func main() {
 		// Too slow — windowBackgroundColour falls back to the dark default.
 	}
 
-	// Restore a saved position only when one actually exists; otherwise keep v3's
-	// default (centered) so a fresh install doesn't land at (0,0).
-	startPos := application.WindowCentered
-	if savedX != 0 || savedY != 0 {
-		startPos = application.WindowXY
-	}
-	startState := application.WindowStateNormal
-	if savedMaxed {
-		startState = application.WindowStateMaximised
-	}
-
 	// Clean external-edit scratch dirs left behind by previous runs that
 	// exited without cleanup (crash / force-kill). Old dirs only: a
 	// concurrently running instance keeps its own. Async: it only ever
@@ -272,6 +261,20 @@ func main() {
 			ProgramName: "uniterm",
 		},
 	})
+
+	// Restore a saved position only when one exists and still lands on an
+	// attached screen; a window saved on a since-disconnected monitor is
+	// centered instead of restored out of reach (issue #1335).
+	startPos := application.WindowCentered
+	if (savedX != 0 || savedY != 0) && windowGeometryVisible(savedX, savedY, winW, winH, w3app.Screen.GetAll()) {
+		startPos = application.WindowXY
+	} else {
+		savedX, savedY = 0, 0
+	}
+	startState := application.WindowStateNormal
+	if savedMaxed {
+		startState = application.WindowStateMaximised
+	}
 
 	// On macOS, install the standard App + Edit menus. This must run AFTER
 	// application.New(): menu roles dereference the global app instance and
@@ -436,6 +439,28 @@ func main() {
 	// servers, sessions, tunnels, webview data dir) already ran synchronously in
 	// shutdown().
 	os.Exit(0)
+}
+
+// windowGeometryVisible reports whether the rect (x, y, w, h) overlaps at least
+// one screen's WorkArea by the 100x50 px a user needs to grab the window. An
+// empty screen list (headless/server backend) reports true, preserving the
+// pre-#1335 behavior instead of centering on every launch.
+func windowGeometryVisible(x, y, w, h int, screens []*application.Screen) bool {
+	if len(screens) == 0 {
+		return true
+	}
+	if w <= 0 || h <= 0 {
+		return false
+	}
+	for _, s := range screens {
+		wa := s.WorkArea
+		overlapW := min(x+w, wa.X+wa.Width) - max(x, wa.X)
+		overlapH := min(y+h, wa.Y+wa.Height) - max(y, wa.Y)
+		if overlapW >= min(100, w) && overlapH >= min(50, h) {
+			return true
+		}
+	}
+	return false
 }
 
 // loadSavedSettings reads the persisted app settings so the window can be
