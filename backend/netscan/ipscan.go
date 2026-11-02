@@ -180,25 +180,50 @@ const (
 	portClosed // RST: host alive, port closed
 )
 
-// probeTCP dials one TCP port and classifies the outcome.
+// probeTCP dials one TCP port and classifies the outcome. The dial runs in a
+// goroutine guarded by an explicit select timeout rather than relying on
+// net.Dialer.Timeout alone: on some hosts (e.g. an address that exists but
+// silently drops SYN) the underlying connect can outlive the dialer timeout,
+// which would tie up a worker slot and a scan's main loop forever. This hard
+// bound guarantees a scan always advances and that Stop() is honoured.
 func probeTCP(ctx context.Context, ip string, port int, timeout time.Duration) portState {
-	d := net.Dialer{Timeout: timeout}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
-	if err == nil {
-		conn.Close()
-		return portOpen
+	type result struct {
+		conn net.Conn
+		err  error
 	}
-	if errors.Is(err, context.Canceled) {
+	ch := make(chan result, 1)
+	go func() {
+		// Keep a dialer-side Timeout as well as the select bound below: on a
+		// silently-dropping host the dial goroutine must not keep a socket and
+		// worker slot alive for the full OS TCP timeout (seconds-to-minutes)
+		// after the outer select has already given up on it.
+		d := net.Dialer{Timeout: timeout}
+		conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+		ch <- result{conn, err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return portTimeout
+	case <-time.After(timeout):
+		return portTimeout
+	case r := <-ch:
+		if r.err == nil {
+			r.conn.Close()
+			return portOpen
+		}
+		if errors.Is(r.err, context.Canceled) {
+			return portTimeout
+		}
+		msg := strings.ToLower(r.err.Error())
+		// Linux: "connection refused" / "connection reset by peer".
+		// Windows: "actively refused" / "forcibly closed".
+		if strings.Contains(msg, "refused") || strings.Contains(msg, "reset") ||
+			strings.Contains(msg, "forcibly closed") {
+			return portClosed
+		}
 		return portTimeout
 	}
-	msg := strings.ToLower(err.Error())
-	// Linux: "connection refused" / "connection reset by peer".
-	// Windows: "actively refused" / "forcibly closed".
-	if strings.Contains(msg, "refused") || strings.Contains(msg, "reset") ||
-		strings.Contains(msg, "forcibly closed") {
-		return portClosed
-	}
-	return portTimeout
 }
 
 func parseIPv4(s string) (uint32, error) {

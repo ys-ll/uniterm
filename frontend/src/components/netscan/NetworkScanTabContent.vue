@@ -347,6 +347,35 @@ const portScanTargets = new Map<string, string>()
 const ipProgressPercent = computed(() => ipTotal.value > 0 ? Math.round((ipDone.value / ipTotal.value) * 100) : 0)
 const portProgressPercent = computed(() => portTotal.value > 0 ? Math.round((portDone.value / portTotal.value) * 100) : 0)
 
+// ── Scan watchdog ──
+// Safety net so the UI can never stay stuck in a "scanning" state even if a
+// netscan done/progress event is lost (a backend scan always completes, so an
+// event that never arrives would otherwise leave the progress bar frozen and
+// the stop button unresponsive). Every progress/done event for an owned scan
+// re-arms the timer; it only fires when an active scan has gone silent well
+// past any plausible completion time for that range.
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null
+const WATCHDOG_MS = 60000
+function armScanWatchdog() {
+  if (watchdogTimer) clearTimeout(watchdogTimer)
+  watchdogTimer = setTimeout(() => {
+    watchdogTimer = null
+    // Only fire when a scan is still marked in progress. If one is, assume the
+    // done event was lost and force the UI back to idle.
+    if (ipScanning.value || portScanning.value) {
+      ipScanning.value = false
+      portScanning.value = false
+      msg.error(t('netscan.common.scanStalled'))
+    }
+  }, WATCHDOG_MS)
+}
+function clearScanWatchdog() {
+  if (watchdogTimer) {
+    clearTimeout(watchdogTimer)
+    watchdogTimer = null
+  }
+}
+
 // Prefill the base octets from the machine's own /24 subnet the first time
 // the dialog opens. Errors are silent — the inputs just stay empty.
 let subnetFetched = false
@@ -396,6 +425,12 @@ async function startIPScan() {
   let to = lastEnd.value || 254
   if (from > to) [from, to] = [to, from]
   try {
+    // Start capturing *before* calling the backend: for a fast target the done
+    // event can arrive before `await StartIPScan` resolves, and without the
+    // capture window it would be dropped by the ownership check, leaving the
+    // UI stuck on "scanning". Events buffered here are replayed after the id
+    // is registered below.
+    captureActive = true
     const id = await StartIPScan(`${base}.${from}`, `${base}.${to}`)
     ownedScans.add(id)
     ipScanId.value = id
@@ -404,12 +439,17 @@ async function startIPScan() {
     ipHosts.value = []
     ipDone.value = 0
     ipTotal.value = 0
+    replayCaptured()
+    armScanWatchdog()
   } catch (e: any) {
+    captureActive = false
+    pendingEvents.length = 0
     msg.error(e?.message || t('netscan.ipScan.startFailed'))
   }
 }
 
 function stopIPScan() {
+  clearScanWatchdog()
   if (ipScanId.value) StopIPScan(ipScanId.value)
 }
 
@@ -424,6 +464,10 @@ async function startPortScan() {
   const endPort = portEnd.value || 65535
   const workers = portWorkers.value || 32
   try {
+    // Capture early events (see startIPScan): a fast-refusing port can finish
+    // the scan before `await StartPortScan` resolves, so its done event would
+    // otherwise be dropped and the UI would stay stuck on "scanning".
+    captureActive = true
     const id = await StartPortScan(host, commonOnly, startPort, endPort, workers)
     ownedScans.add(id)
     portScanId.value = id
@@ -433,12 +477,17 @@ async function startPortScan() {
     portResults.value = []
     portDone.value = 0
     portTotal.value = 0
+    replayCaptured()
+    armScanWatchdog()
   } catch (e: any) {
+    captureActive = false
+    pendingEvents.length = 0
     msg.error(e?.message || t('netscan.portScan.startFailed'))
   }
 }
 
 function stopPortScan() {
+  clearScanWatchdog()
   if (portScanId.value) StopPortScan(portScanId.value)
 }
 
@@ -594,57 +643,101 @@ async function copyResults(kind: 'ip' | 'port') {
   }
 }
 
-// A netscan event belongs to us if we have registered its id, OR (as a
-// race-proof fallback for events that can arrive just before ownedScans.add
-// runs after the await) it matches the id of the scan we most recently
-// started. This prevents the occasional first run from dropping everything.
+// 事件归属判断：若该扫描 id 已注册，或（作为竞态兜底）与最近一次启动的
+// 端口/IP 扫描 id 一致，则视为属于本组件。避免首次运行偶尔丢失全部事件。
 function isOwnedScan(id: string): boolean {
   if (ownedScans.has(id)) return true
   return !!portScanId.value && id === portScanId.value || !!ipScanId.value && id === ipScanId.value
 }
 
-function handleHostFound(ev: any) {
-  const d = ev?.data
-  if (!d || !isOwnedScan(d.scanId)) return
-  const host = d.host
-  if (!host?.ip) return
-  const idx = ipHosts.value.findIndex(h => h.ip === host.ip)
-  if (idx >= 0) ipHosts.value[idx] = host
-  else ipHosts.value.push(host)
+// ── 早期事件捕获 ──
+// 后端在 StartPortScan 内部即 `go m.runPortScan(...)` 异步启动扫描并立刻发
+// 事件。对极快返回的目标（例如 GitLab 主机上立即回 RST 的关闭端口），扫描的
+// done 事件可能在等待中的 start*Scan resolve 并注册返回的 id 之前就到达 JS。
+// 此时 isOwnedScan 会误判并丢弃该事件，导致 await 置 portScanning = true 后
+// 再也没有 done 来复位它：UI 永久卡在“扫描中”，进度条冻结、停止无反应
+// （后端早已 finish，Stop 是空操作）。原本埋日志桩之所以“有效”，正是因为
+// 它引入了恰好够 await 抢先完成注册的延迟。为真正关闭这个竞态：在启动进行
+// 期间缓存所有到达的 netscan 事件，待 id 注册后立即回放归属本组件的事件。
+let captureActive = false
+const pendingEvents: any[] = []
+
+// 当一次扫描启动仍在进行（await 尚未返回 id）、且事件尚不属于本组件时，
+// 将事件缓存待回放。返回 true 表示已缓存（调用方不应立即处理），
+// 返回 false 表示应当丢弃（捕获窗口已关闭且事件不属于本组件）。
+function tryCapture(type: string, ev: any): boolean {
+  if (!captureActive) return false
+  pendingEvents.push({ type, ev })
+  return true
 }
 
-function handleProgress(ev: any) {
-  const d = ev?.data
-  if (!d || !isOwnedScan(d.scanId)) return
-  const done = Number(d.done) || 0
-  const total = Number(d.total) || 0
-  if (d.kind === 'ip') {
-    ipDone.value = done
-    ipTotal.value = total
-  } else if (d.kind === 'port') {
-    portDone.value = done
-    portTotal.value = total
+// 按到达顺序回放所有已归属到本组件扫描的缓存事件，确保快速扫描的 done
+// 即使在 id 注册前到达也不会丢失。
+function replayCaptured() {
+  captureActive = false
+  if (pendingEvents.length === 0) return
+  const evs = pendingEvents.splice(0)
+  for (const { type, ev } of evs) {
+    if (!isOwnedScan(ev?.data?.scanId)) continue
+    dispatchScanEvent(type, ev)
   }
 }
 
-function handlePortOpen(ev: any) {
+// 所有 netscan 回调的统一入口：已归属的事件立即处理；尚未归属的事件在
+// 启动窗口内缓存（注册 id 后回放），否则丢弃。
+function routeScanEvent(type: string, ev: any) {
   const d = ev?.data
-  if (!d || !isOwnedScan(d.scanId)) return
-  const host = portScanTargets.get(d.scanId) || portHost.value || ''
-  // Avoid duplicate rows for the same host+port.
-  if (!portResults.value.some(r => r.host === host && r.port === d.port)) {
-    portResults.value.push({ host, port: d.port, service: d.service, state: d.state })
+  if (!d) return
+  if (isOwnedScan(d.scanId)) {
+    dispatchScanEvent(type, ev)
+  } else {
+    tryCapture(type, ev)
   }
 }
 
-function handleDone(ev: any) {
+// 每种事件的实际状态更新（实时回调与缓存回放共用，保证回放的早期事件
+// 与正常到达的事件对状态的影响完全一致）。
+function dispatchScanEvent(type: string, ev: any) {
   const d = ev?.data
-  if (!d || !isOwnedScan(d.scanId)) return
-  ownedScans.delete(d.scanId)
-  if (d.kind === 'ip') {
-    ipScanning.value = false
-  } else if (d.kind === 'port') {
-    portScanning.value = false
+  if (!d) return
+  switch (type) {
+    case 'host-found':
+      const host = d.host
+      if (!host?.ip) return
+      const idx = ipHosts.value.findIndex(h => h.ip === host.ip)
+      if (idx >= 0) ipHosts.value[idx] = host
+      else ipHosts.value.push(host)
+      break
+    case 'progress': {
+      const done = Number(d.done) || 0
+      const total = Number(d.total) || 0
+      if (d.kind === 'ip') {
+        ipDone.value = done
+        ipTotal.value = total
+      } else if (d.kind === 'port') {
+        portDone.value = done
+        portTotal.value = total
+      }
+      armScanWatchdog()
+      break
+    }
+    case 'port-open': {
+      const host_ = portScanTargets.get(d.scanId) || portHost.value || ''
+      // Avoid duplicate rows for the same host+port.
+      if (!portResults.value.some(r => r.host === host_ && r.port === d.port)) {
+        portResults.value.push({ host: host_, port: d.port, service: d.service, state: d.state })
+      }
+      break
+    }
+    case 'done':
+      ownedScans.delete(d.scanId)
+      if (d.kind === 'ip') {
+        ipScanning.value = false
+      } else if (d.kind === 'port') {
+        portScanning.value = false
+      }
+      if (!ipScanning.value && !portScanning.value) clearScanWatchdog()
+      break
   }
 }
 
@@ -652,10 +745,10 @@ let unsubs: (() => void)[] = []
 
 onMounted(() => {
   unsubs = [
-    Events.On('netscan:host-found', handleHostFound),
-    Events.On('netscan:progress', handleProgress),
-    Events.On('netscan:port-open', handlePortOpen),
-    Events.On('netscan:done', handleDone)
+    Events.On('netscan:host-found', (ev: any) => routeScanEvent('host-found', ev)),
+    Events.On('netscan:progress', (ev: any) => routeScanEvent('progress', ev)),
+    Events.On('netscan:port-open', (ev: any) => routeScanEvent('port-open', ev)),
+    Events.On('netscan:done', (ev: any) => routeScanEvent('done', ev))
   ]
   // Close the export context menu on any outside click.
   document.addEventListener('click', hideCtxMenu)
@@ -663,12 +756,17 @@ onMounted(() => {
 
 onUnmounted(() => {
   // Stop any in-flight scans this component started, then detach listeners.
+  clearScanWatchdog()
   if (ipScanId.value) StopIPScan(ipScanId.value)
   if (portScanId.value) StopPortScan(portScanId.value)
   unsubs.forEach(u => u())
   document.removeEventListener('click', hideCtxMenu)
   ownedScans.clear()
   portScanTargets.clear()
+  // Drop any buffered early events and the open capture window so a detached
+  // component can't swallow events meant for a sibling instance.
+  captureActive = false
+  pendingEvents.length = 0
 })
 </script>
 

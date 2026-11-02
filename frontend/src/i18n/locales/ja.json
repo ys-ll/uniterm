@@ -2043,6 +2043,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "ネットワークスキャン",
   "netscan.common.stop": "停止",
+  "netscan.common.scanStalled": "スキャンが固まった可能性があるためリセットしました。もう一度お試しください。",
   "netscan.ipScan.title": "IP スキャン",
   "netscan.ipScan.connectHint": "クリックで接続を作成",
   "netscan.ipScan.deepScan": "詳細スキャン",

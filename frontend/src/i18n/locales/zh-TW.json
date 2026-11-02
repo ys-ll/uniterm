@@ -2064,6 +2064,7 @@
   "ai.reasoning.max": "最高",
   "netscan.title": "網路掃描",
   "netscan.common.stop": "停止",
+  "netscan.common.scanStalled": "掃描疑似卡住，已自動復位。請重試。",
   "netscan.ipScan.title": "IP 掃描",
   "netscan.ipScan.connectHint": "點擊建立連線",
   "netscan.ipScan.deepScan": "深度掃描",

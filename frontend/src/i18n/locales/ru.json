@@ -2043,6 +2043,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "Сканер сети",
   "netscan.common.stop": "Остановить",
+  "netscan.common.scanStalled": "Похоже, сканирование зависло и было сброшено. Попробуйте ещё раз.",
   "netscan.ipScan.title": "Сканирование IP",
   "netscan.ipScan.connectHint": "Нажмите, чтобы создать подключение",
   "netscan.ipScan.deepScan": "Глубокое сканирование",

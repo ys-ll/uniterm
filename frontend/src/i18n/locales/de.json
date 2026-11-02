@@ -2043,6 +2043,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "Netzwerk-Scan",
   "netscan.common.stop": "Stoppen",
+  "netscan.common.scanStalled": "Der Scan scheint hängen zu bleiben und wurde zurückgesetzt. Bitte erneut versuchen.",
   "netscan.ipScan.title": "IP-Scan",
   "netscan.ipScan.connectHint": "Klicken, um eine Verbindung zu erstellen",
   "netscan.ipScan.deepScan": "Tiefenscan",

@@ -22,6 +22,10 @@ build/darwin/*
 !build/darwin/Info.dev.plist
 # icns ships prebuilt so `wails dev`/`run` show the real icon before generate:icns ever runs
 !build/darwin/icons.icns
+# .lproj bundles declare the app's localizations so AppKit localizes the
+# native window-management (traffic-light) menu to follow the system language
+!build/darwin/*.lproj/
+!build/darwin/*.lproj/*
 uniTerm.exe
 __debug*
 

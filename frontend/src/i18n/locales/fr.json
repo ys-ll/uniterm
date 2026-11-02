@@ -2043,6 +2043,7 @@
   "ai.reasoning.max": "Max",
   "netscan.title": "Scan réseau",
   "netscan.common.stop": "Arrêter",
+  "netscan.common.scanStalled": "Le scan semble bloqué et a été réinitialisé. Veuillez réessayer.",
   "netscan.ipScan.title": "Scan IP",
   "netscan.ipScan.connectHint": "Cliquer pour créer une connexion",
   "netscan.ipScan.deepScan": "Scan approfondi",
