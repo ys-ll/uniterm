@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
+	"github.com/ys-ll/uniterm/backend/mcp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -246,11 +247,35 @@ func startCwdSSHServer(t *testing.T, fs *testCwdFS, subsystemMode string, execHa
 								_, _ = ch.Write([]byte("Native MOTD\r\n$ "))
 								go func() {
 									buf := make([]byte, 1024)
+									// The mock shell only echoes input back, but it
+									// simulates the one universal shell builtin the
+									// echo fallback relies on: a line "echo __UT_x__"
+									// prints the marker, which acknowledges completion.
+									// Like a real shell, the marker is emitted after
+									// the input echo, never before it.
+									var line []byte
+									var marker string
 									for {
 										n, err := ch.Read(buf)
 										if n > 0 {
 											counters.input.Add(int32(n))
 											_, _ = ch.Write(buf[:n])
+											for _, b := range buf[:n] {
+												if b == '\n' || b == '\r' {
+													if marker == "" {
+														if tok, ok := echoMarkerToken(line); ok {
+															marker = "\r\n__UT_" + tok + "__\r\n"
+														}
+													}
+													line = line[:0]
+												} else {
+													line = append(line, b)
+												}
+											}
+											if marker != "" {
+												_, _ = ch.Write([]byte(marker))
+												marker = ""
+											}
 										}
 										if err != nil {
 											return
@@ -299,6 +324,17 @@ func startCwdSSHServer(t *testing.T, fs *testCwdFS, subsystemMode string, execHa
 		}
 	}()
 	return ln.Addr().String(), counters
+}
+
+// echoMarkerToken extracts the nonce from a typed "echo __UT_x__" line — the
+// one builtin the mock shell "executes" to simulate any shell that can echo.
+func echoMarkerToken(line []byte) (string, bool) {
+	s := strings.TrimSpace(string(line))
+	rest, ok := strings.CutPrefix(s, "echo __UT_")
+	if !ok || !strings.HasSuffix(rest, "__") {
+		return "", false
+	}
+	return rest[:len(rest)-2], true
 }
 
 func awaitCwd(t *testing.T, s *SSHSession, want string) {
@@ -391,5 +427,174 @@ func TestSSHCwdUnavailablePreservesTerminal(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// ptyTestAdapter mirrors app_mcp.go's ptyAdapter: it narrows a session to the
+// mcp.Pty surface, including the ForegroundShell() delegation that decides
+// whether the completion acknowledgement is injected.
+type ptyTestAdapter struct{ s *SSHSession }
+
+func (p ptyTestAdapter) Write(data []byte) error { return p.s.Write(data) }
+func (p ptyTestAdapter) OnData(cb func([]byte)) func() {
+	return p.s.AddDataTap(cb)
+}
+func (p ptyTestAdapter) OnStatusChange(cb func(string)) func() {
+	return p.s.AddStatusTap(func(st SessionStatus) { cb(string(st)) })
+}
+func (p ptyTestAdapter) Alive() bool { return p.s.Status() == StatusConnected }
+func (p ptyTestAdapter) ForegroundShell() string {
+	if shell, ok := any(p.s).(interface{ ForegroundShell() string }); ok {
+		return shell.ForegroundShell()
+	}
+	return ""
+}
+
+// waitJobState polls a job until it leaves the running state.
+func waitJobState(t *testing.T, j *mcp.Job, timeout time.Duration) (string, string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		out, _, _, state, _ := j.Snapshot()
+		if state != mcp.StateRunning {
+			return state, string(out)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("job never left running state")
+	return "", ""
+}
+
+// Reproduction of the stuck-AI-execution report on hardened SSH hosts (CentOS
+// 7 behind jump servers): the cwd/SFTP probe fails, shell detection returns
+// empty. Previously that meant no completion acknowledgement at all — every
+// execute_command ran to its full deadline reporting timeout even though the
+// command had visibly finished, and kept the per-session busy lock until the
+// TTL, so every later command failed with "session is busy".
+//
+// With the echo fallback, an undetected shell still gets an in-band
+// acknowledgement (bare echo lines), so the result returns and the lock
+// releases on completion.
+func TestReproShellDetectFailStillReturnsResult(t *testing.T) {
+	fs := newTestCwdFS()
+	// "deny" = server rejects the sftp subsystem, like the hardened target.
+	addr, counts := startCwdSSHServer(t, fs, "deny")
+	s := NewSSHSession("repro1307-deny")
+	if err := s.Connect(probeTestConfig(addr)); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Disconnect()
+
+	if s.ForegroundShell() != "" {
+		t.Fatalf("expected undetected shell, got %q", s.ForegroundShell())
+	}
+
+	reg := mcp.NewRegistry()
+	pty := ptyTestAdapter{s}
+	const hardLimit = 3 * time.Second
+
+	// The first AI command completes through the echo acknowledgement.
+	j, err := reg.StartWithScreen(pty, s.ID(), `echo hello && uname -a`, "\n", hardLimit, 64*1024, 120, 30)
+	if err != nil {
+		t.Fatalf("first start: %v", err)
+	}
+	state, out := waitJobState(t, j, 10*time.Second)
+	if state != mcp.StateExited {
+		t.Fatalf("state=%q, want exited via echo acknowledgement", state)
+	}
+	// The typed command arrived complete — no truncation.
+	if !strings.Contains(out, "echo hello && uname -a") {
+		t.Fatalf("echo of typed command missing from output: %q", out)
+	}
+	if counts.input.Load() == 0 {
+		t.Fatal("command never reached the shell")
+	}
+
+	// The lock is free on completion: the next AI command starts immediately.
+	j2, err := reg.StartWithScreen(pty, s.ID(), `echo second`, "\n", hardLimit, 64*1024, 120, 30)
+	if err != nil {
+		t.Fatalf("second start: %v", err)
+	}
+	if state, _ := waitJobState(t, j2, 10*time.Second); state != mcp.StateExited {
+		t.Fatalf("second job state=%q", state)
+	}
+}
+
+// Interrupt semantics: when a command genuinely keeps running past the
+// deadline, the tool call returns a timeout while the watcher keeps the
+// session lock until real completion. interrupt_command must close that
+// watcher (Registry.Interrupt) alongside sending Ctrl+C, or the lock is held
+// until the TTL even though the process is already dead.
+//
+// The mock never executes the eval wrapper's printf, so the known-shell
+// session plays the genuinely-still-running command here.
+func TestReproInterruptReleasesSessionLock(t *testing.T) {
+	fs := newTestCwdFS()
+	addr, _ := startCwdSSHServer(t, fs, "")
+	s := NewSSHSession("repro1307-interrupt")
+	if err := s.Connect(probeTestConfig(addr)); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Disconnect()
+
+	reg := mcp.NewRegistry()
+	pty := ptyTestAdapter{s}
+	j, err := reg.Start(pty, s.ID(), `tail -f /var/log/messages`, "\n", 300*time.Millisecond, 64*1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, _, _, st, _ := j.Snapshot(); st == want {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatalf("state never reached %q", want)
+	}
+	waitState(mcp.StateTimeout)
+
+	if _, err := reg.Start(pty, s.ID(), `next`, "\n", time.Second, 64*1024); err != mcp.ErrSessionBusy {
+		t.Fatalf("expected busy while the command may still be running: %v", err)
+	}
+	if err := reg.Interrupt(j.ID); err != nil {
+		t.Fatalf("interrupt: %v", err)
+	}
+	next, err := reg.Start(pty, s.ID(), `next`, "\n", time.Second, 64*1024)
+	if err != nil {
+		t.Fatalf("lock not released after interrupt: %v", err)
+	}
+	_ = reg.Interrupt(next.ID)
+}
+
+// Contrast: with the sftp probe available, shell detection succeeds and the
+// known-shell path (eval + concealed printf with exit code) is unchanged.
+func TestReproContrastShellDetectedInjectsSentinel(t *testing.T) {
+	fs := newTestCwdFS()
+	addr, _ := startCwdSSHServer(t, fs, "")
+	s := NewSSHSession("repro1307-ok")
+	if err := s.Connect(probeTestConfig(addr)); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Disconnect()
+
+	if s.ForegroundShell() != "bash" {
+		t.Fatalf("shell=%q, want bash", s.ForegroundShell())
+	}
+
+	reg := mcp.NewRegistry()
+	pty := ptyTestAdapter{s}
+	j, err := reg.StartWithScreen(pty, s.ID(), `echo hello && uname -a`, "\n", 1500*time.Millisecond, 64*1024, 120, 30)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	_, out := waitJobState(t, j, 10*time.Second)
+	if !strings.Contains(out, "eval") || !strings.Contains(out, "__UT_") {
+		t.Fatalf("sentinel wrapper missing from typed command: %q", out)
+	}
+	if strings.Contains(out, "echo __UT_") {
+		t.Fatalf("known shell must keep the eval path, not the echo fallback: %q", out)
 	}
 }

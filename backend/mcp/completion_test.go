@@ -46,7 +46,7 @@ func TestCompletionCommandsInRealShells(t *testing.T) {
 			if shell == "powershell" {
 				command = `Write-Output "a'b"; Start-Sleep -Milliseconds 150; Get-Item .; Write-Output 'last line'; cmd /c exit 7`
 			}
-			wrapped, ok := CompletionCommand(command, shell, token)
+			wrapped, _, ok := CompletionCommand(command, shell, token, "\n")
 			if !ok {
 				t.Fatal("supported shell rejected")
 			}
@@ -105,6 +105,62 @@ func TestTimeoutKeepsPartialLineAndOriginalSessionLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.complete(next, 0)
+}
+
+// The echo fallback for shells outside the known list: the acknowledgement is
+// two bare echo lines after the command. Detection must anchor on line start
+// so the terminal echo of the typed marker line (preceded by "echo ") can
+// never impersonate it, must tolerate the command's own output ending without
+// a trailing newline (the filler echo guarantees the marker's leading
+// newline), and reports no exit code.
+func TestEchoFallbackCompletionForUnknownShell(t *testing.T) {
+	wire, sc, ok := CompletionCommand("uname -a", "", "fg-x", "\n")
+	if !ok || sc == nil || !sc.plain {
+		t.Fatalf("unknown shell must get the plain echo fallback: ok=%v sc=%v", ok, sc)
+	}
+	if want := "uname -a\necho\necho __UT_fg-x__"; wire != want {
+		t.Fatalf("wire=%q want %q", wire, want)
+	}
+
+	// The terminal echo of the typed lines must not complete the job.
+	if _, _, done := sc.feed([]byte("$ uname -a\r\necho\r\necho __UT_fg-x__\r\n")); done {
+		t.Fatal("typed echo impersonated the acknowledgement")
+	}
+	// A marker appearing directly after a newline is indistinguishable from a
+	// genuine acknowledgement — and that is fine: only the typed echo carries
+	// "echo " before the token, which the line-start anchor excludes.
+
+	// Real acknowledgement: command output ends without a trailing newline,
+	// the filler echo re-establishes the line boundary before the marker.
+	sc = &completionScanner{prefix: []byte("\n__UT_fg-x__"), plain: true}
+	cleaned, code, done := sc.feed([]byte("partial"))
+	if done {
+		t.Fatal("completed on keep-back chunk")
+	}
+	b, code, done := sc.feed([]byte(" output\r\nECHO is on.\r\n__UT_fg-x__\r\n$ "))
+	cleaned = append(cleaned, b...)
+	if !done || code != -1 {
+		t.Fatalf("done=%v code=%d", done, code)
+	}
+	// The next prompt after the marker is intentionally not part of the result.
+	if string(cleaned) != "partial output\r\nECHO is on.\r\n" {
+		t.Fatalf("marker not stripped from output: %q", cleaned)
+	}
+
+	// Arbitrary read boundaries, like the eval-mode scanner.
+	wire = "out\r\n" + "\n__UT_fg-x__\r\n$ "
+	for split := 0; split <= len(wire); split++ {
+		sc := &completionScanner{prefix: []byte("\n__UT_fg-x__"), plain: true}
+		a, code, done := sc.feed([]byte(wire[:split]))
+		if !done {
+			b, status, finished := sc.feed([]byte(wire[split:]))
+			a = append(a, b...)
+			code, done = status, finished
+		}
+		if !done || code != -1 || string(a) != "out\r\n\n" {
+			t.Fatalf("split %d: %q %d %v", split, a, code, done)
+		}
+	}
 }
 
 func TestUnknownShellWaitsForTimeoutDespitePromptAndForeignMarker(t *testing.T) {

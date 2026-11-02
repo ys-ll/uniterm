@@ -1,6 +1,6 @@
 import { chat, AVAILABLE_TOOLS, ChatCancelledError, ChatTimeoutError, captureChatConfiguration } from './llm'
 import { prepareAgentContext } from './contextCompaction'
-import { executeCommand, startCommand, captureTerminal, collectOutput, sendTerminalKey } from './terminalAgent'
+import { executeCommand, startCommand, captureTerminal, collectOutput, sendTerminalKey, interruptJob } from './terminalAgent'
 import type { ExecuteResult } from './terminalAgent'
 import { assessLocalRisk } from './localRisk'
 import { useAIStore } from '../stores/aiStore'
@@ -297,6 +297,21 @@ function formatExecuteResult(result: ExecuteResult): string {
     + `• If the output shows progress (percentages, scrolling filenames, etc.) → use collect_output to keep waiting\n`
     + `• If the output shows a password/confirmation prompt → use send_terminal_key to respond\n`
     + `• If the command is stuck and unresponsive → use interrupt_command to cancel`
+}
+
+// A start rejected because the previous execution still owns the session must
+// tell the model how to proceed, not just that it failed — otherwise the model
+// can only guess between retrying (futile while busy) and giving up.
+function busyOrError(prefix: string, e: any): string {
+  const message = String(e?.message ?? e)
+  if (message.includes('session is busy')) {
+    return '[COMMAND NOT STARTED: session is busy with a previous execution]\n\n'
+      + `⚠️ An earlier command may still be running in the terminal.\n`
+      + `Do not resend this command yet.\n`
+      + `• If the previous command is still producing output → use collect_output to keep waiting for it\n`
+      + `• If it is stuck → use interrupt_command to cancel it, then retry`
+  }
+  return `[${prefix}: ${message}]`
 }
 
 function getShellName(path?: string): string {
@@ -887,7 +902,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `[Error executing command: ${e.message ?? e}]`,
+          content: busyOrError('Error executing command', e),
           tool_call_id: tu.id
         })
       }
@@ -940,7 +955,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
-          content: `[Error starting command: ${e.message ?? e}]`,
+          content: busyOrError('Error starting command', e),
           tool_call_id: tu.id
         })
       }
@@ -1037,6 +1052,10 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       try {
         store.status = 'executing'
         const panelTitle = tu.input.panel as string | undefined
+        // Close the backend watcher (frees the session busy lock) before
+        // killing the foreground process: after Ctrl+C the shell acknowledgement
+        // never prints, so the watcher alone would hold the lock until the TTL.
+        await interruptJob(panelTitle)
         const result = await sendTerminalKey(undefined, 'ctrl_c', true, panelTitle)
         store.addMessage({
           id: `msg-${Date.now()}`,
