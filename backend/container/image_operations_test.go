@@ -108,7 +108,7 @@ func TestCommitImageOptionsAndValidation(t *testing.T) {
 	if strings.Contains(strings.Join(r.lastArgv, " "), "--pause") {
 		t.Fatal("pause behavior overridden")
 	}
-	for _, image := range []string{"", " ", "--help", "bad name"} {
+	for _, image := range []string{"", " ", "--help", "bad name", "repo//x", "UPPER/repo", "repo:", "repo/", "repo..tag", "team/image:v1:extra"} {
 		r.lastArgv = nil
 		if _, err := p.CommitImage(context.Background(), "container-id", CommitOptions{Image: image}); err == nil {
 			t.Fatal("invalid image accepted")
@@ -119,6 +119,21 @@ func TestCommitImageOptionsAndValidation(t *testing.T) {
 	}
 	if _, err := p.CommitImage(context.Background(), "--help", opts); err == nil {
 		t.Fatal("option accepted as container ID")
+	}
+}
+
+func TestValidImageReference(t *testing.T) {
+	// Valid references must pass the same gate, including registry with port,
+	// digests, and uppercase tags (Docker allows mixed-case tags).
+	for _, image := range []string{"nginx", "nginx:latest", "registry:5000/team/image:v1", "my-repo/my.image_x:V1.2", "alpine@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"} {
+		if !validImageReference(image) {
+			t.Errorf("validImageReference(%q) = false, want true", image)
+		}
+	}
+	for _, image := range []string{"", "nginx:", "nginx@sha256:short", "my repo:v1", strings.Repeat("a", 256)} {
+		if validImageReference(image) {
+			t.Errorf("validImageReference(%q) = true, want false", image)
+		}
 	}
 }
 
