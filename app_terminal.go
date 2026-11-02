@@ -834,6 +834,18 @@ func (a *App) SetMonitorPaused(sessionID string, paused bool) error {
 	return nil
 }
 
+// SetMonitorSections toggles which monitor sections the poll loop collects
+// (cpu/allCpu/memory/disk/network). Disabled sections' remote commands are
+// not sent, reducing load on the monitored node.
+func (a *App) SetMonitorSections(sessionID string, sections map[string]bool) error {
+	ms, err := a.getMonitorSession(sessionID)
+	if err != nil {
+		return err
+	}
+	ms.SetMonitorSections(sections)
+	return nil
+}
+
 func (a *App) GetProcessDetail(sessionID string, pid int) (map[string]interface{}, error) {
 	ms, err := a.getMonitorSession(sessionID)
 	if err != nil {

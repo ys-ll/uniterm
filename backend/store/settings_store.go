@@ -237,6 +237,20 @@ type AppSettings struct {
 	// newConnection shortcut) opens: "startPage" or "localTerminal".
 	// Empty means the frontend falls back to "startPage".
 	NewTabAction string `json:"newTabAction,omitempty"`
+	// ConnectionsDisplayMode selects the connections panel list density:
+	// "full" (each connection shows a subtitle line) or "compact"
+	// (single-line rows). Empty means the frontend falls back to "full".
+	ConnectionsDisplayMode string `json:"connectionsDisplayMode,omitempty"`
+	// QuickCommandsDisplayMode selects the quick-commands panel display
+	// style: "list" (rows with name + command) or "buttons" (name-only
+	// buttons tiled horizontally). Empty means the frontend falls back to
+	// "list".
+	QuickCommandsDisplayMode string `json:"quickCommandsDisplayMode,omitempty"`
+	// MonitorSections toggles which monitor sections are enabled (basic/
+	// cpu/allCpu/memory/disk/allDisk/network). Disabled sections are hidden
+	// in the UI and skipped by the monitor poll loop. Nil means "use the
+	// frontend defaults" (everything enabled).
+	MonitorSections map[string]bool `json:"monitorSections,omitempty"`
 	// SidebarTabs toggles which connection-sidebar tab icons are visible,
 	// keyed by view id (connections/files/monitor/tunnels/quickCommands/
 	// history/personalization). "connections" is always shown in the UI and
@@ -244,6 +258,14 @@ type AppSettings struct {
 	// builds (which lack this field) still load; a nil map means "use the
 	// frontend defaults" (everything visible).
 	SidebarTabs map[string]bool `json:"sidebarTabs,omitempty"`
+	// PanelLocations maps sidebar view id (connections/files/monitor/
+	// tunnels/quickCommands/history/personalization) to its dock position:
+	// "sidebar" or "bottom". Nil means "use the frontend defaults"
+	// (PANEL_LOCATION_DEFAULTS).
+	PanelLocations map[string]string `json:"panelLocations,omitempty"`
+	// PanelOrder is the global tab order across both docks (view ids);
+	// views absent from the list append in default order.
+	PanelOrder []string `json:"panelOrder,omitempty"`
 	// StartPage controls which blocks (search/favorites/recent/groups) the
 	// start page shows and in what order. Pointer + omitempty so
 	// settings.json written by older builds (which lack this field) still

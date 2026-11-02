@@ -2,22 +2,63 @@
   <div
     ref="sidebarEl"
     class="sidebar"
-    :class="{ collapsed: !visible, resizing: isResizing }"
+    :class="{ collapsed: !visible && !uiLayout.draggingPanel, resizing: isResizing }"
     :style="{ width: sidebarWidth + 'px' }"
   >
     <div class="resize-handle" @mousedown="onResizeStart" />
-    <div class="sidebar-header" @contextmenu.prevent="onTabStripContextMenu">
-      <button class="sidebar-tab" :class="{ active: activeView === 'connections' }" @click="activeView = 'connections'" :title="t('header.connections')"><el-icon><Network :size="'0.875rem'" /></el-icon></button>
-      <button v-if="tabVisible('files')" class="sidebar-tab" :class="{ active: activeView === 'files' }" @click="onFilesTabClick" :title="t('header.files')"><el-icon><FolderTree :size="'0.875rem'" /></el-icon></button>
-      <button v-if="tabVisible('monitor')" class="sidebar-tab" :class="{ active: activeView === 'monitor' }" @click="onMonitorTabClick" :title="t('header.monitor')"><el-icon><Activity :size="'0.875rem'" /></el-icon></button>
-      <button v-if="tabVisible('tunnels')" class="sidebar-tab" :class="{ active: activeView === 'tunnels' }" @click="activeView = 'tunnels'" :title="t('tunnels.tunnelsTab')"><el-icon><ArrowRightLeft :size="'0.875rem'" /></el-icon></button>
-      <button v-if="tabVisible('quickCommands')" class="sidebar-tab" :class="{ active: activeView === 'quickCommands' }" @click="activeView = 'quickCommands'" :title="quickCommandsTitle"><el-icon><Zap :size="'0.875rem'" /></el-icon></button>
-      <button v-if="tabVisible('history')" class="sidebar-tab" :class="{ active: activeView === 'history' }" @click="activeView = 'history'" :title="t('quickCommands.historyTab')"><el-icon><Clock :size="'0.875rem'" /></el-icon></button>
-      <button v-if="tabVisible('personalization')" class="sidebar-tab" :class="{ active: activeView === 'personalization' }" @click="activeView = 'personalization'" :title="t('sidebar.personalization')"><el-icon><Palette :size="'0.875rem'" /></el-icon></button>
+    <div
+      class="sidebar-header"
+      :class="{ 'drag-over': tabStripDragOver }"
+      @contextmenu.prevent="onTabStripContextMenu"
+      @dragover="onStripDragOver"
+      @drop.prevent="onStripDrop"
+    >
+      <button
+        v-for="key in sidebarTabKeys"
+        :key="key"
+        class="sidebar-tab"
+        :class="{ active: activeView === key, 'drop-before': tabDropIndicator?.key === key && tabDropIndicator?.position === 'before', 'drop-after': tabDropIndicator?.key === key && tabDropIndicator?.position === 'after' }"
+        :title="sidebarTabTitle(key)"
+        draggable="true"
+        @dragstart="onTabDragStart($event, key)"
+        @dragend="onTabDragEnd"
+        @dragover="onTabDragOver($event, key)"
+        @drop.prevent.stop="onTabDrop($event, key)"
+        @contextmenu.prevent.stop="onTabContextMenu($event, key)"
+        @click="onTabClick(key)"
+      >
+        <el-icon><component :is="SIDEBAR_TAB_ICONS[key]" :size="'0.875rem'" /></el-icon>
+      </button>
       <button class="icon-btn" @click="emit('toggle')" :title="t('sidebar.collapse')"><el-icon><X :size="'0.875rem'" /></el-icon></button>
     </div>
 
-    <template v-if="activeView === 'connections'">
+    <!-- Empty sidebar (every view moved to the bottom panel or hidden):
+         same dockable-panel hint as the bottom panel's empty state. -->
+    <div v-if="sidebarTabKeys.length === 0" class="sidebar-empty">
+      <div class="empty-hint">{{ t('sidebar.sidebarEmpty') }}</div>
+      <div class="empty-actions">
+        <button
+          v-for="key in sidebarDockableViews"
+          :key="key"
+          class="empty-chip"
+          @click="uiLayout.movePanel(key, 'sidebar', Number.MAX_SAFE_INTEGER)"
+        >
+          <el-icon><component :is="SIDEBAR_TAB_ICONS[key]" :size="'0.75rem'" /></el-icon>
+          {{ t(sidebarTabLabelKey(key)) }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Each view body teleports into the bottom panel's #bottom-panel-body
+         when the view is docked there (uiLayout panelLocations); DockHost
+         renders it in place otherwise, i.e. the normal sidebar layout. The
+         bottom panel is always mounted, so the target exists whenever a
+         docked view renders. -->
+    <DockHost :docked="uiLayout.panelLocation('connections') === 'bottom'">
+      <template #title>
+        <PanelTitleBar v-if="uiLayout.isViewActive('connections')" view="connections" />
+      </template>
+    <template v-if="uiLayout.isViewActive('connections')">
       <div class="search-box">
         <el-input
           ref="searchInputRef"
@@ -49,7 +90,7 @@
         </Menu>
       </div>
 
-    <div class="connection-list" tabindex="0" @keydown="onListKeydown" @contextmenu.prevent="onEmptyAreaContextMenu">
+    <div class="connection-list" :class="{ compact: settingsStore.settings.connectionsDisplayMode === 'compact' }" tabindex="0" @keydown="onListKeydown" @contextmenu.prevent="onEmptyAreaContextMenu">
       <!-- Virtual favorites group — persisted in favorites.json, rendered above all groups -->
       <template v-if="favoriteConns.length > 0">
         <div class="group-header" @click="favoritesExpanded = !favoritesExpanded" @contextmenu.prevent>
@@ -212,19 +253,48 @@
       </div>
     </div>
     </template>
+    </DockHost>
 
-    <QuickCommandsPanel v-if="activeView === 'quickCommands'" ref="quickCommandsRef" />
+    <DockHost :docked="uiLayout.panelLocation('quickCommands') === 'bottom'">
+      <template #title>
+        <PanelTitleBar v-if="uiLayout.isViewActive('quickCommands')" view="quickCommands" />
+      </template>
+      <QuickCommandsPanel v-if="uiLayout.isViewActive('quickCommands')" ref="quickCommandsRef" />
+    </DockHost>
 
-    <TunnelsPanel v-if="activeView === 'tunnels'" />
+    <DockHost :docked="uiLayout.panelLocation('tunnels') === 'bottom'">
+      <template #title>
+        <PanelTitleBar v-if="uiLayout.isViewActive('tunnels')" view="tunnels" />
+      </template>
+      <TunnelsPanel v-if="uiLayout.isViewActive('tunnels')" />
+    </DockHost>
 
-    
-    <HistoryPanel v-if="activeView === 'history'" />
+    <DockHost :docked="uiLayout.panelLocation('history') === 'bottom'">
+      <template #title>
+        <PanelTitleBar v-if="uiLayout.isViewActive('history')" view="history" />
+      </template>
+      <HistoryPanel v-if="uiLayout.isViewActive('history')" />
+    </DockHost>
 
-    <FileSidebar v-if="activeView === 'files'" />
+    <DockHost :docked="uiLayout.panelLocation('files') === 'bottom'">
+      <template #title>
+        <PanelTitleBar v-if="uiLayout.isViewActive('files')" view="files" />
+      </template>
+      <FileSidebar v-if="uiLayout.isViewActive('files')" />
+    </DockHost>
 
-    <MonitorOverviewSidebar v-if="activeView === 'monitor'" />
+    <DockHost :docked="uiLayout.panelLocation('monitor') === 'bottom'">
+      <template #title>
+        <PanelTitleBar v-if="uiLayout.isViewActive('monitor')" view="monitor" />
+      </template>
+      <MonitorOverviewSidebar v-if="uiLayout.isViewActive('monitor')" />
+    </DockHost>
 
-    <template v-if="activeView === 'personalization'">
+    <DockHost :docked="uiLayout.panelLocation('personalization') === 'bottom'">
+      <template #title>
+        <PanelTitleBar v-if="uiLayout.isViewActive('personalization')" view="personalization" />
+      </template>
+    <template v-if="uiLayout.isViewActive('personalization')">
       <div class="personalization-panel">
         <div class="persist-section-title">{{ t('settings.app') }}</div>
         <div class="persist-section">
@@ -329,24 +399,16 @@
         </div>
       </div>
     </template>
+    </DockHost>
 
     <ConnectionForm v-model="showForm" :edit-config="editConfig" :default-group-id="newConnGroupId" @save="onSave" @connect="onConnectFromForm" @connect-only="(c: ConnectionConfig) => { showForm = false; editConfig = undefined; emit('connectOnly', c) }" />
     <ExportDialog v-model:visible="showExportDialog" />
     <ImportDialog v-model:visible="showImportDialog" />
     <CustomThemeEditor v-model="themeEditorVisible" :source-theme-id="themeEditorSourceId" />
 
-    <!-- Tab-strip context menu: toggle which sidebar tabs are shown.
-         Reuses the same AppSettings.sidebarTabs as the Settings page card.
-         "connections" is fixed, so it is not listed. -->
-    <Menu ref="tabStripMenuRef" v-model:visible="tabStripMenuVisible">
-      <MenuItem
-        v-for="tab in SIDEBAR_TAB_ORDER.filter(tab => tab.key !== 'connections')"
-        :key="tab.key"
-        iconic
-        :icon="tabVisible(tab.key) ? Check : undefined"
-        @click="onTabVisibilityClick(tab.key)"
-      >{{ t(tab.labelKey) }}</MenuItem>
-    </Menu>
+    <!-- Tab-strip context menu — shared with the bottom panel's strip so both
+         docks offer identical actions (visibility toggles + 面板位置). -->
+    <PanelStripMenu ref="tabStripMenuRef" />
 
     <!-- Connection context menu -->
     <ConnectionContextMenu
@@ -410,6 +472,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide } from 'vue'
+import { storeToRefs } from 'pinia'
 import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Activity, Pencil, MoreHorizontal, FolderTree, ArrowRightLeft, Star } from '@lucide/vue'
 import { getShellLabel as getShellLabelBase } from '../utils/shellLabel'
 import { useConnectionStore } from '../stores/connectionStore'
@@ -432,7 +495,10 @@ import CustomThemeEditor from './CustomThemeEditor.vue'
 import GroupTreeItem from './GroupTreeItem.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
+import PanelStripMenu from './PanelStripMenu.vue'
 import MenuDivider from './MenuDivider.vue'
+import DockHost from './DockHost.vue'
+import PanelTitleBar from './PanelTitleBar.vue'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 import { parseQuickConnect, formatConnSubtitle, matchTypeFilter } from '../utils/quickConnect'
 import ConnectionContextMenu from './ConnectionContextMenu.vue'
@@ -450,6 +516,9 @@ import { formatFontFamily, normalizeFontFamilyValue } from '../utils/formatFontF
 import { useTerminalThemeOptions } from '../composables/useTerminalThemeOptions'
 import { GetAllFonts } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useLocalStateStore } from '../stores/localStateStore'
+import { useUiLayoutStore } from '../stores/uiLayoutStore'
+import type { SidebarView } from '../stores/uiLayoutStore'
+import { usePanelStripDrag } from '../composables/usePanelStripDrag'
 import { formatKeyBinding } from '../composables/useKeyboardShortcuts'
 import { isMobilePlatform } from '../utils/platform'
 
@@ -493,40 +562,52 @@ const showForm = ref(false)
 const showExportDialog = ref(false)
 const showImportDialog = ref(false)
 const editConfig = ref<ConnectionConfig | undefined>(undefined)
-type SidebarView = 'connections' | 'quickCommands' | 'history' | 'personalization' | 'files' | 'monitor' | 'tunnels'
-const activeView = ref<SidebarView>('connections')
+// Each dock has its own active view in the uiLayout store (left sidebar and
+// bottom panel show content simultaneously). `activeView` here is the
+// SIDEBAR's active view; bottom-docked views render in the bottom panel under
+// uiLayout.bottomActiveView.
+const uiLayout = useUiLayoutStore()
+const { sidebarActiveView: activeView } = storeToRefs(uiLayout)
 const quickCommandsRef = ref<InstanceType<typeof QuickCommandsPanel> | null>(null)
 
+// Point a view's activation at the dock it currently lives in.
+function setActiveViewForDock(view: SidebarView) {
+  if (uiLayout.panelLocation(view) === 'bottom') uiLayout.bottomActiveView = view
+  else activeView.value = view
+}
+
 function openQuickCommands() {
-  activeView.value = 'quickCommands'
+  setActiveViewForDock('quickCommands')
   nextTick(() => quickCommandsRef.value?.focusSearch())
 }
 
 // ── SSH companion: files / monitor folded into this sidebar ──
-// Generic tab-switch entry mirroring a manual tab click: files/monitor route
-// through their click handlers (flag + companion session), the rest just
-// switch the view. Used by the App.vue sidebar shortcuts.
+// Generic tab-switch entry mirroring a manual tab click: files/monitor also
+// (re)establish their companion session, the rest just switch the view. Used
+// by the App.vue sidebar shortcuts and the bottom panel's tab strip.
 function openTab(view: SidebarView) {
-  if (view === 'files') return onFilesTabClick()
-  if (view === 'monitor') return onMonitorTabClick()
-  activeView.value = view
+  if (view === 'files') companionStore.filesVisible = true
+  if (view === 'monitor') companionStore.monitorVisible = true
+  setActiveViewForDock(view)
+  if (view === 'files') {
+    const pid = companionStore.getActiveFilesPanelId()
+    if (pid) companionStore.ensureSftp(pid).catch(() => {})
+  }
+  if (view === 'monitor') {
+    const pid = companionStore.getActiveSshPanelId()
+    if (pid) companionStore.ensureMonitor(pid).catch(() => {})
+  }
   if (view === 'connections') nextTick(() => focusSearch())
 }
 function onFilesTabClick() {
-  activeView.value = 'files'
   // Always open the files view (shows an idle/"need SSH" empty state when no
   // active SSH panel). If there is an active SSH panel, (re)establish the
   // companion SFTP session. Closing happens via the panel's X button, which
   // clears filesVisible and the watch below falls back to connections.
-  companionStore.filesVisible = true
-  const pid = companionStore.getActiveFilesPanelId()
-  if (pid) companionStore.ensureSftp(pid).catch(() => {})
+  openTab('files')
 }
 function onMonitorTabClick() {
-  activeView.value = 'monitor'
-  companionStore.monitorVisible = true
-  const pid = companionStore.getActiveSshPanelId()
-  if (pid) companionStore.ensureMonitor(pid).catch(() => {})
+  openTab('monitor')
 }
 // If the companion panel hides itself (collapse button), fall back to connections view.
 watch(
@@ -546,20 +627,69 @@ function tabVisible(key: string): boolean {
   return settingsStore.settings.sidebarTabs?.[key] ?? SIDEBAR_TAB_DEFAULTS[key] ?? true
 }
 
-const tabStripMenuRef = ref<InstanceType<typeof Menu> | null>(null)
-const tabStripMenuVisible = ref(false)
+// Tab shows in THIS strip only when it is visible and effectively docked to
+// the sidebar (bottom-docked views render their tab in the bottom panel; in
+// narrow layout everything shows here).
+function tabInSidebar(key: string): boolean {
+  return tabVisible(key) && uiLayout.effectiveLocation(key) === 'sidebar'
+}
+
+// Sidebar-strip tabs in persisted order, filtered to views docked here.
+const sidebarTabKeys = computed(() => uiLayout.orderedViews.filter(v => tabInSidebar(v)))
+
+// Empty-sidebar hint: views that could be moved back here (bottom-docked,
+// visible ones). Fixed SIDEBAR_TAB_ORDER — the hint list must not jump
+// around as the user reorders tabs.
+const sidebarDockableViews = computed(() =>
+  SIDEBAR_TAB_ORDER.map(tab => tab.key)
+    .filter(v => tabVisible(v) && uiLayout.panelLocation(v) === 'bottom')
+)
+
+function sidebarTabLabelKey(key: string): string {
+  const entry = SIDEBAR_TAB_ORDER.find(tab => tab.key === key)
+  return entry ? entry.labelKey : key
+}
+
+
+const SIDEBAR_TAB_ICONS: Record<string, any> = {
+  connections: Network,
+  files: FolderTree,
+  monitor: Activity,
+  tunnels: ArrowRightLeft,
+  quickCommands: Zap,
+  history: Clock,
+  personalization: Palette,
+}
+
+function sidebarTabTitle(key: string): string {
+  if (key === 'quickCommands') return quickCommandsTitle.value
+  const entry = SIDEBAR_TAB_ORDER.find(tab => tab.key === key)
+  return entry ? t(entry.labelKey) : key
+}
+
+// Click routes to each tab's own open logic (files/monitor set companion
+// flags); the rest just switch the view.
+function onTabClick(key: string) {
+  if (key === 'files') return onFilesTabClick()
+  if (key === 'monitor') return onMonitorTabClick()
+  activeView.value = key as SidebarView
+}
+
+// ── Tab-strip drag & drop (reorder / move between sidebar and bottom) ──
+// Renamed: `dropIndicator`/`onDragStart`/`onDragEnd` below belong to the
+// connection-list drag system.
+const { dropIndicator: tabDropIndicator, stripDragOver: tabStripDragOver, onDragStart: onTabDragStart, onDragEnd: onTabDragEnd, onTabDragOver, onStripDragOver, onTabDrop, onStripDrop } = usePanelStripDrag('sidebar')
+
+const tabStripMenuRef = ref<InstanceType<typeof PanelStripMenu> | null>(null)
 
 function onTabStripContextMenu(e: MouseEvent) {
+  // Right-click on the strip's empty area: visibility toggles only.
   tabStripMenuRef.value?.openAt(e.clientX, e.clientY)
 }
 
-function onTabVisibilityClick(key: string) {
-  if (key === 'connections') return // always visible
-  const tabs = settingsStore.settings.sidebarTabs
-  tabs[key] = !tabVisible(key)
-  settingsStore.save()
-  // Hiding the view that's currently active falls back to connections.
-  if (!tabs[key] && activeView.value === key) activeView.value = 'connections'
+// Right-click on a specific tab: the "move to" submenu acts on that tab.
+function onTabContextMenu(e: MouseEvent, key: string) {
+  tabStripMenuRef.value?.openAt(e.clientX, e.clientY, key)
 }
 
 // ── Personalization panel ──
@@ -1758,8 +1888,10 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   display: flex;
   align-items: center;
   gap: 0.125rem;
-  /* 下 padding 由各面板顶部工具栏的上 padding 承担，避免间隔叠加 */
-  padding: 0.625rem 0.875rem 0;
+  /* Bottom padding separates the tab strip from the title bar / panel
+     content below (their own rows carry no vertical padding). Horizontal
+     padding matches the panels' toolbars so right-edge buttons align. */
+  padding: 0.625rem 0.625rem 0.5rem;
   flex-shrink: 0;
 }
 
@@ -1819,6 +1951,71 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   border: none;
   border-radius: var(--radius-sm);
   transition: all 0.15s;
+  position: relative;
+}
+
+/* Drag & drop insertion line (tab reorder / cross-dock move) */
+.sidebar-tab.drop-before::before,
+.sidebar-tab.drop-after::after {
+  content: '';
+  position: absolute;
+  top: 0.125rem;
+  bottom: 0.125rem;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.sidebar-tab.drop-before::before { left: -1px; }
+.sidebar-tab.drop-after::after { right: -1px; }
+
+.sidebar-header.drag-over {
+  background: var(--bg-hover);
+}
+
+/* Empty sidebar: dockable-panel chips (same look as the bottom panel's) */
+.sidebar-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.empty-hint {
+  font-size: 0.75rem;
+  font-family: var(--font-ui);
+  color: var(--text-muted);
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.375rem;
+}
+
+.empty-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-family: var(--font-ui);
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.empty-chip:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--accent);
 }
 
 .sidebar-tab:hover {
@@ -1844,6 +2041,18 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   overflow-y: auto;
   padding: 0 0.5rem 0.5rem;
   outline: none;
+}
+
+/* Compact display mode (connections panel more menu): single-line rows,
+   no subtitle, tighter vertical padding. :deep() reaches the items
+   rendered by GroupTreeItem. */
+.connection-list.compact :deep(.conn-meta) {
+  display: none;
+}
+
+.connection-list.compact :deep(.connection-item) {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
 }
 
 /* ── Group header ── */

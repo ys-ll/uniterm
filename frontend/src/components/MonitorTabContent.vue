@@ -4,8 +4,8 @@
       <div class="tab-item" :class="{ active: activeTab === 'performance' }" @click="activeTab = 'performance'">{{ t('monitor.performance') }}</div>
       <div class="tab-item" :class="{ active: activeTab === 'processes' }" @click="activeTab = 'processes'">{{ t('monitor.processes') }}</div>
       <div class="tab-item" :class="{ active: activeTab === 'ports' }" @click="activeTab = 'ports'">{{ t('monitor.ports') }}</div>
-      <div class="tab-item" :class="{ active: activeTab === 'disks' }" @click="activeTab = 'disks'">{{ t('monitor.disks') }}</div>
-      <div class="tab-item" :class="{ active: activeTab === 'network' }" @click="activeTab = 'network'">{{ t('monitor.networkCards') }}</div>
+      <div v-if="sec('allDisk')" class="tab-item" :class="{ active: activeTab === 'disks' }" @click="activeTab = 'disks'">{{ t('monitor.disks') }}</div>
+      <div v-if="sec('network')" class="tab-item" :class="{ active: activeTab === 'network' }" @click="activeTab = 'network'">{{ t('monitor.networkCards') }}</div>
       <div class="tab-item" :class="{ active: activeTab === 'services' }" @click="activeTab = 'services'">{{ t('monitor.services') }}</div>
       <div class="tab-item" :class="{ active: activeTab === 'system' }" @click="activeTab = 'system'">{{ t('monitor.system') }}</div>
       <div class="tab-item" :class="{ active: activeTab === 'devices' }" @click="activeTab = 'devices'">{{ t('monitor.devices') }}</div>
@@ -40,7 +40,7 @@
         <!-- Expandable: all cores / all NICs / all disks -->
         <div class="perf-extras">
           <template v-if="selectedPerf === 'cpu'">
-            <div class="perf-sub-toggle" @click="showCores = !showCores">
+            <div v-if="sec('allCpu')" class="perf-sub-toggle" @click="showCores = !showCores">
               <ChevronRight :size="'0.875rem'" class="chev" :class="{ open: showCores }" />
               <span>{{ t('monitor.allCores') }} ({{ cpus.length }})</span>
             </div>
@@ -54,7 +54,7 @@
           </template>
 
           <template v-else-if="selectedPerf === 'network'">
-            <div class="perf-sub-toggle" @click="showNets = !showNets">
+            <div v-if="sec('allNet')" class="perf-sub-toggle" @click="showNets = !showNets">
               <ChevronRight :size="'0.875rem'" class="chev" :class="{ open: showNets }" />
               <span>{{ t('monitor.allNetworks') }} ({{ nets.length }})</span>
             </div>
@@ -68,7 +68,7 @@
           </template>
 
           <template v-else-if="selectedPerf === 'disk'">
-            <div class="perf-sub-toggle" @click="toggleDisks">
+            <div v-if="sec('allDisk')" class="perf-sub-toggle" @click="toggleDisks">
               <ChevronRight :size="'0.875rem'" class="chev" :class="{ open: showDisks }" />
               <span>{{ t('monitor.allDisks') }} ({{ mountedDisks.length }})</span>
             </div>
@@ -568,6 +568,8 @@ import { msg } from '../services/message'
 import { Close, RefreshRight } from '@element-plus/icons-vue'
 import { ChevronRight } from '@lucide/vue'
 import { useI18n } from '../i18n'
+import { useSettingsStore } from '../stores/settingsStore'
+import { monitorSectionEnabled } from '../types/settings'
 import { uiPx } from '../utils/uiScale'
 
 import Menu from './Menu.vue'
@@ -581,8 +583,15 @@ const props = defineProps<{
 defineOptions({ name: 'MonitorTabContent' })
 
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
 const activeTab = ref('performance')
 const selectedPerf = ref('cpu')
+
+// Monitor display sections (panel more menu): disabled sections are hidden
+// and the monitor session does not collect their data.
+function sec(key: string): boolean {
+  return monitorSectionEnabled(settingsStore.settings.monitorSections, key)
+}
 const processSearch = ref('')
 const portSearch = ref('')
 const diskSearch = ref('')
@@ -737,7 +746,7 @@ function pushHistory(arr: number[], val: number) {
   if (arr.length > 60) arr.shift()
 }
 
-const perfItems = computed(() => [
+const perfItems = computed(() => ([
   {
     key: 'cpu',
     label: t('monitor.cpu'),
@@ -766,7 +775,15 @@ const perfItems = computed(() => [
     percent: Math.min((currentNet.value.rx + currentNet.value.tx) / 1048576 * 100, 100),
     color: 'var(--chart-4)'
   }
-])
+] as const).filter(item => sec(item.key)))
+
+// If the selected perf item's section got disabled, fall back to the first
+// enabled one so the pane never renders a stale/empty selection.
+watch(perfItems, (items) => {
+  if (items.length > 0 && !items.some(item => item.key === selectedPerf.value)) {
+    selectedPerf.value = items[0].key
+  }
+})
 
 const currentPerf = computed(() => {
   switch (selectedPerf.value) {
@@ -1221,6 +1238,7 @@ async function confirmKill() {
 }
 
 async function toggleDisks() {
+  if (!sec('allDisk')) return
   showDisks.value = !showDisks.value
   if (!showDisks.value || disks.value.length > 0) return
   diskLoading.value = true
@@ -1247,6 +1265,7 @@ async function fetchPorts() {
 
 let diskFetchRetried = false
 async function fetchDisks() {
+  if (!sec('allDisk')) return
   loadingDisks.value = true
   try {
     diskList.value = await GetDisks(props.sessionId)

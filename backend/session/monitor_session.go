@@ -112,6 +112,11 @@ type NetCardInfo struct {
 	IPAddrs    []string `json:"ipAddrs"`
 }
 
+// Monitor display sections. Disabled sections are skipped by the poll loop
+// (their remote commands are not sent, reducing load on the node) and left
+// out of the emitted payload. Unknown keys / an empty map mean enabled.
+var monitorSections = []string{"cpu", "allCpu", "memory", "network", "allNet", "disk"}
+
 type MonitorSession struct {
 	baseSession
 	client    *ssh.Client
@@ -122,6 +127,7 @@ type MonitorSession struct {
 	state     monitorState
 	activeTab string
 	paused    bool
+	sections  map[string]bool
 	mu        sync.RWMutex
 }
 
@@ -159,6 +165,31 @@ func (s *MonitorSession) ActiveTab() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.activeTab
+}
+
+// SetMonitorSections toggles which display sections the poll loop collects.
+// Keys are section names ("cpu", "allCpu", ...); missing keys stay enabled.
+func (s *MonitorSession) SetMonitorSections(sections map[string]bool) {
+	cloned := make(map[string]bool, len(sections))
+	for _, k := range monitorSections {
+		if v, ok := sections[k]; ok {
+			cloned[k] = v
+		} else {
+			cloned[k] = true
+		}
+	}
+	s.mu.Lock()
+	s.sections = cloned
+	s.mu.Unlock()
+}
+
+func (s *MonitorSession) sectionEnabled(name string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.sections) == 0 {
+		return true
+	}
+	return s.sections[name]
 }
 
 func (s *MonitorSession) Connect(config ConnectionConfig) error {
@@ -336,8 +367,20 @@ func (s *MonitorSession) collectPerformance() {
 	}
 	defer session.Close()
 
-	script := `exec 2>/dev/null
-cpu_line=$(head -1 /proc/stat)
+	// The script is assembled per enabled section: the remote commands of
+	// disabled sections are never sent, which is what reduces the load on
+	// the monitored node. Each summary section prints key=value lines under
+	// an "S:*" marker; the detail sections (---CORE--- / ---NETCARDS---)
+	// keep their raw line format for the existing parsers.
+	var script strings.Builder
+	script.WriteString("exec 2>/dev/null\n")
+	cpuOn := s.sectionEnabled("cpu")
+	memOn := s.sectionEnabled("memory")
+	diskOn := s.sectionEnabled("disk")
+	netOn := s.sectionEnabled("network")
+
+	if cpuOn {
+		script.WriteString(`cpu_line=$(head -1 /proc/stat)
 cpu_user=$(echo "$cpu_line" | awk '{print $2+$3}')
 cpu_system=$(echo "$cpu_line" | awk '{print $4}')
 cpu_idle=$(echo "$cpu_line" | awk '{print $5}')
@@ -349,7 +392,22 @@ cpu_total=$(echo "$cpu_line" | awk '{print $2+$3+$4+$5+$6+$7+$8+$9}')
 [ -z "$cpu_iowait" ] && cpu_iowait=0
 [ -z "$cpu_total" ] && cpu_total=0
 
-mem_total=$(awk '/MemTotal:/{print $2}' /proc/meminfo)
+cores=$(nproc || echo 1)
+[ -z "$cores" ] && cores=1
+
+loadavg=$(cat /proc/loadavg 2>/dev/null | awk '{print $1,$2,$3}')
+[ -z "$loadavg" ] && loadavg="0 0 0"
+
+handles=$(awk '{print $1}' /proc/sys/fs/file-nr)
+[ -z "$handles" ] && handles=0
+
+proc_count=$(ps -e | wc -l)
+[ -z "$proc_count" ] && proc_count=0
+proc_count=$((proc_count > 0 ? proc_count - 1 : 0))
+`)
+	}
+	if memOn {
+		script.WriteString(`mem_total=$(awk '/MemTotal:/{print $2}' /proc/meminfo)
 mem_avail=$(awk '/MemAvailable:/{print $2}' /proc/meminfo)
 [ -z "$mem_avail" ] && mem_avail=$(awk '/MemFree:/{print $2}' /proc/meminfo)
 mem_cached=$(awk '/^Cached:/{print $2}' /proc/meminfo)
@@ -362,221 +420,259 @@ swap_free=$(awk '/SwapFree:/{print $2}' /proc/meminfo)
 [ -z "$swap_free" ] && swap_free=0
 [ -z "$mem_total" ] && mem_total=0
 [ -z "$mem_avail" ] && mem_avail=0
-
-# One df invocation (with a hard timeout so a stale NFS mount cannot wedge
-# the poll loop) instead of three; the fields are split locally.
-df_line=$(timeout 5 df -h / | awk 'NR==2')
+`)
+	}
+	if diskOn {
+		// One df invocation (with a hard timeout so a stale NFS mount cannot
+		// wedge the poll loop) instead of three; the fields are split locally.
+		script.WriteString(`df_line=$(timeout 5 df -h / | awk 'NR==2')
 disk_total=$(echo "$df_line" | awk '{print $2}')
 disk_used=$(echo "$df_line" | awk '{print $3}')
 disk_usage=$(echo "$df_line" | awk '{gsub(/%/,""); print $5}')
 [ -z "$disk_usage" ] && disk_usage=0
-
-# Sum all non-lo interfaces
-net_rx=$(awk '/^[ ]*[^ ]+:/ && !/lo:/{rx+=$2; tx+=$10} END{print rx+0}' /proc/net/dev)
-net_tx=$(awk '/^[ ]*[^ ]+:/ && !/lo:/{rx+=$2; tx+=$10} END{print tx+0}' /proc/net/dev)
+`)
+	}
+	if netOn {
+		// Sum all non-lo interfaces
+		script.WriteString(`net_rx=$(awk '/^[ ]*[^ ]+:/ && !/lo:/{rx+=$2; tx+=$10} END{print rx+0}' /proc/net/dev)
+net_tx=$(awk '/^[ ]*[^ ]+:/ && !/lo:/{tx+=$10} END{print tx+0}' /proc/net/dev)
 [ -z "$net_rx" ] && net_rx=0
 [ -z "$net_tx" ] && net_tx=0
+`)
+	}
 
-handles=$(awk '{print $1}' /proc/sys/fs/file-nr)
-[ -z "$handles" ] && handles=0
+	if cpuOn {
+		script.WriteString(`echo "---S:CPU---"
+echo "cpu_total=$cpu_total"
+echo "cpu_idle=$cpu_idle"
+echo "cpu_user=$cpu_user"
+echo "cpu_system=$cpu_system"
+echo "cpu_iowait=$cpu_iowait"
+echo "cores=$cores"
+echo "processes=$proc_count"
+echo "handles=$handles"
+echo "loadavg=$loadavg"
+`)
+	}
+	if memOn {
+		script.WriteString(`echo "---S:MEM---"
+echo "mem_total=$mem_total"
+echo "mem_avail=$mem_avail"
+echo "mem_cached=$mem_cached"
+echo "mem_buffers=$mem_buffers"
+echo "swap_total=$swap_total"
+echo "swap_free=$swap_free"
+`)
+	}
+	if diskOn {
+		script.WriteString(`echo "---S:DISK---"
+echo "disk_total=$disk_total"
+echo "disk_used=$disk_used"
+echo "disk_usage=$disk_usage"
+`)
+	}
+	if netOn {
+		script.WriteString(`echo "---S:NET---"
+echo "net_rx=$net_rx"
+echo "net_tx=$net_tx"
+`)
+	}
+	if s.sectionEnabled("allCpu") && s.sectionEnabled("cpu") {
+		script.WriteString("echo \"---CORE---\"\ngrep '^cpu[0-9]' /proc/stat || true\n")
+	}
+	if s.sectionEnabled("allNet") && s.sectionEnabled("network") {
+		script.WriteString("echo \"---NETCARDS---\"\nawk 'NR>2{split($1,a,\":\"); n=a[1]; if(n!=\"lo\") print n,$2,$10}' /proc/net/dev\n")
+	}
 
-proc_count=$(ps -e | wc -l)
-[ -z "$proc_count" ] && proc_count=0
-proc_count=$((proc_count > 0 ? proc_count - 1 : 0))
-
-cores=$(nproc || echo 1)
-[ -z "$cores" ] && cores=1
-
-loadavg=$(cat /proc/loadavg 2>/dev/null | awk '{print $1,$2,$3}')
-[ -z "$loadavg" ] && loadavg="0 0 0"
-
-printf '{"cpu_total":%s,"cpu_idle":%s,"cpu_user":%s,"cpu_system":%s,"cpu_iowait":%s,"cores":%s,"processes":%s,"mem_total":%s,"mem_avail":%s,"mem_cached":%s,"mem_buffers":%s,"swap_total":%s,"swap_free":%s,"disk_total":"%s","disk_used":"%s","disk_usage":%s,"net_rx":%s,"net_tx":%s,"handles":%s,"load1":%s,"load5":%s,"load15":%s}\n' \
-  "$cpu_total" "$cpu_idle" "$cpu_user" "$cpu_system" "$cpu_iowait" "$cores" "$proc_count" \
-  "$mem_total" "$mem_avail" "$mem_cached" "$mem_buffers" \
-  "$swap_total" "$swap_free" \
-  "${disk_total:-}" "${disk_used:-}" "${disk_usage:-0}" \
-  "$net_rx" "$net_tx" "$handles" \
-  $loadavg
-echo "---CORE---"
-grep '^cpu[0-9]' /proc/stat || true
-echo "---NET---"
-awk 'NR>2{split($1,a,":"); n=a[1]; if(n!="lo") print n,$2,$10}' /proc/net/dev
-`
-
-	out, err := session.Output(script)
+	out, err := session.Output(script.String())
 	if err != nil {
 		log.Writef("monitor %s performance poll failed: %v", s.ID(), err)
 		return
 	}
 
-	// Peel off the "--CORE--"/"--NET--" detail sections so the leading JSON
-	// can be unmarshalled on its own.
-	outStr := string(out)
-	corePart := ""
-	netPart := ""
-	if idx := strings.Index(outStr, "---CORE---"); idx >= 0 {
-		rest := outStr[idx:]
-		corePart = rest[len("---CORE---"):]
-		out = []byte(outStr[:idx])
-		if idx2 := strings.Index(rest, "---NET---"); idx2 >= 0 {
-			corePart = rest[len("---CORE---"):idx2]
-			netPart = rest[idx2+len("---NET---"):]
+	// Split the marker sections: "S:*" sections hold key=value lines, the
+	// detail sections keep raw lines for their parsers.
+	kv := map[string]map[string]string{}
+	raw := map[string][]string{}
+	cur := ""
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "---") && strings.HasSuffix(line, "---") {
+			cur = strings.Trim(line, "-")
+			continue
+		}
+		if cur == "" {
+			continue
+		}
+		if strings.HasPrefix(cur, "S:") {
+			idx := strings.Index(line, "=")
+			if idx <= 0 {
+				continue
+			}
+			if kv[cur] == nil {
+				kv[cur] = map[string]string{}
+			}
+			kv[cur][line[:idx]] = line[idx+1:]
+		} else {
+			raw[cur] = append(raw[cur], line)
 		}
 	}
 
-	type rawMetrics struct {
-		CpuTotal   uint64  `json:"cpu_total"`
-		CpuIdle    uint64  `json:"cpu_idle"`
-		CpuUser    uint64  `json:"cpu_user"`
-		CpuSystem  uint64  `json:"cpu_system"`
-		CpuIowait  uint64  `json:"cpu_iowait"`
-		Cores      int     `json:"cores"`
-		Processes  int     `json:"processes"`
-		MemTotal   uint64  `json:"mem_total"`
-		MemAvail   uint64  `json:"mem_avail"`
-		MemCached  uint64  `json:"mem_cached"`
-		MemBuffers uint64  `json:"mem_buffers"`
-		SwapTotal  uint64  `json:"swap_total"`
-		SwapFree   uint64  `json:"swap_free"`
-		DiskTotal  string  `json:"disk_total"`
-		DiskUsed   string  `json:"disk_used"`
-		DiskUsage  int     `json:"disk_usage"`
-		NetRx      uint64  `json:"net_rx"`
-		NetTx      uint64  `json:"net_tx"`
-		Handles    uint64  `json:"handles"`
-		Load1      float64 `json:"load1"`
-		Load5      float64 `json:"load5"`
-		Load15     float64 `json:"load15"`
+	getU64 := func(sec, key string) uint64 {
+		v, _ := strconv.ParseUint(strings.TrimSpace(kv[sec][key]), 10, 64)
+		return v
 	}
-
-	var m rawMetrics
-	if err := json.Unmarshal(out, &m); err != nil {
-		// A malformed summary used to be dropped silently, leaving the
-		// performance gauges at zero forever on hosts whose shell mangles
-		// the inline JSON. Log a sample so the remote failure is
-		// diagnosable from the app log.
-		log.Writef("monitor %s performance payload unmarshal failed: %v; output: %.200s", s.ID(), err, out)
-		return
-	}
-
-	// CPU usage: need delta between two samples (guard against uint64 underflow)
-	cpuUsage := 0.0
-	cpuUserPct := 0.0
-	cpuSystemPct := 0.0
-	cpuIowaitPct := 0.0
-	if s.state.hasPrev {
-		if totalDiff, ok := uintDelta(m.CpuTotal, s.state.lastCpuTotal); ok && totalDiff > 0 {
-			if idleDiff, ok := uintDelta(m.CpuIdle, s.state.lastCpuIdle); ok {
-				cpuUsage = clampPct((float64(totalDiff) - float64(idleDiff)) / float64(totalDiff) * 100)
-			}
-			if userDiff, ok := uintDelta(m.CpuUser, s.state.lastCpuUser); ok {
-				cpuUserPct = clampPct(float64(userDiff) / float64(totalDiff) * 100)
-			}
-			if sysDiff, ok := uintDelta(m.CpuSystem, s.state.lastCpuSystem); ok {
-				cpuSystemPct = clampPct(float64(sysDiff) / float64(totalDiff) * 100)
-			}
-			if ioDiff, ok := uintDelta(m.CpuIowait, s.state.lastCpuIowait); ok {
-				cpuIowaitPct = clampPct(float64(ioDiff) / float64(totalDiff) * 100)
-			}
-		}
-	}
-
-	// Network rate (bytes per second, over the poll interval)
-	netRxRate := uint64(0)
-	netTxRate := uint64(0)
-	if s.state.hasPrev {
-		if m.NetRx >= s.state.lastNetRx {
-			netRxRate = uint64(math.Round(float64(m.NetRx-s.state.lastNetRx) / performancePollSec))
-		}
-		if m.NetTx >= s.state.lastNetTx {
-			netTxRate = uint64(math.Round(float64(m.NetTx-s.state.lastNetTx) / performancePollSec))
-		}
-	}
-
-	memTotalGB := float64(m.MemTotal) / 1024 / 1024
-	memUsedGB := float64(m.MemTotal-m.MemAvail) / 1024 / 1024
-	memFreeGB := float64(m.MemAvail) / 1024 / 1024
-	memUsage := 0.0
-	if m.MemTotal > 0 {
-		memUsage = float64(m.MemTotal-m.MemAvail) / float64(m.MemTotal) * 100
-	}
-	memCachedGB := float64(m.MemCached) / 1024 / 1024
-	memBuffersGB := float64(m.MemBuffers) / 1024 / 1024
-
-	swapTotalGB := float64(m.SwapTotal) / 1024 / 1024
-	swapUsedGB := float64(m.SwapTotal-m.SwapFree) / 1024 / 1024
-	swapUsage := 0.0
-	if m.SwapTotal > 0 {
-		swapUsage = float64(m.SwapTotal-m.SwapFree) / float64(m.SwapTotal) * 100
-	}
-
-	// "Total CPU" style metric ≈ usage × cores (as HexHub shows)
-	cpuTotalPct := cpuUsage
-	if m.Cores > 0 {
-		cpuTotalPct = cpuUsage * float64(m.Cores)
+	getS := func(sec, key string) string {
+		return strings.TrimSpace(kv[sec][key])
 	}
 
 	payload := map[string]interface{}{
 		"type": "performance",
-		"cpu": map[string]interface{}{
+	}
+
+	if cpuOn {
+		cpuTotal := getU64("S:CPU", "cpu_total")
+		cpuIdle := getU64("S:CPU", "cpu_idle")
+		cpuUser := getU64("S:CPU", "cpu_user")
+		cpuSystem := getU64("S:CPU", "cpu_system")
+		cpuIowait := getU64("S:CPU", "cpu_iowait")
+		cores := int(getU64("S:CPU", "cores"))
+
+		// CPU usage: need delta between two samples (guard against uint64 underflow)
+		cpuUsage := 0.0
+		cpuUserPct := 0.0
+		cpuSystemPct := 0.0
+		cpuIowaitPct := 0.0
+		if s.state.hasPrev {
+			if totalDiff, ok := uintDelta(cpuTotal, s.state.lastCpuTotal); ok && totalDiff > 0 {
+				if idleDiff, ok := uintDelta(cpuIdle, s.state.lastCpuIdle); ok {
+					cpuUsage = clampPct((float64(totalDiff) - float64(idleDiff)) / float64(totalDiff) * 100)
+				}
+				if userDiff, ok := uintDelta(cpuUser, s.state.lastCpuUser); ok {
+					cpuUserPct = clampPct(float64(userDiff) / float64(totalDiff) * 100)
+				}
+				if sysDiff, ok := uintDelta(cpuSystem, s.state.lastCpuSystem); ok {
+					cpuSystemPct = clampPct(float64(sysDiff) / float64(totalDiff) * 100)
+				}
+				if ioDiff, ok := uintDelta(cpuIowait, s.state.lastCpuIowait); ok {
+					cpuIowaitPct = clampPct(float64(ioDiff) / float64(totalDiff) * 100)
+				}
+			}
+		}
+
+		// "Total CPU" style metric: usage x cores (as HexHub shows)
+		cpuTotalPct := cpuUsage
+		if cores > 0 {
+			cpuTotalPct = cpuUsage * float64(cores)
+		}
+
+		load1, load5, load15 := 0.0, 0.0, 0.0
+		if parts := strings.Fields(getS("S:CPU", "loadavg")); len(parts) >= 3 {
+			load1, _ = strconv.ParseFloat(parts[0], 64)
+			load5, _ = strconv.ParseFloat(parts[1], 64)
+			load15, _ = strconv.ParseFloat(parts[2], 64)
+		}
+
+		payload["cpu"] = map[string]interface{}{
 			"usage":     roundFloat(cpuUsage, 1),
 			"total":     roundFloat(cpuTotalPct, 1),
 			"user":      roundFloat(cpuUserPct, 1),
 			"system":    roundFloat(cpuSystemPct, 1),
 			"iowait":    roundFloat(cpuIowaitPct, 1),
-			"cores":     m.Cores,
-			"processes": m.Processes,
-			"handles":   m.Handles,
-			"load1":     roundFloat(m.Load1, 2),
-			"load5":     roundFloat(m.Load5, 2),
-			"load15":    roundFloat(m.Load15, 2),
-		},
-		"memory": map[string]interface{}{
-			"total":   roundFloat(memTotalGB, 2),
-			"used":    roundFloat(memUsedGB, 2),
-			"free":    roundFloat(memFreeGB, 2),
-			"usage":   roundFloat(memUsage, 1),
-			"cached":  roundFloat(memCachedGB, 2),
-			"buffers": roundFloat(memBuffersGB, 2),
-		},
-		"swap": map[string]interface{}{
-			"total": roundFloat(swapTotalGB, 2),
-			"used":  roundFloat(swapUsedGB, 2),
-			"usage": roundFloat(swapUsage, 1),
-		},
-		"disk": map[string]interface{}{
-			"total": m.DiskTotal,
-			"used":  m.DiskUsed,
-			"usage": m.DiskUsage,
-		},
-		"network": map[string]interface{}{
-			"rx":      netRxRate,
-			"tx":      netTxRate,
-			"rxTotal": m.NetRx,
-			"txTotal": m.NetTx,
-		},
+			"cores":     cores,
+			"processes": int(getU64("S:CPU", "processes")),
+			"handles":   getU64("S:CPU", "handles"),
+			"load1":     roundFloat(load1, 2),
+			"load5":     roundFloat(load5, 2),
+			"load15":    roundFloat(load15, 2),
+		}
+
+		s.state.lastCpuTotal = cpuTotal
+		s.state.lastCpuIdle = cpuIdle
+		s.state.lastCpuUser = cpuUser
+		s.state.lastCpuSystem = cpuSystem
+		s.state.lastCpuIowait = cpuIowait
 	}
 
-	if cpus := s.computePerCore(corePart); len(cpus) > 0 {
-		payload["cpus"] = cpus
+	if memOn {
+		memTotal := getU64("S:MEM", "mem_total")
+		memAvail := getU64("S:MEM", "mem_avail")
+		memUsage := 0.0
+		if memTotal > 0 {
+			memUsage = float64(memTotal-memAvail) / float64(memTotal) * 100
+		}
+		swapTotal := getU64("S:MEM", "swap_total")
+		swapFree := getU64("S:MEM", "swap_free")
+		swapUsage := 0.0
+		if swapTotal > 0 {
+			swapUsage = float64(swapTotal-swapFree) / float64(swapTotal) * 100
+		}
+		payload["memory"] = map[string]interface{}{
+			"total":   roundFloat(float64(memTotal)/1024/1024, 2),
+			"used":    roundFloat(float64(memTotal-memAvail)/1024/1024, 2),
+			"free":    roundFloat(float64(memAvail)/1024/1024, 2),
+			"usage":   roundFloat(memUsage, 1),
+			"cached":  roundFloat(float64(getU64("S:MEM", "mem_cached"))/1024/1024, 2),
+			"buffers": roundFloat(float64(getU64("S:MEM", "mem_buffers"))/1024/1024, 2),
+		}
+		payload["swap"] = map[string]interface{}{
+			"total": roundFloat(float64(swapTotal)/1024/1024, 2),
+			"used":  roundFloat(float64(swapTotal-swapFree)/1024/1024, 2),
+			"usage": roundFloat(swapUsage, 1),
+		}
 	}
-	if nets := s.computePerNic(netPart); len(nets) > 0 {
-		payload["nets"] = nets
+
+	if diskOn {
+		payload["disk"] = map[string]interface{}{
+			"total": getS("S:DISK", "disk_total"),
+			"used":  getS("S:DISK", "disk_used"),
+			"usage": int(getU64("S:DISK", "disk_usage")),
+		}
+	}
+
+	if netOn {
+		netRx := getU64("S:NET", "net_rx")
+		netTx := getU64("S:NET", "net_tx")
+		netRxRate := uint64(0)
+		netTxRate := uint64(0)
+		if s.state.hasPrev {
+			if netRx >= s.state.lastNetRx {
+				netRxRate = uint64(math.Round(float64(netRx-s.state.lastNetRx) / performancePollSec))
+			}
+			if netTx >= s.state.lastNetTx {
+				netTxRate = uint64(math.Round(float64(netTx-s.state.lastNetTx) / performancePollSec))
+			}
+		}
+		payload["network"] = map[string]interface{}{
+			"rx":      netRxRate,
+			"tx":      netTxRate,
+			"rxTotal": netRx,
+			"txTotal": netTx,
+		}
+		s.state.lastNetRx = netRx
+		s.state.lastNetTx = netTx
+	}
+
+	if s.sectionEnabled("allCpu") && s.sectionEnabled("cpu") {
+		if cpus := s.computePerCore(strings.Join(raw["CORE"], "\n")); len(cpus) > 0 {
+			payload["cpus"] = cpus
+		}
+	}
+	if s.sectionEnabled("allNet") && s.sectionEnabled("network") {
+		if nets := s.computePerNic(strings.Join(raw["NETCARDS"], "\n")); len(nets) > 0 {
+			payload["nets"] = nets
+		}
 	}
 
 	jsonData, _ := json.Marshal(payload)
 	s.emitData(jsonData)
 
-	// Save state for next delta calculation
-	s.state.lastCpuTotal = m.CpuTotal
-	s.state.lastCpuIdle = m.CpuIdle
-	s.state.lastCpuUser = m.CpuUser
-	s.state.lastCpuSystem = m.CpuSystem
-	s.state.lastCpuIowait = m.CpuIowait
-	s.state.lastNetRx = m.NetRx
-	s.state.lastNetTx = m.NetTx
 	s.state.hasPrev = true
 }
+
 
 // computePerCore turns the "---CORE---" subsection (one /proc/stat cpuN line
 // per core) into per-core usage percentages using delta-with-previous-sample.

@@ -11,6 +11,9 @@ type LocalState struct {
 	AI               *AILocalState `json:"ai,omitempty"`
 	SidebarVisible   bool          `json:"sidebarVisible"`
 	AISidebarVisible bool          `json:"aiSidebarVisible"`
+	// Bottom panel (docked panel under the tab area) visibility. Local-only
+	// UI state, never synced.
+	BottomPanelVisible bool `json:"bottomPanelVisible"`
 	// Sidebar widths in px. Local-only UI state, never synced; 0 means an
 	// older config without the key and keeps the component default.
 	SidebarWidth      int      `json:"sidebarWidth"`

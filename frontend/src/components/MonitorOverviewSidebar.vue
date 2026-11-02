@@ -10,7 +10,7 @@
 
     <div v-else class="monitor-body">
       <!-- System info -->
-      <div class="card">
+      <div v-if="sec('basic')" class="card">
         <div class="sys-row">
           <span class="sys-label">{{ t('companion.host') }}</span>
           <span class="sys-value" :title="hostText">{{ hostText }}</span>
@@ -30,7 +30,7 @@
       </div>
 
       <!-- CPU -->
-      <div class="card">
+      <div v-if="sec('cpu')" class="card">
         <div class="mem-row">
           <div class="mem-head">
             <span>{{ t('monitor.cpu') }}</span>
@@ -49,7 +49,7 @@
           <span class="load-val">{{ cpu.load15 }}</span>
         </div>
 
-        <div class="expand-toggle" @click="showCores = !showCores">
+        <div v-if="sec('allCpu')" class="expand-toggle" @click="showCores = !showCores">
           <ChevronRight :size="'0.75rem'" class="chev" :class="{ open: showCores }" />
           <span>{{ t('monitor.allCores') }} ({{ cpus.length }})</span>
         </div>
@@ -63,7 +63,7 @@
       </div>
 
       <!-- Memory -->
-      <div class="card">
+      <div v-if="sec('memory')" class="card">
         <div class="mem-row">
           <div class="mem-head">
             <span>{{ t('companion.physMem') }}</span>
@@ -81,8 +81,8 @@
       </div>
 
       <!-- Network -->
-      <div class="card">
-        <div class="net-stats">
+      <div v-if="sec('network')" class="card">
+        <div v-if="sec('network')" class="net-stats">
           <div class="net-stat">
             <span class="net-label">{{ t('companion.netTxRate') }}</span>
             <span class="net-num tx">{{ formatBytes(net.tx) }}/s</span>
@@ -93,7 +93,7 @@
           </div>
         </div>
 
-        <div class="expand-toggle" @click="showNets = !showNets">
+        <div v-if="sec('allNet')" class="expand-toggle" @click="showNets = !showNets">
           <ChevronRight :size="'0.75rem'" class="chev" :class="{ open: showNets }" />
           <span>{{ t('monitor.allNetworks') }} ({{ nets.length }})</span>
         </div>
@@ -107,7 +107,7 @@
       </div>
 
       <!-- Disk -->
-      <div class="card">
+      <div v-if="sec('disk')" class="card">
         <div class="mem-row">
           <div class="mem-head">
             <span>{{ t('monitor.disk') }}</span>
@@ -116,7 +116,7 @@
           <div class="mem-bar"><div class="mem-fill disk" :style="{ width: fmtWidth(disk.usage) }" /></div>
         </div>
 
-        <div class="expand-toggle" @click="toggleDisks">
+        <div v-if="sec('allDisk')" class="expand-toggle" @click="toggleDisks">
           <ChevronRight :size="'0.75rem'" class="chev" :class="{ open: showDisks }" />
           <span>{{ t('monitor.allDisks') }} ({{ mountedDisks.length }})</span>
         </div>
@@ -131,7 +131,7 @@
       </div>
 
       <!-- Host clock -->
-      <div class="card">
+      <div v-if="sec('clock')" class="card">
         <div class="sys-row">
           <span class="sys-label">{{ t('monitor.timezone') }}</span>
           <span class="sys-value" :title="systemInfo?.timezone || '-'">{{ systemInfo?.timezone || '-' }}</span>
@@ -145,25 +145,28 @@
           <span class="sys-value">{{ clockSkewText }}</span>
         </div>
       </div>
-
-      <!-- Open full monitor (pinned at the bottom) -->
-      <button class="full-monitor-btn" @click="openFullMonitor">
-        <ExternalLink :size="'0.875rem'" />
-        <span>{{ t('companion.openFullMonitor') }}</span>
-      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { ExternalLink, ChevronRight } from '@lucide/vue'
+import { ChevronRight } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { useCompanionStore } from '../stores/companionStore'
 import { usePanelStore } from '../stores/panelStore'
+import { useSettingsStore } from '../stores/settingsStore'
+import { monitorSectionEnabled } from '../types/settings'
 import { Events } from '@wailsio/runtime'
 import { SetMonitorActiveTab, SetMonitorPaused, GetDisks } from '../../bindings/github.com/ys-ll/uniterm/app'
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
+
+// Monitor display sections (panel more menu): disabled cards are hidden and
+// their data is neither requested nor pushed by the monitor session.
+function sec(key: string): boolean {
+  return monitorSectionEnabled(settingsStore.settings.monitorSections, key)
+}
 const companionStore = useCompanionStore()
 const panelStore = usePanelStore()
 
@@ -305,18 +308,11 @@ async function ensureConnected() {
   }
 }
 
-function openFullMonitor() {
-  const pid = companionStore.activeSshPanelId
-  const panel = pid ? panelStore.getPanel(pid) : null
-  if (!panel?.config) return
-  // sourceTabId anchors the new monitor tab beside the owning terminal tab
-  window.dispatchEvent(new CustomEvent('app:connect-monitor', { detail: { ...panel, sourceTabId: panel.tabId } }))
-}
-
 let diskRetryTimer: ReturnType<typeof setTimeout> | null = null
 let diskRetries = 0
 
 async function loadDisks() {
+  if (!sec('allDisk')) return
   if (disks.value.length > 0) return
   const sid = sessionId.value
   if (!sid) return
@@ -469,7 +465,7 @@ watch(sessionId, (sid) => {
   if (!sid) return
   bindListeners()
   SetMonitorActiveTab(sid, 'overview').catch(() => {})
-})
+}, { immediate: true })
 
 // Persist the current values per SSH panel so a later switch-back can restore them.
 watch(
@@ -564,10 +560,19 @@ onUnmounted(() => {
   flex: 1;
   overflow: auto;
   display: flex;
-  flex-direction: column;
+  flex-flow: row wrap;
+  align-content: flex-start;
   gap: 0.625rem;
   padding: 0.625rem;
   min-height: 0;
+}
+
+/* Wide sidebars tile the cards horizontally (wrapping); narrow ones fall
+   back to a single column because each card grows into the full width. */
+.monitor-body > .card {
+  flex: 1 1 16rem;
+  min-width: 13rem;
+  align-self: flex-start;
 }
 
 .full-monitor-btn {

@@ -41,6 +41,11 @@ interface LocalState {
   // Open-tabs snapshot for "reopen last session's tabs". Opaque shape
   // (types/tabSnapshot.ts); local-only, never synced.
   lastTabsSnapshot: SavedTabsSnapshot | null
+  // Bottom panel (docked panel under the tab area) visibility/height.
+  // Local-only UI state, never synced. Height is px; 0 means an older
+  // config and keeps the frontend default.
+  bottomPanelVisible: boolean
+  bottomPanelHeight: number
 }
 
 const DEFAULT: LocalState = {
@@ -67,6 +72,8 @@ const DEFAULT: LocalState = {
   sftpDialogDir: '',
   mcp: { ...DEFAULT_MCP_SETTINGS },
   lastTabsSnapshot: null,
+  bottomPanelVisible: true,
+  bottomPanelHeight: 220,
 } as LocalState
 
 export const useLocalStateStore = defineStore('localState', () => {

@@ -21,7 +21,7 @@
     </div>
 
     <!-- Command list -->
-    <div class="qc-list" ref="listRef" tabindex="0" @keydown="onListKeydown">
+    <div class="qc-list" :class="{ 'qc-buttons': isButtonMode }" ref="listRef" tabindex="0" @keydown="onListKeydown">
       <template v-for="group in store.groups" :key="group.id">
         <div
           class="qc-group-header"
@@ -44,8 +44,9 @@
           <div
             v-for="cmd in store.getCommandsByGroup(group.id).filter(matchesSearch)"
             :key="cmd.id"
-            class="qc-item indented"
-            :class="{ active: selectedId === cmd.id }"
+            class="qc-item"
+            :class="[{ active: selectedId === cmd.id, 'qc-chip': isButtonMode, indented: !isButtonMode }]"
+            :title="isButtonMode ? cmd.command : undefined"
             draggable="true"
             @dragstart="onCommandDragStart($event, cmd)"
             @click="selectCommand(cmd.id)"
@@ -54,6 +55,7 @@
             @mouseenter="hoveredId = cmd.id"
             @mouseleave="hoveredId = null"
           >
+            <template v-if="!isButtonMode">
             <div class="qc-item-content">
               <div v-if="cmd.name" class="qc-item-name">{{ cmd.name }}</div>
               <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
@@ -69,6 +71,8 @@
                 <Copy :size="'1rem'" />
               </button>
             </div>
+            </template>
+            <span v-else class="qc-chip-label">{{ cmd.name || cmd.command }}</span>
           </div>
         </template>
       </template>
@@ -79,7 +83,8 @@
           v-for="cmd in store.getCommandsByGroup(undefined).filter(matchesSearch)"
           :key="cmd.id"
           class="qc-item"
-          :class="{ active: selectedId === cmd.id }"
+          :class="[{ active: selectedId === cmd.id, 'qc-chip': isButtonMode }]"
+          :title="isButtonMode ? cmd.command : undefined"
           draggable="true"
           @dragstart="onCommandDragStart($event, cmd)"
           @click="selectCommand(cmd.id)"
@@ -88,6 +93,7 @@
           @mouseenter="hoveredId = cmd.id"
           @mouseleave="hoveredId = null"
         >
+          <template v-if="!isButtonMode">
           <div class="qc-item-content">
             <div v-if="cmd.name" class="qc-item-name">{{ cmd.name }}</div>
             <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
@@ -103,6 +109,8 @@
               <Copy :size="'1rem'" />
             </button>
           </div>
+          </template>
+          <span v-else class="qc-chip-label">{{ cmd.name || cmd.command }}</span>
         </div>
       </template>
 
@@ -126,8 +134,9 @@
           <div
             v-for="cmd in store.getCommandsByGroup(undefined).filter(matchesSearch)"
             :key="cmd.id"
-            class="qc-item indented"
-            :class="{ active: selectedId === cmd.id }"
+            class="qc-item"
+            :class="[{ active: selectedId === cmd.id, 'qc-chip': isButtonMode }]"
+            :title="isButtonMode ? cmd.command : undefined"
             draggable="true"
             @dragstart="onCommandDragStart($event, cmd)"
             @click="selectCommand(cmd.id)"
@@ -136,6 +145,7 @@
             @mouseenter="hoveredId = cmd.id"
             @mouseleave="hoveredId = null"
           >
+            <template v-if="!isButtonMode">
             <div class="qc-item-content">
               <div v-if="cmd.name" class="qc-item-name">{{ cmd.name }}</div>
               <div class="qc-item-cmd" :class="{ 'qc-item-cmd-only': !cmd.name }">{{ cmd.command }}</div>
@@ -151,6 +161,8 @@
                 <Copy :size="'1rem'" />
               </button>
             </div>
+            </template>
+            <span v-else class="qc-chip-label">{{ cmd.name || cmd.command }}</span>
           </div>
         </template>
       </template>
@@ -222,7 +234,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import {
   Plus, Play, Clipboard, Copy,
   ChevronDown, ChevronRight
@@ -243,7 +255,12 @@ import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
 
+import { useSettingsStore } from '../stores/settingsStore'
+
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
+
+const isButtonMode = computed(() => settingsStore.settings.quickCommandsDisplayMode === 'buttons')
 const store = useQuickCommandStore()
 const localState = useLocalStateStore()
 const tabStore = useTabStore()
@@ -600,8 +617,8 @@ watch(searchQuery, (q) => {
 }
 
 .qc-icon-btn {
-  width: 1.875rem;
-  height: 1.875rem;
+  width: 1.625rem;
+  height: 1.625rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -736,5 +753,44 @@ watch(searchQuery, (q) => {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+/* ── Buttons display style (panel more menu): name-only chips tiled
+   horizontally, command text as tooltip ── */
+.qc-list.qc-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.qc-list.qc-buttons .qc-group-header {
+  flex-basis: 100%;
+  /* Group headers keep their list-mode height: the wrap container's row
+     gap must not add extra headroom above/below them. */
+  margin: 0;
+  padding-top: 0.375rem;
+  padding-bottom: 0.125rem;
+}
+
+.qc-list.qc-buttons .qc-item.qc-chip {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  max-width: 12rem;
+  margin: 0;
+  padding: 0.125rem 0.5rem;
+  cursor: pointer;
+}
+
+.qc-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
 }
 </style>

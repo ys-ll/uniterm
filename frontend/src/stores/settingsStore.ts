@@ -458,6 +458,12 @@ function mergeSettings(loaded: AppSettings): AppSettings {
     tabCloseButton: loaded.tabCloseButton || DEFAULT_SETTINGS.tabCloseButton,
     showTabShortcutHints: loaded.showTabShortcutHints ?? DEFAULT_SETTINGS.showTabShortcutHints,
     hostListMenuStyle: loaded.hostListMenuStyle || DEFAULT_SETTINGS.hostListMenuStyle,
+    connectionsDisplayMode: loaded.connectionsDisplayMode === 'compact' ? 'compact' : 'full',
+    quickCommandsDisplayMode: loaded.quickCommandsDisplayMode === 'buttons' ? 'buttons' : 'list',
+    monitorSections: {
+      ...DEFAULT_SETTINGS.monitorSections,
+      ...(loaded.monitorSections || {})
+    },
     newTabAction: loaded.newTabAction || DEFAULT_SETTINGS.newTabAction,
     // Per-key merge so a settings.json written before a view existed (or
     // with a key dropped) still gets the default for that view.
@@ -465,6 +471,16 @@ function mergeSettings(loaded: AppSettings): AppSettings {
       ...DEFAULT_SETTINGS.sidebarTabs,
       ...(loaded.sidebarTabs || {})
     },
+    // Dock layout: per-key merge like sidebarTabs; the tab order is
+    // validated against known view ids and backfilled with any missing
+    // views (orderedViews computes the append at read time).
+    panelLocations: {
+      ...DEFAULT_SETTINGS.panelLocations,
+      ...(loaded.panelLocations || {})
+    },
+    panelOrder: (loaded.panelOrder || []).filter(v =>
+      Object.keys(DEFAULT_SETTINGS.panelLocations).includes(v)
+    ),
     // Per-key visible merge; the order is validated against the known block
     // ids and backfilled with any missing blocks (older settings.json files
     // or hand-edited ones).

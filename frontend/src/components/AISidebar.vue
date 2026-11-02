@@ -1984,7 +1984,8 @@ defineExpose({ focusInput })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  /* Horizontal padding matches the sidebar's toolbar rows. */
+  padding: 0.75rem 0.625rem;
   font-size: 0.75rem;
   font-family: var(--font-ui);
   font-weight: 600;
@@ -2312,7 +2313,8 @@ defineExpose({ focusInput })
   display: none;
 }
 .ai-editable {
-  padding: 0.75rem 1rem;
+  /* Horizontal padding matches the sidebar's toolbar rows. */
+  padding: 0.75rem 0.625rem;
   font-size: 0.75rem;
   font-family: var(--font-ui);
   color: var(--text-primary);

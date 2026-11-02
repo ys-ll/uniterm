@@ -385,4 +385,12 @@ watch(() => props.visible, (v) => {
   color: var(--accent);
   font-weight: 500;
 }
+/* Iconic rows inside a submenu flyout need the same flex+gap as the main
+   menu's (.conn-context-menu .menu-item.iconic) — without it the leading
+   icon hugs the label with baseline misalignment. */
+.menu-submenu .menu-item.iconic {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
 </style>

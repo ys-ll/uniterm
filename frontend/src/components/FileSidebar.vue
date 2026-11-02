@@ -232,6 +232,10 @@ async function ensureConnected() {
   connectError.value = ''
   try {
     await companionStore.ensureSftp(pid)
+    // The session may already have been alive when this view mounted — the
+    // sessionId watch only fires on changes, so pull the listing here when
+    // it is still empty.
+    if (sessionId.value && files.value.length === 0) await onRefresh()
   } catch (e: any) {
     connectError.value = e?.toString?.() || t('companion.listFailed')
   } finally {
@@ -524,6 +528,9 @@ function restoreCache(): boolean {
   return true
 }
 
+// immediate: covers mounting AFTER the session already exists (e.g. the
+// panel was docked elsewhere when its SSH connection opened) — without it
+// the watch only fires on changes and a first mount would stay empty.
 watch(sessionId, async (sid) => {
   // Re-entering an already-visited tab: restore its cached listing instead of
   // re-fetching it, so switching back shows the previous content instantly.
@@ -543,7 +550,7 @@ watch(sessionId, async (sid) => {
   } catch {
     scheduleRefreshRetry()
   }
-})
+}, { immediate: true })
 
 // Persist the current listing per files panel so a later switch-back can restore it.
 watch([files, cwd], () => {
