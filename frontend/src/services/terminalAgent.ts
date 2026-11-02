@@ -293,6 +293,18 @@ interface SendKeyResult {
   output: string
 }
 
+// Close the backend watcher (and with it the per-session busy lock) for the
+// session's tracked job. Killing the foreground process with Ctrl+C prevents
+// the shell acknowledgement from ever printing, so interrupt_command must
+// close the watcher explicitly or the session stays locked until the job TTL.
+export async function interruptJob(panelTitle?: string): Promise<void> {
+  const { sessionId } = resolveActiveSession(panelTitle)
+  const cursor = foregroundCursors.get(sessionId)
+  if (cursor) {
+    await InterruptForeground(cursor.jobId, 'SIGINT').catch(() => {})
+  }
+}
+
 export async function sendTerminalKey(
   input?: string,
   control?: 'ctrl_c' | 'ctrl_d' | 'enter',

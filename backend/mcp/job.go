@@ -194,9 +194,9 @@ func (r *Registry) start(pty Pty, sessionID, command, newline string, hardLimit 
 	}
 	wireCommand := command
 	if shell, ok := pty.(interface{ ForegroundShell() string }); ok && !observe {
-		if wrapped, supported := CompletionCommand(command, shell.ForegroundShell(), job.ID); supported {
+		if wrapped, scanner, supported := CompletionCommand(command, shell.ForegroundShell(), job.ID, newline); supported {
 			wireCommand = wrapped
-			job.completion = &completionScanner{prefix: []byte("__UT_" + job.ID + ";")}
+			job.completion = scanner
 		}
 	}
 	if cols > 0 && rows > 0 {
