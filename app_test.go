@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/ys-ll/uniterm/backend/credentials"
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/store"
@@ -597,5 +598,65 @@ func TestResolveTrayLanguage(t *testing.T) {
 	}
 	if _, ok := trayLabels[resolveTrayLanguage("system")]; !ok {
 		t.Errorf("resolveTrayLanguage(%q) = %q, want a trayLabels key", "system", resolveTrayLanguage("system"))
+	}
+}
+
+// TestWindowGeometryVisible_Offscreen: a rect saved on a monitor that is no
+// longer attached must be rejected so startup falls back to centered instead
+// of restoring the window somewhere invisible (issue #1335).
+func TestWindowGeometryVisible_Offscreen(t *testing.T) {
+	screens := []*application.Screen{
+		{WorkArea: application.Rect{X: 0, Y: 0, Width: 1920, Height: 1080}},
+	}
+	if windowGeometryVisible(2200, 100, 1200, 800, screens) {
+		t.Error("rect entirely right of the only screen reported visible")
+	}
+	if windowGeometryVisible(100, 100, 0, 800, screens) {
+		t.Error("zero-width rect reported visible")
+	}
+}
+
+// TestWindowGeometryVisible_OnScreen: a saved position on an attached screen
+// keeps its exact coordinates.
+func TestWindowGeometryVisible_OnScreen(t *testing.T) {
+	screens := []*application.Screen{
+		{WorkArea: application.Rect{X: 0, Y: 0, Width: 1920, Height: 1080}},
+	}
+	if !windowGeometryVisible(300, 200, 1200, 800, screens) {
+		t.Error("rect inside the only screen reported invisible")
+	}
+}
+
+// TestWindowGeometryVisible_NegativeCoordinates: monitors left of or above the
+// primary have negative work-area coordinates; a visible rect there is valid.
+func TestWindowGeometryVisible_NegativeCoordinates(t *testing.T) {
+	screens := []*application.Screen{
+		{WorkArea: application.Rect{X: -1920, Y: 0, Width: 1920, Height: 1080}},
+	}
+	if !windowGeometryVisible(-1600, 100, 1200, 800, screens) {
+		t.Error("rect on a monitor left of the primary reported invisible")
+	}
+}
+
+// TestWindowGeometryVisible_PartialOverlap: a window poking onto a screen by at
+// least the 100x50 grab area stays; a thinner sliver is rejected.
+func TestWindowGeometryVisible_PartialOverlap(t *testing.T) {
+	screens := []*application.Screen{
+		{WorkArea: application.Rect{X: 0, Y: 0, Width: 1920, Height: 1080}},
+	}
+	if !windowGeometryVisible(1820, 1030, 1200, 800, screens) {
+		t.Error("rect overlapping the screen by exactly 100x50 reported invisible")
+	}
+	if windowGeometryVisible(1821, 1030, 1200, 800, screens) {
+		t.Error("rect overlapping the screen by only 99x50 reported visible")
+	}
+}
+
+// TestWindowGeometryVisible_NoScreens: platforms that enumerate no screens
+// (headless/server) keep the old behavior — accept the saved rect, never
+// strand the window.
+func TestWindowGeometryVisible_NoScreens(t *testing.T) {
+	if !windowGeometryVisible(5000, 5000, 1200, 800, nil) {
+		t.Error("nil screen list reported invisible; want old behavior preserved")
 	}
 }
