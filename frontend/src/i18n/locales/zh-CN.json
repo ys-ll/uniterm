@@ -522,6 +522,7 @@
   "settings.rightClick": "右键功能",
   "settings.rightClickMenu": "弹出右键菜单",
   "settings.rightClickPaste": "粘贴剪贴板中内容",
+  "settings.rightClickCopyOrPaste": "复制选中内容，无选中则粘贴",
   "settings.maxHistory": "最大历史行数",
   "settings.themeDesc": "选择界面主题风格",
   "settings.languageDesc": "切换界面显示语言",

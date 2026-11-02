@@ -498,6 +498,7 @@
   "settings.rightClick": "Действие правой кнопки",
   "settings.rightClickMenu": "Показать контекстное меню",
   "settings.rightClickPaste": "Вставить из буфера обмена",
+  "settings.rightClickCopyOrPaste": "Копировать выделение, иначе вставить",
   "settings.maxHistory": "Макс. строк истории",
   "settings.themeDesc": "Выберите тему интерфейса",
   "settings.languageDesc": "Переключить язык интерфейса",

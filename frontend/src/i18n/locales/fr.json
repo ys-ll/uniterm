@@ -498,6 +498,7 @@
   "settings.rightClick": "Action du clic droit",
   "settings.rightClickMenu": "Afficher le menu contextuel",
   "settings.rightClickPaste": "Coller le presse-papiers",
+  "settings.rightClickCopyOrPaste": "Copier la sélection, sinon coller",
   "settings.maxHistory": "Lignes d'historique max",
   "settings.themeDesc": "Choisir le thème de l'interface",
   "settings.languageDesc": "Changer la langue d'affichage",
