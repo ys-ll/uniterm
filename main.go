@@ -262,14 +262,11 @@ func main() {
 		},
 	})
 
-	// Restore a saved position only when one exists and still lands on an
-	// attached screen; a window saved on a since-disconnected monitor is
-	// centered instead of restored out of reach (issue #1335).
+	// Restore a saved position only when one actually exists; otherwise keep v3's
+	// default (centered) so a fresh install doesn't land at (0,0).
 	startPos := application.WindowCentered
-	if (savedX != 0 || savedY != 0) && windowGeometryVisible(savedX, savedY, winW, winH, w3app.Screen.GetAll()) {
+	if savedX != 0 || savedY != 0 {
 		startPos = application.WindowXY
-	} else {
-		savedX, savedY = 0, 0
 	}
 	startState := application.WindowStateNormal
 	if savedMaxed {
@@ -324,6 +321,24 @@ func main() {
 		// window-global and could swallow F12 from TUI apps.)
 		OpenInspectorOnStartup: true,
 	}))
+
+	// The screen list is empty until Run() populates it (see #1335), so the
+	// saved rect can only be validated here, on first show: a window restored
+	// on a since-disconnected monitor is moved back onto the primary instead of
+	// staying out of reach.
+	window.OnWindowEvent(events.Common.WindowShow, func(*application.WindowEvent) {
+		x, y := window.Position()
+		w, h := window.Size()
+		if windowGeometryVisible(x, y, w, h, w3app.Screen.GetAll()) {
+			return
+		}
+		if screen := w3app.Screen.GetPrimary(); screen != nil {
+			wa := screen.WorkArea
+			window.SetPosition(wa.X+(wa.Width-w)/2, wa.Y+(wa.Height-h)/2)
+		} else {
+			window.Center()
+		}
+	})
 
 	// Win11 rounded corners: Wails only extends the DWM frame from its
 	// WM_ACTIVATE handler, whose first firing (inside CreateWindowEx, before
