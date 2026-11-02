@@ -2239,5 +2239,12 @@
   "batch.statusCancelled": "Cancelled",
   "batch.statusSkipped": "Skipped",
   "batch.outputTruncated": "Output too large — only the last part is kept.",
-  "batch.selectAll": "Select All"
+  "batch.selectAll": "Select All",
+  "sidebar.locSidebar": "Left sidebar",
+  "sidebar.locBottom": "Bottom panel",
+  "sidebar.bottomPanelEmpty": "Choose panels to show here",
+  "sidebar.moveTo": "Move to",
+  "sidebar.sidebarEmpty": "Choose panels to show here",
+  "sidebar.more": "More",
+  "sidebar.hidePanel": "Hide panel"
 }

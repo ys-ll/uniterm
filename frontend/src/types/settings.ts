@@ -340,6 +340,12 @@ export interface AppSettings {
   // Which connection-sidebar tab icons are visible, keyed by view id.
   // Missing keys fall back to SIDEBAR_TAB_DEFAULTS.
   sidebarTabs: Record<string, boolean>
+  // Dock position per sidebar view ("sidebar" | "bottom"). Missing keys
+  // fall back to PANEL_LOCATION_DEFAULTS. Layout companion of sidebarTabs.
+  panelLocations: Record<string, 'sidebar' | 'bottom'>
+  // Global tab order across both docks (view ids); views absent from the
+  // list append in SIDEBAR_TAB_ORDER order.
+  panelOrder: string[]
   // Which blocks the new-tab start page shows and in what order. See the
   // persistence-contract note on TerminalSettings: this field MUST also
   // exist in the Go AppSettings (backend/store/settings_store.go).
@@ -370,6 +376,21 @@ export const SIDEBAR_TAB_ORDER: { key: string; labelKey: string }[] = [
   { key: 'history', labelKey: 'quickCommands.historyTab' },
   { key: 'personalization', labelKey: 'sidebar.personalization' },
 ]
+
+// Default dock position per sidebar view: "sidebar" (left) or "bottom"
+// (docked panel under the tab area). Views absent from a saved
+// PanelLocations map fall back to these. Everything ships docked to the
+// left sidebar by default; the bottom panel starts empty and is only used
+// when the user moves views into it.
+export const PANEL_LOCATION_DEFAULTS: Record<string, 'sidebar' | 'bottom'> = {
+  connections: 'sidebar',
+  files: 'sidebar',
+  monitor: 'sidebar',
+  personalization: 'sidebar',
+  tunnels: 'sidebar',
+  quickCommands: 'sidebar',
+  history: 'sidebar',
+}
 
 // Platform UI text baseline: macOS native text runs larger than the
 // Windows 12px design size. Mirrors index.html's pre-paint detection.
@@ -441,6 +462,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hostListMenuStyle: 'button',
   newTabAction: 'startPage',
   sidebarTabs: { ...SIDEBAR_TAB_DEFAULTS },
+  panelLocations: { ...PANEL_LOCATION_DEFAULTS },
+  panelOrder: [],
   startPage: {
     visible: { ...START_PAGE_DEFAULTS.visible },
     order: [...START_PAGE_DEFAULTS.order]

@@ -3,6 +3,7 @@
   <div class="app-container" :class="{ 'has-bg': bgVisible }">
     <div v-if="bgVisible" class="app-bg" :style="bgStyle"></div>
     <AppHeader
+      :sidebar-visible="sidebarVisible"
       @toggle-ai="aiStore.toggle"
       @toggle-sidebar="sidebarVisible = !sidebarVisible"
       @open-settings="openSettings"
@@ -11,11 +12,13 @@
       @close-tab="closeTab"
       @close-tab-batch="closeTabBatch"
       @toggle-ai-lock="onToggleAiLock"
+      @toggle-bottom-panel="onToggleBottomPanel"
       @tab-dragstart="onTabDragStart"
       @new-local-terminal="createNewTab"
     />
     <div class="main-content">
       <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onSidebarConnect" @connect-to-workspace="({ config, workspaceId }: any) => onConnect(config, undefined, undefined, true, workspaceId)" @create-workspace="(configs: any) => onCreateWorkspaceFromConfigs(configs)" @connect-only="onConnectOnly" @open-netscan="openNetscan" />
+      <div class="center-column">
       <div class="tab-area">
         <template v-if="activeTab">
           <KeepAlive>
@@ -124,6 +127,8 @@
           </KeepAlive>
         </template>
       </div>
+      <BottomPanel @select="onBottomPanelSelect" />
+      </div>
       <AISidebar ref="aiSidebarRef" @open-settings="openSettings" />
     </div>
     <ConnectionForm v-model="showConnectionForm" :edit-config="editConfig" :default-group-id="pendingGroupId" @save="onSaveOnly" @connect="(c: ConnectionConfig, ko?: boolean) => { const wasEdit = !!editConfig?.id; editConfig = null; onConnect(c, ko, wasEdit) }" @connect-only="onConnectOnly" @cancel="editConfig = null" />
@@ -204,6 +209,7 @@ import ContainerTabContent from './components/ContainerTabContent.vue'
 import StartTabContent from './components/StartTabContent.vue'
 import ConnectionForm from './components/ConnectionForm.vue'
 import AISidebar from './components/AISidebar.vue'
+import BottomPanel from './components/BottomPanel.vue'
 import SyncConflictDialog from './components/SyncConflictDialog.vue'
 import WorkspaceSaveDialog from './components/WorkspaceSaveDialog.vue'
 import UpdateDialog from './components/UpdateDialog.vue'
@@ -229,6 +235,8 @@ import { useSkillStore } from './stores/skillStore'
 import { useCommandStore } from './stores/commandStore'
 import { useTunnelStore } from './stores/tunnelStore'
 import { useLocalStateStore } from './stores/localStateStore'
+import { useUiLayoutStore } from './stores/uiLayoutStore'
+import type { SidebarView } from './stores/uiLayoutStore'
 import { useContainerStore } from './stores/containerStore'
 import { useSyncStore } from './stores/syncStore'
 import { useCredentialStore } from './stores/credentialStore'
@@ -371,6 +379,7 @@ const aiStore = useAIStore()
 const companionStore = useCompanionStore()
 const settingsStore = useSettingsStore()
 const localStateStore = useLocalStateStore()
+const uiLayout = useUiLayoutStore()
 const containerStore = useContainerStore()
 const syncStore = useSyncStore()
 const tunnelStore = useTunnelStore()
@@ -795,6 +804,8 @@ onMounted(async () => {
 
   // Load local-only state (sidebar visibility, background image, etc.)
   await localStateStore.init()
+  // Panel dock layout (sidebar/bottom locations, bottom panel size)
+  await uiLayout.init()
   await loadBackgroundImage()
   // Mobile always opens with both sidebars closed, regardless of the
   // persisted desktop state — screen space is too tight to restore panels.
@@ -995,8 +1006,6 @@ function createNewTab() {
 // reads the sidebar's real activeView, not the companionStore flags — those
 // only control whether the files/monitor content is loaded and can drift from
 // the view actually shown.
-type SidebarTabView = 'connections' | 'files' | 'monitor'
-
 // Collapse the left sidebar and hand focus back to the current panel's
 // terminal. The files/monitor load flags are left to Sidebar's own view logic.
 function closeSidebar() {
@@ -1005,17 +1014,41 @@ function closeSidebar() {
   if (pid) nextTick(() => focusPanelTerminal(pid))
 }
 
-// Open the left sidebar with its visible tab switched to the given view,
-// exactly like clicking that tab (Sidebar.openTab routes to each tab's own
-// open logic).
-function openSidebarToTab(view: SidebarTabView) {
-  sidebarVisible.value = true
-  nextTick(() => sidebarRef.value?.openTab(view))
+// Toggle a view on whichever dock it currently lives in (left sidebar or
+// bottom panel): not in the foreground → open it there; already in the
+// foreground → collapse its dock and hand focus back to the terminal.
+function sidebarViewShortcut(view: SidebarView, usePanelOpener = false) {
+  const atBottom = uiLayout.panelLocation(view) === 'bottom'
+  const isForeground = atBottom
+    ? uiLayout.bottomPanelVisible && uiLayout.bottomActiveView === view
+    : sidebarVisible.value && sidebarRef.value?.activeView === view
+  if (isForeground) {
+    if (atBottom) uiLayout.setBottomPanelVisible(false)
+    else closeSidebar()
+    return
+  }
+  if (atBottom) {
+    if (!uiLayout.bottomPanelVisible) uiLayout.setBottomPanelVisible(true)
+  } else {
+    sidebarVisible.value = true
+  }
+  nextTick(() => {
+    if (usePanelOpener) sidebarRef.value?.openQuickCommands()
+    else sidebarRef.value?.openTab(view)
+  })
 }
 
-function sidebarViewShortcut(view: SidebarTabView) {
-  if (sidebarVisible.value && sidebarRef.value?.activeView === view) closeSidebar()
-  else openSidebarToTab(view)
+// ── Bottom panel (docked panel under the tab area) ──
+
+function onToggleBottomPanel() {
+  uiLayout.setBottomPanelVisible(!uiLayout.bottomPanelVisible)
+}
+
+// Bottom-panel tab click: route through Sidebar.openTab so files/monitor
+// tabs keep their companion-session open logic; activeView lives in the
+// shared uiLayout store, so both strips highlight the same view.
+function onBottomPanelSelect(view: string) {
+  sidebarRef.value?.openTab(view)
 }
 
 const actionHandlers: Record<ShortcutAction, () => void> = {
@@ -1025,10 +1058,7 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   toggleSidebar: () => sidebarViewShortcut('connections'),
   toggleFilePanel: () => sidebarViewShortcut('files'),
   toggleMonitor: () => sidebarViewShortcut('monitor'),
-  openQuickCommands: () => {
-    sidebarVisible.value = true
-    nextTick(() => sidebarRef.value?.openQuickCommands())
-  },
+  openQuickCommands: () => sidebarViewShortcut('quickCommands', true),
   focusTerminal: () => {
     const pid = tabStore.getActivePanelId()
     if (pid) focusPanelTerminal(pid)
@@ -1886,6 +1916,16 @@ watch(
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-base);
+}
+
+/* Center column between the left sidebar and the AI sidebar: active tab
+   content on top, optional docked bottom panel underneath. */
+.center-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .group-list {

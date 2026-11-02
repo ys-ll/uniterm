@@ -6,7 +6,7 @@
   "settings.summaryModel": "Modelo de resumen",
   "settings.summaryModelDesc": "Usa un modelo configurado por separado para los resúmenes de contexto. Vuelve al modelo de chat actual si se elimina el modelo seleccionado.",
   "settings.summaryModelCurrent": "Usar el modelo de chat actual",
- "header.connections": "Conexiones",
+  "header.connections": "Conexiones",
   "header.newConnection": "Nueva Conexión",
   "header.settings": "Configuración",
   "header.menu": "Menú",
@@ -2218,5 +2218,12 @@
   "batch.statusCancelled": "Cancelado",
   "batch.statusSkipped": "Omitido",
   "batch.outputTruncated": "Salida demasiado grande; solo se conserva la parte final.",
-  "batch.selectAll": "Seleccionar todo"
+  "batch.selectAll": "Seleccionar todo",
+  "sidebar.locSidebar": "Barra lateral izquierda",
+  "sidebar.locBottom": "Panel inferior",
+  "sidebar.bottomPanelEmpty": "Elige los paneles que se mostrarán aquí",
+  "sidebar.moveTo": "Mover a",
+  "sidebar.sidebarEmpty": "Elige los paneles que se mostrarán aquí",
+  "sidebar.more": "Más",
+  "sidebar.hidePanel": "Ocultar panel"
 }

@@ -14,7 +14,7 @@
     ></div>
 
     <!-- Connections button (icon only, leftmost) -->
-    <button class="header-btn" @click="emit('toggle-sidebar')" :title="t('header.connections') + shortcutSuffix('toggleSidebar')">
+    <button class="header-btn" :class="{ active: sidebarVisible }" @click="emit('toggle-sidebar')" :title="t('sidebar.locSidebar') + shortcutSuffix('toggleSidebar')">
       <el-icon><PanelLeft :size="'0.875rem'" /></el-icon>
     </button>
 
@@ -30,8 +30,20 @@
       />
     </div>
 
+    <!-- Bottom panel toggle (left of the AI button); hidden in narrow
+         layout, where the bottom panel's views merge into the sidebar. -->
+    <button
+      v-if="!uiLayout.narrowLayout"
+      class="header-btn"
+      :class="{ active: bottomPanelShown }"
+      @click="emit('toggle-bottom-panel')"
+      :title="t('sidebar.locBottom')"
+    >
+      <el-icon><PanelBottom :size="'0.875rem'" /></el-icon>
+    </button>
+
     <!-- AI button -->
-    <button class="header-btn" @click="emit('toggle-ai')" :title="t('header.ai') + shortcutSuffix('focusAI')">
+    <button class="header-btn" :class="{ active: aiStore.visible }" @click="emit('toggle-ai')" :title="t('header.ai') + shortcutSuffix('focusAI')">
       <el-icon><Bot :size="'0.875rem'" /></el-icon>
     </button>
 
@@ -158,7 +170,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, h } from 'vue'
-import { Menu as MenuIcon, PanelLeft, Bot } from '@lucide/vue'
+import { Menu as MenuIcon, PanelLeft, PanelBottom, Bot } from '@lucide/vue'
 import { ElMessageBox, ElCheckbox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { useTabStore } from '../stores/tabStore'
@@ -166,7 +178,9 @@ import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { formatKeyBinding } from '../composables/useKeyboardShortcuts'
+import { useAIStore } from '../stores/aiStore'
 import { useLocalStateStore } from '../stores/localStateStore'
+import { useUiLayoutStore } from '../stores/uiLayoutStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { LANGUAGE_OPTIONS, TERMINAL_THEMES, FOLLOW_APP_THEME } from '../types/settings'
 import type { AppSettings, ShortcutAction } from '../types/settings'
@@ -315,8 +329,23 @@ const hasActiveConnections = computed(() =>
   })
 )
 
+// Bottom panel button active state — the toggle opens the panel even when
+// it has no tabs (empty panel offers dockable options). Read straight from
+// the layout store (no prop drilling).
+const uiLayout = useUiLayoutStore()
+const bottomPanelShown = computed(() => uiLayout.bottomPanelVisible)
+
+// Sidebar/AI/bottom-panel toggle buttons mirror their panel's open state
+// with the shared .header-btn.active pressed style.
+defineProps<{
+  sidebarVisible?: boolean
+}>()
+
+const aiStore = useAIStore()
+
 const emit = defineEmits<{
   'toggle-ai': []
+  'toggle-bottom-panel': []
   'toggle-sidebar': []
   'open-settings': [category?: string]
   'open-netscan': []
@@ -530,9 +559,10 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
+/* Open-panel state: color the icon only — no pressed background. */
 .header-btn.active {
-  background: var(--bg-active, var(--bg-hover));
-  color: var(--accent, var(--text-primary));
+  background: transparent;
+  color: var(--accent);
 }
 
 .header-btn:disabled {

@@ -244,6 +244,14 @@ type AppSettings struct {
 	// builds (which lack this field) still load; a nil map means "use the
 	// frontend defaults" (everything visible).
 	SidebarTabs map[string]bool `json:"sidebarTabs,omitempty"`
+	// PanelLocations maps sidebar view id (connections/files/monitor/
+	// tunnels/quickCommands/history/personalization) to its dock position:
+	// "sidebar" or "bottom". Nil means "use the frontend defaults"
+	// (PANEL_LOCATION_DEFAULTS).
+	PanelLocations map[string]string `json:"panelLocations,omitempty"`
+	// PanelOrder is the global tab order across both docks (view ids);
+	// views absent from the list append in default order.
+	PanelOrder []string `json:"panelOrder,omitempty"`
 	// StartPage controls which blocks (search/favorites/recent/groups) the
 	// start page shows and in what order. Pointer + omitempty so
 	// settings.json written by older builds (which lack this field) still

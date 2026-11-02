@@ -465,6 +465,16 @@ function mergeSettings(loaded: AppSettings): AppSettings {
       ...DEFAULT_SETTINGS.sidebarTabs,
       ...(loaded.sidebarTabs || {})
     },
+    // Dock layout: per-key merge like sidebarTabs; the tab order is
+    // validated against known view ids and backfilled with any missing
+    // views (orderedViews computes the append at read time).
+    panelLocations: {
+      ...DEFAULT_SETTINGS.panelLocations,
+      ...(loaded.panelLocations || {})
+    },
+    panelOrder: (loaded.panelOrder || []).filter(v =>
+      Object.keys(DEFAULT_SETTINGS.panelLocations).includes(v)
+    ),
     // Per-key visible merge; the order is validated against the known block
     // ids and backfilled with any missing blocks (older settings.json files
     // or hand-edited ones).
