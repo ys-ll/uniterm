@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   loadKeybindings, onGlobalKeydown, matchDigitShortcut, panelDigitShortcutsSuppressed,
   tabDigitShortcutPrefix, panelDigitShortcutPrefix, formatDigitShortcut, formatKeyBinding,
-  digitModifierCollides, isRebinding, setRebinding,
+  digitModifierCollides, isRebinding, setRebinding, isTabRenameShortcut,
 } from './useKeyboardShortcuts'
 import { DEFAULT_KEYBOARD } from '../types/settings'
 import type { KeyboardSettings } from '../types/settings'
@@ -288,5 +288,17 @@ describe('formatKeyBinding — macOS symbol display', () => {
   it('handles a modifier-only binding (empty key) for the digit settings rows', () => {
     expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: '' }, true)).toBe('⌘⇧')
     expect(formatKeyBinding({ ctrl: true, shift: true, alt: false, key: '' }, false)).toBe('Ctrl+Shift+')
+  })
+})
+
+// Issue #1336 (补充说明): F2 starts renaming the active tab.
+describe('useKeyboardShortcuts — F2 tab rename', () => {
+  it('matches bare F2 only', () => {
+    expect(isTabRenameShortcut(fakeKey({ key: 'F2' }))).toBe(true)
+    expect(isTabRenameShortcut(fakeKey({ key: 'F2', shiftKey: true }))).toBe(false)
+    expect(isTabRenameShortcut(fakeKey({ key: 'F2', ctrlKey: true }))).toBe(false)
+    expect(isTabRenameShortcut(fakeKey({ key: 'F2', metaKey: true }))).toBe(false)
+    expect(isTabRenameShortcut(fakeKey({ key: 'F2', altKey: true }))).toBe(false)
+    expect(isTabRenameShortcut(fakeKey({ key: 'F3' }))).toBe(false)
   })
 })

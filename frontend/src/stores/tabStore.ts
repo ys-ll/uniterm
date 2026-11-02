@@ -21,6 +21,9 @@ const tabState = reactive<{
   /** OSC 9;4 progress state per tab (null = no active progress). Fed by the
    * ProgressAddon via terminalManager; rendered as a mini bar in TabItem. */
   tabProgress: Record<string, IProgressState | null>
+  // Tab whose TabItem was asked (F2) to open its rename box; the owning
+  // TabItem clears it once the box closes.
+  renamingTabId: string | null
 }>({
   tabs: [],
   activeTabId: null,
@@ -29,7 +32,8 @@ const tabState = reactive<{
   aiLockedPanelIds: new Set<string>(),
   broadcastPanelIds: new Set<string>(),
   tabNotifications: {},
-  tabProgress: {}
+  tabProgress: {},
+  renamingTabId: null
 })
 
 let idCounter = 0
@@ -51,6 +55,7 @@ export const useTabStore = defineStore('tab', () => {
   const activeTabId = computed(() => tabState.activeTabId)
   const draggingTabId = computed(() => tabState.draggingTabId)
   const draggingPanelId = computed(() => tabState.draggingPanelId)
+  const renamingTabId = computed(() => tabState.renamingTabId)
   const activeTab = computed(() =>
     tabState.tabs.find(t => t.id === tabState.activeTabId) || null
   )
@@ -369,6 +374,15 @@ export const useTabStore = defineStore('tab', () => {
       const panel = panelStore.getPanel(t.panelId)
       if (panel) panelStore.updateTitle(panel.id, name)
     }
+  }
+
+  // F2 (issue #1336): ask one tab's TabItem to open its rename box.
+  function beginTabRename(id: string) {
+    tabState.renamingTabId = id
+  }
+
+  function endTabRename() {
+    tabState.renamingTabId = null
   }
 
   // ── Workspace panel management ──
@@ -862,6 +876,7 @@ export const useTabStore = defineStore('tab', () => {
     activeTabId,
     draggingTabId,
     draggingPanelId,
+    renamingTabId,
     activeTab,
     aiLockedPanelId,
     aiLockedPanelIds,
@@ -881,6 +896,8 @@ export const useTabStore = defineStore('tab', () => {
     getActivePanelId,
     moveTab,
     renameTab,
+    beginTabRename,
+    endTabRename,
     setActivePanel,
     toggleWorkspacePanelMaximize,
     updateWorkspaceLayout,
