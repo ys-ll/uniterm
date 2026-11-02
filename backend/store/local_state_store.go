@@ -90,6 +90,33 @@ func (s *LocalStateStore) Save(state LocalState) error {
 	return err
 }
 
+// Window minimums, mirrored from the window options in main.go. A smaller
+// report comes from a minimised or tearing-down window and would restore an
+// invisible or minuscule window.
+const (
+	MinWindowWidth  = 500
+	MinWindowHeight = 450
+)
+
+// SaveGeometry merges window geometry into the current local state and saves
+// it. Too-small sizes are dropped and reported as success so a quit at an
+// awkward moment never loses the previous geometry.
+func (s *LocalStateStore) SaveGeometry(x, y, width, height int, maximised bool) error {
+	if width < MinWindowWidth || height < MinWindowHeight {
+		return nil
+	}
+	ls, err := s.Load()
+	if err != nil {
+		return err
+	}
+	ls.WindowX = x
+	ls.WindowY = y
+	ls.WindowWidth = width
+	ls.WindowHeight = height
+	ls.WindowMaximised = maximised
+	return s.Save(ls)
+}
+
 func defaultLocalState() LocalState {
 	return LocalState{
 		SidebarVisible:                true,

@@ -636,30 +636,16 @@ func (a *App) saveWindowStateFromRuntime() {
 	if a.win().IsMinimised() {
 		return
 	}
-	ls, err := a.localStateStore.Load()
-	if err != nil {
-		return
-	}
-	ls.WindowX, ls.WindowY = a.window.Position()
-	ls.WindowWidth, ls.WindowHeight = a.window.Size()
-	ls.WindowMaximised = a.window.IsMaximised()
-	_ = a.localStateStore.Save(ls)
+	x, y := a.window.Position()
+	width, height := a.window.Size()
+	_ = a.localStateStore.SaveGeometry(x, y, width, height, a.window.IsMaximised())
 }
 
 func (a *App) SaveWindowState(x, y, width, height int, maximised bool) {
 	if a.localStateStore == nil {
 		return
 	}
-	ls, err := a.localStateStore.Load()
-	if err != nil {
-		return
-	}
-	ls.WindowX = x
-	ls.WindowY = y
-	ls.WindowWidth = width
-	ls.WindowHeight = height
-	ls.WindowMaximised = maximised
-	a.localStateStore.Save(ls)
+	_ = a.localStateStore.SaveGeometry(x, y, width, height, maximised)
 }
 
 // resetWindowGeometry recovers a lost window (tray menu item): shows it,
@@ -837,6 +823,12 @@ func (a *App) watchForeground(ctx context.Context) {
 }
 
 func (a *App) shutdown() {
+	// Persist the geometry on every quit path (tray menu, Cmd+Q, OS close,
+	// relaunch) — the frontend only saves on resize/close inside the app, so
+	// without this the next launch opens at the default size (issue #1279).
+	// Runs before Hide(): Hide() is what makes the teardown invisible.
+	a.saveWindowStateFromRuntime()
+
 	// Hide the window first so the user perceives an instant close — the exact
 	// "disappear" behaviour of the upstream build. Releasing WebView2 below calls
 	// ICoreWebView2Controller::Close(), which gracefully tears down the control's

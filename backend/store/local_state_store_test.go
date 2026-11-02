@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -110,5 +111,81 @@ func TestLocalStateAIPreferencesRoundtrip(t *testing.T) {
 	again, _ := restarted.Load()
 	if again.AI == nil || len(again.AI.ModelPreferences) != 2 {
 		t.Fatal("unrelated local state save discarded AI preferences")
+	}
+}
+
+func TestSaveGeometryPersistsAllFields(t *testing.T) {
+	s := NewLocalStateStore(t.TempDir())
+
+	if err := s.SaveGeometry(120, 80, 1500, 900, true); err != nil {
+		t.Fatalf("save geometry: %v", err)
+	}
+	again, err := s.Load()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if again.WindowX != 120 || again.WindowY != 80 ||
+		again.WindowWidth != 1500 || again.WindowHeight != 900 || !again.WindowMaximised {
+		t.Fatalf("geometry roundtrip mismatch: x=%d y=%d w=%d h=%d max=%t",
+			again.WindowX, again.WindowY, again.WindowWidth, again.WindowHeight, again.WindowMaximised)
+	}
+}
+
+func TestSaveGeometryKeepsOtherLocalState(t *testing.T) {
+	s := NewLocalStateStore(t.TempDir())
+
+	state, err := s.Load()
+	if err != nil {
+		t.Fatalf("initial load: %v", err)
+	}
+	state.SidebarWidth = 321
+	state.LastTabsSnapshot = json.RawMessage(`{"tabs":[1]}`)
+	if err := s.Save(state); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if err := s.SaveGeometry(10, 20, 1300, 850, false); err != nil {
+		t.Fatalf("save geometry: %v", err)
+	}
+	again, err := s.Load()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if again.SidebarWidth != 321 {
+		t.Fatalf("geometry save clobbered sidebar width: got %d", again.SidebarWidth)
+	}
+	var tabs struct{ Tabs []int }
+	if err := json.Unmarshal(again.LastTabsSnapshot, &tabs); err != nil || len(tabs.Tabs) != 1 || tabs.Tabs[0] != 1 {
+		t.Fatalf("geometry save clobbered tabs snapshot: got %s (%v)", again.LastTabsSnapshot, err)
+	}
+	if again.WindowX != 10 || again.WindowWidth != 1300 {
+		t.Fatalf("geometry not saved: x=%d w=%d", again.WindowX, again.WindowWidth)
+	}
+}
+
+func TestSaveGeometryIgnoresTinySize(t *testing.T) {
+	s := NewLocalStateStore(t.TempDir())
+
+	if err := s.SaveGeometry(50, 60, 1200, 800, false); err != nil {
+		t.Fatalf("save geometry: %v", err)
+	}
+	// A minimised/tearing-down window reports the off-screen position and the
+	// taskbar thumbnail size; persisting it restores an invisible window.
+	if err := s.SaveGeometry(-32000, -32000, 160, 28, false); err != nil {
+		t.Fatalf("save tiny geometry: %v", err)
+	}
+	// Degenerate zero-size report must be skipped as well.
+	if err := s.SaveGeometry(0, 0, 0, 0, false); err != nil {
+		t.Fatalf("save zero geometry: %v", err)
+	}
+
+	again, err := s.Load()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if again.WindowX != 50 || again.WindowY != 60 ||
+		again.WindowWidth != 1200 || again.WindowHeight != 800 {
+		t.Fatalf("tiny geometry was persisted: x=%d y=%d w=%d h=%d",
+			again.WindowX, again.WindowY, again.WindowWidth, again.WindowHeight)
 	}
 }
