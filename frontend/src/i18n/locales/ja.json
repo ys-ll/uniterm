@@ -2225,5 +2225,20 @@
   "sidebar.moveTo": "移動先",
   "sidebar.sidebarEmpty": "ここに表示するパネルを選択",
   "sidebar.more": "その他",
-  "sidebar.hidePanel": "パネルを非表示"
+  "sidebar.hidePanel": "パネルを非表示",
+  "sidebar.displayMode": "表示スタイル",
+  "sidebar.displayModeFull": "通常",
+  "sidebar.displayModeCompact": "コンパクト",
+  "sidebar.displayStyleList": "リスト",
+  "sidebar.displayStyleButtons": "ボタン",
+  "monitor.sectionConfig": "表示項目",
+  "monitor.secBasic": "基本",
+  "monitor.secCpu": "CPU",
+  "monitor.secAllCpu": "全CPUコア",
+  "monitor.secMemory": "メモリ",
+  "monitor.secDisk": "ディスク",
+  "monitor.secAllDisk": "全ディスク",
+  "monitor.secNetwork": "ネットワーク",
+  "monitor.secAllNet": "全NIC",
+  "monitor.secClock": "タイムゾーン"
 }

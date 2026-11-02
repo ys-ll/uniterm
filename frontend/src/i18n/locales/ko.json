@@ -2225,5 +2225,20 @@
   "sidebar.moveTo": "이동",
   "sidebar.sidebarEmpty": "여기에 표시할 패널 선택",
   "sidebar.more": "더보기",
-  "sidebar.hidePanel": "패널 숨기기"
+  "sidebar.hidePanel": "패널 숨기기",
+  "sidebar.displayMode": "표시 스타일",
+  "sidebar.displayModeFull": "전체",
+  "sidebar.displayModeCompact": "컴팩트",
+  "sidebar.displayStyleList": "목록",
+  "sidebar.displayStyleButtons": "버튼",
+  "monitor.sectionConfig": "표시 항목",
+  "monitor.secBasic": "기본",
+  "monitor.secCpu": "CPU",
+  "monitor.secAllCpu": "전체 CPU 코어",
+  "monitor.secMemory": "메모리",
+  "monitor.secDisk": "디스크",
+  "monitor.secAllDisk": "전체 디스크",
+  "monitor.secNetwork": "네트워크",
+  "monitor.secAllNet": "전체 NIC",
+  "monitor.secClock": "시간대"
 }

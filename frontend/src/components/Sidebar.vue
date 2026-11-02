@@ -90,7 +90,7 @@
         </Menu>
       </div>
 
-    <div class="connection-list" tabindex="0" @keydown="onListKeydown" @contextmenu.prevent="onEmptyAreaContextMenu">
+    <div class="connection-list" :class="{ compact: settingsStore.settings.connectionsDisplayMode === 'compact' }" tabindex="0" @keydown="onListKeydown" @contextmenu.prevent="onEmptyAreaContextMenu">
       <!-- Virtual favorites group — persisted in favorites.json, rendered above all groups -->
       <template v-if="favoriteConns.length > 0">
         <div class="group-header" @click="favoritesExpanded = !favoritesExpanded" @contextmenu.prevent>
@@ -473,7 +473,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide } from 'vue'
 import { storeToRefs } from 'pinia'
-import { X, ChevronRight, ChevronDown, Filter, Network, Zap, Clock, Plus, Palette, SquareTerminal, Activity, Pencil, MoreHorizontal, FolderTree, ArrowRightLeft, Star } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Activity, Pencil, MoreHorizontal, FolderTree, ArrowRightLeft, Star } from '@lucide/vue'
 import { getShellLabel as getShellLabelBase } from '../utils/shellLabel'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useFavoriteStore } from '../stores/favoriteStore'
@@ -496,9 +496,9 @@ import GroupTreeItem from './GroupTreeItem.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import PanelStripMenu from './PanelStripMenu.vue'
+import MenuDivider from './MenuDivider.vue'
 import DockHost from './DockHost.vue'
 import PanelTitleBar from './PanelTitleBar.vue'
-import MenuDivider from './MenuDivider.vue'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 import { parseQuickConnect, formatConnSubtitle, matchTypeFilter } from '../utils/quickConnect'
 import ConnectionContextMenu from './ConnectionContextMenu.vue'
@@ -649,6 +649,7 @@ function sidebarTabLabelKey(key: string): string {
   const entry = SIDEBAR_TAB_ORDER.find(tab => tab.key === key)
   return entry ? entry.labelKey : key
 }
+
 
 const SIDEBAR_TAB_ICONS: Record<string, any> = {
   connections: Network,
@@ -1887,8 +1888,10 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   display: flex;
   align-items: center;
   gap: 0.125rem;
-  /* 下 padding 由各面板顶部工具栏的上 padding 承担，避免间隔叠加 */
-  padding: 0.625rem 0.875rem 0;
+  /* Bottom padding separates the tab strip from the title bar / panel
+     content below (their own rows carry no vertical padding). Horizontal
+     padding matches the panels' toolbars so right-edge buttons align. */
+  padding: 0.625rem 0.625rem 0.5rem;
   flex-shrink: 0;
 }
 
@@ -2038,6 +2041,18 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   overflow-y: auto;
   padding: 0 0.5rem 0.5rem;
   outline: none;
+}
+
+/* Compact display mode (connections panel more menu): single-line rows,
+   no subtitle, tighter vertical padding. :deep() reaches the items
+   rendered by GroupTreeItem. */
+.connection-list.compact :deep(.conn-meta) {
+  display: none;
+}
+
+.connection-list.compact :deep(.connection-item) {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
 }
 
 /* ── Group header ── */

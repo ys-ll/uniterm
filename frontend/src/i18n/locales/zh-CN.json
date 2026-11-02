@@ -2246,5 +2246,20 @@
   "sidebar.moveTo": "移动到",
   "sidebar.sidebarEmpty": "选择在此处展示的面板",
   "sidebar.more": "更多",
-  "sidebar.hidePanel": "隐藏面板"
+  "sidebar.hidePanel": "隐藏面板",
+  "sidebar.displayMode": "展示样式",
+  "sidebar.displayModeFull": "完整",
+  "sidebar.displayModeCompact": "紧缩",
+  "sidebar.displayStyleList": "列表",
+  "sidebar.displayStyleButtons": "按钮",
+  "monitor.sectionConfig": "展示项",
+  "monitor.secBasic": "基础",
+  "monitor.secCpu": "CPU",
+  "monitor.secAllCpu": "全部CPU核心",
+  "monitor.secMemory": "内存",
+  "monitor.secDisk": "磁盘",
+  "monitor.secAllDisk": "全部磁盘",
+  "monitor.secNetwork": "网络",
+  "monitor.secAllNet": "全部网卡",
+  "monitor.secClock": "时区"
 }

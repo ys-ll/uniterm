@@ -2225,5 +2225,20 @@
   "sidebar.moveTo": "Verschieben nach",
   "sidebar.sidebarEmpty": "Hier anzuzeigende Panels auswählen",
   "sidebar.more": "Mehr",
-  "sidebar.hidePanel": "Panel ausblenden"
+  "sidebar.hidePanel": "Panel ausblenden",
+  "sidebar.displayMode": "Anzeigestil",
+  "sidebar.displayModeFull": "Ausführlich",
+  "sidebar.displayModeCompact": "Kompakt",
+  "sidebar.displayStyleList": "Liste",
+  "sidebar.displayStyleButtons": "Schaltflächen",
+  "monitor.sectionConfig": "Anzeigeelemente",
+  "monitor.secBasic": "Basis",
+  "monitor.secCpu": "CPU",
+  "monitor.secAllCpu": "Alle CPU-Kerne",
+  "monitor.secMemory": "Arbeitsspeicher",
+  "monitor.secDisk": "Festplatte",
+  "monitor.secAllDisk": "Alle Festplatten",
+  "monitor.secNetwork": "Netzwerk",
+  "monitor.secAllNet": "Alle Netzwerkkarten",
+  "monitor.secClock": "Zeitzone"
 }

@@ -15,6 +15,9 @@
   </button>
 
   <Menu ref="menuRef" v-model:visible="visible">
+    <!-- Panel-specific items (shared PanelMenuExtras, keyed by view), then
+         the common 移动到 / 隐藏面板 pair that every panel menu shares. -->
+    <PanelMenuExtras :view="view" />
     <MenuSubmenu v-if="!uiLayout.narrowLayout" :label="t('sidebar.moveTo')">
       <MenuItem
         v-for="loc in DOCKS"
@@ -24,7 +27,6 @@
         @click="moveTo(loc)"
       >{{ t(loc === 'sidebar' ? 'sidebar.locSidebar' : 'sidebar.locBottom') }}</MenuItem>
     </MenuSubmenu>
-    <MenuDivider v-if="!uiLayout.narrowLayout" />
     <MenuItem iconic @click="hidePanel">{{ t('sidebar.hidePanel') }}</MenuItem>
   </Menu>
 </template>
@@ -38,7 +40,7 @@ import { SIDEBAR_TAB_ORDER } from '../types/settings'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuSubmenu from './MenuSubmenu.vue'
-import MenuDivider from './MenuDivider.vue'
+import PanelMenuExtras from './PanelMenuExtras.vue'
 
 const props = defineProps<{
   view: string
@@ -62,7 +64,12 @@ const title = computed(() => {
 
 const currentLocation = computed(() => uiLayout.effectiveLocation(props.view))
 
+// Toggle: clicking the more button while its menu is open closes it.
 function openMenu(e: MouseEvent) {
+  if (visible.value) {
+    visible.value = false
+    return
+  }
   const el = (e.currentTarget as HTMLElement).getBoundingClientRect()
   menuRef.value?.openAt(el.left, el.bottom + 4)
 }
@@ -85,9 +92,10 @@ function hidePanel() {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  /* No bottom padding — the panels' own toolbars (search box etc.) carry
-     their top padding, same as the sidebar tab strip. */
-  padding: 0.625rem 0.875rem 0;
+  /* Horizontal padding matches the panels' toolbars (search box etc.) so
+     the more button aligns with their right-edge buttons; no vertical
+     padding — the tab strip sits right above. */
+  padding: 0 0.625rem;
   flex-shrink: 0;
 }
 

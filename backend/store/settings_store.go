@@ -237,6 +237,20 @@ type AppSettings struct {
 	// newConnection shortcut) opens: "startPage" or "localTerminal".
 	// Empty means the frontend falls back to "startPage".
 	NewTabAction string `json:"newTabAction,omitempty"`
+	// ConnectionsDisplayMode selects the connections panel list density:
+	// "full" (each connection shows a subtitle line) or "compact"
+	// (single-line rows). Empty means the frontend falls back to "full".
+	ConnectionsDisplayMode string `json:"connectionsDisplayMode,omitempty"`
+	// QuickCommandsDisplayMode selects the quick-commands panel display
+	// style: "list" (rows with name + command) or "buttons" (name-only
+	// buttons tiled horizontally). Empty means the frontend falls back to
+	// "list".
+	QuickCommandsDisplayMode string `json:"quickCommandsDisplayMode,omitempty"`
+	// MonitorSections toggles which monitor sections are enabled (basic/
+	// cpu/allCpu/memory/disk/allDisk/network). Disabled sections are hidden
+	// in the UI and skipped by the monitor poll loop. Nil means "use the
+	// frontend defaults" (everything enabled).
+	MonitorSections map[string]bool `json:"monitorSections,omitempty"`
 	// SidebarTabs toggles which connection-sidebar tab icons are visible,
 	// keyed by view id (connections/files/monitor/tunnels/quickCommands/
 	// history/personalization). "connections" is always shown in the UI and

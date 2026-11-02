@@ -559,9 +559,15 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-/* Open-panel state: color the icon only — no pressed background. */
+/* Open-panel state: color the icon only — no pressed background. Hover
+   still shows the standard hover surface on top of it. */
 .header-btn.active {
   background: transparent;
+  color: var(--accent);
+}
+
+.header-btn.active:hover {
+  background: var(--bg-hover);
   color: var(--accent);
 }
 

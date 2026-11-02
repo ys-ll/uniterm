@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
-import { CreateSession, CloseSession, ListSessions } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { computed, ref, watch } from 'vue'
+import { CreateSession, CloseSession, ListSessions, SetMonitorSections } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { usePanelStore } from './panelStore'
 import { useSessionStore } from './sessionStore'
 import { useTabStore } from './tabStore'
 import { useConnectionStore } from './connectionStore'
+import { useSettingsStore } from './settingsStore'
 import { fileTransferProto } from '../utils/fileTransferUtils'
 import { unregisterTransferRoute } from '../services/transferTaskCenter'
 import type { ConnectionConfig } from '../types/session'
@@ -66,6 +67,7 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 
   const panelStore = usePanelStore()
+  const settingsStore = useSettingsStore()
   const sessionStore = useSessionStore()
   const tabStore = useTabStore()
 
@@ -264,6 +266,23 @@ export const useCompanionStore = defineStore('companion', () => {
     }
   }
 
+  // Push the enabled monitor sections (settings) to a monitor session so
+  // its poll loop skips the disabled ones (less load on the node).
+  function applyMonitorSections(monitorSessionId: string) {
+    SetMonitorSections(monitorSessionId, { ...settingsStore.settings.monitorSections }).catch(() => {})
+  }
+
+  // Re-push to every live monitor session when the setting changes.
+  watch(
+    () => settingsStore.settings.monitorSections,
+    () => {
+      for (const entry of Object.values(entries.value)) {
+        if (entry.monitorSessionId) applyMonitorSections(entry.monitorSessionId)
+      }
+    },
+    { deep: true },
+  )
+
   async function ensureMonitor(sshPanelId: string): Promise<string | null> {
     const config = resolveConfig(sshPanelId)
     if (!config) return null
@@ -292,6 +311,7 @@ export const useCompanionStore = defineStore('companion', () => {
         [sshPanelId]: { ...entries.value[sshPanelId], monitorSessionId: info.id, creatingMonitor: false },
       }
       sessionStore.initSession(info.id)
+      applyMonitorSections(info.id)
       return info.id
     } catch (e) {
       console.error('companion monitor create failed:', e)

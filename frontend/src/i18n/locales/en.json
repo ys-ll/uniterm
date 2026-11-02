@@ -2246,5 +2246,20 @@
   "sidebar.moveTo": "Move to",
   "sidebar.sidebarEmpty": "Choose panels to show here",
   "sidebar.more": "More",
-  "sidebar.hidePanel": "Hide panel"
+  "sidebar.hidePanel": "Hide panel",
+  "sidebar.displayMode": "Display style",
+  "sidebar.displayModeFull": "Full",
+  "sidebar.displayModeCompact": "Compact",
+  "sidebar.displayStyleList": "List",
+  "sidebar.displayStyleButtons": "Buttons",
+  "monitor.sectionConfig": "Display items",
+  "monitor.secBasic": "Basic",
+  "monitor.secCpu": "CPU",
+  "monitor.secAllCpu": "All CPU cores",
+  "monitor.secMemory": "Memory",
+  "monitor.secDisk": "Disk",
+  "monitor.secAllDisk": "All disks",
+  "monitor.secNetwork": "Network",
+  "monitor.secAllNet": "All NICs",
+  "monitor.secClock": "Timezone"
 }

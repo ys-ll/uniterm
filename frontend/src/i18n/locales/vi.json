@@ -2221,5 +2221,20 @@
   "sidebar.moveTo": "Di chuyển đến",
   "sidebar.sidebarEmpty": "Chọn panel hiển thị ở đây",
   "sidebar.more": "Thêm",
-  "sidebar.hidePanel": "Ẩn panel"
+  "sidebar.hidePanel": "Ẩn panel",
+  "sidebar.displayMode": "Kiểu hiển thị",
+  "sidebar.displayModeFull": "Đầy đủ",
+  "sidebar.displayModeCompact": "Gọn",
+  "sidebar.displayStyleList": "Danh sách",
+  "sidebar.displayStyleButtons": "Nút",
+  "monitor.sectionConfig": "Mục hiển thị",
+  "monitor.secBasic": "Cơ bản",
+  "monitor.secCpu": "CPU",
+  "monitor.secAllCpu": "Tất cả nhân CPU",
+  "monitor.secMemory": "Bộ nhớ",
+  "monitor.secDisk": "Ổ đĩa",
+  "monitor.secAllDisk": "Tất cả ổ đĩa",
+  "monitor.secNetwork": "Mạng",
+  "monitor.secAllNet": "Tất cả card mạng",
+  "monitor.secClock": "Múi giờ"
 }

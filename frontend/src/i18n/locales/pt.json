@@ -2221,5 +2221,20 @@
   "sidebar.moveTo": "Mover para",
   "sidebar.sidebarEmpty": "Escolha os painéis para mostrar aqui",
   "sidebar.more": "Mais",
-  "sidebar.hidePanel": "Ocultar painel"
+  "sidebar.hidePanel": "Ocultar painel",
+  "sidebar.displayMode": "Estilo de exibição",
+  "sidebar.displayModeFull": "Completo",
+  "sidebar.displayModeCompact": "Compacto",
+  "sidebar.displayStyleList": "Lista",
+  "sidebar.displayStyleButtons": "Botões",
+  "monitor.sectionConfig": "Itens exibidos",
+  "monitor.secBasic": "Básico",
+  "monitor.secCpu": "CPU",
+  "monitor.secAllCpu": "Todos os núcleos de CPU",
+  "monitor.secMemory": "Memória",
+  "monitor.secDisk": "Disco",
+  "monitor.secAllDisk": "Todos os discos",
+  "monitor.secNetwork": "Rede",
+  "monitor.secAllNet": "Todas as NICs",
+  "monitor.secClock": "Fuso horário"
 }

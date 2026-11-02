@@ -333,6 +333,15 @@ export interface AppSettings {
   // ("button") or right-click only, with the hover buttons hidden
   // ("rightclick"). The right-click menu works in both modes.
   hostListMenuStyle: 'button' | 'rightclick'
+  // Connections panel list density: "full" shows each connection's subtitle
+  // (host) line; "compact" hides it for single-line rows.
+  connectionsDisplayMode: 'full' | 'compact'
+  // Quick-commands panel display style: "list" (rows with name + command)
+  // or "buttons" (name-only buttons tiled horizontally).
+  quickCommandsDisplayMode: 'list' | 'buttons'
+  // Which monitor sections are enabled. Disabled sections are hidden in the
+  // UI and skipped by the monitor poll loop on the node (less load).
+  monitorSections: Record<string, boolean>
   // What the tab bar's "+" button (and the newConnection shortcut) opens:
   // the start page ("startPage", default) or a local terminal with the
   // default shell ("localTerminal").
@@ -390,6 +399,38 @@ export const PANEL_LOCATION_DEFAULTS: Record<string, 'sidebar' | 'bottom'> = {
   tunnels: 'sidebar',
   quickCommands: 'sidebar',
   history: 'sidebar',
+}
+
+// Monitor sections with their default enabled state. Disabled sections are
+// hidden in the UI and skipped by the monitor poll loop (fewer remote
+// commands per tick, less load on the monitored node).
+export const MONITOR_SECTION_DEFAULTS: Record<string, boolean> = {
+  basic: true,
+  cpu: true,
+  allCpu: true,
+  memory: true,
+  network: true,
+  allNet: true,
+  disk: true,
+  allDisk: true,
+  clock: true,
+}
+
+// Sub-sections that only apply while their parent section is enabled
+// (e.g. no per-core collection when the CPU section is off).
+const MONITOR_SECTION_PARENTS: Record<string, string> = {
+  allCpu: 'cpu',
+  allDisk: 'disk',
+  allNet: 'network',
+}
+
+// Effective enabled state of a monitor section: the section's own toggle
+// AND its parent section's toggle.
+export function monitorSectionEnabled(sections: Record<string, boolean> | undefined, key: string): boolean {
+  if (sections?.[key] === false) return false
+  const parent = MONITOR_SECTION_PARENTS[key]
+  if (parent && !monitorSectionEnabled(sections, parent)) return false
+  return MONITOR_SECTION_DEFAULTS[key] ?? true
 }
 
 // Platform UI text baseline: macOS native text runs larger than the
@@ -460,6 +501,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tabCloseButton: 'left',
   showTabShortcutHints: true,
   hostListMenuStyle: 'button',
+  connectionsDisplayMode: 'full',
+  quickCommandsDisplayMode: 'list',
+  monitorSections: { ...MONITOR_SECTION_DEFAULTS },
   newTabAction: 'startPage',
   sidebarTabs: { ...SIDEBAR_TAB_DEFAULTS },
   panelLocations: { ...PANEL_LOCATION_DEFAULTS },

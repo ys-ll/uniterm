@@ -2225,5 +2225,20 @@
   "sidebar.moveTo": "Переместить в",
   "sidebar.sidebarEmpty": "Выберите панели для отображения здесь",
   "sidebar.more": "Ещё",
-  "sidebar.hidePanel": "Скрыть панель"
+  "sidebar.hidePanel": "Скрыть панель",
+  "sidebar.displayMode": "Стиль отображения",
+  "sidebar.displayModeFull": "Полный",
+  "sidebar.displayModeCompact": "Компактный",
+  "sidebar.displayStyleList": "Список",
+  "sidebar.displayStyleButtons": "Кнопки",
+  "monitor.sectionConfig": "Отображаемые элементы",
+  "monitor.secBasic": "Основное",
+  "monitor.secCpu": "CPU",
+  "monitor.secAllCpu": "Все ядра CPU",
+  "monitor.secMemory": "Память",
+  "monitor.secDisk": "Диск",
+  "monitor.secAllDisk": "Все диски",
+  "monitor.secNetwork": "Сеть",
+  "monitor.secAllNet": "Все сетевые карты",
+  "monitor.secClock": "Часовой пояс"
 }
