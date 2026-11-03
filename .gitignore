@@ -93,3 +93,6 @@ build/android/app/src/main/jniLibs/
 build/android/gen/
 build/android/overlay.json
 build/android/local.properties
+
+# Docker web deployment runtime data (users, JWT secret, per-user homes)
+uniterm-data/

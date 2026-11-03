@@ -166,6 +166,8 @@
     <NetworkScanTabContent v-model:visible="netscanVisible" @new-connection="onNetscanNewConnection" />
     <LocalServices v-model:visible="localServicesVisible" />
     <HostKeyChangedDialog />
+    <!-- Headless web console bar: inert unless /api/web/mode reports server mode. -->
+    <WebConsoleOverlay />
   </div>
   </el-config-provider>
 </template>
@@ -258,6 +260,7 @@ import { Application, Clipboard, Events } from '@wailsio/runtime'
 import { parseQuickConnect } from './utils/quickConnect'
 import { getShellLabel as getShellLabelBase, parseWslFromShell } from './utils/shellLabel'
 import { reconnectFileTransferPanel } from './composables/usePanelReconnect'
+import WebConsoleOverlay from './components/WebConsoleOverlay.vue'
 import { launchConnection, launchFileBrowser, launchMonitor, launchWslFileBrowser, launchContainerFileBrowser, persistConnection, configureLauncher } from './composables/connectionLauncher'
 import { openSavedWorkspace } from './composables/savedWorkspace'
 import { installTabSnapshotSaver, maybeRestoreLastTabs } from './composables/tabSnapshot'
