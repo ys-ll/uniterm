@@ -227,7 +227,7 @@ sudo rpm -i uniterm.rpm
 
 - [Go](https://go.dev/dl/) 1.26+
 - [Node.js](https://nodejs.org/) 20+
-- [wails3 CLI](https://wails.io/docs/) v3.0.0（安装：`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0`）
+- [wails3 CLI](https://wails.io/docs/) v3.1.0（安装：`go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0`）
 - macOS 需 Xcode Command Line Tools
 - Linux 需 `libgtk-3-dev` 与 `libwebkit2gtk-4.1-dev`
 - Android 构建另需 JDK 21 与 Android SDK/NDK（`sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.3.11579264"`）
