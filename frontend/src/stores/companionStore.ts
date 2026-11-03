@@ -6,6 +6,7 @@ import { useSessionStore } from './sessionStore'
 import { useTabStore } from './tabStore'
 import { useConnectionStore } from './connectionStore'
 import { useSettingsStore } from './settingsStore'
+import { useUiLayoutStore } from './uiLayoutStore'
 import { fileTransferProto } from '../utils/fileTransferUtils'
 import { unregisterTransferRoute } from '../services/transferTaskCenter'
 import type { ConnectionConfig } from '../types/session'
@@ -43,8 +44,14 @@ export interface MonitorViewCache {
 }
 
 export const useCompanionStore = defineStore('companion', () => {
-  const filesVisible = ref(false)
-  const monitorVisible = ref(false)
+  // Companion visibility is DERIVED from the view being active in its dock
+  // (uiLayout.isViewActive) instead of a separately-maintained flag. It used
+  // to be plain refs set only by Sidebar.openTab (tab clicks), so docking the
+  // files/monitor view via tab drag & drop never set them and the docked
+  // panel stayed disconnected until the tab was clicked once.
+  const uiLayout = useUiLayoutStore()
+  const filesVisible = computed(() => uiLayout.isViewActive('files'))
+  const monitorVisible = computed(() => uiLayout.isViewActive('monitor'))
   const filesWidth = ref(DEFAULT_FILES_WIDTH)
   const monitorWidth = ref(DEFAULT_MONITOR_WIDTH)
   const entries = ref<Record<string, CompanionEntry>>({})
