@@ -4,10 +4,10 @@
     :model-value="visible"
     @update:model-value="(v: boolean) => !v && close()"
     :title="t('webPassword.title')"
-    width="26rem"
+    width="30rem"
     :close-on-click-modal="false"
   >
-    <el-form label-position="top" @submit.prevent="submit">
+    <el-form label-width="7.5rem" @submit.prevent="submit">
       <el-form-item :label="t('webPassword.current')">
         <el-input v-model="current" type="password" show-password autocomplete="current-password" />
       </el-form-item>
