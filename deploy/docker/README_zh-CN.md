@@ -27,6 +27,15 @@ docker run -d --name uniterm-web \
   uniterm/uniterm:latest
 ```
 
+### 离线导入镜像
+
+内网/离线环境可以从 Release 页下载 `uniterm-docker-<架构>-<版本>.tar.gz`
+（amd64 / arm64 按需选择），导入后照常启动：
+
+```bash
+docker load -i uniterm-docker-amd64-<版本>.tar.gz
+```
+
 ### 自己构建镜像
 
 在仓库根目录执行：
@@ -69,15 +78,6 @@ docker build -t uniterm/uniterm:latest .
 
 1. 备份数据目录（compose 部署默认是 `deploy/docker/uniterm-data/`）。
 2. 拉取新镜像（或重新构建），重建容器，数据目录挂载保持不变。
-
-## 离线导入镜像
-
-内网/离线环境可以从 Release 页下载 `uniterm-docker-<架构>-<版本>.tar.gz`
-（amd64 / arm64 按需选择），导入后照常启动：
-
-```bash
-docker load -i uniterm-docker-amd64-<版本>.tar.gz
-```
 
 ## 安全建议
 

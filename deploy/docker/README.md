@@ -30,6 +30,16 @@ docker run -d --name uniterm-web \
   uniterm/uniterm:latest
 ```
 
+### Offline image import
+
+Air-gapped environments can download
+`uniterm-docker-<arch>-<version>.tar.gz` from the release page (pick amd64 or
+arm64), import it, and start as usual:
+
+```bash
+docker load -i uniterm-docker-amd64-<version>.tar.gz
+```
+
 ### Building the image yourself
 
 Run from the repository root:
@@ -79,16 +89,6 @@ corner:
    deployments).
 2. Pull (or rebuild) the new image and recreate the container with the same
    data-directory mount.
-
-## Offline image import
-
-Air-gapped environments can download
-`uniterm-docker-<arch>-<version>.tar.gz` from the release page (pick amd64 or
-arm64), import it, and start as usual:
-
-```bash
-docker load -i uniterm-docker-amd64-<version>.tar.gz
-```
 
 ## Security notes
 
