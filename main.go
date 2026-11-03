@@ -217,6 +217,7 @@ func main() {
 
 	w3app := application.New(application.Options{
 		Name:       "uniTerm",
+		Server:     BuildServerOptions(), // empty unless built with -tags server
 		Assets:     application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		OnShutdown: app.shutdown,
 		// Single-instance: a second GUI launch acquires the OS lock, notifies
@@ -381,6 +382,10 @@ func main() {
 	app.window = window
 	w3app.RegisterService(application.NewService(app))
 
+	// Browser streaming SFTP/SCP + file staging routes (/api/web/*) exist only
+	// in the headless server build; a no-op on desktop.
+	registerWebStreamService(w3app, app)
+
 	// System notification service: app_<os>.go notifyMCPApproval posts MCP
 	// approval prompts through it when the window is unfocused. Windows needs
 	// the service's Startup to run so the toast AUMID/registry side is set up;
@@ -393,7 +398,7 @@ func main() {
 	// WebView stuck on a blank wails.localhost error page. notifyMCPApproval
 	// already handles a nil notifier.
 	var mcpNotifier *notifications.NotificationService
-	if runtime.GOOS != "android" {
+	if runtime.GOOS != "android" && !serverMode {
 		mcpNotifier = notifications.New()
 		w3app.RegisterService(application.NewService(mcpNotifier))
 	}

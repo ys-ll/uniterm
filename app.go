@@ -485,7 +485,7 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 // (bootstrap + keychain mode + legacy migration) or auto-unlocking on the
 // normal path.
 func (a *App) initCredentials(dataDir string, upgrade bool) {
-	cred := credentials.New(dataDir, sync.NewKeychain())
+	cred := credentials.New(dataDir, credentialKeychain())
 	// The reset/setup ciphertext guards scan the data dir; the declaring
 	// manifest lives in the store package.
 	secretFiles := make([]string, 0, len(store.SecretFiles))
@@ -2424,7 +2424,7 @@ func (a *App) SetDataDir(kind, customDir string, migrate bool) error {
 		if cs := a.credentialStore; cs != nil {
 			st := cs.Status()
 			if st.Mode == credentials.ModeKeychain && st.Unlocked {
-				if err := credentials.New(target, sync.NewKeychain()).Rekey(credentials.ModeKeychain, nil, cs.Key()); err != nil {
+				if err := credentials.New(target, credentialKeychain()).Rekey(credentials.ModeKeychain, nil, cs.Key()); err != nil {
 					return err
 				}
 			}
@@ -2852,7 +2852,7 @@ func dirUnlockable(target string) bool {
 	if err != nil || meta == nil {
 		return true // no meta → new/empty dir is fine
 	}
-	probe := credentials.New(target, sync.NewKeychain())
+	probe := credentials.New(target, credentialKeychain())
 	if err := probe.AutoUnlock(); err != nil {
 		return false
 	}

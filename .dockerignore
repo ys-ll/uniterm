@@ -1,0 +1,10 @@
+.git
+.gitignore
+bin
+dist
+frontend/node_modules
+frontend/dist
+frontend/bindings
+frontend/.vite
+uniterm-data
+*.exe
