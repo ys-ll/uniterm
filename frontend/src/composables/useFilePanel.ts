@@ -15,6 +15,12 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { t as i18nT } from '../i18n'
 import { buildSkipList } from './useTransferTasks'
 import type { TransferTaskUI } from '../stores/panelStore'
+import {
+  downloadRemoteArchiveInBrowser,
+  downloadRemoteFileInBrowser,
+  getWebModeStatus,
+  uploadFilesToRemoteInBrowser,
+} from '../services/webSftpBridge'
 
 // --- Global external-edit toast ---------------------------------------------
 // The "uploaded" event is broadcast app-wide while the file sidebar AND the
@@ -570,6 +576,23 @@ export function useFilePanel(opts: FilePanelOptions) {
   async function onUpload() {
     const id = sid()
     if (!id) return
+
+    // Web/server build: the browser's file picker uploads straight to the
+    // remote session; the desktop folder-picker flow below never runs.
+    if ((await getWebModeStatus()).serverMode) {
+      try {
+        msg.info(i18nT('webTransfer.uploading'))
+        const result = await uploadFilesToRemoteInBrowser({ sessionId: id, remoteDir: cwd.value })
+        if (result.uploadedFiles.length > 0) {
+          msg.success(i18nT('webTransfer.uploaded', { count: result.uploadedFiles.length }))
+          refresh()
+        }
+      } catch (e: any) {
+        msg.error(i18nT('webTransfer.uploadFailed', { error: e?.message || String(e) }))
+      }
+      return
+    }
+
     try {
       const localPaths = await OpenMultipleFilesDialog(...await dialogStartDirs(opts.localCwd?.()))
       if (!localPaths?.length) return
@@ -595,6 +618,21 @@ export function useFilePanel(opts: FilePanelOptions) {
   async function onDownloadTo(items: FileItem[]) {
     const id = sid()
     if (!id) return
+
+    // Web/server build: hand the stream to the browser's download manager.
+    // A single file downloads as-is; a folder or multi-selection is packed
+    // into a .tar.gz on the fly.
+    if ((await getWebModeStatus()).serverMode) {
+      const targets = items.filter(item => item.name !== '..')
+      if (targets.length === 0) return
+      if (targets.length === 1 && !targets[0].isDir) {
+        downloadRemoteFileInBrowser(id, joinPath(cwd.value, targets[0].name))
+      } else {
+        downloadRemoteArchiveInBrowser(id, targets.map(item => joinPath(cwd.value, item.name)))
+      }
+      return
+    }
+
     try {
       const dir = await OpenDirectoryDialog(...await dialogStartDirs(opts.localCwd?.()))
       if (!dir) return

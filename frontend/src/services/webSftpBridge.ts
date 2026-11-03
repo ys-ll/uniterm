@@ -230,6 +230,19 @@ export async function logoutWebUser(): Promise<void> {
   window.location.href = '/login';
 }
 
+export async function changeWebPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const resp = await fetch('/api/auth/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to change password');
+  }
+}
+
 export async function listGatewayUsers(): Promise<
   Array<{ username: string; role: string; createdAt: string; disabled?: boolean }>
 > {
