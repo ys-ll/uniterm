@@ -46,7 +46,7 @@ func TestCompletionCommandsInRealShells(t *testing.T) {
 			if shell == "powershell" {
 				command = `Write-Output "a'b"; Start-Sleep -Milliseconds 150; Get-Item .; Write-Output 'last line'; cmd /c exit 7`
 			}
-			wrapped, _, ok := CompletionCommand(command, shell, token, "\n")
+			wrapped, _, ok := CompletionCommand(command, shell, "", token, "\n")
 			if !ok {
 				t.Fatal("supported shell rejected")
 			}
@@ -70,6 +70,39 @@ func TestCompletionCommandsInRealShells(t *testing.T) {
 				t.Fatal("returned before command finished")
 			}
 		})
+	}
+}
+
+// The GBK filter path (see session.LocalSession.ExecFilterEncoding) runs the
+// command's output through a fifo + Perl line filter inside the real shell.
+func TestCompletionCommandGBKFilter(t *testing.T) {
+	bashPath, err := exec.LookPath("bash")
+	if runtime.GOOS == "windows" {
+		gitBash := `C:\Program Files\Git\bin\bash.exe`
+		if _, statErr := os.Stat(gitBash); statErr == nil {
+			bashPath, err = gitBash, nil
+		}
+	}
+	if err != nil {
+		t.Skip("bash unavailable")
+	}
+	const token = "fg-test-gbk"
+	command := "printf 'GBK中文测试\n' | iconv -f utf-8 -t gbk; echo 中文直出"
+	wrapped, _, ok := CompletionCommand(command, "bash", "cp936", token, "\n")
+	if !ok {
+		t.Fatal("supported shell rejected")
+	}
+	out, err := exec.Command(bashPath, "--noprofile", "--norc", "-c", wrapped).CombinedOutput()
+	if err != nil {
+		t.Fatalf("wrapper failed: %v %q", err, out)
+	}
+	sc := completionScanner{prefix: []byte("__UT_" + token + ";")}
+	cleaned, code, done := sc.feed(out)
+	if !done || code != 0 {
+		t.Fatalf("missing completion: %q", cleaned)
+	}
+	if !strings.Contains(string(cleaned), "GBK中文测试") || !strings.Contains(string(cleaned), "中文直出") {
+		t.Fatalf("filter output wrong: %q", cleaned)
 	}
 }
 
@@ -114,7 +147,7 @@ func TestTimeoutKeepsPartialLineAndOriginalSessionLock(t *testing.T) {
 // a trailing newline (the filler echo guarantees the marker's leading
 // newline), and reports no exit code.
 func TestEchoFallbackCompletionForUnknownShell(t *testing.T) {
-	wire, sc, ok := CompletionCommand("uname -a", "", "fg-x", "\n")
+	wire, sc, ok := CompletionCommand("uname -a", "", "", "fg-x", "\n")
 	if !ok || sc == nil || !sc.plain {
 		t.Fatalf("unknown shell must get the plain echo fallback: ok=%v sc=%v", ok, sc)
 	}

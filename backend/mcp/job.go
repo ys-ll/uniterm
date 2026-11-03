@@ -194,7 +194,11 @@ func (r *Registry) start(pty Pty, sessionID, command, newline string, hardLimit 
 	}
 	wireCommand := command
 	if shell, ok := pty.(interface{ ForegroundShell() string }); ok && !observe {
-		if wrapped, scanner, supported := CompletionCommand(command, shell.ForegroundShell(), job.ID, newline); supported {
+		filterEncoding := ""
+		if fe, ok := pty.(interface{ ExecFilterEncoding() string }); ok {
+			filterEncoding = fe.ExecFilterEncoding()
+		}
+		if wrapped, scanner, supported := CompletionCommand(command, shell.ForegroundShell(), filterEncoding, job.ID, newline); supported {
 			wireCommand = wrapped
 			job.completion = scanner
 		}
