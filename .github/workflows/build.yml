@@ -61,10 +61,16 @@ jobs:
         if: matrix.slug == 'windows'
         shell: bash
         run: |
-          choco install nsis -y
           NSIS_BIN="/c/Program Files (x86)/NSIS/Bin"
           export PATH="$NSIS_BIN:$PATH"
-          if [ ! -f "$NSIS_BIN/makensis.exe" ]; then echo "ERROR: makensis.exe not found at $NSIS_BIN"; exit 1; fi
+          # The Chocolatey community feed intermittently fails (HTTP 406 was
+          # seen in CI); retry a few times before giving up.
+          for attempt in 1 2 3 4 5; do
+            choco install nsis -y && [ -f "$NSIS_BIN/makensis.exe" ] && break
+            if [ "$attempt" = 5 ]; then echo "ERROR: makensis.exe not found at $NSIS_BIN after 5 attempts"; exit 1; fi
+            echo "choco install nsis attempt $attempt failed; retrying in 30s..."
+            sleep 30
+          done
           echo "makensis: $NSIS_BIN/makensis.exe"
 
           UPX_VER="5.2.0"
@@ -88,10 +94,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config \
             openjdk-21-jdk-headless
-          # Gradle needs JAVA_HOME; resolve it from the javac we just installed.
-          JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which javac)")")")"
+          # Gradle needs JAVA_HOME; pin it to the apt-installed OpenJDK 21.
+          # Runner images ship a newer default JDK whose javac shadows the
+          # apt one (which javac resolves there), and AGP lint cannot run on
+          # it (lintVitalAnalyzeRelease dies with a bare version string).
+          JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
           echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
-          java -version
+          "$JAVA_HOME/bin/java" -version
           # GitHub runners ship the Android SDK with cmdline-tools; accept the
           # licenses and add the components the gradle/NDK build needs.
           ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -114,7 +123,7 @@ jobs:
           # does not affect the APK.
           TAGS=""
           if [[ "${{ matrix.slug }}" == linux* || "${{ matrix.slug }}" == "android" ]]; then TAGS="-tags gtk3"; fi
-          go install $TAGS github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+          go install $TAGS github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 
       - name: Set version
         shell: bash
