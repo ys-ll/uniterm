@@ -68,10 +68,10 @@ describe('active AI model migration', () => {
 })
 
 describe('AI context preferences', () => {
-  it('defaults legacy configurations to automatic 32K compaction with the current model', async () => {
+  it('defaults legacy configurations to automatic 96K compaction with the current model', async () => {
     const store = useSettingsStore()
     await store.init()
-    expect(store.ai).toMatchObject({ autoCompact: true, contextTokenBudget: 32000, summaryModelId: '' })
+    expect(store.ai).toMatchObject({ autoCompact: true, contextTokenBudget: 96000, summaryModelId: '' })
   })
 
   it('persists context settings to ai.json and restores them in a fresh store', async () => {

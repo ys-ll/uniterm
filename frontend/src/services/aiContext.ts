@@ -1,7 +1,8 @@
 import type { AIContextSummary, AIMessage } from '../types/ai'
+import { DEFAULT_CONTEXT_TOKEN_BUDGET } from '../types/settings'
 
-export const CONTEXT_TRIGGER_TOKENS = 32_000
-export const CONTEXT_TARGET_TOKENS = 20_000
+export const CONTEXT_TRIGGER_TOKENS = DEFAULT_CONTEXT_TOKEN_BUDGET
+export const CONTEXT_TARGET_TOKENS = 60_000
 export const SUMMARY_MAX_TOKENS = 4096
 export const SUMMARY_CHUNK_TOKENS = 16_000
 
@@ -53,8 +54,8 @@ export function isContextMessage(m: AIMessage): boolean {
 // parallel call that was never executed) would otherwise keep `pending`
 // non-empty forever and swallow the entire remaining transcript into one
 // group — an unsplittable group that compactionCut() must retain, which then
-// pushes the request past CONTEXT_TRIGGER_TOKENS and fails the turn with
-// ai.contextTooLarge.
+// pushes the request past CONTEXT_TRIGGER_TOKENS (it still goes out; the
+// oversized tool results in it get stubbed by prepareAgentContext).
 export function contextGroups(messages: AIMessage[]): AIMessage[][] {
   const resolved = new Set<string>()
   for (const m of messages) {

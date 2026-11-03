@@ -772,9 +772,9 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     // session. contextGroups() (aiContext.ts) treats an invocation without a
     // result as unresolved and keeps its group open, so it swallows the whole
     // remaining transcript into a single group. compactionCut() cannot trim
-    // that group ("the newest meaningful group is always retained"), and the
-    // request then exceeds CONTEXT_TRIGGER_TOKENS and the turn dies with
-    // ai.contextTooLarge.
+    // that group ("the newest meaningful group is always retained"), so the
+    // request stays over budget every turn and the oversized tool results in
+    // it get stubbed — the conversation effectively loses its history.
     //
     // Record a tool_result for every dropped call so the stored history stays
     // consistent — same shape as the stopRequested path above.

@@ -161,7 +161,7 @@ describe('incremental context compaction', () => {
     expect(store.contextSummary).toBeUndefined()
   })
 
-  it('rejects oversized summaries without committing a checkpoint', async () => {
+  it('discards oversized summaries without committing a checkpoint', async () => {
     longSession()
     vi.mocked(SummarizeAIContext).mockResolvedValueOnce('PRIVATE_SUMMARY '.repeat(5000))
     const result = await prepareAgentContext('rules', [])
@@ -224,20 +224,54 @@ describe('incremental context compaction', () => {
     expect((messages[1].content as any[]).filter(b => b.type === 'tool_result')).toHaveLength(2)
   })
 
-  it('rejects oversized current input instead of silently dropping it', async () => {
+  it('sends oversized current input unchanged instead of dropping it', async () => {
     const store = useAIStore()
     store.createSession()
     store.addMessage({ id: 'only', role: 'user', content: 'X'.repeat(200000) })
-    await expect(prepareAgentContext('rules', [])).rejects.toThrow('budget')
+    const result = await prepareAgentContext('rules', [])
+    expect(result.messages).toEqual(store.buildConversation(store.messages))
     expect(store.messages[0].content.length).toBe(200000)
     expect(SummarizeAIContext).not.toHaveBeenCalled()
   })
 
-  it('does not spend a summary request when the retained latest exchange alone is oversized', async () => {
+  it('keeps an oversized latest exchange and still compacts the older history', async () => {
     const store = longSession()
     store.addMessage({ id: 'huge-latest', role: 'user', content: 'X'.repeat(200000) })
-    await expect(prepareAgentContext('rules', [])).rejects.toThrow('budget')
-    expect(SummarizeAIContext).not.toHaveBeenCalled()
+    const result = await prepareAgentContext('rules', [])
+    // The oversized latest input is never dropped or shortened; the request
+    // still goes out (the provider is the authority on its own limit).
+    expect(JSON.stringify(result.messages)).toContain('X'.repeat(1000))
     expect(store.messages[store.messages.length - 1].content.length).toBe(200000)
+    // Older history is still compacted and the checkpoint committed.
+    expect(store.contextSummary).toBeDefined()
+    expect(JSON.stringify(result.messages)).toContain('Goal: pending fix')
+  })
+
+  it('stubs oversized tool results in the request copy only', async () => {
+    const store = useAIStore()
+    store.createSession()
+    store.addMessage({
+      id: 'asst', role: 'assistant', content: '',
+      tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'dump', arguments: '{}' } }],
+    })
+    store.addMessage({ id: 'tool', role: 'tool', content: 'R'.repeat(200000), tool_call_id: 'call-1' })
+    const result = await prepareAgentContext('rules', [])
+    const payload = JSON.stringify(result.messages)
+    expect(payload).toContain('Tool result omitted')
+    expect(payload).toContain('"dump"')
+    expect(payload).not.toContain('R'.repeat(1000))
+    // The stored history keeps the full output for the UI.
+    expect(store.messages.find(m => m.id === 'tool')!.content.length).toBe(200000)
+    expect(SummarizeAIContext).not.toHaveBeenCalled()
+  })
+
+  it('stays usable when system prompt and tool definitions alone approach the trigger', async () => {
+    const store = useAIStore()
+    store.createSession()
+    store.addMessage({ id: 'u', role: 'user', content: 'hello' })
+    const hugeTools = [{ description: 'x'.repeat(200000) }]
+    const result = await prepareAgentContext('rules', hugeTools)
+    expect(result.messages).toEqual(store.buildConversation(store.messages))
+    expect(SummarizeAIContext).not.toHaveBeenCalled()
   })
 })
