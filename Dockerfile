@@ -7,7 +7,7 @@
 # =============================================================================
 
 # Stage 1: Go source + generate the frontend bindings
-FROM golang:1.26.2-alpine AS bindings-generator
+FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine AS bindings-generator
 # proxy.golang.org is unreachable from some networks; goproxy.cn serves the same modules.
 ARG GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
 ENV GOPROXY=${GOPROXY}
@@ -23,7 +23,7 @@ RUN /go/bin/wails3 generate bindings -f "-tags server,production" -clean=true
 # =============================================================================
 # Stage 2: Build Vue 3 + Pinia + Element Plus + xterm.js frontend
 # =============================================================================
-FROM node:22-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
 WORKDIR /src/frontend
 COPY frontend/package*.json ./
 RUN for i in 1 2 3; do npm ci && break; [ "$i" = 3 ] && exit 1; sleep 5; done
@@ -35,9 +35,18 @@ RUN npm run build
 # Stage 3: Headless worker (-tags server) + multi-user gateway
 # =============================================================================
 FROM bindings-generator AS backend-builder
+# Go cross-compiles: the toolchain runs natively on the build machine and
+# only the output targets TARGETARCH — no QEMU emulation in any build stage.
+ARG TARGETARCH
+ARG VERSION=dev
 COPY --from=frontend-builder /src/frontend/dist ./frontend/dist
-RUN CGO_ENABLED=0 GOOS=linux go build -tags "server production" -ldflags="-s -w" -o /out/uniterm-server .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/uniterm-gateway ./cmd/uniterm-gateway
+# Compress the binaries: -s -w strips first, then UPX/LZMA lands the image
+# well under half the size. Trade-off: slightly slower first run and the
+# occasional antivirus false positive on the packed ELF.
+RUN apk add --no-cache upx
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -tags "server production" -ldflags="-s -w -X main.Version=${VERSION}" -o /out/uniterm-server .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /out/uniterm-gateway ./cmd/uniterm-gateway
+RUN upx --lzma -q /out/uniterm-server /out/uniterm-gateway
 
 # =============================================================================
 # Stage 4: Runtime image with the CLI tools the web console shells rely on
