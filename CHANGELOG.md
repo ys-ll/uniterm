@@ -1,5 +1,121 @@
 # Changelog
 
+## v1.11.3-alpha
+
+### What's Changed
+
+**New Features**
+
+- Local services: six new local services — HTTP, TFTP, SSH, FTP, Telnet and NFS — plus a local S3 service backed by a local directory; all local services gain a unified auto-stop timeout, so a service left running by mistake stops itself after the configured time instead of running indefinitely. (@etanman)
+- Terminal recording: sessions can be recorded and replayed (asciinema cast v2 format) — a REC badge with the live elapsed time sits in the terminal, recording continues even while the panel is in the background, and a recording list offers replay, delete and open-folder actions. A one-time notice reminds you about sensitive data on the first recording. (@laigcss)
+- Batch execution: one command can run across multiple selected SSH / local hosts concurrently, with configurable parallelism, timeout and failure strategy, a live per-host result table and CSV / JSON export — the entry lives in the connection context menu when two or more hosts are selected. (@laigcss)
+- Terminal: inline suggestions from the login shell's history — a dimmed hint completes after the cursor and is accepted with the Right arrow, while Tab keeps reaching the shell's own completion; the hint and the suggestion popup each have their own switch in terminal settings. (@dungvv)
+- SSH: host keys are now verified with trust-on-first-use — the server fingerprint is recorded on the first connect, and a changed key is rejected with a dialog showing both fingerprints, offering to save the new key, connect once without recording it, or cancel. (@laigcss)
+- Remote desktop (RDP): quality tiers (high / balanced / low bandwidth) cut server-side graphics features on slow links; resolution and zoom controls move to the status bar and fullscreen toolbar for RDP / VNC / SPICE (adaptive, presets, physical-pixel zoom, fit-window, stretch) and are persisted per connection.
+- UI: a bottom panel is added under the tab area — any sidebar view (quick commands, monitor, …) can dock there and be shown beside the left sidebar at the same time; views move and reorder between the two docks via the context menu, the panel title-bar button or drag & drop.
+- System monitor: display sections are configurable (basic / CPU / per-core CPU / memory / network / NICs / disk / disks / timezone) — disabled sections are hidden and no longer polled, reducing the load on the monitored node.
+- Containers: image archives can be loaded and containers committed to images, and container creation gains stdin and TTY options. (@surenwuyuwuqiu)
+- Database: the result grid can filter rows in place, and CSV import / export are written atomically. (@surenwuyuwuqiu)
+
+**Improvements**
+
+- AI: a local risk guard independently classifies every command the AI runs (read / write / dangerous) by pattern matching, so even if a prompt-injected model labels `rm -rf ~` as safe, the confirmation prompt is still enforced. (@laigcss)
+- AI: auto-compaction is configurable — it can be turned off, and a trigger budget and a dedicated summary model can be set per device. (@surenwuyuwuqiu)
+- Terminal: the shell history feeding inline suggestions reads only the tail of the history file (at most 4 MiB) instead of the whole file — a years-old multi-megabyte history no longer stalls the first keystroke. (@boltomli)
+- Terminal: Ctrl+Backspace deletes the previous word. (@surenwuyuwuqiu)
+- MCP: the MCP service gains opt-in remote access. (@surenwuyuwuqiu)
+- Quick commands: a button display style (name-only chips tiled horizontally) joins the existing list style.
+- Connections: a compact display style that hides the host subtitle.
+- Files: F5 refreshes the file panel, and activating the panel restores the terminal's focus. (@surenwuyuwuqiu)
+- macOS: the native traffic-light buttons replace the CSS facsimile, and the native window menu follows the system language. (@etanman)
+- Tabs: the active tab can be renamed with F2. (@macoladik)
+- Terminal: a new right-click mode "copy or paste" (Windows Terminal style) — right-clicking a selection copies it and right-clicking with no selection pastes.
+- Local terminals: the connection form gains launch arguments and a working directory for local / WSL terminals — for cmd.exe the arguments are consumed by /k, enabling launching another terminal program with parameters.
+
+**Bug Fixes**
+
+- Window: geometry is saved on every quit path (tray quit, Cmd+Q, OS close, relaunch) instead of only the in-app close button, and a restored window is kept on an attached screen with its position re-checked when shown — no more opening at the default size or off-screen. (@macoladik)
+- Tabs: titles set via rename survive an app restart — restored tabs no longer revert to the connection name. (@macoladik)
+- AI: tool_use / tool_result pairs stay consistent, so a dropped parallel tool call can no longer deadlock compaction and kill the session with a context-too-large error. (@lijinxiao1982)
+- AI: tool input objects are no longer rendered as empty in a conversation. (@mikemikimike)
+- AI: the foreground execution lock is released after Ctrl+C, and copy actions in a conversation use the platform clipboard so they keep working when the app window is not focused. (@surenwuyuwuqiu)
+- Menu: opening a dialog no longer closes the menu underneath it, so AI session rename / delete can repeat without reopening the menu. (@wuqiang57)
+- Network scan: closes a race that left the port scan stuck at "scanning" with a frozen progress bar on fast scans. (@etanman)
+- Local: the post-login script never ran on elevated (admin) shells and could be silently dropped when the shell started slowly — it is now sent anyway and buffered until the shell is ready.
+- Terminal: command input verified character-by-character survives hard wraps (long pasted commands are no longer corrupted at line breaks), and the line-number gutter reserves five digits so wide line numbers no longer shift the layout. (@surenwuyuwuqiu)
+- Terminal: fixes a UI freeze caused by very long wrapped output lines — the line-registry scan on each write grew quadratically with the wrapped line length.
+- SSH: credentials are persisted after an auth retry instead of being lost. (@surenwuyuwuqiu)
+- MCP: when shell detection fails (hardened SSH targets), foreground jobs no longer wait out their full deadline and report a timeout after actually finishing, and the busy lock no longer wedges the session until its TTL.
+- Remote desktop (RDP): the last working TLS version is remembered per target, so servers that silently drop the modern handshake no longer pay a 5 s penalty on every connect; a valid tunneled session is no longer rejected as a destination mismatch over a jump host.
+- Remote desktop (VNC): the fullscreen cursor overlay stays visible when the panel is not focused.
+- X11: starting VcXsrv no longer blocks the first SSH connect for up to 5 s. (@sonnartliao)
+- Containers: commit targets are validated against Docker's reference grammar up front, and the SSH stdin pipe is created before registry login starts. (@boltomli)
+- Startup: the tab-restore prompt is no longer shown when it was disabled in settings. (@surenwuyuwuqiu)
+
+**Notes**
+
+- As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
+- Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
+
+Thanks to @surenwuyuwuqiu, @etanman, @laigcss, @macoladik, @dungvv, @boltomli, @lijinxiao1982, @mikemikimike, @sonnartliao and @wuqiang57 for their contributions to this release.
+
+### 更新内容
+
+**新功能**
+
+- 本地服务：新增 HTTP、TFTP、SSH、FTP、Telnet、NFS 六种本地服务，并新增基于本地目录的本地 S3 服务；所有本地服务支持统一的自动停止超时，忘记手动停止的服务会在设定时间后自动停止，避免长期占用资源和安全风险。(@etanman)
+- 终端录制：支持录制并回放终端会话（asciinema cast v2 格式）——终端内显示带实时时长的 REC 徽标，面板在后台时录制也不会中断；录制列表提供回放、删除、打开目录等操作。首次录制时会有一次性的敏感数据提醒。(@laigcss)
+- 批量执行：一条命令可并发执行在多个选中的 SSH / 本地主机上，支持并发数、超时与失败策略配置，提供实时逐主机结果表格和 CSV / JSON 导出——在连接右键菜单中选中两台及以上主机时出现入口。(@laigcss)
+- 终端：基于登录 shell 历史的行内建议——光标后以暗色提示补全，按右方向键接受；Tab 键仍保留给 shell 自己的补全。提示与建议弹窗在终端设置中各有独立开关。(@dungvv)
+- SSH：主机密钥改为 TOFU（首次信任）校验——首次连接记录服务器指纹，密钥变化时拒绝连接并弹出对话框显示新旧指纹，可选择保存新密钥、不记录仅连一次，或取消。(@laigcss)
+- 远程桌面（RDP）：新增画质档位（高 / 均衡 / 低带宽），慢速链路下降低服务端图形特性；RDP / VNC / SPICE 的分辨率与缩放控制移入状态栏和全屏工具栏（自适应、预设、物理像素缩放、适应窗口、拉伸），按连接保存。
+- 界面：标签区下方新增底部面板——任意侧边栏视图（快捷命令、系统监控等）都可停靠至此，与左侧边栏同时显示；视图可通过右键菜单、面板标题栏按钮或拖拽在两个停靠区之间移动和排序。
+- 系统监控：显示分区可配置（基础 / CPU / 各核 / 内存 / 网络 / 各网卡 / 磁盘 / 各磁盘 / 时区）——禁用的分区隐藏且不再轮询，降低被监控节点的负载。
+- 容器：支持导入镜像压缩包、将容器提交为镜像，创建容器时新增 stdin 与 TTY 选项。(@surenwuyuwuqiu)
+- 数据库：结果表格支持就地筛选，CSV 导入 / 导出改为原子写入。(@surenwuyuwuqiu)
+
+**改进**
+
+- AI：新增本地风险护栏，独立对 AI 要执行的命令做模式匹配分级（读 / 写 / 危险）——即使被提示注入的模型把 `rm -rf ~` 标为安全，确认提示依然会被强制执行。(@laigcss)
+- AI：自动压缩可配置——可以关闭，也可按设备设置触发预算和独立的摘要模型。(@surenwuyuwuqiu)
+- 终端：供行内建议使用的 shell 历史改为只读历史文件尾部（最多 4 MiB）而非整个文件——积年膨胀到数十 MB 的历史文件不再卡顿首次按键。(@boltomli)
+- 终端：Ctrl+Backspace 删除前一个词。(@surenwuyuwuqiu)
+- MCP：MCP 服务支持可选开启的远程访问。(@surenwuyuwuqiu)
+- 快捷命令：新增按钮显示样式（仅名称的按钮横向平铺），与原有列表样式并存。
+- 连接列表：新增紧凑显示样式，隐藏主机副标题。
+- 文件：F5 刷新文件面板，激活面板时恢复终端的输入焦点。(@surenwuyuwuqiu)
+- macOS：以原生红绿灯按钮取代 CSS 仿制按钮，原生窗口菜单跟随系统语言。(@etanman)
+- 标签页：按 F2 即可重命名当前活动标签页。(@macoladik)
+- 终端：新增「复制或粘贴」右键模式（Windows Terminal 风格）——右键选中文本即复制，无选中时右键即粘贴。
+- 本地终端：连接表单为本地 / WSL 终端新增启动参数与工作目录字段——cmd.exe 的参数由 /k 接收，可以带参数启动其他终端程序。
+
+**问题修复**
+
+- 窗口：所有退出路径（托盘退出、Cmd+Q、系统关闭、重启）都会保存窗口几何信息，而不再只限于应用内关闭按钮；恢复的窗口会保留在已连接的显示器上并在显示时重新校验位置——不再出现以默认尺寸或屏幕外位置启动。(@macoladik)
+- 标签页：手动重命名的标题在应用重启后保留，恢复的标签页不再回退为连接名。(@macoladik)
+- AI：保持 tool_use / tool_result 配对一致，被丢弃的并行工具调用不再使压缩死锁、导致会话因上下文过大而不可用。(@lijinxiao1982)
+- AI：修复会话中工具调用入参对象显示为空的问题。(@mikemikimike)
+- AI：Ctrl+C 后释放前台执行锁；会话内的复制操作改用平台剪贴板，应用窗口失焦时也能正常复制。(@surenwuyuwuqiu)
+- 菜单：弹出对话框不再连带关闭底下的菜单，AI 会话重命名 / 删除可连续操作而无需重新打开菜单。(@wuqiang57)
+- 网络扫描：修复快速扫描时端口扫描卡在「扫描中」、进度条冻结的问题。(@etanman)
+- 本地终端：post-login 脚本在提权（管理员）会话下从不执行，且在 shell 启动缓慢时可能被静默丢弃——现在总会发送并缓冲到 shell 就绪后写入。
+- 终端：逐字符校验过的命令输入在硬换行处不再损坏（长粘贴命令跨行不再出错）；行号栏预留五位数字，宽行号不再挤压布局。(@surenwuyuwuqiu)
+- 终端：修复超长自动换行的输出行导致界面卡死的问题——每次写入时的行注册扫描随换行行长度呈平方级增长。
+- SSH：认证重试后凭据会被持久化，不再丢失。(@surenwuyuwuqiu)
+- MCP：shell 探测失败（加固的 SSH 目标）时，前台任务不再等满超时后才报超时（实际早已完成），会话也不再因 busy 锁被占住直到 TTL 而不可用。
+- 远程桌面（RDP）：按目标记住上次成功的 TLS 版本，静默丢弃现代握手的服务器不再每次连接都付出 5 秒代价；经跳板机隧道时不再因目标不匹配拒绝有效会话。
+- 远程桌面（VNC）：全屏下面板未聚焦时光标覆盖层保持可见。
+- X11：启动 VcXsrv 不再阻塞首次 SSH 连接最长 5 秒。(@sonnartliao)
+- 容器：提交目标引用提前按 Docker reference 语法校验；SSH stdin 管道在 registry 登录开始前创建。(@boltomli)
+- 启动：设置中关闭的标签恢复提示不再弹出。(@surenwuyuwuqiu)
+
+**说明**
+
+- 由于本开源软件未购买代码签名证书，未签名的可执行文件可能被部分杀毒引擎（如 Windows Defender）误报拦截。这是 Go/Wails 应用的已知问题（参见 [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)）。可在杀毒软件中添加排除规则放行。请务必从 GitHub、Gitee 官方开源渠道下载软件。如仍担心存在病毒，可自行下载源代码在本地构建运行。
+- 安卓 APP 从 1.11.0 版本起更换为基于 uniterm 域名的新应用 ID（`net.uniterm.app`），如果安装了该版本之前的版本，需要先卸载旧版后安装新版。
+
+感谢 @surenwuyuwuqiu、@etanman、@laigcss、@macoladik、@dungvv、@boltomli、@lijinxiao1982、@mikemikimike、@sonnartliao、@wuqiang57 对本次发布的贡献。
+
 ## v1.11.2
 
 ### What's Changed
