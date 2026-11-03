@@ -586,8 +586,10 @@ function openQuickCommands() {
 // (re)establish their companion session, the rest just switch the view. Used
 // by the App.vue sidebar shortcuts and the bottom panel's tab strip.
 function openTab(view: SidebarView) {
-  if (view === 'files') companionStore.filesVisible = true
-  if (view === 'monitor') companionStore.monitorVisible = true
+  // files/monitor visibility is derived from the view being active in its
+  // dock (companionStore computeds over uiLayout.isViewActive), so activating
+  // the view is all that's needed here; the ensure* calls (re)establish the
+  // companion SFTP/monitor session.
   setActiveViewForDock(view)
   if (view === 'files') {
     const pid = companionStore.getActiveFilesPanelId()
@@ -609,14 +611,6 @@ function onFilesTabClick() {
 function onMonitorTabClick() {
   openTab('monitor')
 }
-// If the companion panel hides itself (collapse button), fall back to connections view.
-watch(
-  () => [companionStore.filesVisible, companionStore.monitorVisible],
-  ([filesVisible, monitorVisible]) => {
-    if (!filesVisible && activeView.value === 'files') activeView.value = 'connections'
-    if (!monitorVisible && activeView.value === 'monitor') activeView.value = 'connections'
-  },
-)
 
 // ── Sidebar tab visibility ──
 // Single source of truth is AppSettings.sidebarTabs (editable in Settings →
