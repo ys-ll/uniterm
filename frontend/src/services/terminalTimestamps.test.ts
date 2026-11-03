@@ -122,6 +122,36 @@ describe('recordWrittenLines()', () => {
     expect(times(state)).toEqual([[0, 1000], [2, 2000]])
   })
 
+  it('stamps completion for a long wrapped group whose start is above the write band', () => {
+    const state = createLineRegistry()
+    // One logical line spans rows 0-9; row 10 is the next line. Streaming
+    // such a line means each write's band covers only part of the group.
+    const wrapped = [false, ...Array(9).fill(true), false]
+    const src = source(wrapped, wrapped.map(() => 'x'))
+    write(state, src, 0, 5, 1000) // first half arrives
+    expect(numbers(state)).toEqual([[0, 1]])
+    expect(times(state)).toEqual([[0, 1000]]) // group end still below cursor: no completion stamp
+    write(state, src, 5, 10, 2000) // rest arrives, cursor moves past the group end
+    expect(times(state)).toEqual([[0, 2000], [10, 2000]])
+    write(state, src, 10, 10, 3000) // in-place redraw on the next line: untouched
+    expect(times(state)).toEqual([[0, 2000], [10, 2000]])
+  })
+
+  it('skips completion stamping when stampCompletion is off (numbers still register)', () => {
+    const state = createLineRegistry()
+    const src = source([false, false], ['hello', ''])
+    recordWrittenLines(state, {
+      lineOffset: 0,
+      beforeAbs: 0,
+      afterAbs: 1,
+      source: src,
+      now: 1000,
+      stampCompletion: false,
+    })
+    expect(numbers(state)).toEqual([[0, 1]])
+    expect(times(state)).toEqual([[0, 1000]]) // birth ts kept, no completion overwrite
+  })
+
   it('registers lines arriving in the same write as one band, all with that write ts', () => {
     const state = createLineRegistry()
     const src = source([false, false, false, false], ['l1', 'l2', 'l3', ''])
