@@ -4,37 +4,20 @@ Deploy uniTerm as a browser-accessible, multi-user service: every user gets an
 isolated workspace (their own connections, SSH sessions, keys and data), hidden
 from other users.
 
-## Quick start
+## Getting the image
+
+Pick one of the three ways below.
+
+### Docker Hub
 
 ```bash
-# Set the initial admin password (first startup only; leave empty to
-# auto-generate a random one, printed in the container logs)
-export UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!'
-
-cd deploy/docker && docker compose up -d
-```
-
-Open `http://localhost:8080` in your browser and sign in with the admin
-account.
-
-### Using the Docker Hub image
-
-Skip the build and pull the published image:
-
-```bash
-docker run -d --name uniterm-web \
-  -p 8080:8080 \
-  -v uniterm-data:/data \
-  -e UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!' \
-  --restart unless-stopped \
-  uniterm/uniterm:latest
+docker pull uniterm/uniterm:latest
 ```
 
 ### Offline image import
 
-Air-gapped environments can download
-`uniterm-docker-<arch>-<version>.tar.gz` from the release page (pick amd64 or
-arm64), import it, and start as usual:
+Air-gapped environments can download `uniterm-docker-<arch>-<version>.tar.gz`
+from the release page (pick amd64 or arm64):
 
 ```bash
 docker load -i uniterm-docker-amd64-<version>.tar.gz
@@ -47,6 +30,33 @@ Run from the repository root:
 ```bash
 docker build -t uniterm/uniterm:latest .
 ```
+
+## Starting the container
+
+compose is recommended (copy `deploy/docker/docker-compose.yml` to any
+deployment directory and run there):
+
+```bash
+# Set the initial admin password (first startup only; leave empty to
+# auto-generate a random one, printed in the container logs)
+export UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!'
+
+docker compose up -d
+```
+
+Or with `docker run`:
+
+```bash
+docker run -d --name uniterm-web \
+  -p 8080:8080 \
+  -v uniterm-data:/data \
+  -e UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!' \
+  --restart unless-stopped \
+  uniterm/uniterm:latest
+```
+
+Open `http://localhost:8080` in your browser and sign in with the admin
+account.
 
 ## Data persistence
 
@@ -87,8 +97,8 @@ corner:
 
 1. Back up the data directory (`deploy/docker/uniterm-data/` for compose
    deployments).
-2. Pull (or rebuild) the new image and recreate the container with the same
-   data-directory mount.
+2. Get the new image (pull / offline import / rebuild), recreate the container
+   with the same data-directory mount.
 
 ## Security notes
 

@@ -3,34 +3,20 @@
 把 uniTerm 部署为浏览器可访问的多用户服务：每个用户登录后获得独立的隔离工作区
 （独立的连接配置、SSH 会话、密钥与数据），互不可见。
 
-## 快速开始
+## 获取镜像
+
+三种方式任选其一。
+
+### Docker Hub
 
 ```bash
-# 设置管理员初始密码（仅首次启动生效；留空则自动生成随机密码并打印在容器日志里）
-export UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!'
-
-cd deploy/docker && docker compose up -d
-```
-
-浏览器打开 `http://localhost:8080`，用管理员账号登录。
-
-### 使用 Docker Hub 镜像
-
-不想自己构建的话，直接拉取镜像：
-
-```bash
-docker run -d --name uniterm-web \
-  -p 8080:8080 \
-  -v uniterm-data:/data \
-  -e UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!' \
-  --restart unless-stopped \
-  uniterm/uniterm:latest
+docker pull uniterm/uniterm:latest
 ```
 
 ### 离线导入镜像
 
 内网/离线环境可以从 Release 页下载 `uniterm-docker-<架构>-<版本>.tar.gz`
-（amd64 / arm64 按需选择），导入后照常启动：
+（amd64 / arm64 按需选择）：
 
 ```bash
 docker load -i uniterm-docker-amd64-<版本>.tar.gz
@@ -43,6 +29,30 @@ docker load -i uniterm-docker-amd64-<版本>.tar.gz
 ```bash
 docker build -t uniterm/uniterm:latest .
 ```
+
+## 启动容器
+
+推荐使用 compose（把 `deploy/docker/docker-compose.yml` 复制到你的部署目录，在该目录执行）：
+
+```bash
+# 设置管理员初始密码（仅首次启动生效；留空则自动生成随机密码并打印在容器日志里）
+export UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!'
+
+docker compose up -d
+```
+
+或者用 `docker run`：
+
+```bash
+docker run -d --name uniterm-web \
+  -p 8080:8080 \
+  -v uniterm-data:/data \
+  -e UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!' \
+  --restart unless-stopped \
+  uniterm/uniterm:latest
+```
+
+浏览器打开 `http://localhost:8080`，用管理员账号登录。
 
 ## 数据持久化
 
@@ -77,7 +87,7 @@ docker build -t uniterm/uniterm:latest .
 ## 升级
 
 1. 备份数据目录（compose 部署默认是 `deploy/docker/uniterm-data/`）。
-2. 拉取新镜像（或重新构建），重建容器，数据目录挂载保持不变。
+2. 获取新镜像（pull / 离线导入 / 重新构建均可），重建容器，数据目录挂载保持不变。
 
 ## 安全建议
 
