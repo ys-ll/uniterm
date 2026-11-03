@@ -54,7 +54,6 @@ docker build -t uniterm/uniterm:latest .
 | `UNITERM_WORKER_IDLE_MINUTES` | `60` | 用户空闲多久后回收工作区（分钟），回收后下次访问自动恢复 |
 | `UNITERM_COOKIE_SECURE` | `false` | 通过 HTTPS 反代部署时置 `true` |
 | `UNITERM_ALLOWED_ORIGINS` | 空 | 通过反向代理部署时的公网访问来源（逗号分隔） |
-| `UNITERM_ENABLE_LOCAL_SHELL` | `false` | 是否允许容器本地终端（见下方安全说明） |
 
 ## 用户管理（管理员）
 
@@ -84,4 +83,4 @@ docker load -i uniterm-docker-amd64-<版本>.tar.gz
 
 - **公网部署务必通过 HTTPS 反向代理**，并设置 `UNITERM_COOKIE_SECURE=true`。
 - 登录接口有防暴力破解：连续失败 5 次锁定 10 分钟。
-- 容器本地终端默认关闭，多租户部署请不要开启。
+- 容器本地终端不可用：本地 shell 等于容器 root 权限，属于多用户部署的安全设计。

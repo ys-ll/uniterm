@@ -274,9 +274,6 @@ func (s *WebStreamService) handleModeInfo(w http.ResponseWriter, r *http.Request
 		"user":       tenantUser,
 		"role":       r.Header.Get("X-Uniterm-Role"),
 		"homeDir":    homeDir,
-		// Container-local terminals expose a root shell in the tenant
-		// container; the frontend hides the entry points unless opted in.
-		"localShell": os.Getenv("UNITERM_ENABLE_LOCAL_SHELL") == "true",
 	})
 }
 

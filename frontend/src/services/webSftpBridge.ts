@@ -16,8 +16,6 @@ export interface WebModeStatus {
   user: string;
   role: 'admin' | 'user' | string;
   homeDir: string;
-  /** Whether container-local terminals are enabled (UNITERM_ENABLE_LOCAL_SHELL). */
-  localShell?: boolean;
 }
 
 export interface BrowserUploadProgress {
@@ -67,7 +65,8 @@ export async function getWebModeStatus(forceRefresh = false): Promise<WebModeSta
       return cachedWebMode;
     }
     cachedWebMode = (await resp.json()) as WebModeStatus;
-    setLocalTerminalSupport(cachedWebMode.serverMode ? Boolean(cachedWebMode.localShell) : true)
+    // Server deployments never offer container-local terminals.
+    setLocalTerminalSupport(!cachedWebMode.serverMode)
     return cachedWebMode;
   } catch {
     cachedWebMode = { serverMode: false, user: 'local', role: 'admin', homeDir: '' };
