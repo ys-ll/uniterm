@@ -157,6 +157,10 @@
       <ExportDialog v-model:visible="showExportDialog" />
     </div>
 
+    <!-- Web edition account menu: renders nothing unless /api/web/mode reports
+         server mode, so the desktop header is unchanged. -->
+    <WebAccountMenu />
+
     <!-- Windows/Linux: window controls right -->
     <WindowControls
       v-if="showWindowControls && platform !== 'darwin'"
@@ -189,6 +193,7 @@ import WindowControls from './WindowControls.vue'
 import TabsList from './TabsList.vue'
 import ImportDialog from './ImportDialog.vue'
 import ExportDialog from './ExportDialog.vue'
+import WebAccountMenu from './WebAccountMenu.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuSubmenu from './MenuSubmenu.vue'

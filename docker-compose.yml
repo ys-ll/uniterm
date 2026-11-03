@@ -20,7 +20,8 @@ services:
       # 若通过反向代理部署，配置允许的公网访问源（逗号分隔）
       # - UNITERM_ALLOWED_ORIGINS=https://term.example.com
     volumes:
-      # 持久化所有用户的独立加密配置、SSH 密钥、数据库与个人家目录
-      - ./uniterm-data:/data
+      # 持久化所有用户的独立加密配置、SSH 密钥、数据库与个人家目录。
+      # UNITERM_DATA_HOST 可指向已有部署的数据目录（升级时保留账号与用户数据）。
+      - ${UNITERM_DATA_HOST:-./uniterm-data}:/data
       # 可选：挂载宿主机 Docker Socket 以支持容器管理功能
       # - /var/run/docker.sock:/var/run/docker.sock

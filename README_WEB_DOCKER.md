@@ -12,8 +12,10 @@
 | `server_keychain.go` | 容器内没有 D-Bus，用文件版 keychain 替代系统 keychain |
 | `server_desktop_stub.go` | 桌面构建的空实现（`BuildServerOptions`、`credentialKeychain` 等） |
 | `backend/session/sftp_web_stream.go` | 把 `SFTPSession` 适配成 `io.Reader`/`io.Writer` 流 |
-| `frontend/src/components/WebConsoleOverlay.vue` | 浏览器右下角的 Web 控制台浮窗（仅 server 模式显示） |
-| `frontend/src/services/webSftpBridge.ts` | 前端调用 `/api/web/*` 的桥接层 |
+| `frontend/src/components/WebAccountMenu.vue` | 右上角账户头像与菜单（修改密码 / 用户管理 / 退出，仅 server 模式显示） |
+| `frontend/src/components/WebPasswordDialog.vue` | Web 登录密码修改弹窗 |
+| `frontend/src/components/WebUserAdminDialog.vue` | 管理员用户管理弹窗（列表 / 新增 / 删除） |
+| `frontend/src/services/webSftpBridge.ts` | 前端调用 `/api/web/*` 的桥接层；SFTP 文件面板的上传/下载会自动走它 |
 
 ## 构建与启动
 
@@ -25,7 +27,15 @@ docker compose up -d --build
 # 浏览器打开 http://localhost:8080
 ```
 
-数据全部落在 `./uniterm-data:/data`：`gateway/users.json`、`gateway/jwt_secret.key`，
+默认数据目录是仓库下的 `./uniterm-data`。升级已有部署时，用 `UNITERM_DATA_HOST`
+指向旧数据目录即可保留账号与用户数据：
+
+```bash
+export UNITERM_DATA_HOST=/path/to/existing/uniterm-data
+docker compose up -d --force-recreate
+```
+
+数据全部落在该目录：`gateway/users.json`、`gateway/jwt_secret.key`，
 以及每个用户独立的 `users/<name>/{home,config,data,cache}`（`HOME`、`XDG_*` 都指向这里）。
 
 ## 环境变量
@@ -67,7 +77,9 @@ curl -b cookie.txt -X DELETE http://localhost:8080/api/auth/users/dev_alice
 | `/api/web/sftp/cancel?transferId=` | POST | 中断传输 |
 | `/api/web/dialog/stage-file` | POST | 浏览器选文件后暂存到容器 `$HOME/.cache/uniterm-web-staging/` |
 
-`sessionId` 是当前活动的 SFTP 会话 ID。当前只有 SFTP 会话支持浏览器流式传输；
+Web 端的 SFTP 文件面板已经直接接入这些接口：点“上传”选浏览器文件，点“下载到…”或右键下载
+会交给浏览器下载器（单文件原样下载，目录/多选实时打包），用户不需要手动填写 `sessionId`。
+`sessionId` 只是接口参数，由文件面板当前的 SFTP 会话自动带入。当前只有 SFTP 会话支持浏览器流式传输；
 SCP/FTP 仍走桌面端原有的传输管线。
 
 ## 桌面端不受影响
