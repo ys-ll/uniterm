@@ -18,9 +18,20 @@ import (
 // syntax too). The leading echo guarantees the marker starts on a fresh line
 // even when the command's own output lacks a trailing newline. Detection
 // anchors on line start, and the typed occurrence always has "echo " before
-// the token, so terminal echo cannot impersonate it. Exit code is unknown in
-// this mode.
-func CompletionCommand(command, shell, token, newline string) (string, *completionScanner, bool) {
+// the command text, so terminal echo cannot impersonate it. Exit code is
+// unknown in this mode.
+//
+// filterEncoding is non-empty only for shells whose piped native-program
+// output is legacy-encoded (see session.LocalSession.ExecFilterEncoding): the
+// job's output is then routed through a Perl filter that re-encodes lines
+// which are not valid UTF-8 from that charset, while valid UTF-8 lines pass
+// through untouched. The filter lives inside the shell pipeline because the
+// garbling is unrecoverable after the MSYS console writer has run; the fifo
+// keeps eval in the current shell so cd/exports still survive, and the wait
+// before the marker guarantees the filter has flushed before completion is
+// acknowledged. If mkfifo or perl is unavailable the wrapper degrades to the
+// plain form.
+func CompletionCommand(command, shell, filterEncoding, token, newline string) (string, *completionScanner, bool) {
 	quoted := "'" + strings.ReplaceAll(command, "'", "'\"'\"'") + "'"
 	// Use concealed screen text rather than OSC: ConPTY passes OSC through
 	// ahead of pending screen updates, which would acknowledge completion
@@ -28,10 +39,28 @@ func CompletionCommand(command, shell, token, newline string) (string, *completi
 	format := `\n\033[8m__UT_` + token + `;%d__\033[0m\n`
 	switch shell {
 	case "bash", "zsh", "sh", "dash", "ksh":
-		return " eval " + quoted + "; printf '" + format + `' "$?"`,
+		if filterEncoding == "" {
+			return " eval " + quoted + "; printf '" + format + `' "$?"`,
+				&completionScanner{prefix: []byte("__UT_" + token + ";")}, true
+		}
+		// The Perl filter validates each line against a strict UTF-8 byte
+		// grammar (not Encode::decode/decode_utf8: their in-place UTF-8
+		// optimization destroys the argument scalar, silently swallowing
+		// lines) and re-encodes invalid ones from the legacy charset. A line
+		// mixing both charsets is re-encoded as a whole — rare, since a line
+		// is normally written by one program.
+		filter := `BEGIN{$|=1} while (<>) { print m{\A(?:[\x00-\x7F]|[\xC2-\xDF][\x80-\xBF]|` +
+			`[\xE0-\xEF][\x80-\xBF]{2}|[\xF0-\xF4][\x80-\xBF]{3})*\z} ? $_ : ` +
+			`Encode::encode_utf8(Encode::decode("` + filterEncoding + `", $_)); }`
+		return " __utc=" + quoted + "; __utd=; " +
+				"if __utd=$(mktemp -d) && mkfifo \"$__utd/p\" 2>/dev/null && command -v perl >/dev/null 2>&1; then " +
+				"perl -MEncode -e '" + filter + "' < \"$__utd/p\" & __utp=$!; " +
+				"eval \"$__utc\" > \"$__utd/p\" 2>&1; __utr=$?; wait $__utp; rm -rf \"$__utd\"; " +
+				"else [ -n \"$__utd\" ] && rm -rf \"$__utd\"; eval \"$__utc\"; __utr=$?; fi; " +
+				"printf '" + format + "' \"$__utr\"; unset __utc __utd __utp __utr",
 			&completionScanner{prefix: []byte("__UT_" + token + ";")}, true
 	case "powershell", "pwsh":
-		// $LASTEXITCODE is sticky across PowerShell commands. Reset it before
+		// $LASTEXITCODE is sticky across PowerShell cases. Reset it before
 		// evaluation. Capture $? INSIDE the script block: Windows PowerShell
 		// 5 resets it when an invocation/expression returns to its caller.
 		name := "__ut_" + strings.ReplaceAll(token, "-", "_")

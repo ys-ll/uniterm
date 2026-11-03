@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,7 @@ var (
 	kernel32Dll        = windows.NewLazySystemDLL("kernel32.dll")
 	procAttachConsole  = kernel32Dll.NewProc("AttachConsole")
 	procFreeConsoleWin = kernel32Dll.NewProc("FreeConsole")
+	procGetOEMCP       = kernel32Dll.NewProc("GetOEMCP")
 
 	// AttachConsole/FreeConsole operate on process-wide state (a process can
 	// only be attached to one console at a time), so concurrent calls from
@@ -126,6 +128,10 @@ type LocalSession struct {
 	disconnectOnce       sync.Once
 	mouseTrackingEnabled atomic.Bool
 	foregroundShell      string
+	// msysShell marks MSYS-family bash sessions (Git Bash, MSYS2, Cygwin).
+	// Native Windows programs piped inside them emit OEM code page bytes that
+	// the MSYS runtime relays as if they were UTF-8 — see ExecFilterEncoding.
+	msysShell bool
 
 	// osc7 extracts injected OSC-7 cwd reports from the raw ConPTY/pipe
 	// output stream (see shell_integration.go). Only used from readLoop.
@@ -175,6 +181,27 @@ func (s *LocalSession) ForegroundShell() string {
 	defer s.mu.RUnlock()
 	shell := strings.ReplaceAll(s.foregroundShell, `\`, "/")
 	return strings.TrimSuffix(strings.ToLower(shellBasename(shell)), ".exe")
+}
+
+// ExecFilterEncoding reports the charset native Windows programs emit when
+// their stdout is a pipe inside an MSYS bash session (Git Bash, MSYS2,
+// Cygwin): they always write the system OEM code page (GBK/936 on zh-CN),
+// which the MSYS tools relaying that output reinterpret as UTF-8 at the
+// console boundary — every non-ASCII character garbles, and the damage is
+// unrecoverable afterwards (invalid sequences already became U+FFFD).
+// ConPTY and the console code page are irrelevant: native programs write
+// Unicode straight to the console and only pipe/redirect output is
+// legacy-encoded. The command executor wraps jobs in a filter that
+// re-encodes such lines; "" means no filter is needed.
+func (s *LocalSession) ExecFilterEncoding() string {
+	s.mu.RLock()
+	msys := s.msysShell
+	s.mu.RUnlock()
+	if !msys {
+		return ""
+	}
+	cp, _, _ := procGetOEMCP.Call()
+	return "cp" + strconv.FormatUint(uint64(cp), 10)
 }
 
 func (s *LocalSession) Connect(config ConnectionConfig) error {
@@ -303,6 +330,10 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 
 	platform.HideConsoleWindow(cmd)
 	cmd.Dir = workDir
+
+	s.mu.Lock()
+	s.msysShell = isMSYSBash
+	s.mu.Unlock()
 
 	// Elevated shell: the ConPTY lives in the elevated broker process and is
 	// relayed to us over the control pipe, so everything below (direct
