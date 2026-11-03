@@ -484,6 +484,8 @@
   "settings.langSystem": "Systemstandard",
   "settings.closeTabPrompt": "Tab-Schließen-Bestätigung",
   "settings.closeAppPrompt": "App-Schließen-Bestätigung",
+  "settings.showTrayIcon": "Tray-Symbol",
+  "settings.showTrayIconDesc": "uniTerm-Symbol im System-Tray / in der Menüleiste anzeigen",
   "settings.systemTitleBar": "Systemtitelleiste verwenden",
   "settings.systemTitleBarDesc": "Den nativen Fensterrahmen des Betriebssystems anstelle des integrierten verwenden (Neustart erforderlich)",
   "settings.titleBarRestartTitle": "Neustart erforderlich",

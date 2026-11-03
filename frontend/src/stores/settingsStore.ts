@@ -457,6 +457,7 @@ function mergeSettings(loaded: AppSettings): AppSettings {
     gitBashPath: loaded.gitBashPath ?? DEFAULT_SETTINGS.gitBashPath,
     tabCloseButton: loaded.tabCloseButton || DEFAULT_SETTINGS.tabCloseButton,
     showTabShortcutHints: loaded.showTabShortcutHints ?? DEFAULT_SETTINGS.showTabShortcutHints,
+    showTrayIcon: loaded.showTrayIcon ?? DEFAULT_SETTINGS.showTrayIcon,
     hostListMenuStyle: loaded.hostListMenuStyle || DEFAULT_SETTINGS.hostListMenuStyle,
     connectionsDisplayMode: loaded.connectionsDisplayMode === 'compact' ? 'compact' : 'full',
     quickCommandsDisplayMode: loaded.quickCommandsDisplayMode === 'buttons' ? 'buttons' : 'list',

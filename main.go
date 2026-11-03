@@ -408,8 +408,12 @@ func main() {
 	// toggle and a menu (show / hide / reset position / settings / about /
 	// quit). Menu labels follow the persisted UI language; English is the
 	// fallback for unknown codes. Tray creation must happen after the window
-	// exists so the click handlers can drive it.
-	setupTray(w3app, app, window, savedSettings.Language)
+	// exists so the click handlers can drive it. Skipped entirely when the
+	// user turned the icon off; created lazily if re-enabled at runtime
+	// (see applyTrayVisibility).
+	if trayIconEnabled(&savedSettings) {
+		setupTray(w3app, app, window, savedSettings.Language)
+	}
 
 	// Global show/hide hotkey (issue #982, Windows + platform backends via
 	// the wails GlobalShortcutManager). Default Ctrl+M when unset; can be
@@ -674,6 +678,31 @@ func buildTrayMenu(app *App, lang string) *application.Menu {
 		app.app.Quit()
 	})
 	return menu
+}
+
+// trayIconEnabled reports whether the tray icon should be shown. Nil (older
+// settings.json without the field) means on.
+func trayIconEnabled(s *store.AppSettings) bool {
+	return s.ShowTrayIcon == nil || *s.ShowTrayIcon
+}
+
+// applyTrayVisibility shows or hides the tray icon when the setting changes
+// at runtime. When the app started with the icon disabled no tray exists yet,
+// so the first enable creates it.
+func (a *App) applyTrayVisibility(show bool, lang string) {
+	if a.app == nil {
+		return
+	}
+	switch {
+	case !show:
+		if a.tray != nil {
+			a.tray.Hide()
+		}
+	case a.tray == nil:
+		setupTray(a.app, a, a.window, lang)
+	default:
+		a.tray.Show()
+	}
 }
 
 // refreshTrayLanguage rebuilds the tray menu when the persisted UI language

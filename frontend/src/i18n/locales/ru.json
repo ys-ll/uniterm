@@ -484,6 +484,8 @@
   "settings.langSystem": "Системный по умолчанию",
   "settings.closeTabPrompt": "Подтверждение закрытия вкладки",
   "settings.closeAppPrompt": "Подтверждение закрытия приложения",
+  "settings.showTrayIcon": "Значок в трее",
+  "settings.showTrayIconDesc": "Показывать значок uniTerm в системном трее / строке меню",
   "settings.systemTitleBar": "Использовать системный заголовок окна",
   "settings.systemTitleBarDesc": "Использовать нативную рамку окна ОС вместо встроенной (требуется перезапуск)",
   "settings.titleBarRestartTitle": "Требуется перезапуск",

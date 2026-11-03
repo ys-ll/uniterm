@@ -484,6 +484,8 @@
   "settings.langSystem": "Mặc định hệ thống",
   "settings.closeTabPrompt": "Xác nhận đóng thẻ",
   "settings.closeAppPrompt": "Xác nhận thoát ứng dụng",
+  "settings.showTrayIcon": "Biểu tượng khay hệ thống",
+  "settings.showTrayIconDesc": "Hiển thị biểu tượng uniTerm trên khay hệ thống / thanh menu",
   "settings.systemTitleBar": "Dùng thanh tiêu đề hệ thống",
   "settings.systemTitleBarDesc": "Dùng khung cửa sổ gốc của hệ điều hành thay vì khung tích hợp (cần khởi động lại)",
   "settings.titleBarRestartTitle": "Cần khởi động lại",

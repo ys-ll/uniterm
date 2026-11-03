@@ -484,6 +484,8 @@
   "settings.langSystem": "Valeur par défaut du système",
   "settings.closeTabPrompt": "Confirmation de fermeture d'onglet",
   "settings.closeAppPrompt": "Confirmation de fermeture de l'application",
+  "settings.showTrayIcon": "Icône de la zone de notification",
+  "settings.showTrayIconDesc": "Afficher l'icône uniTerm dans la zone de notification / barre de menus",
   "settings.systemTitleBar": "Utiliser la barre de titre système",
   "settings.systemTitleBarDesc": "Utiliser le cadre de fenêtre natif du système d'exploitation au lieu de celui intégré (redémarrage requis)",
   "settings.titleBarRestartTitle": "Redémarrage requis",
