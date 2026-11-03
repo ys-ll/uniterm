@@ -250,6 +250,7 @@ import { queuedSessionWrite } from '../services/sessionWriter'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
 import { focusActivePanelTerminal } from '../composables/useFocusTerminal'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import QuickCommandEditDialog from './QuickCommandEditDialog.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
@@ -455,12 +456,8 @@ function runCommand(cmd: QuickCommand) { sendCommand(cmd, 'run') }
 function pasteCommand(cmd: QuickCommand) { sendCommand(cmd, 'paste') }
 
 async function copyCommand(cmd: QuickCommand) {
-  try {
-    await navigator.clipboard.writeText(cmd.command)
-    msg.success(t('quickCommands.copied'))
-  } catch {
-    msg.error(t('quickCommands.copyFailed'))
-  }
+  if (await writeClipboard(cmd.command)) msg.success(t('quickCommands.copied'))
+  else msg.error(t('quickCommands.copyFailed'))
 }
 
 function onCommandContextMenu(e: MouseEvent, cmd: QuickCommand) {

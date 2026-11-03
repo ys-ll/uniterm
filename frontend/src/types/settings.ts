@@ -153,6 +153,20 @@ export interface AISettings {
   models: AIModelConfig[]
 }
 
+// Compaction trigger budget. This is a local "start compacting" line, not a
+// hard request limit: an over-budget request still goes out and the provider
+// is the authority on its own context window.
+export const DEFAULT_CONTEXT_TOKEN_BUDGET = 96_000
+// 32000 was the shipped default before the budget was raised. Treating that
+// exact value as unset lets existing installs pick up the new default
+// instead of staying pinned to the old one.
+const LEGACY_CONTEXT_TOKEN_BUDGET = 32_000
+
+export function normalizeContextTokenBudget(value?: number | null): number {
+  if (!value || value === LEGACY_CONTEXT_TOKEN_BUDGET) return DEFAULT_CONTEXT_TOKEN_BUDGET
+  return value
+}
+
 export type ShortcutAction =
   | 'nextTab' | 'prevTab'
   | 'newConnection' | 'toggleSidebar' | 'openQuickCommands'
@@ -329,6 +343,9 @@ export interface AppSettings {
   // Whether the per-tab numeric shortcut hint (e.g. Ctrl+1) is drawn on the
   // tab itself; the hover tooltips elsewhere are unaffected.
   showTabShortcutHints: boolean
+  // Whether the system tray icon (macOS menu bar status item) is shown.
+  // Mirrors ShowTrayIcon in backend/store/settings_store.go.
+  showTrayIcon: boolean
   // How the host list opens the connection menu: hover "⋯"/star buttons
   // ("button") or right-click only, with the hover buttons hidden
   // ("rightclick"). The right-click menu works in both modes.
@@ -471,7 +488,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ai: {
     maxTurns: 20,
     autoCompact: true,
-    contextTokenBudget: 32000,
+    contextTokenBudget: DEFAULT_CONTEXT_TOKEN_BUDGET,
     summaryModelId: '',
     models: [
       {
@@ -500,6 +517,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gitBashPath: '',
   tabCloseButton: 'left',
   showTabShortcutHints: true,
+  showTrayIcon: true,
   hostListMenuStyle: 'button',
   connectionsDisplayMode: 'full',
   quickCommandsDisplayMode: 'list',

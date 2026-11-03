@@ -1003,6 +1003,18 @@ func (p ptyAdapter) ForegroundShell() string {
 	return ""
 }
 
+// ExecFilterEncoding forwards the session's legacy-charset hint (MSYS bash
+// piped native output — see session.LocalSession.ExecFilterEncoding) so the
+// job wrapper can re-encode it. The adapter wraps the session, so without
+// this forwarding the registry's interface probe fails and every job falls
+// back to the unfiltered wrapper.
+func (p ptyAdapter) ExecFilterEncoding() string {
+	if fe, ok := p.s.(interface{ ExecFilterEncoding() string }); ok {
+		return fe.ExecFilterEncoding()
+	}
+	return ""
+}
+
 // newlineFor returns the Enter bytes the shell expects. Windows OpenSSH and
 // PowerShell need CR; POSIX shells accept LF (the frontend mirrors this).
 func newlineFor(s session.Session) string {

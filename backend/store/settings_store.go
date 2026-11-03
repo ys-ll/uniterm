@@ -229,6 +229,10 @@ type AppSettings struct {
 	// written by older builds (which lack this field) still loads; the
 	// frontend defaults to `true` when nil.
 	ShowTabShortcutHints *bool `json:"showTabShortcutHints,omitempty"`
+	// ShowTrayIcon toggles the system tray icon (macOS menu bar status item).
+	// Pointer + omitempty so settings.json written by older builds still
+	// loads; nil means "show" (the frontend default).
+	ShowTrayIcon *bool `json:"showTrayIcon,omitempty"`
 	// HostListMenuStyle selects how the host list opens the connection
 	// menu: "button" (hover buttons) or "rightclick". Empty means the
 	// frontend falls back to `button`.
