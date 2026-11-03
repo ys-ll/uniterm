@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -19,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -55,6 +58,13 @@ type WorkerInstance struct {
 	done       chan struct{} // closed once the process has exited and been reaped
 	waitErr    error
 	mu         sync.Mutex
+
+	// ready is closed once the HTTP port is listening, or spawning failed
+	// (readyErr then explains why). Concurrent first-screen requests wait on
+	// this instead of being proxied to a port that is not accepting yet.
+	ready     chan struct{}
+	readyOnce sync.Once
+	readyErr  error
 }
 
 // MultiUserGateway manages user authentication, isolated per-user directories,
@@ -223,112 +233,289 @@ func (gw *MultiUserGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Header.Set("X-Uniterm-User", claims.Username)
 	r.Header.Set("X-Uniterm-Role", claims.Role)
 
-	worker.Proxy.ServeHTTP(w, r)
+	compressibleAssets(worker.Proxy).ServeHTTP(w, r)
 }
+
+// --- Static asset compression ---
+
+// compressibleAssets gzips the frontend's text assets on the gateway hop. The
+// worker serves them uncompressed (4.45 MB of JS/CSS in the current build);
+// compressing here avoids touching the frontend build and keeps desktop
+// builds byte-identical. Binary assets (woff2/png/wasm) are already
+// compressed, so they pass through untouched.
+func compressibleAssets(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isCompressibleAsset(r.URL.Path) ||
+			r.Method == http.MethodHead ||
+			r.Header.Get("Range") != "" ||
+			!acceptsGzip(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		writer := &gzipResponseWriter{ResponseWriter: w}
+		defer writer.Close()
+		next.ServeHTTP(writer, r)
+	})
+}
+
+func isCompressibleAsset(p string) bool {
+	if !strings.HasPrefix(p, "/assets/") {
+		return false
+	}
+	switch strings.ToLower(path.Ext(p)) {
+	case ".js", ".mjs", ".css", ".json", ".svg", ".map", ".txt", ".html":
+		return true
+	}
+	return false
+}
+
+func acceptsGzip(r *http.Request) bool {
+	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		fields := strings.Split(strings.TrimSpace(part), ";")
+		if !strings.EqualFold(strings.TrimSpace(fields[0]), "gzip") {
+			continue
+		}
+		for _, param := range fields[1:] {
+			if strings.EqualFold(strings.TrimSpace(param), "q=0") {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// gzipResponseWriter compresses only 200 responses that are not already
+// encoded (or a partial range); everything else passes through unchanged.
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	gz      *gzip.Writer
+	decided bool
+}
+
+func (w *gzipResponseWriter) WriteHeader(status int) {
+	if w.decided {
+		return
+	}
+	w.decided = true
+	header := w.Header()
+	if status == http.StatusOK && header.Get("Content-Encoding") == "" && header.Get("Content-Range") == "" {
+		// BestSpeed keeps the 3.7 MB main chunk around 45 ms of CPU while
+		// still cutting the transfer to roughly a third.
+		if gz, err := gzip.NewWriterLevel(w.ResponseWriter, gzip.BestSpeed); err == nil {
+			w.gz = gz
+			header.Del("Content-Length")
+			header.Set("Content-Encoding", "gzip")
+			header.Add("Vary", "Accept-Encoding")
+		}
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	if !w.decided {
+		w.WriteHeader(http.StatusOK)
+	}
+	if w.gz != nil {
+		return w.gz.Write(b)
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *gzipResponseWriter) Close() error {
+	if w.gz != nil {
+		return w.gz.Close()
+	}
+	return nil
+}
+
+func (w *gzipResponseWriter) Flush() {
+	if w.gz != nil {
+		_ = w.gz.Flush()
+	}
+	_ = http.NewResponseController(w.ResponseWriter).Flush()
+}
+
+func (w *gzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("underlying ResponseWriter does not support hijacking")
+	}
+	return hijacker.Hijack()
+}
+
+func (w *gzipResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// errWorkerExited reports that a worker died before it became ready, so the
+// caller should drop that exact instance and spawn a fresh one.
+var errWorkerExited = errors.New("worker exited during startup")
 
 // getOrSpawnWorker ensures a dedicated headless uniterm-server process is running for username.
 func (gw *MultiUserGateway) getOrSpawnWorker(username string) (*WorkerInstance, error) {
-	gw.workersMu.Lock()
-	if existing, ok := gw.workers[username]; ok {
-		select {
-		case <-existing.done:
-			// Exited: drop it and fall through to a fresh spawn.
-			delete(gw.usedPorts, existing.Port)
-			delete(gw.workers, username)
-		default:
-			gw.workersMu.Unlock()
-			return existing, nil
+	// Two attempts: the first instance of a user can die right after spawn
+	// (e.g. an immediate crash), in which case waiters drop it and retry once.
+	for attempt := 0; attempt < 2; attempt++ {
+		gw.workersMu.Lock()
+		if existing, ok := gw.workers[username]; ok {
+			select {
+			case <-existing.done:
+				// Exited: drop it and fall through to a fresh spawn.
+				delete(gw.usedPorts, existing.Port)
+				delete(gw.workers, username)
+			default:
+				gw.workersMu.Unlock()
+				instance, err := existing.waitReady()
+				if err == nil {
+					return instance, nil
+				}
+				if !errors.Is(err, errWorkerExited) {
+					return nil, err
+				}
+				// The process died while requests were queued on it; remove
+				// this exact instance and spawn again.
+				gw.dropWorker(existing)
+				continue
+			}
 		}
-	}
 
-	port, err := gw.allocatePortLocked()
-	if err != nil {
-		gw.workersMu.Unlock()
-		return nil, err
-	}
-
-	userRoot := filepath.Join(gw.dataRoot, "users", username)
-	userHome := filepath.Join(userRoot, "home")
-	userConfig := filepath.Join(userRoot, "config")
-	userData := filepath.Join(userRoot, "data")
-	userCache := filepath.Join(userRoot, "cache")
-	for _, dir := range []string{userHome, userConfig, userData, userCache} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			delete(gw.usedPorts, port)
+		port, err := gw.allocatePortLocked()
+		if err != nil {
 			gw.workersMu.Unlock()
 			return nil, err
 		}
-	}
 
-	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
-	cmd := exec.Command(gw.workerBinary)
-	cmd.Dir = userHome
-	cmd.Env = append(os.Environ(),
-		"HOME="+userHome,
-		"USER="+username,
-		"LOGNAME="+username,
-		"XDG_CONFIG_HOME="+userConfig,
-		"XDG_DATA_HOME="+userData,
-		"XDG_CACHE_HOME="+userCache,
-		"WAILS_SERVER_HOST=127.0.0.1",
-		"WAILS_SERVER_PORT="+strconv.Itoa(port),
-		"UNITERM_TENANT_USER="+username,
-	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		delete(gw.usedPorts, port)
-		gw.workersMu.Unlock()
-		return nil, fmt.Errorf("start %s failed: %w", gw.workerBinary, err)
-	}
-
-	proxy := httputil.NewSingleHostReverseProxy(targetURL)
-	proxy.FlushInterval = -1 // Flush immediately for SSE, WebSocket, and streaming SFTP downloads
-	origDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		origDirector(req)
-		// Rewrite Host to 127.0.0.1:<port> so Wails v3 Loopback Host Check passes cleanly
-		req.Host = targetURL.Host
-		if req.Header.Get("Origin") != "" {
-			req.Header.Set("Origin", "http://"+targetURL.Host)
+		userRoot := filepath.Join(gw.dataRoot, "users", username)
+		userHome := filepath.Join(userRoot, "home")
+		userConfig := filepath.Join(userRoot, "config")
+		userData := filepath.Join(userRoot, "data")
+		userCache := filepath.Join(userRoot, "cache")
+		for _, dir := range []string{userHome, userConfig, userData, userCache} {
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				delete(gw.usedPorts, port)
+				gw.workersMu.Unlock()
+				return nil, err
+			}
 		}
-	}
 
-	instance := &WorkerInstance{
-		Username:   username,
-		Port:       port,
-		TargetURL:  targetURL,
-		Proxy:      proxy,
-		Cmd:        cmd,
-		LastActive: time.Now(),
-		done:       make(chan struct{}),
+		targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
+		cmd := exec.Command(gw.workerBinary)
+		cmd.Dir = userHome
+		cmd.Env = append(os.Environ(),
+			"HOME="+userHome,
+			"USER="+username,
+			"LOGNAME="+username,
+			"XDG_CONFIG_HOME="+userConfig,
+			"XDG_DATA_HOME="+userData,
+			"XDG_CACHE_HOME="+userCache,
+			"WAILS_SERVER_HOST=127.0.0.1",
+			"WAILS_SERVER_PORT="+strconv.Itoa(port),
+			"UNITERM_TENANT_USER="+username,
+		)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Start(); err != nil {
+			delete(gw.usedPorts, port)
+			gw.workersMu.Unlock()
+			return nil, fmt.Errorf("start %s failed: %w", gw.workerBinary, err)
+		}
+
+		proxy := httputil.NewSingleHostReverseProxy(targetURL)
+		proxy.FlushInterval = -1 // Flush immediately for SSE, WebSocket, and streaming SFTP downloads
+		origDirector := proxy.Director
+		proxy.Director = func(req *http.Request) {
+			origDirector(req)
+			// Rewrite Host to 127.0.0.1:<port> so Wails v3 Loopback Host Check passes cleanly
+			req.Host = targetURL.Host
+			if req.Header.Get("Origin") != "" {
+				req.Header.Set("Origin", "http://"+targetURL.Host)
+			}
+		}
+
+		instance := &WorkerInstance{
+			Username:   username,
+			Port:       port,
+			TargetURL:  targetURL,
+			Proxy:      proxy,
+			Cmd:        cmd,
+			LastActive: time.Now(),
+			done:       make(chan struct{}),
+			ready:      make(chan struct{}),
+		}
+		// Register before the port is listening: concurrent first-screen
+		// requests then wait on ready instead of getting a connection refusal.
+		gw.workers[username] = instance
+		gw.workersMu.Unlock()
+
+		// Reap the child so a dead worker is detectable instead of leaving a
+		// permanent zombie that proxied every request to a closed port.
+		go func() {
+			instance.waitErr = cmd.Wait()
+			close(instance.done)
+			log.Printf("[uniterm-gateway] Worker for user=%s exited: %v", username, instance.waitErr)
+		}()
+
+		started := time.Now()
+		if err := waitForWorkerReady(port, 10*time.Second); err != nil {
+			instance.readyErr = err
+			instance.readyOnce.Do(func() { close(instance.ready) })
+			gw.dropWorker(instance)
+			terminateWorkerInstance(instance)
+			return nil, err
+		}
+		instance.readyOnce.Do(func() { close(instance.ready) })
+
+		log.Printf("[uniterm-gateway] Started isolated worker for user=%s on 127.0.0.1:%d in %s (HOME=%s)",
+			username, port, time.Since(started), userHome)
+		return instance, nil
 	}
-	gw.workers[username] = instance
+	return nil, fmt.Errorf("worker for user %s could not be started", username)
+}
+
+// waitReady blocks until the worker is accepting connections, failed to
+// start, or exited.
+func (w *WorkerInstance) waitReady() (*WorkerInstance, error) {
+	select {
+	case <-w.ready:
+		if w.readyErr != nil {
+			return nil, w.readyErr
+		}
+		return w, nil
+	case <-w.done:
+		return nil, errWorkerExited
+	}
+}
+
+// dropWorker removes instance from the registry only when it is still the
+// user's current worker — a stale waiter must not evict a newer instance.
+func (gw *MultiUserGateway) dropWorker(instance *WorkerInstance) {
+	gw.workersMu.Lock()
+	if current, ok := gw.workers[instance.Username]; ok && current == instance {
+		delete(gw.workers, instance.Username)
+		delete(gw.usedPorts, instance.Port)
+	}
 	gw.workersMu.Unlock()
+}
 
-	// Reap the child so a dead worker is detectable instead of leaving a
-	// permanent zombie that proxied every request to a closed port.
-	go func() {
-		instance.waitErr = cmd.Wait()
-		close(instance.done)
-		log.Printf("[uniterm-gateway] Worker for user=%s exited: %v", username, instance.waitErr)
-	}()
-
-	// Wait for worker /health endpoint to become ready
-	if err := waitForWorkerReady(port, 10*time.Second); err != nil {
-		gw.stopWorker(username)
-		return nil, err
+func terminateWorkerInstance(instance *WorkerInstance) {
+	if instance.Cmd == nil || instance.Cmd.Process == nil {
+		return
 	}
-
-	log.Printf("[uniterm-gateway] Started isolated worker for user=%s on 127.0.0.1:%d (HOME=%s)", username, port, userHome)
-	return instance, nil
+	_ = instance.Cmd.Process.Signal(syscall.SIGTERM)
+	select {
+	case <-instance.done:
+	case <-time.After(3 * time.Second):
+		_ = instance.Cmd.Process.Kill()
+		<-instance.done
+	}
 }
 
 func waitForWorkerReady(port int, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", port)
-	client := &http.Client{Timeout: 500 * time.Millisecond}
+	client := &http.Client{Timeout: 300 * time.Millisecond}
 
 	for time.Now().Before(deadline) {
 		resp, err := client.Get(healthURL)
@@ -338,7 +525,7 @@ func waitForWorkerReady(port int, timeout time.Duration) error {
 				return nil
 			}
 		}
-		time.Sleep(80 * time.Millisecond)
+		time.Sleep(25 * time.Millisecond)
 	}
 	return fmt.Errorf("worker on port %d did not become healthy within %s", port, timeout)
 }
@@ -373,14 +560,8 @@ func (gw *MultiUserGateway) stopWorker(username string) {
 	}
 	gw.workersMu.Unlock()
 
-	if ok && instance.Cmd != nil && instance.Cmd.Process != nil {
-		_ = instance.Cmd.Process.Signal(syscall.SIGTERM)
-		select {
-		case <-instance.done:
-		case <-time.After(3 * time.Second):
-			_ = instance.Cmd.Process.Kill()
-			<-instance.done
-		}
+	if ok {
+		terminateWorkerInstance(instance)
 	}
 }
 
@@ -612,6 +793,14 @@ func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) 
 		"username": user.Username,
 		"role":     user.Role,
 	})
+
+	// Pre-warm the isolated worker so the process fork and server
+	// initialisation overlap with the browser loading the SPA.
+	go func(username string) {
+		if _, err := gw.getOrSpawnWorker(username); err != nil {
+			log.Printf("[uniterm-gateway] prewarm worker for user=%s failed: %v", username, err)
+		}
+	}(user.Username)
 }
 
 func (gw *MultiUserGateway) handleLogout(w http.ResponseWriter, r *http.Request) {

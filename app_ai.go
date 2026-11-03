@@ -2379,9 +2379,15 @@ func (a *App) StartMCPClient() {
 		return
 	}
 	mgr := a.ensureMCPClient()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	mgr.Reload(ctx)
+	// Connect in the background: Reload walks every enabled server with a 30s
+	// budget, and one unreachable address must not delay startup (the web
+	// gateway pays this cost on every cold worker start). The manager is
+	// mutex-guarded, so the AI panel sees connections arrive progressively.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		mgr.Reload(ctx)
+	}()
 }
 
 // reloadMCPClientsAfterSync re-lists the persisted servers into the UI and
