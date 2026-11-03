@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"strings"
 )
 
 // Streaming adapters used by the headless web console (server_web_extension.go)
@@ -104,8 +105,12 @@ func archiveRelPath(root, p string) string {
 	if base == "/" || base == "." || base == "" {
 		base = "archive"
 	}
-	rel, err := path.Rel(root, p)
-	if err != nil || rel == "." {
+	// Walker paths are built from root with "/" separators; the stdlib path
+	// package has no Rel, and filepath.Rel would use OS separators, so trim
+	// the prefix directly.
+	rel := strings.TrimPrefix(path.Clean(p), path.Clean(root))
+	rel = strings.TrimPrefix(rel, "/")
+	if rel == "" {
 		return base
 	}
 	return path.Join(base, rel)
