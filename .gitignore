@@ -81,7 +81,7 @@ docs/superpowers/
 designs/
 /design.md
 docs/articles/
-docker/
+/docker/
 
 # Android scaffold (copied from wails build assets; outputs stay ignored)
 !build/android/
