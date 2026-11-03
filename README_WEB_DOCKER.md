@@ -25,7 +25,15 @@ docker compose up -d --build
 # 浏览器打开 http://localhost:8080
 ```
 
-数据全部落在 `./uniterm-data:/data`：`gateway/users.json`、`gateway/jwt_secret.key`，
+默认数据目录是仓库下的 `./uniterm-data`。升级已有部署时，用 `UNITERM_DATA_HOST`
+指向旧数据目录即可保留账号与用户数据：
+
+```bash
+export UNITERM_DATA_HOST=/path/to/existing/uniterm-data
+docker compose up -d --force-recreate
+```
+
+数据全部落在该目录：`gateway/users.json`、`gateway/jwt_secret.key`，
 以及每个用户独立的 `users/<name>/{home,config,data,cache}`（`HOME`、`XDG_*` 都指向这里）。
 
 ## 环境变量
