@@ -3,108 +3,57 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 
 	"github.com/ys-ll/uniterm/backend/credentials"
 )
 
-// fileKeychain stores keychain entries in a 0600 JSON file under HOME.
-//
-// The web build runs in a container with no D-Bus session bus, so the OS
-// keychain (secret-service) is unavailable and every credential setup or
-// unlock fails with `exec: "dbus-launch": executable file not found`. Each
-// tenant already has its own HOME, so that file is the trust boundary here —
-// weaker than an OS keychain (anything that can read the user's home can read
-// the key) but the only option without a session bus.
-type fileKeychain struct {
-	path string
-	mu   sync.Mutex
+// memKeychain is the server-build keychain: an in-memory map with no disk
+// presence. The container has no D-Bus secret service, and the previous
+// file-backed implementation wrote the credential master key to a plaintext
+// JSON file — which defeated the login-password-as-master-password model
+// (anyone reading the tenant home could decrypt the stores). With the
+// in-memory keychain, master keys live only in worker process memory: a
+// respawned worker re-derives the key from the login password the gateway
+// forwards (UNITERM_MASTER_PASSWORD), or the user unlocks in the browser.
+type memKeychain struct {
+	mu      sync.Mutex
+	entries map[string]string
 }
 
 func credentialKeychain() credentials.Keychain {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		home = "/tmp"
-	}
-	return &fileKeychain{path: filepath.Join(home, ".uniterm", "keychain.json")}
+	return &memKeychain{entries: map[string]string{}}
 }
 
-func (k *fileKeychain) load() (map[string]string, error) {
-	entries := map[string]string{}
-	data, err := os.ReadFile(k.path)
-	if errors.Is(err, os.ErrNotExist) {
-		return entries, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, err
-	}
-	return entries, nil
-}
-
-func (k *fileKeychain) save(entries map[string]string) error {
-	if err := os.MkdirAll(filepath.Dir(k.path), 0o700); err != nil {
-		return err
-	}
-	data, err := json.Marshal(entries)
-	if err != nil {
-		return err
-	}
-	tmp := k.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, k.path)
-}
-
-func (k *fileKeychain) Get(key string) (string, error) {
+func (k *memKeychain) Get(key string) (string, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	entries, err := k.load()
-	if err != nil {
-		return "", err
-	}
-	return entries[key], nil
+	return k.entries[key], nil
 }
 
-func (k *fileKeychain) Set(key, value string) error {
+func (k *memKeychain) Set(key, value string) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	entries, err := k.load()
-	if err != nil {
-		return err
+	if k.entries == nil {
+		k.entries = map[string]string{}
 	}
-	entries[key] = value
-	return k.save(entries)
+	k.entries[key] = value
+	return nil
 }
 
-func (k *fileKeychain) Delete(key string) error {
+func (k *memKeychain) Delete(key string) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	entries, err := k.load()
-	if err != nil {
-		return err
-	}
-	delete(entries, key)
-	return k.save(entries)
+	delete(k.entries, key)
+	return nil
 }
 
-func (k *fileKeychain) List() ([]string, error) {
+func (k *memKeychain) List() ([]string, error) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	entries, err := k.load()
-	if err != nil {
-		return nil, err
-	}
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
+	keys := make([]string, 0, len(k.entries))
+	for key := range k.entries {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)

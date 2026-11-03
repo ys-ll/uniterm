@@ -5,6 +5,7 @@ import { CheckForUpdate, GetAppInfo, DownloadUpdate, ApplyUpdate } from '../../b
 import { useI18n, locale } from '../i18n'
 import { useSettingsStore } from '../stores/settingsStore'
 import { isMobilePlatform } from '../utils/platform'
+import { isWebServerMode } from '../services/webSftpBridge'
 import { Events } from '@wailsio/runtime'
 import type { UpdateInfo } from '../types/settings'
 
@@ -199,7 +200,7 @@ watch(autoCheck, (enabled) => {
   settings.save()
 })
 
-function initAutoCheck() {
+async function initAutoCheck() {
   checking.value = false
   stopTimer()
   settingsWatchStop?.()
@@ -214,6 +215,10 @@ function initAutoCheck() {
   // Mobile updates by installing a new APK; the in-app update check would
   // only fetch desktop assets. Skip auto-check scheduling entirely.
   if (isMobilePlatform()) return
+  // Headless server deployments take updates from the container image; the
+  // backend refuses Check/Download/Apply in server mode, so don't schedule
+  // the startup check either.
+  if (await isWebServerMode()) return
   // Wait for persisted settings before scheduling network requests. Reading
   // the temporary default here would ignore a stored `false`.
   const settings = useSettingsStore()

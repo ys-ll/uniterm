@@ -23,6 +23,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { OpenFileDialogFiltered } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebServerMode, pickAndStageLocalFileInBrowser } from '../services/webSftpBridge'
 import { useI18n } from '../i18n'
 import { loadImage } from '../services/containerClient'
 import { backendErrorText } from '../utils/backendError'
@@ -43,6 +44,13 @@ onBeforeUnmount(cancel)
 
 async function browse() {
   try {
+    // Web mode: stage the archive into the worker; loadImage consumes the
+    // container path immediately.
+    if (await isWebServerMode()) {
+      const staged = await pickAndStageLocalFileInBrowser('.tar,.gz,.tgz,.bz2,.tbz2,.xz,.txz,.zst,.tzst')
+      if (staged) archivePath.value = staged.stagedPath
+      return
+    }
     const path = await OpenFileDialogFiltered(t('container.chooseArchive'), 'Image archive', '*.tar;*.tar.gz;*.tgz;*.tar.bz2;*.tbz2;*.tar.xz;*.txz;*.tar.zst;*.tzst')
     if (path) archivePath.value = path
   } catch (e) { error.value = backendErrorText(e) }

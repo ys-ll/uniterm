@@ -20,7 +20,17 @@ export function isMobilePlatform(p: UiPlatform = detectPlatformSync()): boolean 
   return p === 'android' || p === 'ios'
 }
 
+// Web server deployments never offer container-local terminals (the shell
+// would run as root inside the multi-tenant container). null = desktop,
+// untouched.
+let localTerminalSupportOverride: boolean | null = null
+
+export function setLocalTerminalSupport(supported: boolean) {
+  localTerminalSupportOverride = supported
+}
+
 export function supportsLocalTerminal(p: UiPlatform = detectPlatformSync()): boolean {
+  if (localTerminalSupportOverride !== null) return localTerminalSupportOverride
   return p !== 'ios'
 }
 

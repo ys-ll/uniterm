@@ -9,6 +9,8 @@
  * 4. Multi-user session inspection, user management (admin), and logout helpers
  */
 
+import { setLocalTerminalSupport } from '../utils/platform'
+
 export interface WebModeStatus {
   serverMode: boolean;
   user: string;
@@ -63,6 +65,8 @@ export async function getWebModeStatus(forceRefresh = false): Promise<WebModeSta
       return cachedWebMode;
     }
     cachedWebMode = (await resp.json()) as WebModeStatus;
+    // Server deployments never offer container-local terminals.
+    setLocalTerminalSupport(!cachedWebMode.serverMode)
     return cachedWebMode;
   } catch {
     cachedWebMode = { serverMode: false, user: 'local', role: 'admin', homeDir: '' };
@@ -201,14 +205,36 @@ export async function cancelBrowserSftpTransfer(transferId: string): Promise<voi
  * Prompts the user to pick a local file in their browser (e.g., SSH private key,
  * SQLite database, or connection import file), uploads it to the user's isolated
  * staging directory in the container, and returns the container file path.
+ *
+ * `opts.keep` places the file in the janitor-exempt keep/ area — use it when
+ * the returned path will be stored in a saved config (SSH keyPath, SQLite
+ * host, kubeconfig) rather than consumed immediately.
  */
-export async function pickAndStageLocalFileInBrowser(accept = '*/*'): Promise<StagedLocalFileResult | null> {
+export async function pickAndStageLocalFileInBrowser(
+  accept = '*/*',
+  opts?: { keep?: boolean },
+): Promise<StagedLocalFileResult | null> {
   const files = await promptBrowserFileInput({ multiple: false, accept });
   if (!files.length) {
     return null;
   }
+  return stageLocalFilesInBrowser(files[0], opts);
+}
+
+/**
+ * Stages an already-picked File object (from any browser file input or
+ * drag-and-drop) into the worker's staging area. See
+ * pickAndStageLocalFileInBrowser for the keep semantics.
+ */
+export async function stageLocalFilesInBrowser(
+  file: File,
+  opts?: { keep?: boolean },
+): Promise<StagedLocalFileResult> {
   const formData = new FormData();
-  formData.append('file', files[0], files[0].name);
+  if (opts?.keep) {
+    formData.append('keep', '1');
+  }
+  formData.append('file', file, file.name);
 
   const resp = await fetch('/api/web/dialog/stage-file', {
     method: 'POST',
@@ -220,6 +246,29 @@ export async function pickAndStageLocalFileInBrowser(accept = '*/*'): Promise<St
     throw new Error(errBody.error || `Failed to stage local file (HTTP ${resp.status})`);
   }
   return (await resp.json()) as StagedLocalFileResult;
+}
+
+/**
+ * Reads a picked File as text — the web-mode replacement for Go-side
+ * "return the file content" dialogs (OpenPrivateKeyFile, OpenKubeconfigFile)
+ * and ReadFileBase64 consumers.
+ */
+export function readBrowserFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('failed to read file'));
+    reader.readAsText(file);
+  });
+}
+
+/** True when the app runs in the headless server mode (browser deployment). */
+export async function isWebServerMode(): Promise<boolean> {
+  try {
+    return (await getWebModeStatus()).serverMode;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -271,8 +320,8 @@ export async function createGatewayUser(
   }
 }
 
-export async function deleteGatewayUser(username: string): Promise<void> {
-  const resp = await fetch(`/api/auth/users/${encodeURIComponent(username)}`, {
+export async function deleteGatewayUser(username: string, purge = false): Promise<void> {
+  const resp = await fetch(`/api/auth/users/${encodeURIComponent(username)}?purge=${purge}`, {
     method: 'DELETE',
     credentials: 'same-origin',
   });
@@ -282,7 +331,52 @@ export async function deleteGatewayUser(username: string): Promise<void> {
   }
 }
 
+/** Self-service password change (POST /api/auth/password). */
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const resp = await fetch('/api/auth/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to change password');
+  }
+}
+
+/** Admin-only password reset for any account (POST /api/auth/users/<name>/password). */
+export async function adminResetUserPassword(username: string, newPassword: string): Promise<void> {
+  const resp = await fetch(`/api/auth/users/${encodeURIComponent(username)}/password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ newPassword }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to reset password');
+  }
+}
+
 // --- Internal Browser DOM Helpers ---
+
+/**
+ * Opens the browser's native file picker and resolves with the picked File
+ * objects. The web-mode replacement for native "pick a file/dialog" call
+ * sites whose content is read client-side.
+ */
+export function pickBrowserFiles(opts?: {
+  multiple?: boolean;
+  accept?: string;
+  directory?: boolean;
+}): Promise<File[]> {
+  return promptBrowserFileInput({
+    multiple: opts?.multiple,
+    accept: opts?.accept,
+    directory: opts?.directory,
+  });
+}
 
 function triggerHiddenDownloadLink(url: string): void {
   const anchor = document.createElement('a');

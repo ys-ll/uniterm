@@ -78,6 +78,12 @@ func (a *App) ensureMCPServer() *mcp.Server {
 // active token set. Called from initStores (auto-start) and from
 // SaveLocalState when the user toggles the switch.
 func (a *App) StartMCP() error {
+	// Server mode: the MCP endpoint binds a worker's loopback port, which is
+	// unreachable from outside the container (and collides across tenants).
+	// The feature is disabled entirely; the settings entry is hidden too.
+	if serverMode {
+		return nil
+	}
 	if a.localStateStore == nil {
 		return fmt.Errorf("local state store not initialized")
 	}

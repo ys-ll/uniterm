@@ -16,6 +16,46 @@ export type TransferDoneCallback = (status: string, type: string) => void
 const routes = new Map<string, Map<string, TransferDoneCallback | undefined>>()
 let listening = false
 
+// Web server mode streams transfers over /api/web/* and reports progress via
+// `web:sftp:progress` events (TransferProgressPayload). They are normalized
+// into the same shape the desktop `sftp:transfer` pipeline produces so the
+// per-panel task lists work unchanged. transferIds already introduced with a
+// `start` event are tracked so the synthetic start fires exactly once.
+const webStarted = new Set<string>()
+
+function dispatchWebProgress(p: any) {
+  if (!p || !p.transferId || !p.sessionId) return
+  const base = { type: 'sftp:transfer', sessionId: p.sessionId, taskId: p.transferId }
+  if (p.status === 'running') {
+    if (!webStarted.has(p.transferId)) {
+      webStarted.add(p.transferId)
+      dispatchTransferEvent({
+        ...base,
+        event: 'start',
+        tfType: p.direction || 'download',
+        name: p.fileName || '',
+        remotePath: p.remotePath || '',
+        total: p.totalBytes || 0,
+        fileCount: 1,
+      })
+    }
+    dispatchTransferEvent({
+      ...base,
+      event: 'progress',
+      progress: p.bytesTransferred || 0,
+      total: p.totalBytes || 0,
+    })
+  } else if (p.status === 'completed' || p.status === 'cancelled' || p.status === 'error') {
+    dispatchTransferEvent({
+      ...base,
+      event: 'complete',
+      status: p.status === 'completed' ? 'done' : p.status,
+      error: p.error || '',
+    })
+    webStarted.delete(p.transferId)
+  }
+}
+
 function ensureListener() {
   if (listening) return
   listening = true
@@ -23,6 +63,9 @@ function ensureListener() {
     const msg = ev?.data as (Record<string, any> & { type?: string; sessionId?: string }) | undefined
     if (!msg || msg.type !== 'sftp:transfer' || !msg.sessionId) return
     dispatchTransferEvent(msg)
+  })
+  Events.On('web:sftp:progress', (ev) => {
+    dispatchWebProgress(ev?.data)
   })
 }
 

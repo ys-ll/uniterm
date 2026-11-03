@@ -307,6 +307,7 @@ import MenuItem from './MenuItem.vue'
 import { ExecuteQuery, ExecuteStatement, GetTables, GetTableSchema, DBDefaultTableQuery, DBBrowseTable, DBUpdateRowsAtomic, DBPreviewCSV, DBImportCSV, DBInsertRow, DBUpdateRow, DBDeleteRow, ExecuteSQLScript, OpenFileDialogFiltered, ReadFileBase64, SaveFileDialogFiltered, WriteFileBase64 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { chat } from '../services/llm'
 import { msg } from '../services/message'
+import { isWebServerMode, pickAndStageLocalFileInBrowser, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
 import { loadSqlHistory, pushSqlHistory } from '../composables/useDbSqlHistory'
 import type { QueryResult, ExecResult, ColumnInfo, HistoryEntry } from '../types/database'
 import { ScriptResult } from '../../bindings/github.com/ys-ll/uniterm/backend/database/models'
@@ -499,7 +500,16 @@ const importingCsv = ref(false)
 async function openCSVImport() {
   if (!props.tableName || !(await confirmDiscardEdits())) return
   try {
-    const path = await OpenFileDialogFiltered(t('db.importCSV'), 'CSV File', '*.csv')
+    // Web mode: stage the CSV into the worker; preview/import read the
+    // container path on the Go side.
+    let path = ''
+    if (await isWebServerMode()) {
+      const staged = await pickAndStageLocalFileInBrowser('.csv')
+      if (!staged) return
+      path = staged.stagedPath
+    } else {
+      path = await OpenFileDialogFiltered(t('db.importCSV'), 'CSV File', '*.csv')
+    }
     if (!path) return
     const [preview, schema] = await Promise.all([
       DBPreviewCSV(path),
@@ -868,17 +878,24 @@ const sqlFileEditorLimit = 1 << 20
 
 async function onOpenScriptFile() {
   if (!(await confirmDiscardEdits())) return
-  let path = ''
+  let text = ''
   try {
-    path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
+    // Web mode: read the script content in the browser, no Go-side file IO.
+    if (await isWebServerMode()) {
+      const [file] = await pickBrowserFiles({ accept: '.sql' })
+      if (!file) return
+      text = await readBrowserFileAsText(file)
+    } else {
+      const path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
+      if (!path) return
+      const b64 = await ReadFileBase64(path)
+      text = decodeBase64(b64)
+    }
   } catch (e) {
     if (!isDialogCancel(e)) error.value = (e as any)?.message || String(e)
     return
   }
-  if (!path) return
   try {
-    const b64 = await ReadFileBase64(path)
-    const text = decodeBase64(b64)
     error.value = ''
     queryResult.value = null
     execResult.value = null

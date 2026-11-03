@@ -183,6 +183,7 @@ import { useI18n } from '../i18n'
 import { ElMessageBox } from 'element-plus'
 import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
+import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
@@ -536,8 +537,18 @@ async function onCtxRunSqlFile() {
   ctxMenuVisible.value = false
   const dbName = ctxDbName.value
   let path = ''
+  let text = ''
   try {
-    path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
+    // Web mode: read the script content in the browser, no Go-side file IO.
+    if (await isWebServerMode()) {
+      const [file] = await pickBrowserFiles({ accept: '.sql' })
+      if (!file) return
+      path = file.name
+      text = await readBrowserFileAsText(file)
+    } else {
+      path = await OpenFileDialogFiltered(t('db.runSqlFile'), 'SQL File', '*.sql')
+      if (!path) return
+    }
   } catch (e) {
     if (!isDialogCancel(e)) msg.error((e as any)?.message || String(e))
     return
@@ -545,8 +556,10 @@ async function onCtxRunSqlFile() {
   if (!path) return
   try {
     runningSqlFile.value = true
-    const b64 = await ReadFileBase64(path)
-    const text = decodeBase64(b64)
+    if (!text) {
+      const b64 = await ReadFileBase64(path)
+      text = decodeBase64(b64)
+    }
     const result = await ExecuteSQLScript(props.sessionId, dbName, text)
     if (result?.failedLine) {
       showScriptFailure(result)

@@ -504,3 +504,23 @@ func waitJob(t *testing.T, job *mcp.Job, timeout time.Duration, out *[]byte) {
 		*out = stdout
 	}
 }
+
+// ptyAdapter must forward the session's ExecFilterEncoding hint: the registry
+// probes the adapter, not the session, and a dropped method silently disables
+// the MSYS bash output filter (all jobs fall back to the plain wrapper).
+type execFilterStub struct {
+	session.Session
+	filter string
+}
+
+func (s execFilterStub) ExecFilterEncoding() string { return s.filter }
+
+func TestPtyAdapterForwardsExecFilterEncoding(t *testing.T) {
+	p := ptyAdapter{s: execFilterStub{filter: "cp936"}}
+	if got := p.ExecFilterEncoding(); got != "cp936" {
+		t.Fatalf("adapter dropped the filter hint: %q", got)
+	}
+	if got := (ptyAdapter{s: execFilterStub{}}).ExecFilterEncoding(); got != "" {
+		t.Fatalf("session without hint reported %q", got)
+	}
+}

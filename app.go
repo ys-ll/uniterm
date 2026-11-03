@@ -14,10 +14,10 @@ import (
 	"github.com/ys-ll/uniterm/backend/credentials"
 	"github.com/ys-ll/uniterm/backend/importer"
 	"github.com/ys-ll/uniterm/backend/k8s"
+	"github.com/ys-ll/uniterm/backend/localsrv"
 	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/mcp"
 	"github.com/ys-ll/uniterm/backend/mcpclient"
-	"github.com/ys-ll/uniterm/backend/localsrv"
 	"github.com/ys-ll/uniterm/backend/netscan"
 	"github.com/ys-ll/uniterm/backend/platform"
 	"github.com/ys-ll/uniterm/backend/session"
@@ -222,6 +222,13 @@ func (a *App) emit(name string, data ...any) {
 	if a.app == nil {
 		return
 	}
+	// In the headless server build the gateway reaps idle workers by HTTP
+	// activity alone, which misses WebSocket-only usage (a user watching
+	// terminal output). Mark every real event emission as activity; no-op on
+	// desktop.
+	if serverMode {
+		touchWebActivity()
+	}
 	a.app.Event.Emit(name, data...)
 }
 
@@ -295,7 +302,14 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 	a.subclassMainWindow()
 
 	// Resolve data directory. First run (no bootstrap, no existing config)
-	// defers all store init until the frontend calls SetDataDir.
+	// defers all store init until the frontend calls SetDataDir. The headless
+	// server build has no interactive first run — pin the default directory
+	// up front so stores initialize during startup.
+	if serverMode {
+		if dd0, err0 := store.ResolveDataDir(); err0 == nil && dd0.FirstRun {
+			_ = store.WriteBootstrap("default", "")
+		}
+	}
 	dd, err := store.ResolveDataDir()
 	if err != nil {
 		log.Writef("Failed to resolve data dir: %v", err)
@@ -486,6 +500,52 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 // normal path.
 func (a *App) initCredentials(dataDir string, upgrade bool) {
 	cred := credentials.New(dataDir, credentialKeychain())
+	// Server mode: the gateway forwards the tenant's login password via
+	// UNITERM_MASTER_PASSWORD and it doubles as the credential master
+	// password — no plaintext keychain.json holds the data key. Fresh stores
+	// auto-set-up in master-password mode; locked stores wait for the browser
+	// unlock dialog (the user re-enters their login password). Legacy
+	// keychain-mode server stores predate this model and cannot be migrated
+	// blindly, so they surface as keychain-lost/locked rather than silently
+	// re-encrypted.
+	if serverMode {
+		pw := os.Getenv("UNITERM_MASTER_PASSWORD")
+		meta, _ := credentials.ReadMeta(dataDir)
+		switch {
+		case meta == nil:
+			if pw != "" {
+				if err := cred.Setup(credentials.ModeMasterPassword, pw); err != nil {
+					log.Writef("[server] credential auto-setup failed: %v", err)
+				}
+			}
+		case meta.Mode == credentials.ModeMasterPassword:
+			if pw != "" {
+				// AutoUnlock first: it loads meta (a fresh Store has no mode
+				// loaded) and recovers an in-process keychain cache if any;
+				// Unlock then verifies the login-password-derived key.
+				_ = cred.AutoUnlock()
+				if !cred.Unlocked() {
+					if err := cred.Unlock(pw); err != nil {
+						log.Writef("[server] credential auto-unlock failed (locked until browser unlock): %v", err)
+					}
+				}
+			}
+		default:
+			// Pre-existing keychain-mode server store: the plaintext key file
+			// contradicts the login-password-as-master model. Force the
+			// browser setup dialog by leaving NeedsSetup/locked state.
+			log.Writef("[server] legacy keychain-mode store found; browser setup required")
+		}
+		a.credentialStore = cred
+		if a.connectionStore != nil {
+			a.connectionStore.SetPasswordStore(cred)
+			a.connectionStore.SetLegacyKeychain(sync.NewKeychain())
+		}
+		if a.settingsStore != nil {
+			a.settingsStore.SetPasswordStore(cred)
+		}
+		return
+	}
 	// The reset/setup ciphertext guards scan the data dir; the declaring
 	// manifest lives in the store package.
 	secretFiles := make([]string, 0, len(store.SecretFiles))
@@ -2270,6 +2330,11 @@ func (a *App) QuitApp() {
 }
 
 func (a *App) CheckForUpdate(source string) (*update.UpdateInfo, error) {
+	// In the headless server build updates come from the container image, not
+	// from a self-updating binary.
+	if serverMode {
+		return nil, errors.New("updates are managed by the container image in server mode")
+	}
 	return update.Check(Version, source)
 }
 
@@ -2288,6 +2353,9 @@ func (a *App) DownloadUpdate(assets []update.UpdateAsset) error {
 	if devBuild {
 		return fmt.Errorf("updates are disabled in development builds")
 	}
+	if serverMode {
+		return fmt.Errorf("updates are managed by the container image in server mode")
+	}
 	if len(assets) == 0 {
 		return fmt.Errorf("no update assets available")
 	}
@@ -2300,6 +2368,9 @@ func (a *App) DownloadUpdate(assets []update.UpdateAsset) error {
 // NSIS installer after this process exits (the installer relaunches the app),
 // so it just quits instead of relaunching.
 func (a *App) ApplyUpdate() error {
+	if serverMode {
+		return fmt.Errorf("updates are managed by the container image in server mode")
+	}
 	if err := updateManager.Apply(a.emitUpdateProgress); err != nil {
 		return err
 	}

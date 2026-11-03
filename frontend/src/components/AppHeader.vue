@@ -169,6 +169,8 @@
       @maximise="onMaximise"
       @close="onClose"
     />
+    <!-- Server mode: the web account widget takes the window-controls spot
+         (those buttons are hidden — there is no OS window to control). -->
   </div>
 </template>
 
@@ -182,6 +184,7 @@ import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { formatKeyBinding } from '../composables/useKeyboardShortcuts'
+import { isWebServerMode } from '../services/webSftpBridge'
 import { useAIStore } from '../stores/aiStore'
 import { useLocalStateStore } from '../stores/localStateStore'
 import { useUiLayoutStore } from '../stores/uiLayoutStore'
@@ -370,10 +373,16 @@ const isMaximised = ref(false)
 // them, and never on mobile (no OS window to minimise/maximise/close). On
 // macOS they render as traffic lights on the left (see template). Before the
 // snapshot lands, fall back to the live store value (the frameless default).
+// In headless server mode the UI runs in a browser tab — there is no OS
+// window to minimise/maximise/close, so the buttons are hidden entirely.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
+
 const showWindowControls = computed(
   () =>
     !(systemTitleBarAtStartup.value ?? localStateStore.state.systemTitleBar) &&
-    !isMobilePlatform(platform.value)
+    !isMobilePlatform(platform.value) &&
+    !webServerMode.value
 )
 
 // On macOS the real AppKit traffic lights overlay the top-left of the

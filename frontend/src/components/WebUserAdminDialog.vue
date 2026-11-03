@@ -31,8 +31,16 @@
       <el-table-column :label="t('webUsers.createdAt')" min-width="170">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="90" align="right">
+      <el-table-column :label="t('common.actions')" width="150" align="right">
         <template #default="{ row }">
+          <el-button
+            v-if="row.username !== currentUser"
+            link
+            type="warning"
+            size="small"
+            :loading="resetting === row.username"
+            @click="resetPassword(row.username)"
+          >{{ t('webUsers.resetPassword') }}</el-button>
           <el-button
             v-if="row.username !== currentUser"
             link
@@ -56,7 +64,7 @@ import { ref, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
-import { createGatewayUser, deleteGatewayUser, listGatewayUsers } from '../services/webSftpBridge'
+import { adminResetUserPassword, createGatewayUser, deleteGatewayUser, listGatewayUsers } from '../services/webSftpBridge'
 
 interface GatewayUser {
   username: string
@@ -73,6 +81,7 @@ const users = ref<GatewayUser[]>([])
 const loading = ref(false)
 const creating = ref(false)
 const deleting = ref('')
+const resetting = ref('')
 const newUsername = ref('')
 const newPassword = ref('')
 
@@ -136,13 +145,42 @@ async function remove(username: string) {
   }
   deleting.value = username
   try {
-    await deleteGatewayUser(username)
+    await deleteGatewayUser(username, true)
     msg.success(t('webUsers.deleted'))
     await load()
   } catch (e: any) {
     msg.error(e?.message || String(e))
   } finally {
     deleting.value = ''
+  }
+}
+
+// Admin password reset: in server mode the login password doubles as the
+// credential master password, so this wipes the target's secret stores (the
+// gateway runs the master-password reset server-side) and the user starts
+// over with an empty workspace under the new password.
+async function resetPassword(username: string) {
+  let newPassword = ''
+  try {
+    const res = await ElMessageBox.prompt(
+      t('webUsers.resetPrompt', { name: username }),
+      t('webUsers.resetTitle'),
+      { type: 'warning', inputType: 'password', inputPattern: /.{6,}/, inputErrorMessage: t('webUsers.resetTooShort') }
+    )
+    newPassword = String(res.value || '')
+  } catch {
+    return
+  }
+  if (!newPassword) return
+  resetting.value = username
+  try {
+    await adminResetUserPassword(username, newPassword)
+    msg.success(t('webUsers.resetDone', { name: username }))
+    await load()
+  } catch (e: any) {
+    msg.error(e?.message || String(e))
+  } finally {
+    resetting.value = ''
   }
 }
 </script>

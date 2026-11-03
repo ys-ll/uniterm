@@ -2,17 +2,21 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/crypto/bcrypt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -24,6 +28,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,16 +39,20 @@ import (
 // UserAccount represents an isolated user account in the uniTerm Web Gateway.
 type UserAccount struct {
 	Username     string    `json:"username"`
-	PasswordHash string    `json:"passwordHash"` // hex(salt) + ":" + hex(iterated-hmac-sha256)
+	PasswordHash string    `json:"passwordHash"` // bcrypt or legacy hex(salt)+":"+hex(iterated-hmac)
 	Role         string    `json:"role"`         // "admin" | "user"
 	CreatedAt    time.Time `json:"createdAt"`
-	Disabled     bool      `json:"disabled,omitempty"`
+	// PasswordChangedAt invalidates tokens issued before a password change;
+	// zero on accounts that never changed theirs.
+	PasswordChangedAt time.Time `json:"passwordChangedAt,omitempty"`
+	Disabled          bool      `json:"disabled,omitempty"`
 }
 
 // SessionClaims represents the signed token payload stored in the HttpOnly session cookie.
 type SessionClaims struct {
 	Username string `json:"u"`
 	Role     string `json:"r"`
+	Iat      int64  `json:"iat,omitempty"`
 	Exp      int64  `json:"exp"`
 }
 
@@ -65,6 +74,9 @@ type WorkerInstance struct {
 	ready     chan struct{}
 	readyOnce sync.Once
 	readyErr  error
+	// token is the per-worker shared secret the gateway injects on every
+	// proxied request; the worker rejects /api/web calls without it.
+	token string
 }
 
 // MultiUserGateway manages user authentication, isolated per-user directories,
@@ -79,6 +91,13 @@ type MultiUserGateway struct {
 
 	usersMu sync.RWMutex
 	users   map[string]UserAccount
+
+	// passwords caches tenant login passwords in gateway memory so respawned
+	// workers can silently re-unlock the master-password credential store.
+	// It is the deliberate trade-off of the login-password-as-master-password
+	// model: the gateway process holds what the keychain file used to.
+	passwordsMu sync.Mutex
+	passwords   map[string]string
 
 	workersMu sync.Mutex
 	workers   map[string]*WorkerInstance
@@ -154,6 +173,7 @@ func NewMultiUserGateway(dataRoot, workerBinary string, idleTimeout time.Duratio
 		workerIdleTimeout: idleTimeout,
 		baseWorkerPort:    19000,
 		users:             make(map[string]UserAccount),
+		passwords:         make(map[string]string),
 		workers:           make(map[string]*WorkerInstance),
 		usedPorts:         make(map[int]bool),
 	}
@@ -214,13 +234,18 @@ func (gw *MultiUserGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/auth/users" && r.Method == http.MethodPost:
 		gw.handleCreateUser(w, r, claims)
 		return
+	case strings.HasPrefix(r.URL.Path, "/api/auth/users/") && strings.HasSuffix(r.URL.Path, "/password") && r.Method == http.MethodPost:
+		gw.handleAdminResetPassword(w, r, claims)
+		return
 	case strings.HasPrefix(r.URL.Path, "/api/auth/users/") && r.Method == http.MethodDelete:
 		gw.handleDeleteUser(w, r, claims)
 		return
 	}
 
-	// 5. Route to the user's dedicated isolated uniterm-server worker instance
-	worker, err := gw.getOrSpawnWorker(claims.Username)
+	// 5. Route to the user's dedicated isolated uniterm-server worker
+	// instance, forwarding the cached login password so a respawned worker
+	// can silently re-unlock its master-password credential store.
+	worker, err := gw.getOrSpawnWorker(claims.Username, true)
 	if err != nil {
 		log.Printf("[uniterm-gateway] failed to spawn worker for %s: %v", claims.Username, err)
 		http.Error(w, fmt.Sprintf("Failed to start isolated workspace for user %s: %v", claims.Username, err), http.StatusBadGateway)
@@ -353,7 +378,10 @@ func (w *gzipResponseWriter) Unwrap() http.ResponseWriter {
 var errWorkerExited = errors.New("worker exited during startup")
 
 // getOrSpawnWorker ensures a dedicated headless uniterm-server process is running for username.
-func (gw *MultiUserGateway) getOrSpawnWorker(username string) (*WorkerInstance, error) {
+// forwardPassword controls whether the cached login password is passed to the
+// worker (UNITERM_MASTER_PASSWORD) so it can silently unlock the
+// master-password credential store. Reset flows spawn without it.
+func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bool) (*WorkerInstance, error) {
 	// Two attempts: the first instance of a user can die right after spawn
 	// (e.g. an immediate crash), in which case waiters drop it and retry once.
 	for attempt := 0; attempt < 2; attempt++ {
@@ -368,6 +396,15 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string) (*WorkerInstance, 
 				gw.workersMu.Unlock()
 				instance, err := existing.waitReady()
 				if err == nil {
+					// The instance may have died right after becoming ready
+					// (crash, kill, idle reaper); dropping it here keeps the
+					// next request from proxying to a dead port forever.
+					select {
+					case <-instance.done:
+						gw.dropWorker(instance)
+						continue
+					default:
+					}
 					return instance, nil
 				}
 				if !errors.Is(err, errWorkerExited) {
@@ -400,6 +437,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string) (*WorkerInstance, 
 		}
 
 		targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
+		workerToken := newTransferID()
 		cmd := exec.Command(gw.workerBinary)
 		cmd.Dir = userHome
 		cmd.Env = append(os.Environ(),
@@ -412,7 +450,24 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string) (*WorkerInstance, 
 			"WAILS_SERVER_HOST=127.0.0.1",
 			"WAILS_SERVER_PORT="+strconv.Itoa(port),
 			"UNITERM_TENANT_USER="+username,
+			"UNITERM_WORKER_TOKEN="+workerToken,
+			"UNITERM_MASTER_PASSWORD="+gw.cachedPassword(username, forwardPassword),
 		)
+		// The Go standard library ignores HOME/XDG_* on Windows and macOS:
+		// os.UserHomeDir reads %USERPROFILE% and os.UserConfigDir reads
+		// %AppData% there. Setting them keeps the per-user isolation intact
+		// when the gateway runs on a non-Linux host; on Linux they are unused.
+		if runtime.GOOS == "windows" {
+			localTemp := filepath.Join(userCache, "tmp")
+			_ = os.MkdirAll(localTemp, 0o700)
+			cmd.Env = append(cmd.Env,
+				"USERPROFILE="+userHome,
+				"APPDATA="+userConfig,
+				"LOCALAPPDATA="+userCache,
+				"TMP="+localTemp,
+				"TEMP="+localTemp,
+			)
+		}
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
@@ -424,14 +479,16 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string) (*WorkerInstance, 
 
 		proxy := httputil.NewSingleHostReverseProxy(targetURL)
 		proxy.FlushInterval = -1 // Flush immediately for SSE, WebSocket, and streaming SFTP downloads
-		origDirector := proxy.Director
 		proxy.Director = func(req *http.Request) {
-			origDirector(req)
+			req.URL.Scheme = targetURL.Scheme
+			req.URL.Host = targetURL.Host
 			// Rewrite Host to 127.0.0.1:<port> so Wails v3 Loopback Host Check passes cleanly
 			req.Host = targetURL.Host
 			if req.Header.Get("Origin") != "" {
 				req.Header.Set("Origin", "http://"+targetURL.Host)
 			}
+			// Set (not Add) so a client-supplied header cannot smuggle past.
+			req.Header.Set("X-Uniterm-Worker-Token", workerToken)
 		}
 
 		instance := &WorkerInstance{
@@ -443,9 +500,8 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string) (*WorkerInstance, 
 			LastActive: time.Now(),
 			done:       make(chan struct{}),
 			ready:      make(chan struct{}),
+			token:      workerToken,
 		}
-		// Register before the port is listening: concurrent first-screen
-		// requests then wait on ready instead of getting a connection refusal.
 		gw.workers[username] = instance
 		gw.workersMu.Unlock()
 
@@ -600,11 +656,109 @@ func (gw *MultiUserGateway) reapIdleWorkersLoop(ctx context.Context) {
 			gw.workersMu.Unlock()
 
 			for _, username := range stale {
+				// HTTP-request activity alone misses WebSocket-only usage (a
+				// user watching terminal output streams over the event
+				// channel). Ask the worker when it last emitted an event
+				// before tearing it down; unreachable workers are dead
+				// anyway and get reaped.
+				gw.workersMu.Lock()
+				inst, ok := gw.workers[username]
+				gw.workersMu.Unlock()
+				if ok && workerRecentlyActive(inst, gw.workerIdleTimeout) {
+					continue
+				}
 				log.Printf("[uniterm-gateway] Stopping idle worker for user=%s", username)
 				gw.stopWorker(username)
 			}
 		}
 	}
+}
+
+// cachedPassword returns the tenant's cached login password, or "" when
+// forwarding is disabled (reset flows) or the gateway has not seen this
+// tenant log in yet (e.g. after a gateway restart).
+func (gw *MultiUserGateway) cachedPassword(username string, forward bool) string {
+	if !forward {
+		return ""
+	}
+	gw.passwordsMu.Lock()
+	defer gw.passwordsMu.Unlock()
+	return gw.passwords[username]
+}
+
+// runningWorker returns the live, ready worker instance for username, or an
+// error when none is running (dead workers are dropped by getOrSpawnWorker).
+func (gw *MultiUserGateway) runningWorker(username string) (*WorkerInstance, error) {
+	gw.workersMu.Lock()
+	inst, ok := gw.workers[username]
+	gw.workersMu.Unlock()
+	if !ok {
+		return nil, errors.New("worker not running")
+	}
+	select {
+	case <-inst.done:
+		return nil, errors.New("worker not running")
+	default:
+	}
+	select {
+	case <-inst.ready:
+		if inst.readyErr != nil {
+			return nil, errors.New("worker not ready")
+		}
+	default:
+		return nil, errors.New("worker not ready")
+	}
+	return inst, nil
+}
+
+// postToWorker issues an authenticated POST against a running worker.
+func (gw *MultiUserGateway) postToWorker(inst *WorkerInstance, path string, body []byte) (int, []byte, error) {
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://127.0.0.1:%d%s", inst.Port, path), bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Uniterm-Worker-Token", inst.token)
+	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	return resp.StatusCode, data, err
+}
+
+// workerRecentlyActive reports whether the worker served an HTTP request or
+// emitted a frontend event (terminal output, progress, …) within idle.
+func workerRecentlyActive(inst *WorkerInstance, idle time.Duration) bool {
+	inst.mu.Lock()
+	lastHTTP := inst.LastActive
+	inst.mu.Unlock()
+	if time.Since(lastHTTP) < idle {
+		return true
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	activityURL := fmt.Sprintf("http://127.0.0.1:%d/api/web/activity", inst.Port)
+	req, err := http.NewRequest(http.MethodGet, activityURL, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("X-Uniterm-Worker-Token", inst.token)
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var body struct {
+		LastActivityNano int64 `json:"lastActivityNano"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || body.LastActivityNano == 0 {
+		return false
+	}
+	return time.Since(time.Unix(0, body.LastActivityNano)) < idle
 }
 
 // --- User Store & Cryptography ---
@@ -659,29 +813,48 @@ func (gw *MultiUserGateway) saveUsersLocked() error {
 	return os.WriteFile(gw.usersFile, data, 0o600)
 }
 
+// hashPassword produces a bcrypt hash. The gateway originally stored
+// homebrew iterated-HMAC hashes ("hex(salt):hex(digest)"); verifyPassword
+// still accepts those and handleLogin transparently rehashes on successful
+// login, so existing users.json files keep working.
 func hashPassword(password string) string {
-	var salt [16]byte
-	_, _ = rand.Read(salt[:])
-	derived := deriveKey(password, salt[:], 100000)
-	return hex.EncodeToString(salt[:]) + ":" + hex.EncodeToString(derived)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		// bcrypt can only fail on inputs > 72 bytes; fall back to the legacy
+		// scheme rather than failing login entirely.
+		var salt [16]byte
+		_, _ = rand.Read(salt[:])
+		return hex.EncodeToString(salt[:]) + ":" + hex.EncodeToString(legacyDeriveKey(password, salt[:], 100000))
+	}
+	return string(hash)
 }
 
-func verifyPassword(password, stored string) bool {
+// isLegacyHash reports whether stored uses the pre-bcrypt iterated-HMAC
+// format ("hex(salt):hex(digest)", 16-byte salt + 32-byte digest).
+func isLegacyHash(stored string) bool {
 	parts := strings.SplitN(stored, ":", 2)
 	if len(parts) != 2 {
 		return false
 	}
-	salt, err1 := hex.DecodeString(parts[0])
-	expected, err2 := hex.DecodeString(parts[1])
-	if err1 != nil || err2 != nil {
-		return false
-	}
-	actual := deriveKey(password, salt, 100000)
-	return subtle.ConstantTimeCompare(actual, expected) == 1
+	return len(parts[0]) == 32 && len(parts[1]) == 64
 }
 
-// deriveKey performs iterated HMAC-SHA256 key stretching using pure Go standard library.
-func deriveKey(password string, salt []byte, iterations int) []byte {
+func verifyPassword(password, stored string) bool {
+	if isLegacyHash(stored) {
+		parts := strings.SplitN(stored, ":", 2)
+		salt, err1 := hex.DecodeString(parts[0])
+		expected, err2 := hex.DecodeString(parts[1])
+		if err1 != nil || err2 != nil {
+			return false
+		}
+		return subtle.ConstantTimeCompare(legacyDeriveKey(password, salt, 100000), expected) == 1
+	}
+	return bcrypt.CompareHashAndPassword([]byte(stored), []byte(password)) == nil
+}
+
+// legacyDeriveKey is the pre-bcrypt iterated-HMAC-SHA256 stretch, kept only
+// to verify hashes written by older gateway versions.
+func legacyDeriveKey(password string, salt []byte, iterations int) []byte {
 	mac := hmac.New(sha256.New, []byte(password))
 	mac.Write(salt)
 	digest := mac.Sum(nil)
@@ -748,10 +921,79 @@ func (gw *MultiUserGateway) authenticateRequest(r *http.Request) (*SessionClaims
 	if !exists || user.Disabled {
 		return nil, errors.New("user disabled or removed")
 	}
+	// A token issued before the latest password change is no longer valid,
+	// so a stolen cookie does not survive a password rotation.
+	if claims.Iat > 0 && claims.Iat < user.PasswordChangedAt.Unix() {
+		return nil, errors.New("session expired by password change")
+	}
 	return claims, nil
 }
 
 // --- Auth & Admin HTTP Handlers ---
+
+// loginThrottle is a simple in-memory failure counter keyed by username:
+// after loginMaxFailures consecutive failures, logins for that name are
+// refused for loginLockout. Tracked per username only — client IPs are
+// invisible behind reverse proxies.
+type loginThrottle struct {
+	mu       sync.Mutex
+	attempts map[string]*loginAttempt
+}
+
+type loginAttempt struct {
+	failures    int
+	lockedUntil time.Time
+}
+
+const (
+	loginMaxFailures = 5
+	loginLockout     = 10 * time.Minute
+)
+
+var logins = &loginThrottle{attempts: make(map[string]*loginAttempt)}
+
+// checkLocked reports whether username is currently locked out. Expired
+// entries are dropped lazily so the map cannot grow without bound.
+func (t *loginThrottle) checkLocked(username string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	a, ok := t.attempts[username]
+	if !ok {
+		return false
+	}
+	if !a.lockedUntil.IsZero() && time.Now().After(a.lockedUntil) {
+		delete(t.attempts, username)
+		return false
+	}
+	return !a.lockedUntil.IsZero() && time.Now().Before(a.lockedUntil)
+}
+
+// countFailure records a failed attempt; reaching the threshold locks the
+// username for loginLockout. Lazy cleanup caps the map under username-spray.
+func (t *loginThrottle) countFailure(username string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if len(t.attempts) > 10000 {
+		// Coarse bound against username-spray: drop all counters rather than
+		// letting the map grow without bound.
+		t.attempts = make(map[string]*loginAttempt)
+	}
+	a, ok := t.attempts[username]
+	if !ok {
+		a = &loginAttempt{}
+		t.attempts[username] = a
+	}
+	a.failures++
+	if a.failures >= loginMaxFailures {
+		a.lockedUntil = time.Now().Add(loginLockout)
+	}
+}
+
+func (t *loginThrottle) resetOnSuccess(username string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.attempts, username)
+}
 
 func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -764,18 +1006,43 @@ func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) 
 	}
 	req.Username = strings.TrimSpace(req.Username)
 
+	if logins.checkLocked(req.Username) {
+		writeGatewayJSON(w, http.StatusTooManyRequests, map[string]any{"error": "尝试次数过多，请 10 分钟后再试", "error_code": "rate_limited"})
+		return
+	}
+
 	gw.usersMu.RLock()
 	user, ok := gw.users[req.Username]
 	gw.usersMu.RUnlock()
 
 	if !ok || user.Disabled || !verifyPassword(req.Password, user.PasswordHash) {
-		writeGatewayJSON(w, http.StatusUnauthorized, map[string]any{"error": "用户名或密码错误"})
+		logins.countFailure(req.Username)
+		writeGatewayJSON(w, http.StatusUnauthorized, map[string]any{"error": "用户名或密码错误", "error_code": "invalid_credentials"})
 		return
+	}
+	logins.resetOnSuccess(req.Username)
+	// Cache the login password for this session of the gateway process: it is
+	// forwarded to (re)spawned workers as UNITERM_MASTER_PASSWORD so the
+	// master-password credential store unlocks without a browser prompt.
+	gw.passwordsMu.Lock()
+	gw.passwords[req.Username] = req.Password
+	gw.passwordsMu.Unlock()
+
+	if isLegacyHash(user.PasswordHash) {
+		// Transparently upgrade the pre-bcrypt hash on successful login.
+		gw.usersMu.Lock()
+		if u, ok := gw.users[user.Username]; ok && isLegacyHash(u.PasswordHash) {
+			u.PasswordHash = hashPassword(req.Password)
+			gw.users[user.Username] = u
+			_ = gw.saveUsersLocked()
+		}
+		gw.usersMu.Unlock()
 	}
 
 	token := gw.signToken(SessionClaims{
 		Username: user.Username,
 		Role:     user.Role,
+		Iat:      time.Now().Unix(),
 		Exp:      time.Now().Add(24 * time.Hour).Unix(),
 	})
 
@@ -785,6 +1052,7 @@ func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) 
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   os.Getenv("UNITERM_COOKIE_SECURE") == "true",
 		MaxAge:   86400,
 	})
 
@@ -795,9 +1063,10 @@ func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) 
 	})
 
 	// Pre-warm the isolated worker so the process fork and server
-	// initialisation overlap with the browser loading the SPA.
+	// initialisation overlap with the browser loading the SPA. The password
+	// was cached just above, so the pre-warmed worker auto-unlocks.
 	go func(username string) {
-		if _, err := gw.getOrSpawnWorker(username); err != nil {
+		if _, err := gw.getOrSpawnWorker(username, true); err != nil {
 			log.Printf("[uniterm-gateway] prewarm worker for user=%s failed: %v", username, err)
 		}
 	}(user.Username)
@@ -835,9 +1104,42 @@ func (gw *MultiUserGateway) handleChangePassword(w http.ResponseWriter, r *http.
 		writeGatewayJSON(w, http.StatusUnauthorized, map[string]any{"error": "原密码校验失败"})
 		return
 	}
+	// The login password doubles as the master password: the live rekey of
+	// the tenant's secret stores must succeed BEFORE the new login password
+	// is committed, otherwise the store stays encrypted under a password the
+	// user can no longer provide.
+	worker, err := gw.runningWorker(claims.Username)
+	if err != nil {
+		writeGatewayJSON(w, http.StatusConflict, map[string]any{
+			"error": "工作区未运行或凭据未解锁：请先在浏览器中打开工作区并解锁，再修改密码",
+		})
+		return
+	}
+	payload, _ := json.Marshal(map[string]string{"oldPassword": req.CurrentPassword, "newPassword": req.NewPassword})
+	code, body, err := gw.postToWorker(worker, "/api/web/credentials/rekey", payload)
+	if err != nil || code != http.StatusOK {
+		msg := fmt.Sprintf("rekey failed (HTTP %d)", code)
+		var errBody struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &errBody) == nil && errBody.Error != "" {
+			msg = errBody.Error
+		}
+		writeGatewayJSON(w, http.StatusBadGateway, map[string]any{"error": msg})
+		return
+	}
+
 	user.PasswordHash = hashPassword(req.NewPassword)
+	// Invalidate tokens issued before this change so a stolen session cookie
+	// does not survive a password rotation.
+	user.PasswordChangedAt = time.Now().UTC()
 	gw.users[claims.Username] = user
 	_ = gw.saveUsersLocked()
+	// Refresh the spawn-time unlock cache so a reaped worker re-unlocks with
+	// the new password.
+	gw.passwordsMu.Lock()
+	gw.passwords[claims.Username] = req.NewPassword
+	gw.passwordsMu.Unlock()
 	writeGatewayJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
@@ -916,6 +1218,14 @@ func (gw *MultiUserGateway) handleDeleteUser(w http.ResponseWriter, r *http.Requ
 		writeGatewayJSON(w, http.StatusBadRequest, map[string]any{"error": "不能删除当前登录的管理员账号"})
 		return
 	}
+	// Must match the create-time regex: the username maps 1:1 to a data-root
+	// subdirectory, so an unvalidated name (e.g. "../..") would make the
+	// purge below delete outside the data root.
+	if !validUsernameRe.MatchString(target) {
+		writeGatewayJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid username"})
+		return
+	}
+	purge := r.URL.Query().Get("purge") == "true" || r.URL.Query().Get("purge") == "1"
 	gw.stopWorker(target)
 
 	gw.usersMu.Lock()
@@ -923,7 +1233,78 @@ func (gw *MultiUserGateway) handleDeleteUser(w http.ResponseWriter, r *http.Requ
 	_ = gw.saveUsersLocked()
 	gw.usersMu.Unlock()
 
+	// Optional deep clean: without purge the data dir survives so an admin
+	// can inspect it; with purge the tenant's home/config/data/cache and the
+	// per-user keychain/credential stores inside are wiped.
+	if purge {
+		userRoot := filepath.Join(gw.dataRoot, "users", target)
+		if err := os.RemoveAll(userRoot); err != nil {
+			log.Printf("[uniterm-gateway] purge data dir for user=%s failed: %v", target, err)
+		}
+	}
+
 	writeGatewayJSON(w, http.StatusOK, map[string]any{"status": "deleted", "username": target})
+}
+
+// handleAdminResetPassword lets an admin set a new password for any account.
+// In server mode the login password IS the master password, so resetting it
+// destroys the data key: a fresh password-less worker is spawned, its
+// credential store is wiped through the app's master-password reset, and the
+// worker is stopped again. The tenant's next login re-setups an empty store
+// under the new password.
+func (gw *MultiUserGateway) handleAdminResetPassword(w http.ResponseWriter, r *http.Request, claims *SessionClaims) {
+	if claims.Role != "admin" {
+		writeGatewayJSON(w, http.StatusForbidden, map[string]any{"error": "admin role required"})
+		return
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/auth/users/"), "/password")
+	if !validUsernameRe.MatchString(name) {
+		writeGatewayJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid username"})
+		return
+	}
+	var req struct {
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil || len(req.NewPassword) < 6 {
+		writeGatewayJSON(w, http.StatusBadRequest, map[string]any{"error": "密码长度至少为 6 位"})
+		return
+	}
+	gw.usersMu.Lock()
+	user, ok := gw.users[name]
+	if !ok {
+		gw.usersMu.Unlock()
+		writeGatewayJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
+		return
+	}
+	user.PasswordHash = hashPassword(req.NewPassword)
+	user.PasswordChangedAt = time.Now().UTC()
+	gw.users[name] = user
+	if err := gw.saveUsersLocked(); err != nil {
+		gw.usersMu.Unlock()
+		writeGatewayJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	gw.usersMu.Unlock()
+
+	// Wipe the tenant's data key through the app's master-password reset.
+	gw.stopWorker(name)
+	worker, err := gw.getOrSpawnWorker(name, false)
+	if err != nil {
+		log.Printf("[uniterm-gateway] admin reset for %s: spawn password-less worker failed: %v", name, err)
+	} else {
+		if code, body, err := gw.postToWorker(worker, "/api/web/credentials/reset", nil); err != nil || code != http.StatusOK {
+			log.Printf("[uniterm-gateway] admin reset for %s: credential wipe failed (HTTP %d): %s", name, code, string(body))
+		}
+	}
+	gw.stopWorker(name)
+
+	// Cache the new password so the tenant's next login spawns the worker
+	// with the right unlock material.
+	gw.passwordsMu.Lock()
+	gw.passwords[name] = req.NewPassword
+	gw.passwordsMu.Unlock()
+
+	writeGatewayJSON(w, http.StatusOK, map[string]any{"status": "ok", "username": name})
 }
 
 func (gw *MultiUserGateway) serveLoginPage(w http.ResponseWriter, r *http.Request) {
@@ -953,6 +1334,15 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
+// newTransferID returns a 32-char hex string from crypto/rand. The gateway
+// uses it for per-worker shared secrets; the same name exists in the worker's
+// package for transfer IDs.
+func newTransferID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
+
 func writeGatewayJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -964,7 +1354,7 @@ const loginPageHTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>uniTerm Web — 登录</title>
+<title>uniTerm Web</title>
 <style>
   :root {
     --bg: #0f141c;
@@ -995,7 +1385,24 @@ const loginPageHTML = `<!DOCTYPE html>
     border: 1px solid var(--border);
     border-radius: 14px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    position: relative;
   }
+  .lang-row {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+  }
+  .lang-select {
+    background: var(--bg);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    padding: 3px 6px;
+    outline: none;
+    cursor: pointer;
+  }
+  .lang-select:focus { border-color: var(--primary); }
   .brand {
     display: flex;
     align-items: center;
@@ -1052,19 +1459,63 @@ const loginPageHTML = `<!DOCTYPE html>
 </head>
 <body>
   <form class="login-card" id="loginForm">
+    <div class="lang-row">
+      <select class="lang-select" id="langSel" aria-label="language"></select>
+    </div>
     <div class="brand">
       <div class="brand-icon">&gt;_</div>
       <h1>uniTerm Web</h1>
     </div>
-    <p class="sub">多协议终端与 AI Agent 工作台 · 多用户隔离版</p>
+    <p class="sub" id="subTitle"></p>
     <div class="err" id="errBox"></div>
-    <label for="username">用户名</label>
+    <label for="username" id="userLabel"></label>
     <input id="username" name="username" autocomplete="username" required autofocus />
-    <label for="password">密码</label>
+    <label for="password" id="pwdLabel"></label>
     <input id="password" name="password" type="password" autocomplete="current-password" required />
-    <button type="submit" id="submitBtn">登录工作区</button>
+    <button type="submit" id="submitBtn"></button>
   </form>
   <script>
+    const I18N = {"zh-CN": {"sub": "多协议终端与 AI Agent 工作台 · 多用户隔离版", "username": "用户名", "password": "密码", "submit": "登录工作区", "loading": "正在启动隔离工作区...", "failed": "登录失败", "invalidCredentials": "用户名或密码错误", "rateLimited": "尝试次数过多，请 10 分钟后再试", "lang": "语言"}, "zh-TW": {"sub": "多協定終端與 AI Agent 工作台 · 多使用者隔離版", "username": "使用者名稱", "password": "密碼", "submit": "登入工作區", "loading": "正在啟動隔離工作區...", "failed": "登入失敗", "invalidCredentials": "使用者名稱或密碼錯誤", "rateLimited": "嘗試次數過多，請 10 分鐘後再試", "lang": "語言"}, "en": {"sub": "Multi-protocol terminal & AI agent workbench · multi-user isolated", "username": "Username", "password": "Password", "submit": "Sign in to workspace", "loading": "Starting isolated workspace...", "failed": "Sign-in failed", "invalidCredentials": "Invalid username or password", "rateLimited": "Too many attempts, try again in 10 minutes", "lang": "Language"}, "ja": {"sub": "マルチプロトコル端末 & AIエージェント ワークベンチ · マルチユーザー隔離版", "username": "ユーザー名", "password": "パスワード", "submit": "ワークスペースにサインイン", "loading": "隔離ワークスペースを起動中...", "failed": "サインインに失敗しました", "invalidCredentials": "ユーザー名またはパスワードが違います", "rateLimited": "試行回数が多すぎます。10分後に再試行してください", "lang": "言語"}, "ko": {"sub": "멀티 프로토콜 터미널 & AI 에이전트 워크벤치 · 다중 사용자 격리 버전", "username": "사용자 이름", "password": "비밀번호", "submit": "워크스페이스 로그인", "loading": "격리 워크스페이스 시작 중...", "failed": "로그인 실패", "invalidCredentials": "사용자 이름 또는 비밀번호가 올바르지 않습니다", "rateLimited": "시도 횟수가 너무 많습니다. 10분 후 다시 시도하세요", "lang": "언어"}, "de": {"sub": "Multi-Protokoll-Terminal & AI-Agent-Workbench · Mehrbenutzer-isoliert", "username": "Benutzername", "password": "Passwort", "submit": "Bei Arbeitsbereich anmelden", "loading": "Isolierter Arbeitsbereich wird gestartet...", "failed": "Anmeldung fehlgeschlagen", "invalidCredentials": "Benutzername oder Passwort falsch", "rateLimited": "Zu viele Versuche, in 10 Minuten erneut versuchen", "lang": "Sprache"}, "es": {"sub": "Terminal multiprotocolo y agente de IA · versión multiusuario aislada", "username": "Usuario", "password": "Contraseña", "submit": "Iniciar sesión", "loading": "Iniciando espacio de trabajo aislado...", "failed": "Error de inicio de sesión", "invalidCredentials": "Usuario o contrasena incorrectos", "rateLimited": "Demasiados intentos, reintentar en 10 minutos", "lang": "Idioma"}, "fr": {"sub": "Terminal multi-protocoles et agent IA · édition multi-utilisateurs isolée", "username": "Nom d'utilisateur", "password": "Mot de passe", "submit": "Se connecter", "loading": "Démarrage de l'espace de travail isolé...", "failed": "Échec de la connexion", "invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect", "rateLimited": "Trop de tentatives, reessayez dans 10 minutes", "lang": "Langue"}, "ru": {"sub": "Мультипротокольный терминал и AI-агент · многопользовательская изолированная версия", "username": "Имя пользователя", "password": "Пароль", "submit": "Войти в рабочую область", "loading": "Запуск изолированной рабочей области...", "failed": "Ошибка входа", "invalidCredentials": "Неверное имя пользователя или пароль", "rateLimited": "Слишком много попыток, повторите через 10 минут", "lang": "Язык"}, "pt": {"sub": "Terminal multiprotocolo e agente de IA · versão multiusuário isolada", "username": "Usuario", "password": "Senha", "submit": "Entrar no espaço de trabalho", "loading": "Iniciando espaço de trabalho isolado...", "failed": "Falha no login", "invalidCredentials": "Usuário ou senha incorretos", "rateLimited": "Muitas tentativas, tente novamente em 10 minutos", "lang": "Idioma"}, "vi": {"sub": "Terminal đa giao thức và AI agent · phiên bản đa người dùng biệt lập", "username": "Tên người dùng", "password": "Mật khẩu", "submit": "Đăng nhập", "loading": "Đang khởi động không gian làm việc...", "failed": "Đăng nhập thất bại", "invalidCredentials": "Tên người dùng hoac mat khau khong dung", "rateLimited": "Quá nhiều lần thử, thử lại sau 10 phút", "lang": "Ngôn ngữ"}};
+    const LANG_NAMES = {"zh-CN": "简体中文", "zh-TW": "繁體中文", "en": "English", "ja": "日本語", "ko": "한국어", "de": "Deutsch", "es": "Español", "fr": "Français", "ru": "Русский", "pt": "Português", "vi": "Tiếng Việt"};
+    const ERR_KEYS = { invalid_credentials: 'invalidCredentials', rate_limited: 'rateLimited' };
+
+    const langSel = document.getElementById('langSel');
+    let lang = localStorage.getItem('uniterm_web_lang') || pickBrowserLang();
+    function pickBrowserLang() {
+      const pref = (navigator.language || 'zh-CN').toLowerCase();
+      for (const code of Object.keys(LANG_NAMES)) {
+        if (pref === code.toLowerCase()) return code;
+      }
+      if (pref.startsWith('zh')) return pref.includes('tw') || pref.includes('hk') || pref.includes('hant') ? 'zh-TW' : 'zh-CN';
+      const base = pref.split('-')[0];
+      const hit = Object.keys(LANG_NAMES).find(c => c.split('-')[0] === base);
+      return hit || 'zh-CN';
+    }
+    if (!I18N[lang]) lang = 'en';
+
+    Object.keys(LANG_NAMES).forEach((code) => {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = LANG_NAMES[code];
+      langSel.appendChild(opt);
+    });
+
+    function applyLang() {
+      const t = I18N[lang];
+      document.getElementById('subTitle').textContent = t.sub;
+      document.getElementById('userLabel').textContent = t.username;
+      document.getElementById('pwdLabel').textContent = t.password;
+      const btn = document.getElementById('submitBtn');
+      if (!btn.disabled) btn.textContent = t.submit;
+      document.documentElement.lang = lang;
+      langSel.value = lang;
+    }
+    langSel.addEventListener('change', () => {
+      lang = langSel.value;
+      localStorage.setItem('uniterm_web_lang', lang);
+      applyLang();
+    });
+
     const form = document.getElementById('loginForm');
     const errBox = document.getElementById('errBox');
     const btn = document.getElementById('submitBtn');
@@ -1072,7 +1523,7 @@ const loginPageHTML = `<!DOCTYPE html>
       e.preventDefault();
       errBox.style.display = 'none';
       btn.disabled = true;
-      btn.textContent = '正在启动隔离工作区...';
+      btn.textContent = I18N[lang].loading;
       try {
         const res = await fetch('/api/auth/login', {
           method: 'POST',
@@ -1084,16 +1535,19 @@ const loginPageHTML = `<!DOCTYPE html>
         });
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.error || '登录失败');
+          const key = ERR_KEYS[data.error_code];
+          throw new Error(key ? I18N[lang][key] : (data.error || I18N[lang].failed));
         }
         window.location.href = '/';
       } catch (err) {
         errBox.textContent = err.message;
         errBox.style.display = 'block';
         btn.disabled = false;
-        btn.textContent = '登录工作区';
+        btn.textContent = I18N[lang].submit;
       }
     });
+
+    applyLang();
   </script>
 </body>
 </html>`

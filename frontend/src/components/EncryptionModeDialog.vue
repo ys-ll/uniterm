@@ -9,8 +9,9 @@
     :show-close="false"
   >
     <p v-if="existingSecrets > 0" class="encrypt-hint">{{ t('encrypt.existing', { n: existingSecrets }) }}</p>
+    <p v-if="webServerMode" class="encrypt-hint">{{ t('web.encryptHint') }}</p>
     <el-form label-width="7.5rem" class="encrypt-form" @submit.prevent="onConfirm">
-      <el-form-item :label="t('config.encryption')">
+      <el-form-item v-if="!webServerMode" :label="t('config.encryption')">
         <el-select v-model="mode" popper-class="mode-select-popper" style="width: 100%">
           <el-option :label="t('encrypt.keychain')" value="keychain">
             <div class="mode-option">
@@ -49,13 +50,18 @@ import { useI18n } from '../i18n'
 import { QuitApp } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useCredentialStore } from '../stores/credentialStore'
 import { isMobilePlatform } from '../utils/platform'
+import { isWebServerMode } from '../services/webSftpBridge'
 
 const props = defineProps<{ visible: boolean; existingSecrets: number }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'done'): void }>()
 
 const { t } = useI18n()
 const cred = useCredentialStore()
-const mode = ref<'keychain' | 'master-password'>('keychain')
+// Server mode ties the master password to the gateway login password, so
+// only master-password setup is offered there.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
+const mode = ref<'keychain' | 'master-password'>(webServerMode.value ? 'master-password' : 'keychain')
 const pw = ref('')
 const pw2 = ref('')
 const submitting = ref(false)
@@ -83,7 +89,7 @@ async function autoKeychainSetup() {
 // Reset on every open so a previously-entered password isn't shown again.
 watch(() => props.visible, (v) => {
   if (v) {
-    mode.value = 'keychain'
+    mode.value = webServerMode.value ? 'master-password' : 'keychain'
     pw.value = ''
     pw2.value = ''
     errorMsg.value = ''

@@ -48,6 +48,7 @@ import { ref, watch } from 'vue'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
 import { ParseImportFile, ApplyImport, OpenFileDialogFiltered, OpenDirectoryDialog } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebServerMode, pickAndStageLocalFileInBrowser } from '../services/webSftpBridge'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'done', count: number): void }>()
@@ -78,11 +79,25 @@ function onCancel() { emit('update:visible', false) }
 async function pickFile() {
   const f = FILTERS[format.value]
   if (!f) return
+  // Web mode: stage the picked import file into the worker and use the
+  // container path as the import source.
+  if (await isWebServerMode()) {
+    const exts = f.pattern.split(';').map(p => p.replace('*', '').trim()).filter(Boolean).join(',')
+    const staged = await pickAndStageLocalFileInBrowser(exts || undefined)
+    if (staged) srcPath.value = staged.stagedPath
+    return
+  }
   const p = await OpenFileDialogFiltered(t('importExport.importType'), f.display, f.pattern)
   if (p) srcPath.value = p
 }
 
 async function pickDBeaverDir() {
+  // Browsers cannot return a server-side directory path; in web mode the
+  // DBeaver import stays usable only via the auto-detect (empty path) mode.
+  if (await isWebServerMode()) {
+    msg.warning(t('web.dirPickerUnavailable'))
+    return
+  }
   const p = await OpenDirectoryDialog()
   if (p) srcPath.value = p
 }

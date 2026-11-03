@@ -169,6 +169,7 @@ import { useBatchStore, stripAnsi, type BatchSession, type BatchSessionStatus } 
 import { assessLocalRisk } from '../services/localRisk'
 import { executeBatch, exportCsv, exportJson } from '../services/batchExecute'
 import { OpenFileDialogFiltered, ReadFileBase64, SaveFileDialogFiltered, WriteFileBase64 } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import type { ConnectionConfig } from '../types/session'
@@ -360,6 +361,13 @@ async function onBeforeClose(done: () => void) {
 // ── 选择脚本文件 ──
 async function onSelectScript() {
   try {
+    // Web mode: read the script content in the browser, no Go-side file IO.
+    if (await isWebServerMode()) {
+      const [file] = await pickBrowserFiles({ accept: '.sh,.bash,.py,.rb,.pl,.txt' })
+      if (!file) return
+      command.value = await readBrowserFileAsText(file)
+      return
+    }
     const path = await OpenFileDialogFiltered(t('batch.selectScript'), 'Shell Script', '*.sh;*.bash;*.py;*.rb;*.pl;*.txt')
     if (!path) return
     const b64 = await ReadFileBase64(path)

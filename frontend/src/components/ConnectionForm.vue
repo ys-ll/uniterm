@@ -776,6 +776,12 @@ import IdentityEditDialog from './IdentityEditDialog.vue'
 import ProxyEditDialog from './ProxyEditDialog.vue'
 import SSHAlgorithmsDialog from './SSHAlgorithmsDialog.vue'
 import { isSqlDbType } from '../utils/quickConnect'
+import {
+  isWebServerMode,
+  pickBrowserFiles,
+  pickAndStageLocalFileInBrowser,
+  readBrowserFileAsText,
+} from '../services/webSftpBridge'
 import { RDP_RESOLUTION_PRESETS } from '../utils/rdpResolutions'
 import { CATEGORY_META, CATEGORY_ORDER, CONNECTION_TYPES, connectionTypeFormLabel, connectionTypeInfo, defaultPortFor } from '../utils/connectionTypes'
 import { getShellLabel as getShellLabelBase } from '../utils/shellLabel'
@@ -1616,6 +1622,13 @@ async function reloadK8sContexts() {
 
 async function selectKeyFile() {
   try {
+    // Web mode: stage the picked key into the worker's keep/ area so the
+    // path stored in the config survives beyond the current session.
+    if (await isWebServerMode()) {
+      const staged = await pickAndStageLocalFileInBrowser('*/*', { keep: true })
+      if (staged) form.keyPath = staged.stagedPath
+      return
+    }
     const selected = await OpenFileDialog('~/.ssh')
     if (selected) form.keyPath = selected
   } catch (e) {
@@ -1627,6 +1640,11 @@ async function selectKeyFile() {
 // stored in the Host field.
 async function selectSqliteFile() {
   try {
+    if (await isWebServerMode()) {
+      const staged = await pickAndStageLocalFileInBrowser('.sqlite,.sqlite3,.db,.db3', { keep: true })
+      if (staged) form.host = staged.stagedPath
+      return
+    }
     const selected = await OpenFileDialogFiltered(t('db.sqlitePickTitle'), 'SQLite Database', '*.sqlite;*.sqlite3;*.db;*.db3')
     if (selected) form.host = selected
   } catch (e) {
@@ -1653,6 +1671,16 @@ async function useDefaultKeyPath() {
 
 async function importKeyText() {
   try {
+    // Web mode: read the key content in the browser instead of the Go-side
+    // dialog (which errors in server mode).
+    if (await isWebServerMode()) {
+      const [file] = await pickBrowserFiles()
+      if (file) {
+        form.keyContent = await readBrowserFileAsText(file)
+        keyContentRevealed.value = true
+      }
+      return
+    }
     const content = await OpenPrivateKeyFile()
     if (content) {
       form.keyContent = content
@@ -1665,6 +1693,14 @@ async function importKeyText() {
 
 async function importKubeconfigText() {
   try {
+    if (await isWebServerMode()) {
+      const [file] = await pickBrowserFiles({ accept: '.yaml,.yml,.conf' })
+      if (file) {
+        form.k8sConfigInline = await readBrowserFileAsText(file)
+        k8sConfigRevealed.value = true
+      }
+      return
+    }
     const content = await OpenKubeconfigFile()
     if (content) {
       form.k8sConfigInline = content
@@ -1677,6 +1713,11 @@ async function importKubeconfigText() {
 
 async function pickKubeconfigFile() {
   try {
+    if (await isWebServerMode()) {
+      const staged = await pickAndStageLocalFileInBrowser('.yaml,.yml,.conf', { keep: true })
+      if (staged) form.k8sConfigPath = staged.stagedPath
+      return
+    }
     const selected = await OpenFileDialog('~/.kube')
     if (selected) form.k8sConfigPath = selected
   } catch (e) {
