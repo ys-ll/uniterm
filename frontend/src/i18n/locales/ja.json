@@ -484,6 +484,8 @@
   "settings.langSystem": "システムの既定値",
   "settings.closeTabPrompt": "タブを閉じる確認",
   "settings.closeAppPrompt": "アプリを閉じる確認",
+  "settings.showTrayIcon": "トレイアイコン",
+  "settings.showTrayIconDesc": "システムトレイ／メニューバーに uniTerm アイコンを表示",
   "settings.systemTitleBar": "システムタイトルバーを使用",
   "settings.systemTitleBarDesc": "内蔵タイトルバーの代わりに OS ネイティブのウィンドウ枠を使用します（再起動が必要）",
   "settings.titleBarRestartTitle": "再起動が必要",

@@ -484,6 +484,8 @@
   "settings.langSystem": "Predeterminado del Sistema",
   "settings.closeTabPrompt": "Confirmación al cerrar pestaña",
   "settings.closeAppPrompt": "Confirmación al cerrar aplicación",
+  "settings.showTrayIcon": "Icono de bandeja",
+  "settings.showTrayIconDesc": "Mostrar el icono de uniTerm en la bandeja del sistema / barra de menús",
   "settings.systemTitleBar": "Usar barra de título del sistema",
   "settings.systemTitleBarDesc": "Usar el marco de ventana nativo del sistema operativo en lugar del integrado (requiere reinicio)",
   "settings.titleBarRestartTitle": "Reinicio requerido",

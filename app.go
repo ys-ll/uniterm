@@ -1843,6 +1843,9 @@ func (a *App) SaveSettings(settings store.AppSettings) error {
 		// Rebuild the tray menu when the UI language changed (issue #1215).
 		// No-op when the resolved language is unchanged.
 		a.refreshTrayLanguage(settings.Language)
+		// Show/hide the tray icon when that toggle changed; creates the
+		// tray lazily if the app started with it disabled.
+		a.applyTrayVisibility(trayIconEnabled(&settings), settings.Language)
 	}
 	return err
 }

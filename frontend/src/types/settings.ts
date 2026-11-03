@@ -343,6 +343,9 @@ export interface AppSettings {
   // Whether the per-tab numeric shortcut hint (e.g. Ctrl+1) is drawn on the
   // tab itself; the hover tooltips elsewhere are unaffected.
   showTabShortcutHints: boolean
+  // Whether the system tray icon (macOS menu bar status item) is shown.
+  // Mirrors ShowTrayIcon in backend/store/settings_store.go.
+  showTrayIcon: boolean
   // How the host list opens the connection menu: hover "⋯"/star buttons
   // ("button") or right-click only, with the hover buttons hidden
   // ("rightclick"). The right-click menu works in both modes.
@@ -514,6 +517,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   gitBashPath: '',
   tabCloseButton: 'left',
   showTabShortcutHints: true,
+  showTrayIcon: true,
   hostListMenuStyle: 'button',
   connectionsDisplayMode: 'full',
   quickCommandsDisplayMode: 'list',

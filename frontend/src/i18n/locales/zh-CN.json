@@ -507,6 +507,8 @@
   "settings.langSystem": "系统默认",
   "settings.closeTabPrompt": "关闭标签页提示",
   "settings.closeAppPrompt": "关闭应用提示",
+  "settings.showTrayIcon": "托盘图标",
+  "settings.showTrayIconDesc": "在系统托盘/菜单栏显示 uniTerm 图标",
   "settings.systemTitleBar": "使用系统标题栏",
   "settings.systemTitleBarDesc": "使用操作系统原生窗口边框，替代内置标题栏（需重启生效）",
   "settings.titleBarRestartTitle": "需要重启",

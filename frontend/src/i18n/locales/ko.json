@@ -484,6 +484,8 @@
   "settings.langSystem": "시스템 기본값",
   "settings.closeTabPrompt": "탭 닫기 확인",
   "settings.closeAppPrompt": "앱 닫기 확인",
+  "settings.showTrayIcon": "트레이 아이콘",
+  "settings.showTrayIconDesc": "시스템 트레이/메뉴 막대에 uniTerm 아이콘 표시",
   "settings.systemTitleBar": "시스템 제목 표시줄 사용",
   "settings.systemTitleBarDesc": "내장 제목 표시줄 대신 OS 기본 창 프레임을 사용합니다 (재시작 필요)",
   "settings.titleBarRestartTitle": "재시작 필요",
