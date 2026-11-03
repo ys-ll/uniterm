@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 )
 
 // Streaming adapters used by the headless web console (server_web_extension.go)
@@ -104,9 +105,12 @@ func archiveRelPath(root, p string) string {
 	if base == "/" || base == "." || base == "" {
 		base = "archive"
 	}
-	rel, err := path.Rel(root, p)
+	// filepath.Rel works on slash-only paths even on Windows, but its result
+	// carries the OS separator; ToSlash restores the remote path convention.
+	// (path.Rel does not exist in the standard library.)
+	rel, err := filepath.Rel(root, p)
 	if err != nil || rel == "." {
 		return base
 	}
-	return path.Join(base, rel)
+	return path.Join(base, filepath.ToSlash(rel))
 }
