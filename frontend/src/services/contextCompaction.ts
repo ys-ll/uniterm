@@ -11,6 +11,67 @@ import {
   CONTEXT_TARGET_TOKENS, SUMMARY_MAX_TOKENS,
 } from './aiContext'
 
+// Single tool_result blocks below this size are left alone: stubbing them
+// cannot meaningfully shrink the payload and would only destroy context the
+// model still benefits from.
+const STUB_MIN_TOOL_RESULT_TOKENS = 1024
+
+// Replace the largest tool_result blocks with explicit stubs until the
+// payload fits the trigger budget. Only the request copy is modified — the
+// messages built by buildConversation are fresh objects, so the stored
+// history (and the UI) keep the full tool output. The stub text states the
+// tool name and size and points at a narrower re-run, so the model never
+// mistakes a dropped result for a failed or empty one and does not silently
+// assume the omitted data.
+//
+// Oversized tool results are the one bloat source compaction cannot remove:
+// the newest group is always retained, so a single enormous output stays in
+// the payload no matter how much older history is cut. Stubbing is the last
+// degradation step — it only runs when the request is already over budget.
+function stubOversizedToolResults(
+  messages: Array<Record<string, unknown>>,
+  budgetTokens: number,
+): Array<Record<string, unknown>> {
+  const names = new Map<string, string>()
+  for (const m of messages) {
+    if (!Array.isArray(m.content)) continue
+    for (const block of m.content as Array<Record<string, unknown>>) {
+      if (block.type === 'tool_use' && typeof block.id === 'string') {
+        names.set(block.id, typeof block.name === 'string' ? block.name : 'unknown')
+      }
+    }
+  }
+  // Shallow-copy every array-content message so mutation stays local.
+  const out = messages.map(m => Array.isArray(m.content) ? { ...m, content: [...m.content as unknown[]] } : m)
+  let total = estimateTokens(out)
+  for (;;) {
+    if (total < budgetTokens) break
+    let target: { msg: Record<string, unknown>; index: number; size: number } | null = null
+    for (const m of out) {
+      if (!Array.isArray(m.content)) continue
+      const content = m.content as Array<Record<string, unknown>>
+      for (let index = 0; index < content.length; index++) {
+        const block = content[index]
+        if (block.type !== 'tool_result') continue
+        const size = estimateTokens(block.content)
+        if (size >= STUB_MIN_TOOL_RESULT_TOKENS && (!target || size > target.size)) {
+          target = { msg: m, index, size }
+        }
+      }
+    }
+    if (!target) break
+    const content = target.msg.content as Array<Record<string, unknown>>
+    const block = content[target.index]
+    const name = names.get(String(block.tool_use_id)) || 'unknown'
+    content[target.index] = {
+      ...block,
+      content: `[Tool result omitted to fit the context budget: tool "${name}", about ${target.size} tokens. The tool ran; only its output was dropped here. Re-run it with a narrower query if this data is essential.]`,
+    }
+    total = estimateTokens(out)
+  }
+  return out
+}
+
 export async function prepareAgentContext(system: string, tools: unknown[], skipCompaction = false, isCurrent = () => true, modelSnapshot?: AIModelConfig): Promise<{
   messages: Array<Record<string, unknown>>
   failed: boolean
@@ -33,6 +94,17 @@ export async function prepareAgentContext(system: string, tools: unknown[], skip
   const triggerTokens = typeof configuredBudget === 'number' && Number.isFinite(configuredBudget)
     ? Math.max(16000, Math.min(2000000, Math.floor(configuredBudget))) : CONTEXT_TRIGGER_TOKENS
   const targetTokens = Math.floor(triggerTokens * CONTEXT_TARGET_TOKENS / CONTEXT_TRIGGER_TOKENS)
+
+  // Last-step degradation before a request goes out: once the assembled
+  // payload is over the trigger, stub the largest tool results (request copy
+  // only). Whatever remains is sent even if still over budget — the provider
+  // is the authority on its own context window, and rejecting locally turned
+  // recoverable turns into permanently stuck sessions.
+  function finalize(messages: Array<Record<string, unknown>>) {
+    if (estimateRequestTokens(system, messages, tools) < triggerTokens) return messages
+    return stubOversizedToolResults(messages, triggerTokens)
+  }
+
   const prior = store.contextSummary
   const history = activeHistory(store.messages, prior)
   checkCurrent()
@@ -40,11 +112,15 @@ export async function prepareAgentContext(system: string, tools: unknown[], skip
   const inputTokens = estimateRequestTokens(system, original, tools)
   if (inputTokens < triggerTokens) return { messages: original, failed: false }
 
+  // Compaction can only remove older groups: the newest meaningful group is
+  // always retained, and system prompt + tool definitions are fixed cost.
+  // When there is nothing to cut, send the payload as-is — oversized user
+  // input in particular is never silently dropped or shortened.
   const overhead = estimateRequestTokens(system, [], tools)
   const recentBudget = Math.max(1024, targetTokens - overhead - SUMMARY_MAX_TOKENS)
   const cut = compactionCut(history, recentBudget)
-  if (cut === 0 || overhead + SUMMARY_MAX_TOKENS >= triggerTokens) {
-    throw new Error(t('ai.contextTooLarge'))
+  if (cut === 0) {
+    return { messages: finalize(original), failed: false }
   }
 
   function checkCurrent() {
@@ -54,9 +130,6 @@ export async function prepareAgentContext(system: string, tools: unknown[], skip
   }
 
   const recent = history.slice(cut)
-  if (estimateRequestTokens(system, store.buildConversation(recent), tools) >= triggerTokens) {
-    throw new Error(t('ai.contextTooLarge'))
-  }
   let summary: AIContextSummary | undefined
   let failed = skipCompaction
   if (!skipCompaction) {
@@ -82,11 +155,10 @@ export async function prepareAgentContext(system: string, tools: unknown[], skip
       if (!content.trim()) throw new Error('Empty history summary')
       summary = { version: 1, content, throughMessageId: history[cut - 1].id, createdAt: Date.now() }
       checkCurrent()
-      // Validate the candidate before committing a checkpoint. An enormous
-      // latest input is never silently shortened or removed.
-      if (estimateRequestTokens(system, store.buildConversation(recent, summary), tools) >= triggerTokens) {
-        throw new Error(t('ai.contextTooLarge'))
-      }
+      // Commit the checkpoint even when the retained latest exchange alone
+      // keeps the request over budget: the checkpoint permanently shrinks
+      // what future turns have to carry, and an oversized latest group is
+      // dealt with by stubbing, not by discarding the summary.
       if (!store.applyContextSummary(summary, revision)) throw new ChatCancelledError()
       store.contextNotice = ''
       await store.doSave()
@@ -112,9 +184,8 @@ export async function prepareAgentContext(system: string, tools: unknown[], skip
     throughMessageId: history[cut - 1].id,
     createdAt: Date.now(),
   } : prior)
-  const messages = store.buildConversation(recent, requestSummary)
+  const messages = finalize(store.buildConversation(recent, requestSummary))
   const outputTokens = estimateRequestTokens(system, messages, tools)
-  if (outputTokens >= triggerTokens) throw new Error(t('ai.contextTooLarge'))
   if (failed) store.contextNotice = t('ai.compactionFailed')
   store.contextStats = { beforeTokens: inputTokens, afterTokens: outputTokens, durationMs: Math.round(performance.now() - started), fallback: failed }
   return { messages, failed }

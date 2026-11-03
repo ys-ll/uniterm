@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { AppSettings, AIModelConfig, CustomTerminalTheme } from '../types/settings'
-import { DEFAULT_SETTINGS, normalizeKeyBindings } from '../types/settings'
+import { DEFAULT_SETTINGS, normalizeKeyBindings, normalizeContextTokenBudget } from '../types/settings'
 import { SaveSettings, LoadSettings, GetAvailableShells, SetDefaultSessionLogDir } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { Events } from '@wailsio/runtime'
 import { setLocale } from '../i18n'
@@ -72,7 +72,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const aiCfg = useAIConfigStore()
     aiCfg.maxTurns = settings.value.ai.maxTurns
     aiCfg.autoCompact = settings.value.ai.autoCompact ?? true
-    aiCfg.contextTokenBudget = settings.value.ai.contextTokenBudget || 32000
+    aiCfg.contextTokenBudget = normalizeContextTokenBudget(settings.value.ai.contextTokenBudget)
     aiCfg.summaryModelId = settings.value.ai.summaryModelId || ''
     aiCfg.models = settings.value.ai.models
     aiCfg.save()
@@ -364,7 +364,7 @@ export const useSettingsStore = defineStore('settings', () => {
       const aiCfg = useAIConfigStore()
       aiCfg.maxTurns = data.maxTurns ?? DEFAULT_SETTINGS.ai.maxTurns
       aiCfg.autoCompact = data.autoCompact ?? true
-      aiCfg.contextTokenBudget = data.contextTokenBudget || 32000
+      aiCfg.contextTokenBudget = normalizeContextTokenBudget(data.contextTokenBudget)
       aiCfg.summaryModelId = data.summaryModelId || ''
       aiCfg.models = data.models?.length ? data.models : aiCfg.models
       const wasApplyingSettings = applyingLoadedSettings
@@ -437,7 +437,7 @@ function mergeSettings(loaded: AppSettings): AppSettings {
     ai: {
       maxTurns: loaded.ai?.maxTurns ?? DEFAULT_SETTINGS.ai.maxTurns,
       autoCompact: loaded.ai?.autoCompact ?? true,
-      contextTokenBudget: loaded.ai?.contextTokenBudget || 32000,
+      contextTokenBudget: normalizeContextTokenBudget(loaded.ai?.contextTokenBudget),
       summaryModelId: loaded.ai?.summaryModelId || '',
       models: loaded.ai?.models?.length ? loaded.ai.models : DEFAULT_SETTINGS.ai.models,
     },
