@@ -1,0 +1,22 @@
+services:
+  uniterm-web:
+    image: uniterm/uniterm:latest
+    container_name: uniterm-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - TZ=Asia/Shanghai
+      - UNITERM_DATA_DIR=/data
+      - UNITERM_GATEWAY_ADDR=0.0.0.0:8080
+      - UNITERM_ADMIN_USER=admin
+      # Set the initial admin password on first startup (leave empty to auto-generate a random one, printed in docker logs)
+      - UNITERM_ADMIN_PASSWORD=${UNITERM_ADMIN_PASSWORD}
+      # Idle timeout (minutes) before an inactive user worker is recycled
+      - UNITERM_WORKER_IDLE_MINUTES=60
+      # When deployed behind a reverse proxy, list the allowed public origins (comma-separated)
+      # - UNITERM_ALLOWED_ORIGINS=https://term.example.com
+    volumes:
+      # Persists every user's isolated encrypted config, SSH keys, databases and home directory.
+      # UNITERM_DATA_HOST may point at an existing deployment's data directory (keeps accounts and user data across upgrades).
+      - ${UNITERM_DATA_HOST:-./uniterm-data}:/data

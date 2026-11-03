@@ -96,3 +96,5 @@ build/android/local.properties
 
 # Docker web deployment runtime data (users, JWT secret, per-user homes)
 uniterm-data/
+
+# Docker deploy dir runtime data (data root when running compose from deploy/docker)

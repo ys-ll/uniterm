@@ -259,6 +259,11 @@ import { parseQuickConnect } from './utils/quickConnect'
 import { getShellLabel as getShellLabelBase, parseWslFromShell } from './utils/shellLabel'
 import { reconnectFileTransferPanel } from './composables/usePanelReconnect'
 import { launchConnection, launchFileBrowser, launchMonitor, launchWslFileBrowser, launchContainerFileBrowser, persistConnection, configureLauncher } from './composables/connectionLauncher'
+import { isWebServerMode, logoutWebUser } from './services/webSftpBridge'
+
+// Headless server deployments hide OS-bound chrome; resolve once at startup.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 import { openSavedWorkspace } from './composables/savedWorkspace'
 import { installTabSnapshotSaver, maybeRestoreLastTabs } from './composables/tabSnapshot'
 import { createWorkspaceFromSelection } from './composables/createWorkspace'
@@ -419,6 +424,15 @@ const localServicesVisible = ref(false)
 // straight to EncryptionModeDialog over existing secrets.
 function resolveCredentialDialog() {
   const st = credStore.status
+  // Server mode never shows the encryption-mode picker: the master password
+  // is the gateway login password and the worker auto-setups on spawn. A
+  // NeedsSetup state here means the gateway lost its cached password
+  // (restart) — re-login refreshes it, so force a logout instead of showing
+  // the dialog.
+  if (webServerMode.value && st.needsSetup && !st.existingSecrets) {
+    void logoutWebUser()
+    return
+  }
   if (st.needsSetup && !st.existingSecrets) { encryptVisible.value = true; return }
   if (!st.unlocked) { unlockVisible.value = true }
 }
@@ -468,8 +482,15 @@ async function checkCredentials() {
     return
   }
   if (credStore.firstRun || credStore.dataDirInfo.firstRun) {
-    dataDirVisible.value = true
-    return
+    // Server mode: the gateway already pins each worker to its own isolated
+    // default directory, and the alternatives (exe-relative portable, global
+    // custom path) would break per-user isolation. Take the default silently.
+    if (await isWebServerMode()) {
+      await credStore.selectDataDir('default', '', false)
+    } else {
+      dataDirVisible.value = true
+      return
+    }
   }
   resolveCredentialDialog()
 }

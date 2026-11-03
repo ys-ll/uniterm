@@ -7,11 +7,13 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -78,10 +80,41 @@ func NewWebStreamService(unitermApp *App, resolver SessionResolverFunc) *WebStre
 	stagingDir := filepath.Join(homeDir, ".cache", "uniterm-web-staging")
 	_ = os.MkdirAll(stagingDir, 0o700)
 
-	return &WebStreamService{
+	s := &WebStreamService{
 		unitermApp:     unitermApp,
 		resolveSession: resolver,
 		stagingDir:     stagingDir,
+	}
+	go s.cleanupStagingLoop()
+	return s
+}
+
+// cleanupStagingLoop removes staged files left behind by crashed uploads (and
+// anything older than a day) so the staging directory cannot grow without
+// bound. Staged files have no handle to invalidate — anything already wired to
+// a staged path is expected to be consumed promptly.
+func (s *WebStreamService) cleanupStagingLoop() {
+	purge := func() {
+		entries, err := os.ReadDir(s.stagingDir)
+		if err != nil {
+			return
+		}
+		cutoff := time.Now().Add(-24 * time.Hour)
+		for _, e := range entries {
+			info, err := e.Info()
+			if err != nil || info.IsDir() {
+				continue
+			}
+			if info.ModTime().Before(cutoff) {
+				_ = os.Remove(filepath.Join(s.stagingDir, e.Name()))
+			}
+		}
+	}
+	purge()
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		purge()
 	}
 }
 
@@ -156,18 +189,46 @@ func BuildServerOptions() application.ServerOptions {
 	}
 
 	return application.ServerOptions{
-		Host:                    host,
-		Port:                    port,
-		ReadTimeout:             0, // Disable short read timeout for large streaming SFTP uploads
-		WriteTimeout:            0, // Disable short write timeout for large streaming SFTP downloads
+		Host: host,
+		Port: port,
+		// Wails treats 0 as "fall back to its 30s default", while net/http only
+		// installs a deadline for d > 0 — so a negative value is what actually
+		// disables the timeout for large streaming SFTP transfers.
+		ReadTimeout:             -1,
+		WriteTimeout:            -1,
 		IdleTimeout:             180 * time.Second,
 		ShutdownTimeout:         30 * time.Second,
 		WebSocketOriginPatterns: origins,
 	}
 }
 
+// lastWebActivityNano records when the app last emitted an event to the
+// frontend (terminal output included). The multi-user gateway's idle reaper
+// polls /api/web/activity for it, because WebSocket-only traffic — a user
+// watching tail -f or an AI stream — produces no proxied HTTP requests to
+// refresh the gateway-side timestamp.
+var lastWebActivityNano atomic.Int64
+
+// touchWebActivity marks a frontend-visible event as web activity. Called
+// from App.emit; a no-op stub exists in the desktop build.
+func touchWebActivity() {
+	lastWebActivityNano.Store(time.Now().UnixNano())
+}
+
 // ServeHTTP routes "/api/web/*" requests.
 func (s *WebStreamService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Shared-secret check: when the gateway spawned this worker it passed a
+	// per-worker random token via UNITERM_WORKER_TOKEN and injects it on every
+	// proxied request. Without it, any process inside the container could talk
+	// to this loopback port and drive another tenant's session.
+	if want := os.Getenv("UNITERM_WORKER_TOKEN"); want != "" {
+		got := r.Header.Get("X-Uniterm-Worker-Token")
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
 	// Enforce same-origin / gateway header check
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
@@ -175,6 +236,14 @@ func (s *WebStreamService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case subPath == "/mode" && r.Method == http.MethodGet:
 		s.handleModeInfo(w, r)
+	case subPath == "/credentials/status" && r.Method == http.MethodGet:
+		s.handleCredentialsStatus(w, r)
+	case subPath == "/credentials/rekey" && r.Method == http.MethodPost:
+		s.handleCredentialsRekey(w, r)
+	case subPath == "/credentials/reset" && r.Method == http.MethodPost:
+		s.handleCredentialsReset(w, r)
+	case subPath == "/activity" && r.Method == http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"lastActivityNano": lastWebActivityNano.Load()})
 	case subPath == "/sftp/download" && r.Method == http.MethodGet:
 		s.handleSFTPDownload(w, r)
 	case subPath == "/sftp/download-archive" && r.Method == http.MethodGet:
@@ -205,6 +274,9 @@ func (s *WebStreamService) handleModeInfo(w http.ResponseWriter, r *http.Request
 		"user":       tenantUser,
 		"role":       r.Header.Get("X-Uniterm-Role"),
 		"homeDir":    homeDir,
+		// Container-local terminals expose a root shell in the tenant
+		// container; the frontend hides the entry points unless opted in.
+		"localShell": os.Getenv("UNITERM_ENABLE_LOCAL_SHELL") == "true",
 	})
 }
 
@@ -316,12 +388,17 @@ func (s *WebStreamService) handleSFTPDownloadArchive(w http.ResponseWriter, r *h
 	ctx := r.Context()
 	buf := make([]byte, 64*1024)
 
+	transferID := newTransferID()
 	for _, targetPath := range remotePaths {
 		targetPath = strings.TrimSpace(targetPath)
 		if targetPath == "" {
 			continue
 		}
-		_ = sess.WalkRemoteDir(ctx, targetPath, func(relPath string, info os.FileInfo, openReader func() (io.ReadCloser, error)) error {
+		// The tar stream is already committed to the response by the time a
+		// walk fails, so the status code can no longer change; surface the
+		// failure through the log and the progress-event channel instead of
+		// silently delivering a truncated archive.
+		if err := sess.WalkRemoteDir(ctx, targetPath, func(relPath string, info os.FileInfo, openReader func() (io.ReadCloser, error)) error {
 			hdr, err := tar.FileInfoHeader(info, "")
 			if err != nil {
 				return err
@@ -343,7 +420,18 @@ func (s *WebStreamService) handleSFTPDownloadArchive(w http.ResponseWriter, r *h
 			defer rc.Close()
 			_, err = io.CopyBuffer(tarWriter, rc, buf)
 			return err
-		})
+		}); err != nil {
+			log.Printf("[web-stream] archive walk %s failed: %v", targetPath, err)
+			s.emitProgress(TransferProgressPayload{
+				TransferID: transferID,
+				SessionID:  sessionID,
+				Direction:  "download",
+				FileName:   archiveName,
+				RemotePath: targetPath,
+				Status:     "error",
+				Error:      fmt.Sprintf("archive walk %s failed: %v", targetPath, err),
+			})
+		}
 	}
 }
 
@@ -506,21 +594,54 @@ func (s *WebStreamService) handleStageLocalFile(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	part, err := mr.NextPart()
-	if err != nil {
+	// keep=1 places the file under staging/keep/, which the 24h janitor
+	// never touches: staged paths referenced by saved connection configs
+	// (SSH keys, SQLite DBs, kubeconfigs) must outlive any single session,
+	// while one-shot imports are fine with the janitored default area.
+	keep := false
+	var part io.ReadCloser
+	var pickedName string
+	for {
+		p, err := mr.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid multipart stream"})
+			return
+		}
+		if p.FormName() == "keep" {
+			data, _ := io.ReadAll(io.LimitReader(p, 8))
+			keep = strings.TrimSpace(string(data)) == "1" || strings.EqualFold(strings.TrimSpace(string(data)), "true")
+			_ = p.Close()
+			continue
+		}
+		if p.FileName() != "" {
+			part = p
+			pickedName = p.FileName()
+			break
+		}
+		_ = p.Close()
+	}
+	if part == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing file part"})
 		return
 	}
 	defer part.Close()
 
-	origName := filepath.Base(part.FileName())
+	origName := filepath.Base(pickedName)
 	if origName == "" || origName == "." || origName == "/" {
 		origName = "staged-file.bin"
 	}
 
+	stagingDir := s.stagingDir
+	if keep {
+		stagingDir = filepath.Join(s.stagingDir, "keep")
+		_ = os.MkdirAll(stagingDir, 0o700)
+	}
 	token := newTransferID()[:12]
 	stagedFileName := fmt.Sprintf("%s_%s", token, origName)
-	stagedPath := filepath.Join(s.stagingDir, stagedFileName)
+	stagedPath := filepath.Join(stagingDir, stagedFileName)
 
 	// Containment check
 	cleanStaging := filepath.Clean(s.stagingDir) + string(os.PathSeparator)
@@ -536,10 +657,20 @@ func (s *WebStreamService) handleStageLocalFile(w http.ResponseWriter, r *http.R
 	}
 	defer outFile.Close()
 
-	written, err := io.Copy(outFile, io.LimitReader(part, 512*1024*1024)) // 512 MiB cap for staged config/DB files
+	// Read one byte past the cap so an oversized upload is detected as an
+	// error instead of being silently truncated into a valid-looking file.
+	const stagingCap = 512 * 1024 * 1024 // 512 MiB cap for staged config/DB files
+	written, err := io.Copy(outFile, io.LimitReader(part, stagingCap+1))
 	if err != nil {
 		_ = os.Remove(stagedPath)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if written > stagingCap {
+		_ = os.Remove(stagedPath)
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
+			"error": fmt.Sprintf("staged file exceeds the %d MiB staging cap", stagingCap/(1024*1024)),
+		})
 		return
 	}
 
@@ -639,6 +770,57 @@ func (s *WebStreamService) emitProgress(payload TransferProgressPayload) {
 	if s.app != nil && s.app.Event != nil {
 		s.app.Event.Emit("web:sftp:progress", payload)
 	}
+}
+
+// handleCredentialsStatus reports the credential store state so the gateway
+// can decide whether a live rekey is possible before accepting a password
+// change.
+func (s *WebStreamService) handleCredentialsStatus(w http.ResponseWriter, _ *http.Request) {
+	a := s.unitermApp
+	if a == nil || a.credentialStore == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"initialized": false, "unlocked": false, "needsSetup": true})
+		return
+	}
+	st := a.credentialStore.Status()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"initialized": !st.NeedsSetup,
+		"unlocked":    st.Unlocked,
+		"needsSetup":  st.NeedsSetup,
+	})
+}
+
+// handleCredentialsRekey re-encrypts the tenant's secret stores under a new
+// master password. Server mode ties the master password to the gateway login
+// password, so the gateway calls this whenever a tenant changes theirs. The
+// store must be unlocked: the gateway only offers password change from an
+// active, unlocked browser session.
+func (s *WebStreamService) handleCredentialsRekey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		OldPassword string `json:"oldPassword"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil || req.OldPassword == "" || req.NewPassword == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "oldPassword and newPassword are required"})
+		return
+	}
+	a := s.unitermApp
+	if err := a.ChangeMasterPassword(req.OldPassword, req.NewPassword); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+}
+
+// handleCredentialsReset wipes the tenant's credential store (the master
+// password reset). The gateway invokes it as part of an admin password
+// reset: the login password and the master password are one and the same in
+// server mode, so resetting the login password destroys the data key.
+func (s *WebStreamService) handleCredentialsReset(w http.ResponseWriter, _ *http.Request) {
+	if err := s.unitermApp.ResetCredentials(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
 func formatContentDisposition(fileName string) string {

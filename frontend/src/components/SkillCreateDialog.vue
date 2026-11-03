@@ -86,6 +86,7 @@ import { FileUp, CircleCheck } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { useSkillStore } from '../stores/skillStore'
 import { OpenFileDialogFiltered, OpenDirectoryDialog, ImportSkillFromZip, ImportSkillFromDir } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebServerMode, pickAndStageLocalFileInBrowser } from '../services/webSftpBridge'
 
 const { t } = useI18n()
 const store = useSkillStore()
@@ -221,6 +222,17 @@ async function onCreate() {
 // 通过 Wails 原生对话框选 zip / 文件夹，走后端导入（支持文件夹型 skill）
 async function importZip() {
   try {
+    // Web mode: stage the picked archive into the worker and import from
+    // the container path.
+    if (await isWebServerMode()) {
+      const staged = await pickAndStageLocalFileInBrowser('.zip,.skill')
+      if (!staged) return
+      const name = await ImportSkillFromZip(staged.stagedPath)
+      await store.reload()
+      ElMessage.success(t('settings.skillsImportOk', { name }))
+      emit('created')
+      return
+    }
     const path = await OpenFileDialogFiltered(t('settings.skillsImportZip'), 'Skill', '*.zip;*.skill')
     if (!path) return
     const name = await ImportSkillFromZip(path)
@@ -234,6 +246,11 @@ async function importZip() {
 
 async function importDir() {
   try {
+    // Browsers cannot return a server-side directory path (see pickDBeaverDir).
+    if (await isWebServerMode()) {
+      ElMessage.warning(t('web.dirPickerUnavailable'))
+      return
+    }
     const path = await OpenDirectoryDialog()
     if (!path) return
     const name = await ImportSkillFromDir(path)

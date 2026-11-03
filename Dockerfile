@@ -1,14 +1,14 @@
 # =============================================================================
-# 从当前仓库源码构建 uniTerm Web（Wails v3 -tags server + 多用户网关）
+# Build uniTerm Web from this repository (Wails v3 -tags server + multi-user gateway).
 #
 #   docker compose up -d --build
 #
-# 前端 bindings 是 gitignore 的生成物，所以必须先用 wails3 生成再 npm build。
+# Frontend bindings are a gitignored generated artifact: run wails3 generate, then npm build.
 # =============================================================================
 
-# Stage 1: Go 源码 + 生成前端 bindings
+# Stage 1: Go source + generate the frontend bindings
 FROM golang:1.26.2-alpine AS bindings-generator
-# proxy.golang.org 在部分网络不可达；goproxy.cn 提供相同模块。
+# proxy.golang.org is unreachable from some networks; goproxy.cn serves the same modules.
 ARG GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
 ENV GOPROXY=${GOPROXY}
 RUN for i in 1 2 3; do apk add --no-cache git ca-certificates && break; [ "$i" = 3 ] && exit 1; sleep 5; done
@@ -16,7 +16,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN for i in 1 2 3; do go mod download && break; [ "$i" = 3 ] && exit 1; sleep 5; done
 COPY . .
-# 与 go.mod 中的 wails 版本保持一致
+# Keep in sync with the wails version in go.mod
 RUN for i in 1 2 3; do go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0 && break; [ "$i" = 3 ] && exit 1; sleep 5; done
 RUN /go/bin/wails3 generate bindings -f "-tags server,production" -clean=true
 
@@ -43,17 +43,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/uniterm-gateway .
 # Stage 4: Runtime image with the CLI tools the web console shells rely on
 # =============================================================================
 FROM alpine:3.21
+# EXTRA_PACKAGES lets deployments opt into heavyweight CLI tools (docker-cli,
+# kubectl) that the web console shells can drive. They are NOT installed by
+# default: a mounted docker.sock plus any tenant's local terminal equals host
+# root, and every tenant worker currently shares the container's root user.
+ARG EXTRA_PACKAGES=""
 RUN for i in 1 2 3; do apk add --no-cache \
     ca-certificates \
     tzdata \
-    bash \
-    openssh-client \
-    curl \
     wget \
-    git \
-    sqlite \
-    docker-cli \
-    kubectl \
+    $EXTRA_PACKAGES \
     && break; [ "$i" = 3 ] && exit 1; sleep 5; done \
     && mkdir -p /data/gateway /data/users
 

@@ -24,3 +24,7 @@ func BuildServerOptions() application.ServerOptions {
 // registerWebStreamService is a no-op on desktop: the /api/web routes only
 // exist in the headless server build (see server_web_extension.go).
 func registerWebStreamService(_ *application.App, _ *App) {}
+
+// touchWebActivity tracks frontend-visible activity for the gateway's idle
+// reaper; desktop builds have no gateway, so this is a no-op.
+func touchWebActivity() {}
