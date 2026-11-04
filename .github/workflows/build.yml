@@ -402,6 +402,11 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: artifacts
+          # Fixed artifact-name allowlist — skips the dockerbuild record
+          # artifact that docker/build-push-action uploads on its own.
+          pattern: |
+            uniTerm-*
+            docker-image-archives
 
       - name: Collect release files
         run: |
