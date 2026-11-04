@@ -65,7 +65,7 @@ func TestBrowseSQLDialects(t *testing.T) {
 		{"postgres", "$1", "LIMIT 21 OFFSET 40", &postgresProvider{}},
 		{"sqlite", "?", "LIMIT 21 OFFSET 40", &sqliteProvider{}},
 		{"sqlserver", "@p1", "OFFSET 40 ROWS FETCH NEXT 21 ROWS ONLY", &sqlserverProvider{}},
-		{"oracle", ":1", "OFFSET 40 ROWS FETCH NEXT 21 ROWS ONLY", &oracleProvider{}},
+		{"oracle", ":1", "ROWNUM", &oracleProvider{}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			query, args, err := buildBrowseSQL(test.provider, "items", cols, opts)

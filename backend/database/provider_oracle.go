@@ -71,10 +71,9 @@ func (p *oracleProvider) PrepareExec(db execer, dbName string) error {
 }
 
 func (p *oracleProvider) DefaultTableQuery(dbName, tableName string, limit, offset int) string {
-	return fmt.Sprintf(
-		"SELECT * FROM %s OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
-		p.Quote(tableName), offset, limit,
-	)
+	// ROWNUM wrapping instead of OFFSET ... FETCH NEXT: the latter is 12c+
+	// syntax and fails with ORA-00933 on 11g.
+	return oraclePagingWrap(fmt.Sprintf("SELECT * FROM %s", p.Quote(tableName)), offset, limit)
 }
 
 func (p *oracleProvider) PagedTableQuery(dbName, tableName string, limit, offset int) string {
@@ -214,6 +213,39 @@ func (p *oracleProvider) GetCapabilities() DBCapabilities {
 // and data queries resolve names through ALTER SESSION SET CURRENT_SCHEMA,
 // so any listed schema is fully browsable without extra privileges beyond
 // what the grants already allow.
+// systemSchemas lists the Oracle-maintained accounts shipped with pre-12c
+// releases. all_users only gained the oracle_maintained column in 12.1, so
+// older servers need this static list to keep system schemas out of the tree.
+var systemSchemas = []string{
+	"SYS", "SYSTEM", "OUTLN", "XDB", "CTXSYS", "MDSYS", "OLAPSYS", "EXFSYS",
+	"WMSYS", "DBSNMP", "SYSMAN", "APPQOSSYS", "ORDDATA", "ORDSYS", "ORDPLUGINS",
+	"SI_INFORMTN_SCHEMA", "LBACSYS", "DVSYS", "DVF", "FLOWS_FILES",
+	"APEX_040000", "APEX_040200",
+}
+
+// hasOracleMaintainedColumn reports whether the server's all_users dictionary
+// exposes the oracle_maintained column (Oracle 12.1 and newer).
+func hasOracleMaintainedColumn(db *sql.DB) bool {
+	var n int
+	err := db.QueryRow(`SELECT COUNT(*) FROM all_tab_columns
+		WHERE owner = 'SYS' AND table_name = 'ALL_USERS' AND column_name = 'ORACLE_MAINTAINED'`).Scan(&n)
+	return err == nil && n > 0
+}
+
+// listSchemasSQL returns the owner-listing query filtered to user schemas.
+func listSchemasSQL(db *sql.DB) string {
+	if hasOracleMaintainedColumn(db) {
+		return `SELECT DISTINCT owner FROM all_objects
+			WHERE object_type IN ('TABLE', 'VIEW')
+			  AND owner NOT IN (SELECT username FROM all_users WHERE oracle_maintained = 'Y')
+			ORDER BY owner`
+	}
+	return `SELECT DISTINCT owner FROM all_objects
+		WHERE object_type IN ('TABLE', 'VIEW')
+		  AND owner NOT IN ('` + strings.Join(systemSchemas, `', '`) + `')
+		ORDER BY owner`
+}
+
 func (p *oracleProvider) GetDatabases(db *sql.DB) ([]string, error) {
 	results, err := queryStrings(db, "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS CURRENT_SCHEMA FROM DUAL")
 	if err != nil {
@@ -224,10 +256,7 @@ func (p *oracleProvider) GetDatabases(db *sql.DB) ([]string, error) {
 		current = results[0]["CURRENT_SCHEMA"]
 	}
 
-	owners, err := queryStrings(db, `SELECT DISTINCT owner FROM all_objects
-		WHERE object_type IN ('TABLE', 'VIEW')
-		  AND owner NOT IN (SELECT username FROM all_users WHERE oracle_maintained = 'Y')
-		ORDER BY owner`)
+	owners, err := queryStrings(db, listSchemasSQL(db))
 	if err != nil {
 		return nil, fmt.Errorf("list schemas: %w", err)
 	}
