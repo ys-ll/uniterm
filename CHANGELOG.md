@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.12.0-alpha
+## v1.12.0
 
 ### What's Changed
 
@@ -52,9 +52,12 @@
 - SSH: credentials are persisted after an auth retry instead of being lost. (@surenwuyuwuqiu)
 - MCP: when shell detection fails (hardened SSH targets), foreground jobs no longer wait out their full deadline and report a timeout after actually finishing, and the busy lock no longer wedges the session until its TTL.
 - Remote desktop (RDP): the last working TLS version is remembered per target, so servers that silently drop the modern handshake no longer pay a 5 s penalty on every connect; a valid tunneled session is no longer rejected as a destination mismatch over a jump host.
+- Remote desktop (RDP): servers whose self-signed certificate carries a negative serial number are reachable again — Go 1.23's stricter x509 parser rejected such certificates even with certificate verification disabled, and some older Windows servers ship exactly these.
 - Remote desktop (VNC): the fullscreen cursor overlay stays visible when the panel is not focused.
 - X11: starting VcXsrv no longer blocks the first SSH connect for up to 5 s. (@sonnartliao)
 - Containers: commit targets are validated against Docker's reference grammar up front, and the SSH stdin pipe is created before registry login starts. (@boltomli)
+- Database: Oracle 11g and other pre-12c servers can list schemas and browse table data again — two dictionary queries used 12c-only syntax, so the schema tree stayed empty and table browsing failed on older releases.
+- macOS: restarting immediately after toggling the system title bar setting works again — the app used to exit without relaunching. (@surenwuyuwuqiu)
 - Startup: the tab-restore prompt is no longer shown when it was disabled in settings. (@surenwuyuwuqiu)
 
 **Notes**
@@ -114,9 +117,12 @@ Thanks to @NatureLProokie, @etanman, @laigcss, @dungvv, @surenwuyuwuqiu, @boltom
 - SSH：认证重试后凭据会被持久化，不再丢失。(@surenwuyuwuqiu)
 - MCP：shell 探测失败（加固的 SSH 目标）时，前台任务不再等满超时后才报超时（实际早已完成），会话也不再因 busy 锁被占住直到 TTL 而不可用。
 - 远程桌面（RDP）：按目标记住上次成功的 TLS 版本，静默丢弃现代握手的服务器不再每次连接都付出 5 秒代价；经跳板机隧道时不再因目标不匹配拒绝有效会话。
+- 远程桌面（RDP）：支持连接证书序列号为负的服务器（部分老版本 Windows 服务器的自签名证书属于这种情况）。
 - 远程桌面（VNC）：全屏下面板未聚焦时光标覆盖层保持可见。
 - X11：启动 VcXsrv 不再阻塞首次 SSH 连接最长 5 秒。(@sonnartliao)
 - 容器：提交目标引用提前按 Docker reference 语法校验；SSH stdin 管道在 registry 登录开始前创建。(@boltomli)
+- 数据库：Oracle 11g 及其他 12c 之前的服务器恢复 schema 列表与表数据浏览——两处字典查询使用了 12c 才有的语法，导致旧版本的 schema 树一直为空、表浏览报错。
+- macOS：切换「使用系统标题栏」设置后点「立即重启」能正常重启了，不再只是退出。(@surenwuyuwuqiu)
 - 启动：设置中关闭的标签恢复提示不再弹出。(@surenwuyuwuqiu)
 
 **说明**
