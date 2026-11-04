@@ -2,6 +2,11 @@ module github.com/ys-ll/uniterm
 
 go 1.26.2
 
+// Some RDP servers (e.g. Windows Server 2008) present self-signed
+// certificates with a negative serial number; restore the pre-Go 1.23
+// parser leniency so the proxy's TLS leg can still terminate on them.
+godebug x509negativeserial=1
+
 require (
 	github.com/UserExistsError/conpty v0.1.4
 	github.com/alexbrainman/sspi v0.0.0-20210105120005-909beea2cc74
