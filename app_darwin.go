@@ -207,8 +207,8 @@ func systemLanguage() string {
 	return ""
 }
 
-// spawnSuccessorProcess starts a fresh copy of the app after this process has
-// exited (see app_windows.go). On macOS the executable lives inside a .app
+// spawnSuccessorProcess starts a fresh copy after shutdown releases the lock.
+// On macOS the executable lives inside a .app
 // bundle (.../Foo.app/Contents/MacOS/Foo); re-exec'ing that path bypasses
 // LaunchServices, so walk up to the bundle and use `open -n` instead. Falls
 // back to a raw re-exec when not running from a bundle (e.g. `wails dev`).
