@@ -2306,13 +2306,23 @@ func (a *App) GetAppInfo() AppInfo {
 }
 
 // relaunchPending marks that the successor process should be spawned once
-// the current one has fully exited (checked in main() after w3app.Run()
-// returns). Quitting BEFORE spawning is what makes RelaunchApp compatible
+// shutdown has released the single-instance lock (in PostShutdown on macOS,
+// after w3app.Run() returns elsewhere). Quitting BEFORE spawning keeps it compatible
 // with single-instance locking: if the successor were spawned first, it
 // would see the lock still held and exit immediately, killing the app.
 // (The old spawn-first order existed to inherit Windows set-foreground
 // permission; the successor now focuses itself at startup instead.)
 var relaunchPending atomic.Bool
+
+func relaunchIfPending() {
+	// Consume the request so PostShutdown and the Run fallback cannot both
+	// launch a successor if the platform returns from its native event loop.
+	if relaunchPending.Swap(false) {
+		if err := spawnSuccessorProcess(); err != nil {
+			log.Writef("relaunch: spawn successor failed: %v", err)
+		}
+	}
+}
 
 // RelaunchApp quits the current instance and spawns a fresh one afterwards
 // so settings that are fixed at startup (e.g. the window title bar) can take

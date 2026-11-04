@@ -111,8 +111,7 @@ func main() {
 	}
 
 	// Single-instance relaunch: RelaunchApp/autotest set relaunchPending and
-	// quit; the successor is spawned after Run() returns, once the lock is
-	// released.
+	// quit; the successor is spawned once shutdown releases the lock.
 
 	// Capture top-level panics
 	defer func() {
@@ -220,13 +219,20 @@ func main() {
 		Server:     BuildServerOptions(), // empty unless built with -tags server
 		Assets:     application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		OnShutdown: app.shutdown,
+		// AppKit's terminate: exits the process without returning from Run().
+		// PostShutdown runs after store cleanup and single-instance lock release.
+		PostShutdown: func() {
+			if runtime.GOOS == "darwin" {
+				relaunchIfPending()
+			}
+		},
 		// Single-instance: a second GUI launch acquires the OS lock, notifies
 		// this instance (which shows/focuses the existing window) and exits.
 		// This prevents two GUI processes from racing on the shared stores in
 		// the user's data directory (settings.json, connections, credentials).
 		// The admin-shell broker process never reaches application.New, so it
 		// is exempt. RelaunchApp sets relaunchPending and quits first; the
-		// successor is spawned after Run() returns, with the lock released.
+		// successor is spawned after shutdown releases the lock.
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: singleInstanceID,
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
@@ -449,11 +455,7 @@ func main() {
 	// Quit-then-spawn relaunch (RelaunchApp / update autotest): the process
 	// is exiting and the single-instance lock is released, so the successor
 	// starts clean — it would otherwise be rejected as a "second instance".
-	if relaunchPending.Load() {
-		if err := spawnSuccessorProcess(); err != nil {
-			log.Writef("relaunch: spawn successor failed: %v", err)
-		}
-	}
+	relaunchIfPending()
 	// Graceful exit. shutdown() (see app.go) has already released the WebView2
 	// COM controller synchronously on the UI thread. ICoreWebView2Controller::Close()
 	// blocks until the controller and, being the last one on the environment, the

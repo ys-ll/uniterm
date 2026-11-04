@@ -3411,7 +3411,7 @@ async function clearBackground() {
 }
 
 // The window frame is fixed at startup (Wails limitation) — changing it needs
-// a restart. Persist the choice, then offer to quit so the user can reopen.
+// a restart. Persist the choice, then offer to relaunch the app.
 async function onToggleSystemTitleBar(v: boolean) {
   await localStateStore.update({ systemTitleBar: v })
   try {
