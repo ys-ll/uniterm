@@ -482,9 +482,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
   ## ---- Docker image: amd64 + arm64, pushed to Docker Hub ----
-  ## Tag pushes (v*) publish <version> + latest; manual runs publish the
-  ## dev-<sha> tag only when the preview checkbox is set — latest always
-  ## points at an official release.
+  ## Tag pushes (v*) publish <version>; stable releases additionally move
+  ## latest. Manual runs publish the dev-<sha> tag only when the preview
+  ## checkbox is set — latest always points at a stable official release.
   docker:
     if: github.event_name == 'push' || inputs.preview == true
     runs-on: ubuntu-latest
@@ -524,9 +524,14 @@ jobs:
         shell: bash
         run: |
           # Docker tags conventionally drop the leading v of the git tag.
+          # latest only follows stable releases: a pre-release version
+          # (alpha / beta / rc, signalled by a hyphen) never moves it.
           IMG=uniterm/uniterm
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "IMAGE_TAGS=${IMG}:${VERSION#v},${IMG}:latest" >> $GITHUB_ENV
+            case "$VERSION" in
+              *-*) echo "IMAGE_TAGS=${IMG}:${VERSION#v}" >> $GITHUB_ENV ;;
+              *)   echo "IMAGE_TAGS=${IMG}:${VERSION#v},${IMG}:latest" >> $GITHUB_ENV ;;
+            esac
           else
             echo "IMAGE_TAGS=${IMG}:${VERSION}" >> $GITHUB_ENV
           fi
