@@ -202,9 +202,20 @@ func stripOraclePagingColumn(result *QueryResult) {
 }
 
 func BrowseTable(p Provider, db *sql.DB, dbName, tableName string, opts BrowseOptions) (*QueryResult, error) {
-	cols, err := browseTableColumns(p, db, dbName, tableName)
-	if err != nil {
-		return nil, err
+	// The column map is only needed to validate filter/sort columns. The default
+	// browse (no filters, no sorts) does not reference it, so skip the expensive
+	// GetTableSchema round-trip entirely — the frontend already loaded the schema
+	// when the table was opened (§loadSchema). This avoids duplicate schema queries
+	// that prolong the slow Oracle 11g load and stress the connection pool.
+	var (
+		cols map[string]bool
+		err  error
+	)
+	if len(opts.Filters) > 0 || len(opts.Sorts) > 0 {
+		cols, err = browseTableColumns(p, db, dbName, tableName)
+		if err != nil {
+			return nil, err
+		}
 	}
 	query, args, err := buildBrowseSQL(p, tableName, cols, opts)
 	if err != nil {

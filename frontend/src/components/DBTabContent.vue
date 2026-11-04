@@ -222,7 +222,7 @@ import DBTreePanel from './DBTreePanel.vue'
 import DBTableStructure from './DBTableStructure.vue'
 import DBQueryEditor from './DBQueryEditor.vue'
 import DBObjectList from './DBObjectList.vue'
-import { GetTableSchema } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetTableSchema, LogMessage } from '../../bindings/github.com/ys-ll/uniterm/app'
 import type { ColumnInfo } from '../types/database'
 
 defineOptions({ name: 'DBTabContent' })
@@ -512,10 +512,12 @@ function findDbDoc(kind: 'db-query' | 'db-objects', dbName: string) {
 }
 
 async function loadSchema(doc: DocTab) {
+  void LogMessage(`T1 loadSchema start table=${doc.tableName}`)
   try {
     const schema = await GetTableSchema(props.sessionId, doc.dbName, doc.tableName)
     doc.tableColumns = schema.columns
     doc.primaryKeys = schema.columns.filter(c => c.isPrimary).map(c => c.name)
+    void LogMessage(`T2 loadSchema done table=${doc.tableName} cols=${schema.columns.length}`)
   } catch { /* ignore */ }
 }
 
@@ -541,8 +543,24 @@ async function onSelectTable(dbName: string, tableName: string, isView = false) 
   }
   // Load schema first so the result grid opens with canEdit already true
   await loadSchema(doc)
+  // Re-check after the async gap: concurrent emits on the same table (e.g.
+  // click + dblclick) may have already created a doc while we awaited the
+  // schema. If so, reuse that one instead of pushing a duplicate, which would
+  // otherwise mount an extra, permanent, expensive DBQueryEditor/CodeMirror
+  // instance for the same table and eventually freeze the renderer.
+  const dup = findTableDoc(dbName, tableName)
+  if (dup) {
+    if (!dup.tableColumns.length) {
+      dup.tableColumns = doc.tableColumns
+      dup.primaryKeys = doc.primaryKeys
+    }
+    activateDoc(dup.id)
+    return
+  }
   docs.value.push(doc)
+  void LogMessage(`T3 after push docs`);
   activateDoc(doc.id)
+  void LogMessage(`T4 after activateDoc`)
 }
 
 async function onViewStructure(dbName: string, tableName: string) {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	_ "github.com/rqlite/gorqlite/stdlib"
@@ -162,6 +163,41 @@ func (p *rqliteProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, erro
 		infos = append(infos, TableInfo{Name: name, Type: tp})
 	}
 	return infos, nil
+}
+
+func (p *rqliteProvider) GetTablePage(db *sql.DB, dbName string, query string, offset, limit int) ([]TableInfo, int, error) {
+	base := `FROM sqlite_master WHERE type IN ('table', 'view') AND name != 'sqlite_sequence'`
+	if query != "" {
+		base += ` AND name LIKE ?`
+	}
+	var countArgs []any
+	if query != "" {
+		countArgs = append(countArgs, "%"+query+"%")
+	}
+	countRows, err := queryStrings(db, "SELECT COUNT(*) AS n "+base, countArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count tables: %w", err)
+	}
+	total := 0
+	if len(countRows) > 0 {
+		total, _ = strconv.Atoi(countRows[0]["n"])
+	}
+	pageArgs := []any{}
+	if query != "" {
+		pageArgs = append(pageArgs, "%"+query+"%")
+	}
+	pageArgs = append(pageArgs, offset, limit)
+	results, err := queryStrings(db,
+		"SELECT name, type "+base+" ORDER BY name LIMIT ? OFFSET ?", pageArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get tables page: %w", err)
+	}
+	infos := make([]TableInfo, 0, len(results))
+	for _, row := range results {
+		tp := strings.ToLower(row["type"])
+		infos = append(infos, TableInfo{Name: row["name"], Type: tp})
+	}
+	return infos, total, nil
 }
 
 func (p *rqliteProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error) {

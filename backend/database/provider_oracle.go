@@ -307,6 +307,80 @@ func (p *oracleProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, erro
 	return infos, nil
 }
 
+// GetTablePage returns one sorted page of tables plus the total count. A
+// non-empty query filters by name (LIKE %q%), which the tree uses for both
+// jump-loading to an arbitrary offset and for full-schema search. 11g has no
+// OFFSET..FETCH, so rows are sorted inside the innermost derived table and
+// paginated with a double ROWNUM wrap. Placeholders are owner=:1, optional
+// query=:2, then ROWNUM bounds at the following two positions (go-ora style).
+func (p *oracleProvider) GetTablePage(db *sql.DB, dbName string, query string, offset, limit int) ([]TableInfo, int, error) {
+	owner, err := p.resolveSchema(db, dbName)
+	if err != nil {
+		return nil, 0, err
+	}
+	owner = strings.ToUpper(owner)
+
+	// owner=:1 always; when query is set it becomes a name LIKE bound at :2 so
+	// the ROWNUM placeholders shift to :3/:4 (go-ora positional style).
+	where := `o.owner = :1 AND o.object_type IN ('TABLE', 'VIEW') AND o.object_name NOT LIKE 'BIN$%'`
+	countArgs := []any{owner}
+	pageArgs := []any{owner}
+	queryPh := ""
+	next := 2
+	if query != "" {
+		queryPh = fmt.Sprintf(" AND o.object_name LIKE :%d", next)
+		where += queryPh
+		countArgs = append(countArgs, "%"+query+"%")
+		pageArgs = append(pageArgs, "%"+query+"%")
+		next++
+	}
+
+	countRows, err := queryStrings(db, `
+		SELECT COUNT(*) AS n
+		FROM all_objects o
+		LEFT JOIN all_tab_comments c
+		  ON c.owner = o.owner AND c.table_name = o.object_name
+		WHERE `+where, countArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count tables: %w", err)
+	}
+	total := 0
+	if len(countRows) > 0 {
+		total, _ = strconv.Atoi(countRows[0]["N"])
+	}
+
+	last := offset + limit
+	pageArgs = append(pageArgs, last, offset)
+	results, err := queryStrings(db, fmt.Sprintf(`
+		SELECT object_name, object_type, comments FROM (
+			SELECT tt.*, ROWNUM rn FROM (
+				SELECT o.object_name AS object_name, o.object_type AS object_type,
+				       NVL(c.comments, '') AS comments
+				FROM all_objects o
+				LEFT JOIN all_tab_comments c
+				  ON c.owner = o.owner AND c.table_name = o.object_name
+				WHERE %s
+				ORDER BY o.object_name
+			) tt WHERE ROWNUM <= :%d
+		) WHERE rn > :%d`, where, next, next+1), pageArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get tables page: %w", err)
+	}
+	infos := make([]TableInfo, 0, len(results))
+	for _, row := range results {
+		tp := "table"
+		if row["OBJECT_TYPE"] == "VIEW" {
+			tp = "view"
+		}
+		infos = append(infos, TableInfo{
+			Name:    row["OBJECT_NAME"],
+			Type:    tp,
+			Comment: row["COMMENTS"],
+		})
+	}
+	return infos, total, nil
+}
+
 func (p *oracleProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error) {
 	owner, err := p.resolveSchema(db, dbName)
 	if err != nil {

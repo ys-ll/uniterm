@@ -304,7 +304,7 @@ import SyntaxEditor from './SyntaxEditor.vue'
 import DBResultGrid from './DBResultGrid.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
-import { ExecuteQuery, ExecuteStatement, GetTables, GetTableSchema, DBDefaultTableQuery, DBBrowseTable, DBUpdateRowsAtomic, DBPreviewCSV, DBImportCSV, DBInsertRow, DBUpdateRow, DBDeleteRow, ExecuteSQLScript, OpenFileDialogFiltered, ReadFileBase64, SaveFileDialogFiltered, WriteFileBase64 } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { ExecuteQuery, ExecuteStatement, GetTables, GetTableSchema, DBDefaultTableQuery, DBBrowseTable, DBUpdateRowsAtomic, DBPreviewCSV, DBImportCSV, DBInsertRow, DBUpdateRow, DBDeleteRow, ExecuteSQLScript, OpenFileDialogFiltered, ReadFileBase64, SaveFileDialogFiltered, WriteFileBase64, LogMessage } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { chat } from '../services/llm'
 import { msg } from '../services/message'
 import { isWebServerMode, pickAndStageLocalFileInBrowser, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
@@ -668,6 +668,7 @@ function normalizeSql(s: string): string {
 }
 
 async function loadBrowseSql(offset = 0) {
+  void LogMessage(`Q1 loadBrowseSql table=${props.tableName} offset=${offset}`)
   if (!props.tableName) return
   browseSql.value = await DBDefaultTableQuery(
     props.sessionId,
@@ -676,6 +677,7 @@ async function loadBrowseSql(offset = 0) {
     pageSize.value,
     offset,
   )
+  void LogMessage(`Q2 browseSql set ${offset}`)
   sql.value = browseSql.value
   browseMode.value = true
 }
@@ -690,10 +692,12 @@ watch(() => props.tableName, async (name) => {
 })
 
 onMounted(async () => {
+  void LogMessage(`Q0 onMounted table=${props.tableName}`)
   refreshHistory()
   if (!props.tableName) return
   page.value = 0
   await loadBrowseSql(0)
+  void LogMessage(`Q3 onMounted-lb-done table=${props.tableName}`)
   if (props.autoRun) await onExecute()
 })
 

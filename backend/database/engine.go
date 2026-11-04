@@ -1,12 +1,22 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// schemaTimeout caps each schema / dictionary query (object tree, table
+// schema, indexes, primary keys…). These run through queryStrings/queryAny.
+// On a slow or heavily locked server a dictionary scan can hang forever; on
+// such a hang database/sql returns the pooled connection after this deadline
+// (it closes the driver conn to break the stalled read, even for drivers like
+// go-ora that are not context-aware), so a stuck query can no longer starve the
+// connection pool and freeze the whole app.
+var schemaTimeout = 60 * time.Second
 
 // parseParams parses "key1=val1&key2=val2" into a map.
 func parseParams(s string) map[string]string {
@@ -54,7 +64,9 @@ func NewDB(dbType, dsn string) (*sql.DB, error) {
 
 // queryStrings executes a SQL query and returns all rows as []map[string]string.
 func queryStrings(db *sql.DB, query string, args ...any) ([]map[string]string, error) {
-	rows, err := db.Query(query, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), schemaTimeout)
+	defer cancel()
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +100,9 @@ func queryStrings(db *sql.DB, query string, args ...any) ([]map[string]string, e
 // queryAny is like queryStrings but preserves nil values for proper NULL handling.
 // Returns rows, column names in SQL order, and error.
 func queryAny(db *sql.DB, query string, args ...any) ([]map[string]any, []string, error) {
-	rows, err := db.Query(query, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), schemaTimeout)
+	defer cancel()
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, nil, err
 	}

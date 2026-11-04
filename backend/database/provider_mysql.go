@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -183,6 +184,52 @@ func (p *mysqlProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, error
 		})
 	}
 	return infos, nil
+}
+
+func (p *mysqlProvider) GetTablePage(db *sql.DB, dbName string, query string, offset, limit int) ([]TableInfo, int, error) {
+	countSQL := `SELECT COUNT(*) AS n FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?`
+	countArgs := []any{dbName}
+	if query != "" {
+		countSQL += ` AND TABLE_NAME LIKE ?`
+		countArgs = append(countArgs, "%"+query+"%")
+	}
+	countRows, err := queryStrings(db, countSQL, countArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count tables: %w", err)
+	}
+	total := 0
+	if len(countRows) > 0 {
+		total, _ = strconv.Atoi(countRows[0]["n"])
+	}
+	pageSQL := `SELECT TABLE_NAME, TABLE_TYPE, IFNULL(TABLE_COMMENT, '') AS TABLE_COMMENT
+		 FROM information_schema.TABLES
+		 WHERE TABLE_SCHEMA = ?`
+	pageArgs := []any{dbName}
+	if query != "" {
+		pageSQL += ` AND TABLE_NAME LIKE ?`
+		pageArgs = append(pageArgs, "%"+query+"%")
+	}
+	pageSQL += `
+		 ORDER BY TABLE_NAME
+		 LIMIT ?, ?`
+	pageArgs = append(pageArgs, offset, limit)
+	results, err := queryStrings(db, pageSQL, pageArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get tables page: %w", err)
+	}
+	infos := make([]TableInfo, 0, len(results))
+	for _, row := range results {
+		tp := "table"
+		if row["TABLE_TYPE"] == "VIEW" {
+			tp = "view"
+		}
+		infos = append(infos, TableInfo{
+			Name:    row["TABLE_NAME"],
+			Type:    tp,
+			Comment: row["TABLE_COMMENT"],
+		})
+	}
+	return infos, total, nil
 }
 
 func (p *mysqlProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error) {
