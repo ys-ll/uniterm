@@ -12,7 +12,7 @@
 <br>
 
 <a href="https://github.com/ys-ll/uniterm/releases/latest"><img src="https://img.shields.io/github/v/release/ys-ll/uniterm" alt="GitHub release" /></a>
-<a href="https://github.com/ys-ll/uniterm"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue" alt="Platform" /></a>
+<a href="https://github.com/ys-ll/uniterm"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20Docker-blue" alt="Platform" /></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License" /></a>
 <a href="https://github.com/ys-ll/uniterm/releases"><img src="https://img.shields.io/github/downloads/ys-ll/uniterm/total" alt="GitHub downloads" /></a>
 <a href="https://github.com/ys-ll/uniterm"><img src="https://img.shields.io/github/stars/ys-ll/uniterm?style=social" alt="GitHub stars" /></a>
@@ -165,6 +165,7 @@ Oracle Database 支持基于纯 Go 驱动实现。uniTerm 不随安装包分发 
 - **macOS** (Apple Silicon arm64 / Intel amd64): 下载 `uniterm-darwin-*-*.dmg`
 - **Linux** (amd64 / arm64): 下载 `uniterm-linux-*-*.tar.gz`、`.deb` 或 `.rpm`
 - **Android** (arm64): 下载 `uniterm-android-arm64-*.apk`
+- **Docker** (amd64 / arm64): Web 多租户部署模式——浏览器访问的服务端部署，每位用户拥有隔离的工作区，详见 [Docker 部署指南](https://github.com/ys-ll/uniterm/blob/main/deploy/docker/README_zh-CN.md)
 
 > **关于 Windows 杀软误报**：由于本开源软件未购买代码签名证书，未签名的可执行文件可能被部分杀毒引擎（如 Windows Defender）误报拦截。这是 Go/Wails 应用的已知问题（参见 [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)）。可在杀毒软件中为其添加排除规则以放行。请务必从 GitHub、Gitee 官方开源渠道下载软件。如仍担心存在病毒，可自行下载源代码在本地构建运行。
 
@@ -192,6 +193,7 @@ sudo rpm -i uniterm.rpm
 - **macOS**: 无需额外依赖（使用系统自带 WebKit）
 - **Linux**: `libgtk-3-0` 与 `libwebkit2gtk-4.1-0`（多数桌面发行版已自带）
 - **Android**: Android 5.0+（使用系统自带 WebView，无需额外依赖）
+- **Docker**: 宿主机仅需 Docker Engine（compose 部署需 Docker Compose v2），镜像内已内置全部运行时依赖
 
 ## 使用流程
 
