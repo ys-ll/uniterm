@@ -32,6 +32,14 @@ func (p *unixTelnetPty) Write(b []byte) error {
 	return err
 }
 
+// Resize resizes the PTY to the given column/row dimensions.
+func (p *unixTelnetPty) Resize(cols, rows int) error {
+	if cols <= 0 || rows <= 0 {
+		return nil
+	}
+	return pty.Setsize(p.ptmx, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+}
+
 func (p *unixTelnetPty) Close() error {
 	var err error
 	p.once.Do(func() {
@@ -44,10 +52,10 @@ func (p *unixTelnetPty) Close() error {
 	return err
 }
 
-// startTelnetShell launches the user's interactive shell on a PTY. On Unix we
+// startLocalShell launches the user's interactive shell on a PTY. On Unix we
 // prefer $SHELL, then bash, then sh (Android/Harmony fall back to
 // /system/bin/sh) and export a valid TERM so line-editing works.
-func startTelnetShell(ctx context.Context, cfg TelnetConfig) (telnetPty, error) {
+func startLocalShell(ctx context.Context, cols, rows int) (telnetPty, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		if runtime.GOOS == "android" {
@@ -64,7 +72,13 @@ func startTelnetShell(ctx context.Context, cfg TelnetConfig) (telnetPty, error) 
 	// launched from a desktop) did not export one.
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 
-	ws := &pty.Winsize{Cols: 120, Rows: 30}
+	if cols <= 0 {
+		cols = 120
+	}
+	if rows <= 0 {
+		rows = 30
+	}
+	ws := &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)}
 	ptmx, err := pty.StartWithSize(cmd, ws)
 	if err != nil {
 		return nil, err

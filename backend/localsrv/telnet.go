@@ -11,12 +11,16 @@ import (
 )
 
 // StartTelnetServer starts a Telnet server listening on the given TCP port.
-// Each incoming connection is optionally authenticated (cfg.Password non-empty),
-// then bridged to a local cmd.exe shell (Windows) or the default shell on
-// other platforms. Returns the server id.
+// Each incoming connection is authenticated with cfg.Password, then bridged
+// to a local cmd.exe shell (Windows) or the default shell on other platforms.
+// The password is required: the shell grants full access to this machine.
+// Returns the server id.
 func (m *Manager) StartTelnetServer(cfg TelnetConfig) (string, error) {
 	if cfg.Port <= 0 || cfg.Port > 65535 {
 		return "", fmt.Errorf("invalid port: %d", cfg.Port)
+	}
+	if cfg.Password == "" {
+		return "", fmt.Errorf("password is required")
 	}
 
 	id, ctx := m.newServer()
@@ -61,7 +65,7 @@ func (m *Manager) StartTelnetServer(cfg TelnetConfig) (string, error) {
 }
 
 // telnetPty abstracts the local interactive shell process that backs a Telnet
-// session. The concrete implementation is platform-specific (ConPTY on
+// or SSH session. The concrete implementation is platform-specific (ConPTY on
 // Windows, a classic PTY via creack/pty on Unix).
 type telnetPty interface {
 	// Data streams raw bytes read from the shell's terminal. The channel is
@@ -72,6 +76,8 @@ type telnetPty interface {
 	Write(b []byte) error
 	// Done is closed when the underlying shell process has exited.
 	Done() <-chan struct{}
+	// Resize resizes the terminal to the given column/row dimensions.
+	Resize(cols, rows int) error
 	// Close tears down the PTY and reaps the child process.
 	Close() error
 }
@@ -108,7 +114,7 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 	}
 
 	// 3. Launch a local shell and bridge it to the connection via a PTY.
-	sh, err := startTelnetShell(ctx, cfg)
+	sh, err := startLocalShell(ctx, 120, 30)
 	if err != nil {
 		fmt.Fprintf(conn, "\r\nFailed to start shell: %v\r\n", err)
 		m.log(ServiceTelnet, id, fmt.Sprintf("shell start failed for %s: %v", addr, err))

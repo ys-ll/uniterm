@@ -35,6 +35,11 @@ func (p *winTelnetPty) Write(b []byte) error {
 	return err
 }
 
+// Resize resizes the ConPTY to the given column/row dimensions.
+func (p *winTelnetPty) Resize(cols, rows int) error {
+	return p.cpty.Resize(cols, rows)
+}
+
 func (p *winTelnetPty) Close() error {
 	var err error
 	p.once.Do(func() { err = p.cpty.Close() })
@@ -54,11 +59,9 @@ func windowsCommandLine(argv []string) string {
 	return strings.Join(parts, " ")
 }
 
-// startTelnetShell launches the user's Windows shell on a ConPTY, preferring
-// pwsh.exe, then powershell.exe, then cmd.exe. The control-sequence stripper in
-// the bridge already removes the OSC window-title sequence PowerShell writes on
-// startup, so PowerShell's full UTF-8 output renders cleanly.
-func startTelnetShell(ctx context.Context, cfg TelnetConfig) (telnetPty, error) {
+// startLocalShell launches the user's Windows shell on a ConPTY, preferring
+// pwsh.exe, then powershell.exe, then cmd.exe.
+func startLocalShell(ctx context.Context, cols, rows int) (telnetPty, error) {
 	shell := "cmd.exe"
 	if p, err := exec.LookPath("pwsh.exe"); err == nil {
 		shell = p
@@ -67,7 +70,13 @@ func startTelnetShell(ctx context.Context, cfg TelnetConfig) (telnetPty, error) 
 	}
 	_ = ctx // ConPTY has no context-cancellable start; lifetime is managed via Close().
 
-	opts := []conpty.ConPtyOption{conpty.ConPtyDimensions(120, 30)}
+	if cols <= 0 {
+		cols = 120
+	}
+	if rows <= 0 {
+		rows = 30
+	}
+	opts := []conpty.ConPtyOption{conpty.ConPtyDimensions(cols, rows)}
 	// Start in the user's home directory instead of the exe's directory so the
 	// prompt does not show the install/bin path.
 	if home, err := os.UserHomeDir(); err == nil {

@@ -32,10 +32,11 @@ type NFSConfig struct {
 	TimeoutSeconds int `json:"timeoutSeconds"` // 0 = no auto-stop
 }
 
-// TelnetConfig holds the parameters for the Telnet server.
+// TelnetConfig holds the parameters for the Telnet server. The password is
+// required: the shell grants full access to this machine.
 type TelnetConfig struct {
 	Port           int    `json:"port"`
-	Password       string `json:"password"`       // empty = no auth
+	Password       string `json:"password"`
 	TimeoutSeconds int    `json:"timeoutSeconds"` // 0 = no auto-stop
 }
 
@@ -64,7 +65,9 @@ type TFTPConfig struct {
 	TimeoutSeconds int    `json:"timeoutSeconds"` // 0 = no auto-stop
 }
 
-// SSHConfig holds the parameters for the SSH/SFTP server.
+// SSHConfig holds the parameters for the SSH server (interactive shell +
+// SFTP). Username and password are required: the shell grants full access
+// to this machine.
 type SSHConfig struct {
 	RootDir        string `json:"rootDir"`
 	Port           int    `json:"port"`

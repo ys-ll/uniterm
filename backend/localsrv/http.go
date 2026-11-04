@@ -29,9 +29,11 @@ func listen(ctx context.Context, network, addr string) (net.Listener, error) {
 	return ln, nil
 }
 
-// StartHTTPServer starts an HTTP file server serving rootDir on the given port.
-// When listDir is true, directory contents are listed; otherwise directory
-// requests return 404. Returns the server id.
+// StartHTTPServer starts an HTTP file server serving rootDir on the given
+// port. With listDir enabled, directory requests render the directory
+// listing (index.html stays reachable under its explicit name). With
+// listDir disabled, directory requests serve index.html when one is
+// present and 404 when not. Returns the server id.
 func (m *Manager) StartHTTPServer(cfg HTTPConfig) (string, error) {
 	if cfg.Port <= 0 || cfg.Port > 65535 {
 		return "", fmt.Errorf("invalid port: %d", cfg.Port)
@@ -43,8 +45,6 @@ func (m *Manager) StartHTTPServer(cfg HTTPConfig) (string, error) {
 
 	id, ctx := m.newServer()
 	m.log(ServiceHTTP, id, fmt.Sprintf("Starting HTTP server on port %d ...", cfg.Port))
-
-	fileServer := http.FileServer(http.Dir(absRoot))
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.log(ServiceHTTP, id, fmt.Sprintf("%s %s %s", r.RemoteAddr, r.Method, r.URL.Path))
@@ -63,16 +63,41 @@ func (m *Manager) StartHTTPServer(cfg HTTPConfig) (string, error) {
 
 		fi, statErr := os.Stat(fullPath)
 		if statErr == nil && fi.IsDir() {
-			if !cfg.ListDir {
-				// Block listing when directory browsing is disabled.
-				http.NotFound(w, r)
+			if cfg.ListDir {
+				// Directory browsing enabled: list the directory. The
+				// site's index.html stays reachable under its explicit
+				// name, which is handled by the file path below.
+				renderDirHTML(w, r, absRoot, fullPath)
 				return
 			}
-			renderDirHTML(w, r, absRoot, fullPath)
+			// Directory browsing disabled: serve index.html when present
+			// so a static site still works, otherwise 404.
+			indexPath := filepath.Join(fullPath, "index.html")
+			if indexFi, indexErr := os.Stat(indexPath); indexErr == nil && !indexFi.IsDir() {
+				// Redirect directory URLs to the trailing-slash form so
+				// relative links inside index.html resolve correctly.
+				if !strings.HasSuffix(r.URL.Path, "/") {
+					http.Redirect(w, r, r.URL.Path+"/", http.StatusFound)
+					return
+				}
+				http.ServeFile(w, r, indexPath)
+				return
+			}
+			http.NotFound(w, r)
 			return
 		}
 
-		fileServer.ServeHTTP(w, r)
+		// Serve files directly. http.FileServer is deliberately avoided: it
+		// redirects any URL ending in "/index.html" back to the directory,
+		// which would make the explicit name unreachable when browsing is
+		// enabled. ServeContent keeps Content-Type sniffing and range support.
+		f, err := os.Open(fullPath)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+		http.ServeContent(w, r, fi.Name(), fi.ModTime(), f)
 	})
 
 	srv := &http.Server{
