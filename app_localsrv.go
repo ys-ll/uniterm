@@ -35,9 +35,9 @@ func (a *App) StartTFTPServer(rootDir string, port, blockSize int, timeoutSecond
 	})
 }
 
-// StartSSHServer starts an SSH/SFTP server serving rootDir on port.
-// Authentication is by username/password; both empty means accept any login.
-// Returns the server id.
+// StartSSHServer starts an SSH server serving rootDir on port: an interactive
+// local shell plus an SFTP subsystem restricted to rootDir. Authentication is
+// by username/password; both are required. Returns the server id.
 func (a *App) StartSSHServer(rootDir string, port int, username, password string, timeoutSeconds int) (string, error) {
 	return a.localsrvManager.StartSSHServer(localsrv.SSHConfig{
 		RootDir:        rootDir,
@@ -67,8 +67,8 @@ func (a *App) StopLocalServer(id string) {
 	a.localsrvManager.Stop(id)
 }
 
-// StartTelnetServer starts a Telnet server on port. When password is empty
-// no authentication is required. Returns the server id.
+// StartTelnetServer starts a Telnet server on port. The password is required.
+// Returns the server id.
 func (a *App) StartTelnetServer(port int, password string, timeoutSeconds int) (string, error) {
 	return a.localsrvManager.StartTelnetServer(localsrv.TelnetConfig{
 		Port:           port,

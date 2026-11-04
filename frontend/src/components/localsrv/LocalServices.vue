@@ -128,6 +128,7 @@
 
           <!-- Telnet settings -->
           <template v-if="selected === 'telnet'">
+            <div class="ssh-hint">{{ t('localsrv.telnet.hint') }}</div>
             <div class="form-row">
               <label class="form-label">{{ t('localsrv.port') }}</label>
               <el-input-number v-model="config.telnet.port" :min="1" :max="65535" :disabled="isRunning('telnet')" controls-position="right" />
@@ -293,6 +294,15 @@ async function startServer(key: ServiceKey) {
   const needsRootDir = ['http', 'tftp', 'ssh', 'ftp', 's3'].includes(key)
   if (needsRootDir && !rootDir) {
     msg.warning(t('localsrv.missingRootDir'))
+    return
+  }
+  // Credentials are mandatory for the services that expose a local shell.
+  if (key === 'ssh' && (!config.ssh.username || !config.ssh.password)) {
+    msg.warning(t('localsrv.ssh.missingCreds'))
+    return
+  }
+  if (key === 'telnet' && !config.telnet.password) {
+    msg.warning(t('localsrv.telnet.missingPassword'))
     return
   }
   try {
