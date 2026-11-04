@@ -49,6 +49,13 @@ type Provider interface {
 	// Schema discovery
 	GetDatabases(db *sql.DB) ([]string, error)
 	GetTables(db *sql.DB, dbName string) ([]TableInfo, error)
+	// GetTablePage returns one ordered page of tables [offset, offset+limit)
+	// plus the total table count. A non-empty query filters by table name
+	// (LIKE %q%); it is used for both arbitrary-offset jump loading and
+	// full-schema search, so a schema with ~100k tables never loads all of
+	// them into the frontend at once. Keep GetTables for callers that
+	// genuinely need the full list.
+	GetTablePage(db *sql.DB, dbName string, query string, offset, limit int) ([]TableInfo, int, error)
 	GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error)
 
 	// DefaultTableQuery returns the default SELECT used when browsing a table.

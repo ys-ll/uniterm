@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -226,6 +227,68 @@ func (p *sqlserverProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, e
 		})
 	}
 	return infos, nil
+}
+
+func (p *sqlserverProvider) GetTablePage(db *sql.DB, dbName string, query string, offset, limit int) ([]TableInfo, int, error) {
+	base := `
+		SELECT t.name AS table_name, 'TABLE' AS type_desc,
+		       ISNULL(CONVERT(nvarchar(4000), ep.value), '') AS table_comment
+		FROM sys.tables t
+		LEFT JOIN sys.extended_properties ep
+		  ON ep.major_id = t.object_id AND ep.minor_id = 0 AND ep.name = N'MS_Description'
+		WHERE t.is_ms_shipped = 0
+		UNION ALL
+		SELECT v.name AS table_name, 'VIEW' AS type_desc,
+		       ISNULL(CONVERT(nvarchar(4000), ep.value), '') AS table_comment
+		FROM sys.views v
+		LEFT JOIN sys.extended_properties ep
+		  ON ep.major_id = v.object_id AND ep.minor_id = 0 AND ep.name = N'MS_Description'
+		WHERE v.is_ms_shipped = 0`
+
+	var countArgs []any
+	countSQL := "SELECT COUNT(*) AS n FROM (" + base + ") t"
+	if query != "" {
+		countSQL += " WHERE table_name LIKE @p1"
+		countArgs = append(countArgs, "%"+query+"%")
+	}
+	countRows, err := queryStrings(db, p.withUse(dbName, countSQL), countArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count tables: %w", err)
+	}
+	total := 0
+	if len(countRows) > 0 {
+		total, _ = strconv.Atoi(countRows[0]["n"])
+	}
+
+	var pageSQL string
+	var pageArgs []any
+	if query != "" {
+		pageSQL = "SELECT table_name, type_desc, table_comment FROM (" + base + ") t " +
+			"WHERE table_name LIKE @p1 " +
+			"ORDER BY table_name OFFSET @p2 ROWS FETCH NEXT @p3 ROWS ONLY"
+		pageArgs = append(pageArgs, "%"+query+"%", offset, limit)
+	} else {
+		pageSQL = "SELECT table_name, type_desc, table_comment FROM (" + base + ") t " +
+			"ORDER BY table_name OFFSET @p1 ROWS FETCH NEXT @p2 ROWS ONLY"
+		pageArgs = append(pageArgs, offset, limit)
+	}
+	results, err := queryStrings(db, p.withUse(dbName, pageSQL), pageArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get tables page: %w", err)
+	}
+	infos := make([]TableInfo, 0, len(results))
+	for _, row := range results {
+		tp := "table"
+		if row["type_desc"] == "VIEW" {
+			tp = "view"
+		}
+		infos = append(infos, TableInfo{
+			Name:    row["table_name"],
+			Type:    tp,
+			Comment: row["table_comment"],
+		})
+	}
+	return infos, total, nil
 }
 
 func (p *sqlserverProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error) {

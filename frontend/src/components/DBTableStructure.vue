@@ -218,7 +218,7 @@ import { Pencil, Trash2, Plus } from '@lucide/vue'
 import { ElMessageBox } from 'element-plus'
 import { msg } from '../services/message'
 import { useI18n } from '../i18n'
-import { GetTableSchema, AddColumn, ModifyColumn, DropColumn, AddIndex, DropIndexOp, GetDBCapabilities } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetTableSchema, AddColumn, ModifyColumn, DropColumn, AddIndex, DropIndexOp, GetDBCapabilities, LogMessage } from '../../bindings/github.com/ys-ll/uniterm/app'
 import type { SchemaResult, ColumnInfo, IndexInfo } from '../types/database'
 import { uiPx } from '../utils/uiScale'
 
@@ -254,6 +254,7 @@ const editColumnOnUpdate = ref(false)
 
 async function loadSchema() {
   if (!props.tableName) return
+  void LogMessage(`S1 structure loadSchema table=${props.tableName}`)
   loading.value = true
   cancelled = false
   try {

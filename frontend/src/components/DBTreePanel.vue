@@ -21,43 +21,50 @@
         <MenuItem @click="onMoreRefresh">{{ t('db.refreshDatabases') }}</MenuItem>
       </Menu>
     </div>
-    <div ref="treeContentRef" class="tree-content" @contextmenu.prevent="onTreeContextMenu">
+    <div ref="treeContentRef" class="tree-content" @scroll.passive="onTreeScroll" @contextmenu.prevent="onTreeContextMenu">
       <div v-if="loading || runningSqlFile" class="tree-loading">{{ t('db.loading') }}</div>
-      <template v-for="db in filteredDbs" :key="db.name">
+      <div class="virt-pad" :style="{ height: topPad + 'px' }"></div>
+      <template v-for="row in visibleRows" :key="row.key">
         <div
+          v-if="row.kind === 'db'"
           class="db-header"
-          :data-db-row="db.name"
-          :class="{ selected: selectedDb === db.name && !selectedTable }"
-          @click="onDbClick(db.name)"
-          @dblclick="onDbActivate(db.name)"
-          @contextmenu.prevent="onDbContextMenu($event, db.name)"
+          :data-db-row="row.db.name"
+          :class="{ selected: selectedDb === row.db.name && !selectedTable }"
+          @click="onDbClick(row.db.name)"
+          @dblclick="onDbActivate(row.db.name)"
+          @contextmenu.prevent="onDbContextMenu($event, row.db.name)"
         >
-          <span class="db-arrow" @click.stop="onToggleDb(db.name)">
-            <component :is="expandedDbs.has(db.name) ? ChevronDown : ChevronRight" :size="'0.75rem'" />
+          <span class="db-arrow" @click.stop="onToggleDb(row.db.name)">
+            <component :is="expandedDbs.has(row.db.name) ? ChevronDown : ChevronRight" :size="'0.75rem'" />
           </span>
           <Database class="db-icon" :size="'0.875rem'" />
-          <span class="db-name">{{ db.name }}</span>
+          <span class="db-name">{{ row.db.name }}</span>
         </div>
-        <template v-if="expandedDbs.has(db.name)">
-          <div
-            v-for="t in db.tables"
-            :key="t.name"
-            class="table-item"
-            :data-table-row="db.name + '/' + t.name"
-            :class="{ selected: selectedTable === t.name && selectedDb === db.name }"
-            @click="onTableClick(db.name, t.name)"
-            @dblclick="onTableDblClick(db.name, t)"
-            @contextmenu.prevent="onTableContextMenu($event, db.name, t)"
-          >
-            <span class="table-icon-spacer" />
-            <component :is="t.type === 'view' ? Eye : Table2" class="table-icon" :size="'0.875rem'" />
-            <span class="table-name">{{ t.name }}</span>
-          </div>
-          <div v-if="db.tables.length === 0" class="empty-hint">
-            {{ t('db.noTables') }}
-          </div>
-        </template>
+        <div
+          v-else-if="row.kind === 'table' && row.table"
+          class="table-item"
+          :data-table-row="row.db.name + '/' + row.table.name"
+          :class="{ selected: selectedTable === row.table.name && selectedDb === row.db.name }"
+          @click="onTableClick(row.db.name, row.table.name)"
+          @dblclick="onTableDblClick(row.db.name, row.table)"
+          @contextmenu.prevent="onTableContextMenu($event, row.db.name, row.table)"
+        >
+          <span class="table-icon-spacer" />
+          <component :is="row.table.type === 'view' ? Eye : Table2" class="table-icon" :size="'0.875rem'" />
+          <span class="table-name">{{ row.table.name }}</span>
+        </div>
+        <div v-else-if="row.kind === 'empty'" class="empty-hint">
+          {{ t('db.noTables') }}
+        </div>
+        <div v-else-if="row.kind === 'more'" class="tree-more">
+          <span class="tree-more-info">
+            共 {{ row.total }} 张表，已显示 {{ row.loaded }}，加载中…
+          </span>
+        </div>
+        <!-- unloaded slots render as blank rows so the scroll position stays stable -->
+        <div v-else-if="row.kind === 'blank'" class="table-item table-item-blank"></div>
       </template>
+      <div class="virt-pad" :style="{ height: bottomPad + 'px' }"></div>
     </div>
 
     <Menu
@@ -181,7 +188,7 @@ import { ref, watch, computed, nextTick, h } from 'vue'
 import { Database, Table2, Eye, ChevronRight, ChevronDown, RefreshCw, MoreHorizontal } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { ElMessageBox } from 'element-plus'
-import { GetDatabases, GetTables, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetDatabases, GetTablePage, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
 import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
 import Menu from './Menu.vue'
@@ -194,8 +201,19 @@ const { t } = useI18n()
 
 interface DbEntry {
   name: string
-  tables: TableInfo[]
+  // Sparse page storage: indexed by absolute row, null = not yet loaded.
+  // Length equals `total` once the first page has been fetched, so virtual
+  // slot positions stay stable as pages stream in (including after a jump).
+  tables: (TableInfo | null)[]
   loaded: boolean
+  total: number
+  loading: boolean
+  // Number of non-null (actually loaded) table rows — used for the footer.
+  loadedCount: number
+  // Table-name filter (search) that produced the current array contents.
+  query: string
+  // Set of page offsets already requested, to coalesce rapid scrolls.
+  requested: Set<number>
 }
 
 const props = defineProps<{
@@ -242,54 +260,19 @@ async function loadTree() {
   loading.value = true
   try {
     const dbs = await GetDatabases(props.sessionId)
-    // Auto-expand the connection's default db only when it's actually a real
-    // entry in the list. Oracle's dbName is the service name and never
-    // matches — that case falls through to the oracle branch below.
-    let autoOpen = ''
-    if (props.defaultDbName && dbs.includes(props.defaultDbName)) {
-      const tables = await GetTables(props.sessionId, props.defaultDbName)
-      // 默认库置顶并展开（已加载表），其余可访问的数据库折叠显示，
-      // 点击展开时再懒加载表（见 ensureDbExpanded）。
-      const otherDbs = dbs.filter(d => d !== props.defaultDbName)
-      databases.value = [
-        { name: props.defaultDbName, tables, loaded: true },
-        ...otherDbs.map(d => ({ name: d, tables: [] as TableInfo[], loaded: false }))
-      ]
-      expandedDbs.value = new Set([props.defaultDbName])
-      autoOpen = props.defaultDbName
-    } else if (dbs.length === 1) {
-      // Single schema/db (e.g. Oracle showing only the current schema) — expand it.
-      const only = dbs[0]
-      const tables = await GetTables(props.sessionId, only)
-      databases.value = [{ name: only, tables, loaded: true }]
-      expandedDbs.value = new Set([only])
-      autoOpen = only
-    } else if (dbs.length > 0 && props.dbType === 'oracle') {
-      // Oracle's dbName is the service name (e.g. FREEPDB1), which never
-      // matches a schema name — without this the tree would stay fully
-      // collapsed. Expand and open the first schema (the login user's
-      // default) and lazy-load the rest.
-      const first = dbs[0]
-      const tables = await GetTables(props.sessionId, first)
-      databases.value = [
-        { name: first, tables, loaded: true },
-        ...dbs.slice(1).map((d: string) => ({ name: d, tables: [] as TableInfo[], loaded: false }))
-      ]
-      expandedDbs.value = new Set([first])
-      autoOpen = first
-    } else {
-      databases.value = dbs.map((db: string) => ({ name: db, tables: [], loaded: false }))
-      expandedDbs.value = new Set()
-    }
-    if (autoOpen) {
-      selectedDb.value = autoOpen
-      selectedTable.value = ''
-      emit('openDatabase', autoOpen, 'objects')
-    }
+    // 默认全部折叠：只加载库/schema 名称，表在点击节点展开时按需懒加载
+    // （见 ensureDbExpanded）。需要改为默认展开时，把 expandedDbs 设为第一个节点
+    // 并对该节点调用一次 fetchPage(0, INITIAL_PAGE) 即可。
+    const fresh = (name: string): DbEntry =>
+      ({ name, tables: [], loaded: false, total: 0, loading: false, loadedCount: 0, query: '', requested: new Set() })
+    databases.value = dbs.map((db: string) => fresh(db))
+    expandedDbs.value = new Set()
   } catch (e) {
     console.error('Failed to load tree:', e)
   } finally {
     loading.value = false
+    await nextTick()
+    recomputeVisible()
   }
 }
 
@@ -297,6 +280,204 @@ watch(() => props.sessionId, (newId) => {
 
   if (newId) loadTree()
 }, { immediate: true })
+
+// ── Backend pagination + jump loading + virtual scrolling ──
+//
+// The tree pages its table lists from the backend (GetTablePage), which also
+// accepts a table-name filter, and renders only the rows in the viewport
+// (virtual scroll). Tables are stored sparsely by absolute index (null = not
+// yet loaded), so dragging the scrollbar straight to the bottom requests that
+// bottom page directly — you no longer wait for every intermediate page. A
+// non-empty search term filters the WHOLE schema server-side (LIKE), not just
+// what has been paged in. This keeps a ~100k-table schema smooth: bounded DOM
+// nodes, fast jumps, and full-schema search.
+
+const INITIAL_PAGE = 200
+const JUMP_PAGE = 400
+const ROW_H = 28
+const OVERSCAN = 30
+
+// fetchPage loads one page of a database's tables at an absolute offset and
+// stores it in the sparse db.tables array. Results are discarded (via the
+// db.query check) if the search term changed while the request was in flight.
+async function fetchPage(db: DbEntry, offset: number, limit: number) {
+  const q = searchQuery.value.trim()
+  db.loading = true
+  try {
+    const [tables, total] = await GetTablePage(props.sessionId, db.name, q, offset, limit)
+    if (q !== db.query) return // stale result from a previous search term
+    db.total = total
+    ensureSized(db, total)
+    for (let i = 0; i < tables.length; i++) {
+      db.tables[offset + i] = tables[i]
+    }
+    db.loadedCount = db.tables.reduce((c, t) => c + (t ? 1 : 0), 0)
+    db.loaded = true
+  } catch (e) {
+    console.error('Failed to load table page:', e)
+  } finally {
+    db.loading = false
+    if (q === db.query) recomputeVisible()
+  }
+}
+
+// Keep the table array's length equal to the total so virtual slot positions
+// stay stable while pages stream in (missing entries become null).
+function ensureSized(db: DbEntry, total: number) {
+  if (db.tables.length === total) return
+  db.tables.length = total
+  for (let i = 0; i < total; i++) {
+    if (db.tables[i] === undefined) db.tables[i] = null
+  }
+}
+
+// resetDb clears a database's list and loads its first page (used on refresh
+// and whenever the search term changes).
+async function resetDb(db: DbEntry) {
+  db.tables = []
+  db.total = 0
+  db.loaded = false
+  db.loadedCount = 0
+  db.requested.clear()
+  db.query = searchQuery.value.trim()
+  await fetchPage(db, 0, INITIAL_PAGE)
+}
+
+// rebuildDb is an alias used by the refresh handlers.
+async function rebuildDb(db: DbEntry) {
+  await resetDb(db)
+}
+
+function pageStart(idx: number) {
+  return Math.floor(idx / JUMP_PAGE) * JUMP_PAGE
+}
+
+// Jump-load: for a section, request the page covering the first visible,
+// not-yet-loaded table row. Coalesces on a per-db set of requested offsets so
+// a fast scrollbar drag triggers at most one page fetch per pass.
+function scheduleJumpLoad(s: Section, startGlobal: number, endGlobal: number) {
+  const db = s.db
+  if (s.kind !== 'more' && s.kind !== 'full') return
+  const slotStart = Math.max(0, startGlobal - s.start - 1)
+  const slotEnd = Math.min(db.total - 1, endGlobal - s.start - 1)
+  for (let i = slotStart; i <= slotEnd; i++) {
+    const tbl = db.tables[i]
+    if (tbl) continue
+    const off = pageStart(i)
+    if (db.requested.has(off)) continue
+    db.requested.add(off)
+    fetchPage(db, off, JUMP_PAGE)
+    return
+  }
+}
+
+// Virtualized flat layout: each expanded database contributes its header row
+// plus one slot per table plus (while more remain unloaded) a "loading more"
+// footer row. The slot height reserves room for the *total* table count so the
+// scrollbar spans the whole list, even the not-yet-fetched rows, enabling
+// immersive infinite scroll.
+interface Section {
+  db: DbEntry
+  start: number
+  n: number
+  kind: 'collapsed' | 'empty' | 'more' | 'full'
+}
+
+const sections = computed<Section[]>(() => {
+  const arr: Section[] = []
+  for (const db of databases.value) {
+    const expanded = expandedDbs.value.has(db.name)
+    if (!expanded || !db.loaded) {
+      arr.push({ db, start: 0, n: 1, kind: 'collapsed' })
+      continue
+    }
+    const total = db.total
+    if (total === 0) {
+      arr.push({ db, start: 0, n: 2, kind: 'empty' })
+      continue
+    }
+    const more = db.loadedCount < total
+    arr.push({ db, start: 0, n: 1 + total + (more ? 1 : 0), kind: more ? 'more' : 'full' })
+  }
+  let acc = 0
+  for (const s of arr) {
+    s.start = acc
+    acc += s.n
+  }
+  return arr
+})
+
+const totalRows = computed(() => sections.value.reduce((a, s) => a + s.n, 0))
+
+const scrollTop = ref(0)
+const viewH = ref(0)
+const topPad = ref(0)
+const bottomPad = ref(0)
+const visibleRows = ref<any[]>([])
+
+function describeRow(s: Section, idx: number, key: string): any {
+  if (idx === 0) return { key, kind: 'db', db: s.db }
+  if (s.kind === 'empty') return { key, kind: 'empty', db: s.db }
+  const slot = idx - 1
+  if (s.kind === 'more' && idx === s.n - 1) {
+    return { key, kind: 'more', db: s.db, total: s.db.total, loaded: s.db.loadedCount }
+  }
+  const tbl = s.db.tables[slot]
+  if (!tbl) return { key, kind: 'blank', db: s.db }
+  return { key, kind: 'table', db: s.db, table: tbl }
+}
+
+function recomputeVisible() {
+  const secs = sections.value
+  const total = totalRows.value
+  if (total === 0) {
+    visibleRows.value = []
+    topPad.value = 0
+    bottomPad.value = 0
+    return
+  }
+  const view = viewH.value > 0 ? viewH.value : 600
+  const start = Math.max(0, Math.floor(scrollTop.value / ROW_H) - OVERSCAN)
+  const end = Math.min(total, Math.ceil((scrollTop.value + view) / ROW_H) + OVERSCAN)
+  topPad.value = start * ROW_H
+  bottomPad.value = Math.max(0, (total - end) * ROW_H)
+  const rows: any[] = []
+  for (const s of secs) {
+    const a = Math.max(start, s.start)
+    const b = Math.min(end, s.start + s.n - 1)
+    if (a > b) continue
+    for (let i = a; i <= b; i++) {
+      const idx = i - s.start
+      rows.push(describeRow(s, idx, s.db.name + ':' + idx))
+    }
+  }
+  visibleRows.value = rows
+  for (const s of secs) {
+    scheduleJumpLoad(s, start, end)
+  }
+}
+
+function onTreeScroll(e: Event) {
+  const el = e.target as HTMLElement
+  scrollTop.value = el.scrollTop
+  viewH.value = el.clientHeight
+  recomputeVisible()
+}
+
+watch(() => [sections.value, expandedDbs.value], () => recomputeVisible())
+
+// Keep viewport height in sync with the container's size.
+let ro: ResizeObserver | undefined
+watch(treeContentRef, (el) => {
+  ro?.disconnect()
+  if (el) {
+    ro = new ResizeObserver(() => {
+      viewH.value = el.clientHeight
+      recomputeVisible()
+    })
+    ro.observe(el)
+  }
+})
 
 // Sync tree highlight/position when the active db/table changes from outside
 // (breadcrumb navigation, object list, etc.)
@@ -308,10 +489,7 @@ watch(() => [props.activeDb, props.activeTable], async ([db, table]) => {
     expandedDbs.value.add(db)
     const entry = databases.value.find(d => d.name === db)
     if (entry && !entry.loaded) {
-      try {
-        entry.tables = await GetTables(props.sessionId, db)
-        entry.loaded = true
-      } catch { /* ignore */ }
+      await resetDb(entry)
     }
     expandedDbs.value = new Set(expandedDbs.value)
   }
@@ -322,26 +500,30 @@ watch(() => [props.activeDb, props.activeTable], async ([db, table]) => {
 function scrollActiveIntoView() {
   const root = treeContentRef.value
   if (!root || !selectedDb.value) return
-  const key = selectedTable.value ? `${selectedDb.value}/${selectedTable.value}` : selectedDb.value
-  const attr = selectedTable.value ? 'data-table-row' : 'data-db-row'
-  const esc = key.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-  const el = root.querySelector(`[${attr}="${esc}"]`) as HTMLElement | null
-  el?.scrollIntoView({ block: 'nearest' })
+  const sec = sections.value.find(s => s.db.name === selectedDb.value)
+  if (!sec || sec.kind === 'collapsed') return
+  let target: number
+  if (selectedTable.value) {
+    const slot = sec.db.tables.findIndex(t => t && t.name === selectedTable.value)
+    if (slot < 0) return
+    target = sec.start + 1 + slot
+  } else {
+    target = sec.start
+  }
+  root.scrollTop = Math.max(0, target * ROW_H - viewH.value / 2)
+  scrollTop.value = root.scrollTop
+  recomputeVisible()
 }
 
 async function ensureDbExpanded(dbName: string) {
   if (expandedDbs.value.has(dbName)) return
   expandedDbs.value.add(dbName)
+  expandedDbs.value = new Set(expandedDbs.value)
+  recomputeVisible()
   const db = databases.value.find(d => d.name === dbName)
   if (db && !db.loaded) {
-    try {
-      db.tables = await GetTables(props.sessionId, dbName)
-      db.loaded = true
-    } catch (e) {
-      console.error('Failed to load tables:', e)
-    }
+    await resetDb(db)
   }
-  expandedDbs.value = new Set(expandedDbs.value)
 }
 
 async function onDbActivate(dbName: string) {
@@ -359,13 +541,14 @@ async function onToggleDb(dbName: string) {
   if (expandedDbs.value.has(dbName)) {
     expandedDbs.value.delete(dbName)
     expandedDbs.value = new Set(expandedDbs.value)
+    recomputeVisible()
     return
   }
   await ensureDbExpanded(dbName)
 }
 
 function onTableClick(dbName: string, tableName: string) {
-  const table = databases.value.find(d => d.name === dbName)?.tables.find(t => t.name === tableName)
+  const table = databases.value.find(d => d.name === dbName)?.tables.find(t => t && t.name === tableName)
   selectedDb.value = dbName
   selectedTable.value = tableName
   emit('selectTable', dbName, tableName, table?.type === 'view')
@@ -377,29 +560,22 @@ function onTableDblClick(dbName: string, table: TableInfo) {
   emit('selectTable', dbName, table.name, table.type === 'view')
 }
 
-const filteredDbs = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return databases.value
-  return databases.value.map(db => ({
-    ...db,
-    tables: db.tables.filter(t => t.name.toLowerCase().includes(q))
-  }))
+// Searching runs a full-schema, server-side name filter (LIKE) across every
+// database, paged just like the normal list, so it finds tables no matter how
+// far down the 100k-row list they live. Debounced while the user types.
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+watch(searchQuery, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    if (searchQuery.value.trim()) {
+      expandedDbs.value = new Set(databases.value.map(d => d.name))
+    }
+    for (const db of databases.value) {
+      resetDb(db)
+    }
+  }, 250)
 })
 
-watch(searchQuery, (q) => {
-  if (q.trim()) {
-    const all = new Set(databases.value.map(d => d.name))
-    for (const db of databases.value) {
-      if (!db.loaded) {
-        GetTables(props.sessionId, db.name).then(tables => {
-          db.tables = tables
-          db.loaded = true
-        }).catch(() => {})
-      }
-    }
-    expandedDbs.value = all
-  }
-})
 
 // ── Context menu ──
 
@@ -714,8 +890,7 @@ async function onCtxRefresh() {
   const db = databases.value.find(d => d.name === ctxDbName.value)
   if (db) {
     try {
-      db.tables = await GetTables(props.sessionId, ctxDbName.value)
-      db.loaded = true
+      await rebuildDb(db)
     } catch (e) {
       console.error('Failed to refresh:', e)
     }
@@ -732,8 +907,7 @@ async function refreshDb(dbName: string) {
   const db = databases.value.find(d => d.name === dbName)
   if (db) {
     try {
-      db.tables = await GetTables(props.sessionId, dbName)
-      db.loaded = true
+      await rebuildDb(db)
     } catch (e) {
       console.error('Failed to refresh db:', e)
     }
@@ -810,8 +984,7 @@ async function onCreateTable() {
     newTableVisible.value = false
     const db = databases.value.find(d => d.name === newTableDb.value)
     if (db) {
-      db.tables = await GetTables(props.sessionId, newTableDb.value)
-      db.loaded = true
+      await rebuildDb(db)
       expandedDbs.value = new Set([...expandedDbs.value, newTableDb.value])
     }
   } catch (e: any) {
@@ -946,6 +1119,42 @@ async function onCreateTable() {
   font-family: var(--font-ui);
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+.tree-more {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem 0.25rem 1.75rem;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.tree-more-info {
+  margin-right: 0.25rem;
+}
+.tree-more-btn {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  color: var(--accent, #409eff);
+  background: transparent;
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 4px;
+  padding: 0.125rem 0.375rem;
+  cursor: pointer;
+}
+.tree-more-btn:hover {
+  background: var(--bg-hover);
+}
+
+/* Virtual-scroll spacers. They reserve the scrollbar length for rows that are
+   not currently mounted, so the tree can appear to be one long list. */
+.virt-pad {
+  width: 100%;
+  flex-shrink: 0;
+}
+.table-item-blank {
+  pointer-events: none;
 }
 
 /* Confirm dialog */
