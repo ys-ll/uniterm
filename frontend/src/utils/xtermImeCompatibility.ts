@@ -23,6 +23,18 @@ import type { Terminal } from '@xterm/xterm'
 // backspace and retype, delivering the replacement as a multi-character
 // `keydown.key`. That needs intercepting before keypress — see
 // deliverKeyTextRewrite below.
+//
+// Windows (WebView2 / Chromium): xterm's CompositionHelper has two independent
+// paths that can deliver one IME commit. `compositionend` queues a deferred
+// send that slices the hidden textarea (_finalizeComposition), while the
+// `input` event (inputType `insertText`) is delivered through _inputEvent.
+// Chromium only runs the second path when _keyDownSeen is already false, which
+// happens for candidate words picked with the mouse and for IMEs whose commit
+// keyup lands before the input event. Both paths then send the word and the
+// terminal shows it twice (reported with WeChat IME + opencode). The commit
+// guard below keeps a short window after compositionend and drops a payload
+// that was already sent in it, so whichever path wins the race the pty sees
+// the word once. It also re-anchors the IME textarea on compositionstart.
 
 export interface Disposable {
   dispose(): void
@@ -32,12 +44,22 @@ interface XtermCompositionHelperInternals {
   _isComposing?: unknown
   _isSendingComposition?: unknown
   isComposing?: unknown
+  updateCompositionElements?: (dontRecurse?: boolean) => void
+}
+
+interface XtermCoreServiceInternals {
+  triggerDataEvent?: (
+    this: XtermCoreServiceInternals,
+    data: string,
+    wasUserInput?: boolean,
+  ) => void
 }
 
 interface XtermCoreInternals {
   _inputEvent?: (this: XtermCoreInternals, ev: InputEvent) => boolean
   _keyDownSeen?: boolean
   _compositionHelper?: XtermCompositionHelperInternals
+  coreService?: XtermCoreServiceInternals
   textarea?: {
     value: string
     addEventListener: (type: string, listener: EventListener, capture?: boolean) => void
@@ -66,7 +88,12 @@ const PRINTABLE_ASCII = /^[\x20-\x7E]$/
 // than one character is literal text the IME wants inserted.
 const NAMED_KEY = /^[A-Z][A-Za-z0-9]*$/
 const PRINTABLE_TEXT = /^[^\p{C}]+$/u
+const NON_ASCII = /[^\x00-\x7F]/
 const LATE_EVENT_WINDOW_MS = 250
+// How long after compositionend a payload counts as part of that commit. The
+// two xterm delivery paths land in the same task or in the 0ms timer queued by
+// _finalizeComposition, so anything this late is a different keystroke.
+const COMMIT_DEDUPE_WINDOW_MS = 100
 const noopDisposable: Disposable = { dispose() {} }
 
 function isMacPlatform(): boolean {
@@ -85,16 +112,120 @@ function isSameCharacter(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase()
 }
 
+// Escape sequences (arrow keys, mouse reports, device replies) and newlines
+// start with a control character, so this separates real text payloads from
+// protocol traffic without parsing the sequence.
+function isPlainTextPayload(data: string): boolean {
+  if (data.length === 0) return false
+  for (let index = 0; index < data.length; index += 1) {
+    const code = data.charCodeAt(index)
+    if (code < 0x20 || code === 0x7f) return false
+  }
+  return true
+}
+
+// Exactly-once delivery for an IME commit. Returns null when the terminal does
+// not expose the services it needs (older xterm builds, test fakes).
+function installCompositionCommitGuard(
+  core: XtermCoreInternals,
+  helper: XtermCompositionHelperInternals,
+): Disposable | null {
+  const coreService = core.coreService
+  const textarea = core.textarea
+  if (
+    !coreService ||
+    typeof coreService.triggerDataEvent !== 'function' ||
+    !textarea ||
+    typeof textarea.addEventListener !== 'function'
+  ) {
+    return null
+  }
+
+  let commitWindowUntil = 0
+  let windowTimer: ReturnType<typeof setTimeout> | null = null
+  const committedPayloads = new Set<string>()
+
+  const cancelCommitWindow = () => {
+    if (windowTimer !== null) {
+      clearTimeout(windowTimer)
+      windowTimer = null
+    }
+    commitWindowUntil = 0
+    committedPayloads.clear()
+  }
+
+  const closeCommitWindow = () => {
+    windowTimer = null
+    commitWindowUntil = 0
+    committedPayloads.clear()
+  }
+
+  const onCompositionStart = () => {
+    cancelCommitWindow()
+    // xterm repositions the IME anchor on render and on compositionupdate
+    // only. Doing it here keeps a textarea that a right-click parked under the
+    // mouse from anchoring the candidate window at the mouse pointer.
+    helper.updateCompositionElements?.()
+  }
+
+  const onCompositionEnd = () => {
+    commitWindowUntil = Date.now() + COMMIT_DEDUPE_WINDOW_MS
+    if (windowTimer !== null) clearTimeout(windowTimer)
+    windowTimer = setTimeout(closeCommitWindow, COMMIT_DEDUPE_WINDOW_MS)
+  }
+
+  const originalTriggerDataEvent = coreService.triggerDataEvent
+  const patchedTriggerDataEvent = function patchedTriggerDataEvent(
+    this: XtermCoreServiceInternals,
+    data: string,
+    wasUserInput?: boolean,
+  ): void {
+    if (
+      commitWindowUntil > 0 &&
+      Date.now() < commitWindowUntil &&
+      isPlainTextPayload(data) &&
+      // A lone ASCII key is what fast typing and key auto-repeat produce.
+      // IME commits are either multi-character or non-ASCII, so leave plain
+      // single characters alone and only collapse those.
+      (data.length > 1 || NON_ASCII.test(data))
+    ) {
+      // Both xterm commit paths send the same text; keep the first one.
+      if (committedPayloads.has(data)) return
+      committedPayloads.add(data)
+    }
+    originalTriggerDataEvent.call(this, data, wasUserInput)
+  }
+
+  coreService.triggerDataEvent = patchedTriggerDataEvent
+  textarea.addEventListener('compositionstart', onCompositionStart, true)
+  textarea.addEventListener('compositionend', onCompositionEnd, true)
+
+  return {
+    dispose() {
+      cancelCommitWindow()
+      textarea.removeEventListener('compositionstart', onCompositionStart, true)
+      textarea.removeEventListener('compositionend', onCompositionEnd, true)
+      if (coreService.triggerDataEvent === patchedTriggerDataEvent) {
+        coreService.triggerDataEvent = originalTriggerDataEvent
+      }
+    },
+  }
+}
+
 export function installImeCompatibilityPatch(terminal: Terminal): Disposable {
-  if (!isMacPlatform()) {
+  const core = (terminal as TerminalWithCore)._core
+  const helper = core?._compositionHelper
+  if (!core || !helper) {
     return noopDisposable
   }
 
-  const core = (terminal as TerminalWithCore)._core
-  const helper = core?._compositionHelper
+  // macOS has its own delivery patch below; the commit guard targets the
+  // Chromium two-path commit that WebView2 and Linux webviews hit.
+  if (!isMacPlatform()) {
+    return installCompositionCommitGuard(core, helper) ?? noopDisposable
+  }
+
   if (
-    !core ||
-    !helper ||
     typeof core._inputEvent !== 'function' ||
     typeof core._keyDownSeen !== 'boolean' ||
     !core.textarea ||
