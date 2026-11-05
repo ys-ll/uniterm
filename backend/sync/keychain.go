@@ -2,9 +2,12 @@ package sync
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 
+	"github.com/ys-ll/uniterm/backend/credentials"
 	"github.com/ys-ll/uniterm/backend/kdf"
+	"github.com/zalando/go-keyring"
 )
 
 var keychainService = "uniTerm"
@@ -22,7 +25,11 @@ func (k *Keychain) List() ([]string, error) {
 }
 
 func (k *Keychain) Get(key string) (string, error) {
-	return keychainGet(keychainService, key)
+	value, err := keychainGet(keychainService, key)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return "", fmt.Errorf("%w: %w", credentials.ErrKeychainNotFound, err)
+	}
+	return value, err
 }
 
 func (k *Keychain) Set(key, value string) error {
