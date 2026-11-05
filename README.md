@@ -7,7 +7,7 @@
 
 <div align="center">
 
-English &nbsp;|&nbsp; <a href="README_zh-CN.md">简体中文</a>
+English &nbsp;|&nbsp; <a href="README_zh-CN.md">简体中文</a> &nbsp;|&nbsp; <a href="README_ja.md">日本語</a>
 
 <br>
 
