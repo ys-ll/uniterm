@@ -1379,7 +1379,7 @@ var LANGS = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'de', 'es', 'fr', 'ru', 'pt', '
 var LANG_LABEL = {
   'zh-CN': '简体中文',
   'zh-TW': '繁體中文',
-  'en': 'EN',
+  'en': 'English',
   'ja': '日本語',
   'ko': '한국어',
   'de': 'Deutsch',
@@ -2062,7 +2062,7 @@ function setLang(lang) {
     b.classList.toggle('active', b.getAttribute('data-lang') === lang);
   });
   var langCurrentText = document.getElementById('lang-current-text');
-  if (langCurrentText) langCurrentText.textContent = LANG_LABEL[lang] || 'EN';
+  if (langCurrentText) langCurrentText.textContent = LANG_LABEL[lang] || 'English';
   document.title = PAGE_TITLES[lang] || PAGE_TITLES['en'];
   /* Re-render every translatable element from the dictionary */
   var dict = I18N[lang] || I18N['zh-CN'];
