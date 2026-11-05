@@ -346,6 +346,11 @@ Issue、提案、フィードバックは [GitHub Issues](https://github.com/ys-
     <td align="center"><a href="https://github.com/macoladik">@macoladik</a></td>
     <td align="center"><a href="https://github.com/NatureLProokie">@NatureLProokie</a></td>
   </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/kevin9327">@kevin9327</a></td>
+    <td align="center"><a href="https://github.com/gezerui888">@gezerui888</a></td>
+    <td align="center"><a href="https://github.com/eltociear">@eltociear</a></td>
+  </tr>
 </table>
 
 ## ライセンス
