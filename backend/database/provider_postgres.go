@@ -212,7 +212,7 @@ func (p *postgresProvider) GetTablePage(db *sql.DB, dbName string, query string,
 		  AND n.nspname NOT IN ('pg_catalog', 'information_schema')`
 	var countArgs []any
 	if query != "" {
-		countSQL += " AND c.relname LIKE $1"
+		countSQL += " AND c.relname ILIKE $1"
 		countArgs = append(countArgs, "%"+query+"%")
 	}
 	countRows, err := queryStrings(db, countSQL, countArgs...)
@@ -233,7 +233,7 @@ func (p *postgresProvider) GetTablePage(db *sql.DB, dbName string, query string,
 		  AND n.nspname NOT IN ('pg_catalog', 'information_schema')`
 	var pageArgs []any
 	if query != "" {
-		pageSQL += " AND c.relname LIKE $1"
+		pageSQL += " AND c.relname ILIKE $1"
 		pageArgs = append(pageArgs, "%"+query+"%")
 		pageSQL += "\n\t\tORDER BY c.relname\n\t\tLIMIT $2 OFFSET $3"
 		pageArgs = append(pageArgs, limit, offset)

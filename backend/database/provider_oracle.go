@@ -328,10 +328,12 @@ func (p *oracleProvider) GetTablePage(db *sql.DB, dbName string, query string, o
 	queryPh := ""
 	next := 2
 	if query != "" {
-		queryPh = fmt.Sprintf(" AND o.object_name LIKE :%d", next)
+		// Match case-insensitively: Oracle LIKE is case-sensitive by default,
+		// but the tree search should find a name regardless of case.
+		queryPh = fmt.Sprintf(" AND UPPER(o.object_name) LIKE :%d", next)
 		where += queryPh
-		countArgs = append(countArgs, "%"+query+"%")
-		pageArgs = append(pageArgs, "%"+query+"%")
+		countArgs = append(countArgs, "%"+strings.ToUpper(query)+"%")
+		pageArgs = append(pageArgs, "%"+strings.ToUpper(query)+"%")
 		next++
 	}
 
