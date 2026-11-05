@@ -1198,6 +1198,7 @@
   "db.paramsDefault": "Default",
   "db.paramsExample": "e.g.",
   "db.loading": "Loading...",
+  "db.loadingAllTables": "Loading all tables in background…",
   "db.selectTableHint": "Double-click a database or table to view",
   "db.tableStructure": "Table Structure",
   "db.dataQuery": "Query",
