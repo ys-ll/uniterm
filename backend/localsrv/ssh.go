@@ -13,15 +13,16 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
 // StartSSHServer starts an SSH server on the given port serving an interactive
-// local shell and an SFTP subsystem restricted to rootDir. Authentication is
-// by username/password; both are required — the shell grants full access to
-// this machine. Returns the server id.
+// local shell, TCP forwarding and an SFTP subsystem restricted to rootDir.
+// Authentication is by username/password; both are required — the shell
+// grants full access to this machine. Returns the server id.
 func (m *Manager) StartSSHServer(cfg SSHConfig) (string, error) {
 	if cfg.Port <= 0 || cfg.Port > 65535 {
 		return "", fmt.Errorf("invalid port: %d", cfg.Port)
@@ -128,7 +129,7 @@ func (m *Manager) StartSSHServer(cfg SSHConfig) (string, error) {
 	return id, nil
 }
 
-// handleSSHConn performs the SSH handshake and serves channels (SFTP subsystem).
+// handleSSHConn serves session and direct-tcpip channels after authentication.
 func (m *Manager) handleSSHConn(ctx context.Context, id string, conn net.Conn, sshCfg *ssh.ServerConfig, rootDir string) {
 	sConn, chans, reqs, err := ssh.NewServerConn(conn, sshCfg)
 	if err != nil {
@@ -136,14 +137,28 @@ func (m *Manager) handleSSHConn(ctx context.Context, id string, conn net.Conn, s
 		return
 	}
 	defer sConn.Close()
+	ctx, cancel := context.WithCancel(ctx)
+	var forwards sync.WaitGroup
+	defer func() {
+		cancel()
+		forwards.Wait()
+	}()
 	m.log(ServiceSSH, id, fmt.Sprintf("SSH login from %s (user: %s)", conn.RemoteAddr(), sConn.User()))
 
 	// Discard global requests (required by the ssh package).
 	go ssh.DiscardRequests(reqs)
 
 	for newChannel := range chans {
+		if newChannel.ChannelType() == "direct-tcpip" {
+			forwards.Add(1)
+			go func() {
+				defer forwards.Done()
+				m.handleSSHForward(ctx, id, newChannel)
+			}()
+			continue
+		}
 		if newChannel.ChannelType() != "session" {
-			newChannel.Reject(ssh.UnknownChannelType, "only session channels supported")
+			newChannel.Reject(ssh.UnknownChannelType, "unsupported channel type")
 			continue
 		}
 		ch, reqs, err := newChannel.Accept()
@@ -152,6 +167,64 @@ func (m *Manager) handleSSHConn(ctx context.Context, id string, conn net.Conn, s
 		}
 		go m.handleSSHSession(ctx, id, ch, reqs, rootDir)
 	}
+}
+
+// directTCPIPRequest is the SSH direct-tcpip channel payload (RFC 4254).
+type directTCPIPRequest struct {
+	Host       string
+	Port       uint32
+	OriginHost string
+	OriginPort uint32
+}
+
+func (m *Manager) handleSSHForward(ctx context.Context, id string, request ssh.NewChannel) {
+	var dest directTCPIPRequest
+	if err := ssh.Unmarshal(request.ExtraData(), &dest); err != nil || dest.Host == "" || dest.Port == 0 || dest.Port > 65535 {
+		_ = request.Reject(ssh.ConnectionFailed, "invalid direct-tcpip destination")
+		return
+	}
+	addr := net.JoinHostPort(dest.Host, fmt.Sprint(dest.Port))
+	target, err := (&net.Dialer{Timeout: 30 * time.Second}).DialContext(ctx, "tcp", addr)
+	if err != nil {
+		m.log(ServiceSSH, id, fmt.Sprintf("SSH forwarding to %s failed: %v", addr, err))
+		_ = request.Reject(ssh.ConnectionFailed, "failed to connect to destination")
+		return
+	}
+	defer target.Close()
+	ch, reqs, err := request.Accept()
+	if err != nil {
+		return
+	}
+	defer ch.Close()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	closeBoth := func() {
+		_ = target.Close()
+		_ = ch.Close()
+	}
+	stopClose := context.AfterFunc(ctx, closeBoth)
+	defer stopClose()
+	// The request stream ends on channel close, including while the target
+	// is idle. EOF on channel data alone may only be a write half-close.
+	go func() {
+		ssh.DiscardRequests(reqs)
+		cancel()
+	}()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := io.Copy(ch, target); err != nil {
+			closeBoth()
+			return
+		}
+		_ = ch.CloseWrite()
+	}()
+	if _, err := io.Copy(target, ch); err != nil {
+		closeBoth()
+	} else {
+		_ = target.(*net.TCPConn).CloseWrite()
+	}
+	<-done
 }
 
 // handleSSHSession handles a session channel: interactive local shell,
