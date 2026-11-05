@@ -53,6 +53,9 @@
         </div>
         <div v-if="!loading && filtered.length === 0" class="object-empty">{{ t('db.noTables') }}</div>
       </div>
+      <div v-if="!loading && allLoaded === false" class="object-loading-all">
+        <span class="spinner" /> {{ t('db.loadingAllTables') }}
+      </div>
       <div v-if="totalPages > 1" class="object-pager">
         <button class="btn btn-ghost btn-icon btn-sm" :disabled="currentPage <= 1" @click="currentPage--">
           <ChevronLeft :size="'0.875rem'" />
@@ -100,7 +103,7 @@
 import { ref, computed, watch } from 'vue'
 import { Table2, Eye, Eraser, Trash2, Plus, ChevronLeft, ChevronRight } from '@lucide/vue'
 import { useI18n } from '../i18n'
-import { GetTables, CreateTable, DropTable, DropView, TruncateTable } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetTables, GetTablePage, CreateTable, DropTable, DropView, TruncateTable } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
 import type { TableInfo } from '../types/database'
 
@@ -119,23 +122,48 @@ const emit = defineEmits<{
   objectRemoved: [payload: { dbName: string; tableName?: string; kind: 'table' | 'view' | 'database' }]
 }>()
 
+// ── 轻量分页：全量就绪后为内存分页（秒开）；未就绪时首屏只有第一页 ──
+const PAGE_SIZE = 200
+const currentPage = ref(1)
+
 const objects = ref<TableInfo[]>([])
 const search = ref('')
 const loading = ref(false)
+// allLoaded: 全量是否已就绪。就绪后翻页/搜索都走内存（秒开），避免每页重跑
+// Oracle 深分页查询（offset 越大越慢）造成的卡顿。
+const allLoaded = ref(false)
+let loadSeq = 0
 
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / PAGE_SIZE)))
+const paged = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE
+  return filtered.value.slice(start, start + PAGE_SIZE)
+})
+
+// 折中方案：首屏先用 GetTablePage 只取第一页（近瞬时显示），同时后台用
+// GetTables 拉全量；全量就绪后翻页秒开。loadSeq 用于防止切换库时旧请求
+// 的异步结果覆盖新库的数据。
 async function load() {
   if (!props.sessionId || !props.dbName) return
+  const seq = ++loadSeq
   loading.value = true
+  allLoaded.value = false
+  objects.value = []
   try {
-    objects.value = await GetTables(props.sessionId, props.dbName)
+    const [first] = await GetTablePage(props.sessionId, props.dbName, '', 0, PAGE_SIZE)
+    if (seq !== loadSeq) return
+    objects.value = first
+    loading.value = false // 首屏就绪，立即显示第一页
+    const all = await GetTables(props.sessionId, props.dbName)
+    if (seq !== loadSeq) return
+    objects.value = all
+    allLoaded.value = true
   } catch {
+    if (seq !== loadSeq) return
     objects.value = []
-  } finally {
     loading.value = false
   }
 }
-
-watch(() => [props.sessionId, props.dbName], load, { immediate: true })
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -143,14 +171,10 @@ const filtered = computed(() => {
   return objects.value.filter(o => o.name.toLowerCase().includes(q))
 })
 
-// ── 轻量分页：限制一次性渲染的行数，避免大列表卡死渲染进程 ──
-const PAGE_SIZE = 200
-const currentPage = ref(1)
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / PAGE_SIZE)))
-const paged = computed(() => {
-  const start = (currentPage.value - 1) * PAGE_SIZE
-  return filtered.value.slice(start, start + PAGE_SIZE)
-})
+watch(() => [props.sessionId, props.dbName], () => {
+  currentPage.value = 1
+  load()
+}, { immediate: true })
 
 watch([search, filtered], () => {
   currentPage.value = 1
@@ -353,6 +377,27 @@ async function onCreateTable() {
   text-align: center;
   color: var(--text-muted);
   font-size: 0.75rem;
+}
+.object-loading-all {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
+}
+.spinner {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px solid var(--border-strong, #888);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: db-loading-all-spin 0.8s linear infinite;
+}
+@keyframes db-loading-all-spin {
+  to { transform: rotate(360deg); }
 }
 .object-pager {
   flex-shrink: 0;
