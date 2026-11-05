@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -200,6 +201,63 @@ func (p *postgresProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, er
 		})
 	}
 	return infos, nil
+}
+
+func (p *postgresProvider) GetTablePage(db *sql.DB, dbName string, query string, offset, limit int) ([]TableInfo, int, error) {
+	countSQL := `
+		SELECT COUNT(*) AS n
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind IN ('r', 'p', 'v')
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema')`
+	var countArgs []any
+	if query != "" {
+		countSQL += " AND c.relname ILIKE $1"
+		countArgs = append(countArgs, "%"+query+"%")
+	}
+	countRows, err := queryStrings(db, countSQL, countArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count tables: %w", err)
+	}
+	total := 0
+	if len(countRows) > 0 {
+		total, _ = strconv.Atoi(countRows[0]["n"])
+	}
+	pageSQL := `
+		SELECT c.relname AS table_name,
+		       CASE WHEN c.relkind = 'v' THEN 'VIEW' ELSE 'BASE TABLE' END AS table_type,
+		       COALESCE(obj_description(c.oid, 'pg_class'), '') AS table_comment
+		FROM pg_class c
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind IN ('r', 'p', 'v')
+		  AND n.nspname NOT IN ('pg_catalog', 'information_schema')`
+	var pageArgs []any
+	if query != "" {
+		pageSQL += " AND c.relname ILIKE $1"
+		pageArgs = append(pageArgs, "%"+query+"%")
+		pageSQL += "\n\t\tORDER BY c.relname\n\t\tLIMIT $2 OFFSET $3"
+		pageArgs = append(pageArgs, limit, offset)
+	} else {
+		pageSQL += "\n\t\tORDER BY c.relname\n\t\tLIMIT $1 OFFSET $2"
+		pageArgs = append(pageArgs, limit, offset)
+	}
+	results, err := queryStrings(db, pageSQL, pageArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get tables page: %w", err)
+	}
+	infos := make([]TableInfo, 0, len(results))
+	for _, row := range results {
+		tp := "table"
+		if row["table_type"] == "VIEW" {
+			tp = "view"
+		}
+		infos = append(infos, TableInfo{
+			Name:    row["table_name"],
+			Type:    tp,
+			Comment: row["table_comment"],
+		})
+	}
+	return infos, total, nil
 }
 
 func (p *postgresProvider) GetTableSchema(db *sql.DB, dbName, tableName string) (*SchemaResult, error) {

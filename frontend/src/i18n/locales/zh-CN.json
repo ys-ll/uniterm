@@ -1198,6 +1198,7 @@
   "db.paramsDefault": "默认",
   "db.paramsExample": "例如",
   "db.loading": "加载中...",
+  "db.loadingAllTables": "正在后台加载全部表…",
   "db.selectTableHint": "双击数据库或表查看",
   "db.tableStructure": "表结构",
   "db.dataQuery": "查询",
