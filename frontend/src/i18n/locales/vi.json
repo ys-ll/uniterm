@@ -1274,6 +1274,7 @@
   "db.autoIncrementTypeWarn": "AUTO_INCREMENT yêu cầu kiểu cột số nguyên (INT, BIGINT, v.v.)",
   "conn.tunnel": "Đường hầm SSH",
   "conn.tunnelPlaceholder": "Chọn kết nối SSH làm jump host...",
+  "conn.tunnelChainHint": "Hỗ trợ nhiều máy trung gian: cấu hình máy trước đó cho từng kết nối SSH, rồi chọn máy gần đích nhất tại đây. Mỗi máy dùng thông tin xác thực riêng.",
   "conn.proxy": "Proxy",
   "conn.proxyDisabled": "bị tắt",
   "conn.proxyPlaceholder": "Chọn một proxy",

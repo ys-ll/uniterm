@@ -678,6 +678,7 @@
                       :value="c.id"
                     />
                   </el-select>
+                  <div class="field-hint">{{ t('conn.tunnelChainHint') }}</div>
                 </el-form-item>
                 <el-form-item v-if="showProxy" :label="t('conn.proxy')">
                   <div class="inline-add-row">

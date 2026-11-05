@@ -105,31 +105,11 @@ func (a *App) testContainerConnection(config session.ConnectionConfig) (string, 
 	// Mirror ContainerConnect: honor the referenced connection's own jump-host
 	// tunnel before dialing through it.
 	if sshCfg.TunnelSSHConnID != "" && a.tunnelService != nil {
-		var tunnelCfg *session.ConnectionConfig
-		for _, c := range data.Connections {
-			if c.ID == sshCfg.TunnelSSHConnID {
-				tunnelCfg = &c
-				break
-			}
-		}
-		if tunnelCfg == nil {
-			return "", fmt.Errorf("tunnel SSH connection not found: %s", sshCfg.TunnelSSHConnID)
-		}
-		if tunnelCfg.AuthType == "identity" {
-			m, err := a.materializeIdentity(*tunnelCfg)
-			if err != nil {
-				return "", err
-			}
-			tunnelCfg = &m
-		}
 		key := uuid.New().String()
-		localPort, err := a.tunnelService.Start(key, *tunnelCfg, sshCfg.Host, sshCfg.Port, nil)
-		if err != nil {
-			return "", fmt.Errorf("tunnel start: %w", err)
+		if err := a.setupJumpHostTunnel(key, "container", sshCfg); err != nil {
+			return "", err
 		}
 		defer a.tunnelService.Stop(key)
-		sshCfg.Host = "127.0.0.1"
-		sshCfg.Port = localPort
 	}
 
 	client, err := session.DialSSHClient(*sshCfg)
@@ -182,27 +162,6 @@ func (a *App) testK8sConnection(config session.ConnectionConfig) (string, error)
 	if a.tunnelService == nil || a.connectionStore == nil {
 		return "", fmt.Errorf("tunnel service or connection store not initialized")
 	}
-	data, err := a.connectionStore.Load()
-	if err != nil {
-		return "", fmt.Errorf("load connections for tunnel: %w", err)
-	}
-	var tunnelSSHConfig *session.ConnectionConfig
-	for _, c := range data.Connections {
-		if c.ID == tunnelID {
-			tunnelSSHConfig = &c
-			break
-		}
-	}
-	if tunnelSSHConfig == nil {
-		return "", fmt.Errorf("tunnel SSH connection not found: %s", tunnelID)
-	}
-	if tunnelSSHConfig.AuthType == "identity" {
-		m, err := a.materializeIdentity(*tunnelSSHConfig)
-		if err != nil {
-			return "", err
-		}
-		tunnelSSHConfig = &m
-	}
 
 	kc, err := k8s.ParseBytes(raw)
 	if err != nil {
@@ -226,10 +185,12 @@ func (a *App) testK8sConnection(config session.ConnectionConfig) (string, error)
 	}
 
 	tunnelKey := uuid.New().String()
-	localPort, err := a.tunnelService.Start(tunnelKey, *tunnelSSHConfig, targetHost, targetPort, nil)
-	if err != nil {
-		return "", fmt.Errorf("tunnel start: %w", err)
+	tunnelConfig := config
+	tunnelConfig.Host, tunnelConfig.Port = targetHost, targetPort
+	if err := a.setupJumpHostTunnel(tunnelKey, "k8s", &tunnelConfig); err != nil {
+		return "", err
 	}
+	localPort := tunnelConfig.Port
 
 	var dialer net.Dialer
 	dialOverride := func(ctx context.Context, _, _ string) (net.Conn, error) {

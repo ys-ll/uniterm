@@ -1278,6 +1278,7 @@
   "db.autoIncrementTypeWarn": "AUTO_INCREMENT требует целочисленный тип столбца (INT, BIGINT и т.д.)",
   "conn.tunnel": "Туннель",
   "conn.tunnelPlaceholder": "Выберите туннельное подключение",
+  "conn.tunnelChainHint": "Несколько переходов: настройте предыдущий узел в каждом SSH-соединении и выберите здесь ближайший к цели. Каждый узел использует свои учётные данные.",
   "conn.proxy": "Прокси",
   "conn.proxyDisabled": "отключен",
   "conn.proxyPlaceholder": "Выберите прокси",

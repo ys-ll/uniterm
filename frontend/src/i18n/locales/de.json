@@ -1278,6 +1278,7 @@
   "db.autoIncrementTypeWarn": "AUTO_INCREMENT erfordert einen ganzzahligen Spaltentyp (INT, BIGINT usw.)",
   "conn.tunnel": "Tunnel",
   "conn.tunnelPlaceholder": "Tunnel-Verbindung auswählen",
+  "conn.tunnelChainHint": "Mehrere Sprungserver: Konfigurieren Sie für jede SSH-Verbindung den vorherigen Sprung und wählen Sie hier den dem Ziel nächsten aus. Jeder nutzt eigene Zugangsdaten.",
   "conn.proxy": "Proxy",
   "conn.proxyDisabled": "deaktiviert",
   "conn.proxyPlaceholder": "Proxy auswählen",
