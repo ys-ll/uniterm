@@ -1302,6 +1302,7 @@
   "db.autoIncrementTypeWarn": "AUTO_INCREMENT 要求列为整数类型（INT、BIGINT 等）",
   "conn.tunnel": "SSH 隧道",
   "conn.tunnelPlaceholder": "选择 SSH 连接作为跳板...",
+  "conn.tunnelChainHint": "支持多级跳板：先在各 SSH 连接中配置上一级跳板，再在此选择离目标最近的一跳。每一跳使用自己的凭据。",
   "conn.proxy": "代理",
   "conn.proxyDisabled": "已禁用",
   "conn.proxyPlaceholder": "选择代理",

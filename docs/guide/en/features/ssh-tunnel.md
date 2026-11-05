@@ -69,6 +69,62 @@ Clicking **Stop**, deleting the tunnel, or quitting uniTerm cancels automatic re
 
 Automatic connections require available SSH credentials. Temporary credentials entered for a manual start are reused only during that tunnel's current lifecycle and are not saved to disk by auto-reconnect. Connecting after an application restart still requires saved credentials.
 
+## Multi-hop connections on macOS and Windows
+
+Both desktop platforms use the same SSH jump-host configuration. The **SSH Tunnel** field in an ordinary connection follows the selected SSH connection's own jump host recursively. Each hop uses its own username, password, private key, or keystore identity.
+
+### Example: client → A → B → C
+
+| Saved connection | Example host and port | Advanced settings → Network → SSH Tunnel |
+| --- | --- | --- |
+| A (SSH entry gateway) | `gateway.example.com:22` | None; reachable directly from the client |
+| B (SSH internal gateway) | `10.0.0.10:22` | A |
+| C (target SSH server) | `10.0.1.20:22` | B |
+
+1. Create and save SSH connection A with A's credentials.
+2. Create SSH connection B, select A in **Advanced settings → Network → SSH Tunnel**, enter B's credentials, and save it.
+3. Create target connection C with C's actual address and credentials. Select B as its SSH tunnel.
+4. Click **Test Connection**, then connect to C. uniTerm opens A, then B, then the target connection. There is no need to open gateway terminal tabs first.
+
+B's hostname is resolved from A; C's hostname is resolved from B. Keep C's actual address in the target connection. For a single jump host, omit B and select A on C. The same configuration applies to TCP connections that expose the SSH Tunnel option, such as SFTP and RDP; use each target protocol's own port and credentials.
+
+### macOS
+
+Configure A, B, and C in the macOS app and connect to C. The client uses built-in SSH support; enabling macOS Remote Login is not required to use external gateways.
+
+Private-key paths must point to files on the Mac. SSH Agent authentication uses `SSH_AUTH_SOCK`, which must be available to the app. After syncing a connection from Windows, update local key paths or use inline key text or a keystore identity.
+
+### Windows
+
+Use the same A, B, and C configuration in the Windows app. Client-side chaining does not require Windows OpenSSH Server or WSL.
+
+Private-key paths must point to files on the Windows computer. SSH Agent authentication tries Pageant first, then Windows OpenSSH Agent. After syncing a connection from macOS, update local key paths or use inline key text or a keystore identity.
+
+### Lifecycle and troubleshooting
+
+- An ordinary connection opens its jump-host chain when connecting to the target. Closing the target session or quitting the app closes all hops. The chain does not start independently on application launch.
+- Provide credentials for every hop. Save upstream gateway credentials, reference keystore identities, or configure an SSH agent in advance; the current credential dialog does not prompt separately for every upstream gateway.
+- A failed hop closes all earlier connections. Check the host identified by the error and that hop's credentials.
+- A missing-hop error means a referenced connection cannot be found. A `loop` error means the saved references contain a cycle, such as A → B → A.
+- Gateway SSH servers must allow TCP forwarding. Using uniTerm's embedded SSH server as a gateway requires a version containing [PR #1406](https://github.com/ys-ll/uniterm/pull/1406) and manually starting **Local Services → SSH/SFTP** on that gateway. Embedded-server forwarding and client-side multi-hop connections are separate capabilities.
+
+### Standalone tunnels
+
+The standalone Tunnel Manager also follows saved jump-host references. Selecting B as the SSH connection in this example opens `client → A → B`; B then forwards to the target service. Local, remote, and dynamic forwarding retain their respective semantics.
+
+Use an ordinary connection to open a target session inside uniTerm. Use a standalone tunnel to expose a local port or SOCKS5 proxy to other applications. Standalone tunnels can separately enable **Auto-Start**.
+
+## Reference products
+
+This comparison concerns client-side jump hosts, not whether each product provides an SSH server.
+
+| Product | Official configuration | uniTerm equivalent |
+| --- | --- | --- |
+| Xshell | Select `JUMPHOST` in proxy settings and chain gateways with `Next proxy` | Set the preceding SSH tunnel on each saved SSH connection; select the hop nearest the target on the target connection |
+| MobaXterm | Configure `SSH gateway` in session `Network settings`; multiple SSH jump hosts are supported | Reference a saved jump-host chain from an ordinary connection or standalone tunnel |
+
+Official references: [Xshell Proxy Setting](https://netsarang.atlassian.net/wiki/spaces/ENSUP/pages/2237304738/Proxy+Setting), [MobaXterm Network settings](https://mobaxterm.mobatek.net/documentation.html#4_10), and [MobaXterm multi-hop changelog](https://mobaxterm.mobatek.net/download-home-edition.html).
+
 ---
 
 ::: tip Related

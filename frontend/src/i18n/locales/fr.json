@@ -1278,6 +1278,7 @@
   "db.autoIncrementTypeWarn": "AUTO_INCREMENT nécessite un type de colonne entier (INT, BIGINT, etc.)",
   "conn.tunnel": "Tunnel",
   "conn.tunnelPlaceholder": "Choisir une connexion tunnel",
+  "conn.tunnelChainHint": "Sauts multiples : configurez le saut précédent de chaque connexion SSH, puis sélectionnez ici le plus proche de la cible. Chaque saut utilise ses propres identifiants.",
   "conn.proxy": "Proxy",
   "conn.proxyDisabled": "désactivé",
   "conn.proxyPlaceholder": "Sélectionner un proxy",

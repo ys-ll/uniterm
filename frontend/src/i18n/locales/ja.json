@@ -1278,6 +1278,7 @@
   "db.autoIncrementTypeWarn": "AUTO_INCREMENT には整数型のカラム（INT、BIGINT など）が必要です",
   "conn.tunnel": "SSH トンネル",
   "conn.tunnelPlaceholder": "ジャンプホストのSSH接続を選択...",
+  "conn.tunnelChainHint": "多段踏み台に対応：各 SSH 接続で前段の踏み台を設定し、ここでは接続先に最も近い踏み台を選択します。各段は個別の認証情報を使用します。",
   "conn.proxy": "プロキシ",
   "conn.proxyDisabled": "無効",
   "conn.proxyPlaceholder": "プロキシを選択",

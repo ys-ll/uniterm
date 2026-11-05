@@ -1301,6 +1301,7 @@
   "db.autoIncrementTypeWarn": "AUTO_INCREMENT 要求欄為整數類型（INT、BIGINT 等）",
   "conn.tunnel": "SSH 隧道",
   "conn.tunnelPlaceholder": "選擇 SSH 連線作為跳板...",
+  "conn.tunnelChainHint": "支援多級跳板：先在各 SSH 連線中設定上一級跳板，再於此選擇最接近目標的一跳。每一跳使用自己的憑證。",
   "conn.proxy": "代理",
   "conn.proxyDisabled": "已停用",
   "conn.proxyPlaceholder": "選擇代理",

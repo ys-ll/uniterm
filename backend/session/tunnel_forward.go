@@ -151,7 +151,7 @@ func (ts *TunnelService) runUserTunnel(t Tunnel, resolve ConnResolver, entry *us
 }
 
 func (ts *TunnelService) openUserTunnel(ctx context.Context, t Tunnel, resolve ConnResolver) (net.Listener, []*ssh.Client, error) {
-	chain, err := buildHopChain(t.SSHConnID, resolve)
+	chain, err := BuildHopChain(t.SSHConnID, resolve)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -337,11 +337,11 @@ func (ts *TunnelService) finishStoppedTunnel(id string, entry *userTunnelEntry) 
 	}
 }
 
-// buildHopChain resolves the exit connection and recurses its jump host
+// BuildHopChain resolves the exit connection and recurses its jump host
 // (ConnectionConfig.TunnelSSHConnID) into an ordered chain, outermost first:
 // [firstHop, …, exit]. A connection with no jump host yields a single-element
 // chain (direct to the exit). Loops are rejected.
-func buildHopChain(exitID string, resolve ConnResolver) ([]ConnectionConfig, error) {
+func BuildHopChain(exitID string, resolve ConnResolver) ([]ConnectionConfig, error) {
 	if exitID == "" {
 		return nil, fmt.Errorf("no SSH connection selected")
 	}
@@ -355,6 +355,9 @@ func buildHopChain(exitID string, resolve ConnResolver) ([]ConnectionConfig, err
 		cfg, ok := resolve(id)
 		if !ok {
 			return nil, fmt.Errorf("SSH connection %s not found", id)
+		}
+		if cfg.Type != "" && cfg.Type != "ssh" {
+			return nil, fmt.Errorf("jump host %s is not an SSH connection", id)
 		}
 		chain = append(chain, cfg)
 		id = cfg.TunnelSSHConnID
