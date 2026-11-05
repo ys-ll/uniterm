@@ -81,3 +81,23 @@ func TestSplitScript_EscapedQuote(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
+
+func TestSplitScript_DelimiterOnFirstLine(t *testing.T) {
+	in := "DELIMITER $$\nCREATE PROCEDURE p()\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND$$\nDELIMITER ;\nCALL p();"
+	got := SplitScript(in)
+	want := []string{
+		"CREATE PROCEDURE p()\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND",
+		"CALL p()",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d stmts: %v", len(got), stmts(got))
+	}
+	for i := range want {
+		if got[i].SQL != want[i] {
+			t.Fatalf("stmt %d:\n got=[%s]\nwant=[%s]", i, got[i].SQL, want[i])
+		}
+	}
+	if got[0].Line != 2 || got[1].Line != 8 {
+		t.Fatalf("lines: %v", []int{got[0].Line, got[1].Line})
+	}
+}
