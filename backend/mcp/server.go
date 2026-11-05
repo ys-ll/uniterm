@@ -232,6 +232,11 @@ type AuditEntry struct {
 type Server struct {
 	env Env
 
+	// Serialize listener transitions separately from state/token access.
+	lifecycleMu sync.Mutex
+	listenPort  int
+	allowRemote bool
+
 	mu      sync.Mutex
 	tokens  map[string]TokenInfo // keyed by sha256(token)
 	handler *mcp.StreamableHTTPHandler
@@ -277,10 +282,19 @@ func (s *Server) SetTokens(tokens map[string]TokenInfo) {
 	s.tokens = tokens
 }
 
-// Start restarts the listener on the requested port. Remote access must be
+// Start preserves active sessions when the listener configuration is unchanged.
+// Otherwise it restarts the listener on the requested port. Remote access must be
 // explicitly enabled; otherwise both the listener and SDK restrict it to localhost.
 func (s *Server) Start(port int, allowRemote bool) error {
-	s.Stop()
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.mu.Lock()
+	unchanged := s.started && s.listenPort == port && s.allowRemote == allowRemote
+	s.mu.Unlock()
+	if unchanged {
+		return nil
+	}
+	s.stop()
 
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name:    "uniterm",
@@ -309,6 +323,8 @@ func (s *Server) Start(port int, allowRemote bool) error {
 	s.ln = ln
 	s.httpSrv = httpSrv
 	s.port = ln.Addr().(*net.TCPAddr).Port
+	s.listenPort = port
+	s.allowRemote = allowRemote
 	s.started = true
 	s.mu.Unlock()
 
@@ -317,12 +333,19 @@ func (s *Server) Start(port int, allowRemote bool) error {
 			log.Writef("mcp: serve: %v", err)
 		}
 	}()
-	log.Writef("mcp: server listening on %s:%d", host, s.port)
+	log.Writef("mcp: server listening on %s", ln.Addr())
 	return nil
 }
 
 // Stop tears the listener down.
 func (s *Server) Stop() {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	s.stop()
+}
+
+// stop requires lifecycleMu to be held.
+func (s *Server) stop() {
 	s.mu.Lock()
 	httpSrv := s.httpSrv
 	s.httpSrv = nil
