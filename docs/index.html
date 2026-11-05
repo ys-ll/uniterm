@@ -300,7 +300,7 @@ html[data-theme="light"] body::before { opacity: 0.18; }
   z-index: 120;
   display: none;
   flex-direction: column;
-  min-width: 78px;
+  min-width: 112px;
   background: var(--bg-card, #141a22);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -333,10 +333,8 @@ html[data-theme="light"] body::before { opacity: 0.18; }
 html[data-theme="light"] .theme-btn .icon-sun { display: none; }
 html[data-theme="light"] .theme-btn .icon-moon { display: inline; }
 
-.content-zh, .content-en { display: none; }
-html[lang="zh-CN"] .content-zh, html[lang="en"] .content-en { display: initial; }
-html[lang="zh-CN"] .content-inline-zh, html[lang="en"] .content-inline-en { display: inline; }
-.content-inline-zh, .content-inline-en { display: none; }
+/* Translatable copy is marked with data-i18n keys and rendered from the
+   I18N dictionary in JS; markup ships with zh-CN as the static default */
 
 /* ── Hero ── */
 .hero {
@@ -1002,13 +1000,13 @@ var _hmt = _hmt || [];
     </a>
     <div class="nav-links">
       <a href="#features">
-        <span class="content-zh">功能特性</span><span class="content-en">Features</span>
+        <span data-i18n="nav.features">功能特性</span>
       </a>
       <a href="#install">
-        <span class="content-zh">下载</span><span class="content-en">Download</span>
+        <span data-i18n="common.download">下载</span>
       </a>
       <a href="/guide/zh/introduction" class="guide-link">
-        <span class="content-zh">用户手册</span><span class="content-en">User Guide</span>
+        <span data-i18n="nav.guide">用户手册</span>
       </a>
     </div>
     <div class="nav-actions">
@@ -1027,11 +1025,20 @@ var _hmt = _hmt || [];
       <div class="lang-group" id="lang-group">
         <button class="lang-btn lang-current" id="lang-current" aria-haspopup="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.9 5.6 3.9 9s-1.4 6.4-3.9 9c-2.5-2.6-3.9-5.6-3.9-9s1.4-6.4 3.9-9z"/></svg>
-          <span id="lang-current-text">中文</span>
+          <span id="lang-current-text">简体中文</span>
         </button>
         <div class="lang-menu" id="lang-menu">
-          <button class="lang-btn active" onclick="setLang('zh-CN')">中文</button>
-          <button class="lang-btn" onclick="setLang('en')">EN</button>
+          <button class="lang-btn active" data-lang="zh-CN" onclick="setLang('zh-CN')">简体中文</button>
+          <button class="lang-btn" data-lang="zh-TW" onclick="setLang('zh-TW')">繁體中文</button>
+          <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+          <button class="lang-btn" data-lang="ja" onclick="setLang('ja')">日本語</button>
+          <button class="lang-btn" data-lang="ko" onclick="setLang('ko')">한국어</button>
+          <button class="lang-btn" data-lang="de" onclick="setLang('de')">Deutsch</button>
+          <button class="lang-btn" data-lang="es" onclick="setLang('es')">Español</button>
+          <button class="lang-btn" data-lang="fr" onclick="setLang('fr')">Français</button>
+          <button class="lang-btn" data-lang="ru" onclick="setLang('ru')">Русский</button>
+          <button class="lang-btn" data-lang="pt" onclick="setLang('pt')">Português</button>
+          <button class="lang-btn" data-lang="vi" onclick="setLang('vi')">Tiếng Việt</button>
         </div>
       </div>
       <button class="nav-burger" id="nav-burger" aria-label="Menu" aria-expanded="false">
@@ -1040,10 +1047,10 @@ var _hmt = _hmt || [];
     </div>
     <!-- Mobile dropdown menu -->
     <div class="nav-menu" id="nav-menu">
-      <a href="#features"><span class="content-zh">功能特性</span><span class="content-en">Features</span></a>
-      <a href="#install"><span class="content-zh">下载</span><span class="content-en">Download</span></a>
-      <a href="/guide/zh/introduction" class="guide-link"><span class="content-zh">用户手册</span><span class="content-en">User Guide</span></a>
-      <div class="nav-menu-label"><span class="content-zh">代码仓库</span><span class="content-en">Repositories</span></div>
+      <a href="#features"><span data-i18n="nav.features">功能特性</span></a>
+      <a href="#install"><span data-i18n="common.download">下载</span></a>
+      <a href="/guide/zh/introduction" class="guide-link"><span data-i18n="nav.guide">用户手册</span></a>
+      <div class="nav-menu-label"><span data-i18n="menu.repos">代码仓库</span></div>
       <a href="https://github.com/ys-ll/uniterm" target="_blank" rel="noopener">GitHub</a>
       <a href="https://gitee.com/ys-l/uniterm" target="_blank" rel="noopener">Gitee</a>
     </div>
@@ -1057,31 +1064,27 @@ var _hmt = _hmt || [];
   </div>
   <h1>uniTerm</h1>
   <p class="subtitle">
-    <span class="content-inline-zh">一站式终端，覆盖 30 余种协议<br>内置自主执行多轮命令的 AI Agent</span>
-    <span class="content-inline-en">All-in-one terminal with 30+ protocols<br>Built-in AI Agent that runs multi-turn shell commands</span>
+    <span data-i18n="hero.subtitle">一站式终端，覆盖 30 余种协议<br>内置自主执行多轮命令的 AI Agent</span>
   </p>
 
   <div class="hero-meta">
     <span class="meta-badge"><span class="ver" id="ver-tag">v1.10.0</span></span>
-    <span class="meta-badge"><span id="ver-date">2026-10-04</span>&nbsp;<span class="content-zh">发布</span><span class="content-en">released</span></span>
-    <span class="meta-badge">Apache-2.0&nbsp;<span class="content-zh">开源</span><span class="content-en">open source</span></span>
+    <span class="meta-badge"><span id="ver-date">2026-10-04</span>&nbsp;<span data-i18n="hero.released">发布</span></span>
+    <span class="meta-badge">Apache-2.0&nbsp;<span data-i18n="hero.opensource">开源</span></span>
   </div>
 
   <p class="platforms-above">
-    <span class="content-inline-zh">Windows · macOS · Linux · Android · Docker</span>
-    <span class="content-inline-en">Windows · macOS · Linux · Android · Docker</span>
+    <span data-i18n="hero.platforms">Windows · macOS · Linux · Android · Docker</span>
   </p>
 
     <div class="btns">
     <a href="#install" class="btn btn-primary">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      <span class="content-inline-zh">下载安装</span>
-      <span class="content-inline-en">Download</span>
+      <span data-i18n="hero.downloadBtn">下载安装</span>
     </a>
     <a href="/guide/zh/introduction" class="btn btn-outline guide-link">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-      <span class="content-zh">用户手册</span>
-      <span class="content-en">User Guide</span>
+      <span data-i18n="nav.guide">用户手册</span>
     </a>
     <a href="https://github.com/ys-ll/uniterm" target="_blank" class="btn btn-outline">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.418-1.305.762-1.604-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
@@ -1101,12 +1104,10 @@ var _hmt = _hmt || [];
   <div class="feature-group">
     <div class="feature-group-head">
       <h3 class="feature-group-title">
-        <span class="content-zh">全功能终端</span>
-        <span class="content-en">Full-Featured Terminal</span>
+        <span data-i18n="feat1.title">全功能终端</span>
       </h3>
       <p class="feature-group-desc">
-        <span class="content-zh">终端、文件传输、远程桌面、数据库、容器 —— 覆盖全部远程访问场景。</span>
-        <span class="content-en">Terminal, file transfer, remote desktop, database, and containers — covering all remote access needs.</span>
+        <span data-i18n="feat1.desc">终端、文件传输、远程桌面、数据库、容器 —— 覆盖全部远程访问场景。</span>
       </p>
     </div>
     <div class="fs-split">
@@ -1122,36 +1123,36 @@ var _hmt = _hmt || [];
       <li class="fs-item active" data-dark="imgs/ai_assistant.webp" data-light="imgs/ai_assistant_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg></div>
         <div>
-          <h4><span class="content-zh">终端</span><span class="content-en">Terminal</span></h4>
-          <p><span class="content-zh">SSH / Telnet / Mosh 远程终端，PowerShell / Git Bash / WSL 本地终端与串口连接，SSH 隧道转发与服务器实时监控</span><span class="content-en">Remote SSH / Telnet / Mosh, local PowerShell / Git Bash / WSL and serial terminals, with SSH tunnel forwarding and live server monitoring</span></p>
+          <h4><span data-i18n="feat1.terminal">终端</span></h4>
+          <p><span data-i18n="feat1.terminalDesc">SSH / Telnet / Mosh 远程终端，PowerShell / Git Bash / WSL 本地终端与串口连接，SSH 隧道转发与服务器实时监控</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/sftp.webp" data-light="imgs/sftp_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
         <div>
-          <h4><span class="content-zh">文件传输</span><span class="content-en">File Transfer</span></h4>
-          <p><span class="content-zh">SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，双栏浏览、鼠标拖拽上传下载，SSH 内 `rz`/`sz`</span><span class="content-en">SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, dual-pane browse, drag-and-drop transfer, `rz`/`sz` in SSH</span></p>
+          <h4><span data-i18n="feat1.file">文件传输</span></h4>
+          <p><span data-i18n="feat1.fileDesc">SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，双栏浏览、鼠标拖拽上传下载，SSH 内 `rz`/`sz`</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/rdp.webp" data-light="imgs/rdp_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
         <div>
-          <h4><span class="content-zh">远程桌面</span><span class="content-en">Remote Desktop</span></h4>
-          <p><span class="content-zh">RDP（Windows 远程桌面）、VNC（Linux 远程控制）、SPICE（KVM/QEMU 虚拟机）、X11（X Window 图形界面转发）</span><span class="content-en">RDP (Windows Remote Desktop), VNC (Linux remote control), SPICE (KVM/QEMU VMs), X11 (X Window forwarding)</span></p>
+          <h4><span data-i18n="feat1.rdp">远程桌面</span></h4>
+          <p><span data-i18n="feat1.rdpDesc">RDP（Windows 远程桌面）、VNC（Linux 远程控制）、SPICE（KVM/QEMU 虚拟机）、X11（X Window 图形界面转发）</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/database.webp" data-light="imgs/database_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
         <div>
-          <h4><span class="content-zh">数据库客户端</span><span class="content-en">Database Client</span></h4>
-          <p><span class="content-zh">MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch，AI 自然语言生成查询与数据行编辑</span><span class="content-en">MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — AI natural language query generation &amp; inline row editing</span></p>
+          <h4><span data-i18n="feat1.db">数据库客户端</span></h4>
+          <p><span data-i18n="feat1.dbDesc">MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch，AI 自然语言生成查询与数据行编辑</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/kubernetes.webp" data-light="imgs/kubernetes_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
         <div>
-          <h4><span class="content-zh">Kubernetes & 容器</span><span class="content-en">Kubernetes & Containers</span></h4>
-          <p><span class="content-zh">Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC，集群资源与容器镜像管理、Pod 日志与 exec 终端、CPU/内存指标</span><span class="content-en">Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — cluster resources and container/image management, Pod logs and exec terminals, CPU/memory metrics</span></p>
+          <h4><span data-i18n="feat1.k8s">Kubernetes & 容器</span></h4>
+          <p><span data-i18n="feat1.k8sDesc">Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC，集群资源与容器镜像管理、Pod 日志与 exec 终端、CPU/内存指标</span></p>
         </div>
       </li>
     </ul>
@@ -1162,12 +1163,10 @@ var _hmt = _hmt || [];
   <div class="feature-group">
     <div class="feature-group-head">
       <h3 class="feature-group-title">
-        <span class="content-zh">AI Agent</span>
-        <span class="content-en">AI Agent</span>
+        <span data-i18n="feat2.agent">AI Agent</span>
       </h3>
       <p class="feature-group-desc">
-        <span class="content-zh">自主执行的 AI Agent，独立规划并执行多轮 Shell 命令，直接在终端中完成复杂任务。</span>
-        <span class="content-en">Autonomous AI Agent that independently plans and executes multi-turn shell commands directly in your terminal.</span>
+        <span data-i18n="feat2.desc">自主执行的 AI Agent，独立规划并执行多轮 Shell 命令，直接在终端中完成复杂任务。</span>
       </p>
     </div>
     <div class="fs-split">
@@ -1183,36 +1182,36 @@ var _hmt = _hmt || [];
       <li class="fs-item active" data-dark="imgs/ai_model.webp" data-light="imgs/ai_model_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg></div>
         <div>
-          <h4><span class="content-zh">AI Agent</span><span class="content-en">AI Agent</span></h4>
-          <p><span class="content-zh">AI Agent 自主规划并多轮执行命令，直接在终端完成复杂任务；兼容 Anthropic / OpenAI 协议，支持 Claude、GPT 等模型，四种执行模式自主权由你掌控</span><span class="content-en">The AI Agent plans and executes multi-turn commands right in your terminal; Anthropic / OpenAI-compatible with Claude, GPT and more, plus four execution modes under your control</span></p>
+          <h4><span data-i18n="feat2.agent">AI Agent</span></h4>
+          <p><span data-i18n="feat2.agentDesc">AI Agent 自主规划并多轮执行命令，直接在终端完成复杂任务；兼容 Anthropic / OpenAI 协议，支持 Claude、GPT 等模型，四种执行模式自主权由你掌控</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/skills.webp" data-light="imgs/skills_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="15" y2="7"/></svg></div>
         <div>
-          <h4><span class="content-zh">技能与命令</span><span class="content-en">Skills &amp; Commands</span></h4>
-          <p><span class="content-zh">可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可触发，AI 也可自行沉淀新技能</span><span class="content-en">Reusable skill workflows and prompt-template commands triggered with `/`; the AI can also save new skills itself</span></p>
+          <h4><span data-i18n="feat2.skills">技能与命令</span></h4>
+          <p><span data-i18n="feat2.skillsDesc">可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可触发，AI 也可自行沉淀新技能</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/mcp_server.webp" data-light="imgs/mcp_server_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
         <div>
-          <h4><span class="content-zh">MCP Server</span><span class="content-en">MCP Server</span></h4>
-          <p><span class="content-zh">外部 AI Agent 经 MCP 安全执行命令、传输文件，凭据不出应用</span><span class="content-en">External AI agents run commands and transfer files via MCP — credentials never leave the app</span></p>
+          <h4><span data-i18n="feat2.mcp">MCP Server</span></h4>
+          <p><span data-i18n="feat2.mcpDesc">外部 AI Agent 经 MCP 安全执行命令、传输文件，凭据不出应用</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/ai_generate_sql.webp" data-light="imgs/ai_generate_sql_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
         <div>
-          <h4><span class="content-zh">AI 生成 SQL</span><span class="content-en">AI SQL Generation</span></h4>
-          <p><span class="content-zh">用自然语言描述查询需求，AI 结合表结构自动生成 SQL 并直接执行</span><span class="content-en">Describe your query in natural language and the AI generates SQL from your schema, ready to run</span></p>
+          <h4><span data-i18n="feat2.sql">AI 生成 SQL</span></h4>
+          <p><span data-i18n="feat2.sqlDesc">用自然语言描述查询需求，AI 结合表结构自动生成 SQL 并直接执行</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/auto_complete.webp" data-light="imgs/auto_complete_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
         <div>
-          <h4><span class="content-zh">智能提示</span><span class="content-en">Smart Completion</span></h4>
-          <p><span class="content-zh">输入时按历史命令与 AI 能力实时补全</span><span class="content-en">Real-time completion from command history and AI as you type</span></p>
+          <h4><span data-i18n="feat2.completion">智能提示</span></h4>
+          <p><span data-i18n="feat2.completionDesc">输入时按历史命令与 AI 能力实时补全</span></p>
         </div>
       </li>
     </ul>
@@ -1223,12 +1222,10 @@ var _hmt = _hmt || [];
   <div class="feature-group">
     <div class="feature-group-head">
       <h3 class="feature-group-title">
-        <span class="content-zh">个性化能力</span>
-        <span class="content-en">Personalization</span>
+        <span data-i18n="feat3.title">个性化能力</span>
       </h3>
       <p class="feature-group-desc">
-        <span class="content-zh">连接管理、自由分屏、云端同步、主题与国际化 —— 你的终端由你掌控。</span>
-        <span class="content-en">Connection management, split panes, cloud sync, themes &amp; languages — your terminal, your way.</span>
+        <span data-i18n="feat3.desc">连接管理、自由分屏、云端同步、主题与国际化 —— 你的终端由你掌控。</span>
       </p>
     </div>
     <div class="fs-split">
@@ -1244,36 +1241,36 @@ var _hmt = _hmt || [];
       <li class="fs-item active" data-dark="imgs/new_connection.webp" data-light="imgs/new_connection_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
         <div>
-          <h4><span class="content-zh">连接管理器</span><span class="content-en">Connection Manager</span></h4>
-          <p><span class="content-zh">快速搜索、新建连接、分组排序、批量操作</span><span class="content-en">Quick search, new connection, grouping, sorting, batch ops</span></p>
+          <h4><span data-i18n="feat3.conn">连接管理器</span></h4>
+          <p><span data-i18n="feat3.connDesc">快速搜索、新建连接、分组排序、批量操作</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/workspace.webp" data-light="imgs/workspace_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/></svg></div>
         <div>
-          <h4><span class="content-zh">工作区</span><span class="content-en">Workspace</span></h4>
-          <p><span class="content-zh">将终端标签拖到内容区即可自由分屏，任意组合成工作区</span><span class="content-en">Drag terminal tabs into the content area to split freely and combine into a workspace</span></p>
+          <h4><span data-i18n="feat3.workspace">工作区</span></h4>
+          <p><span data-i18n="feat3.workspaceDesc">将终端标签拖到内容区即可自由分屏，任意组合成工作区</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/cloud_sync.webp" data-light="imgs/cloud_sync_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 116.71-9h1.79a4.5 4.5 0 110 9z"/></svg></div>
         <div>
-          <h4><span class="content-zh">云端配置同步</span><span class="content-en">Cloud Sync</span></h4>
-          <p><span class="content-zh">Git / WebDAV / SFTP / S3 / SMB 加密云同步，多设备无缝接续，无惧丢失泄露</span><span class="content-en">Encrypted cloud sync via Git, WebDAV, SFTP, S3 or SMB — seamless across devices</span></p>
+          <h4><span data-i18n="feat3.sync">云端配置同步</span></h4>
+          <p><span data-i18n="feat3.syncDesc">Git / WebDAV / SFTP / S3 / SMB 加密云同步，多设备无缝接续，无惧丢失泄露</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/shortcuts.webp" data-light="imgs/shortcuts_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M10 14h4M18 14h.01"/></svg></div>
         <div>
-          <h4><span class="content-zh">自定义快捷键</span><span class="content-en">Custom Keybindings</span></h4>
-          <p><span class="content-zh">自由绑定各项操作的快捷键，实现全键盘操作</span><span class="content-en">Freely bind shortcuts for every action for full keyboard-driven operation</span></p>
+          <h4><span data-i18n="feat3.keys">自定义快捷键</span></h4>
+          <p><span data-i18n="feat3.keysDesc">自由绑定各项操作的快捷键，实现全键盘操作</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/background_image.webp" data-light="imgs/background_image.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
         <div>
-          <h4><span class="content-zh">主题与国际化</span><span class="content-en">Themes &amp; Languages</span></h4>
-          <p><span class="content-zh">28 款终端主题、3 款界面主题、自定义背景图片，支持简中、英、日、韩等 11 种语言界面</span><span class="content-en">28 terminal themes, 3 UI themes and a custom background image, with an 11-language UI including Chinese, English, Japanese and Korean</span></p>
+          <h4><span data-i18n="feat3.themes">主题与国际化</span></h4>
+          <p><span data-i18n="feat3.themesDesc">28 款终端主题、3 款界面主题、自定义背景图片，支持简中、英、日、韩等 11 种语言界面</span></p>
         </div>
       </li>
     </ul>
@@ -1289,48 +1286,48 @@ var _hmt = _hmt || [];
     <div class="install-card">
       <div class="os-icon"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="9" height="9" rx="1.5"/><rect x="13" y="2" width="9" height="9" rx="1.5"/><rect x="2" y="13" width="9" height="9" rx="1.5"/><rect x="13" y="13" width="9" height="9" rx="1.5"/></svg></div>
       <h3>Windows</h3>
-      <div class="format"><span class="content-inline-zh">EXE 安装版 / ZIP 便携版<br>amd64 / arm64</span><span class="content-inline-en">EXE Installer / ZIP Portable<br>amd64 / arm64</span></div>
+      <div class="format"><span data-i18n="install.windows">EXE 安装版 / ZIP 便携版<br>amd64 / arm64</span></div>
       <a href="https://github.com/ys-ll/uniterm/releases/latest" target="_blank" class="btn btn-primary release-link">
-        <span class="content-inline-zh">下载</span><span class="content-inline-en">Download</span>
+        <span data-i18n="common.download">下载</span>
       </a>
     </div>
 
     <div class="install-card">
       <div class="os-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg></div>
       <h3>macOS</h3>
-      <div class="format"><span class="content-inline-zh">DMG 安装包<br>Apple Silicon / Intel</span><span class="content-inline-en">DMG Installer<br>Apple Silicon / Intel</span></div>
+      <div class="format"><span data-i18n="install.macos">DMG 安装包<br>Apple Silicon / Intel</span></div>
       <a href="https://github.com/ys-ll/uniterm/releases/latest" target="_blank" class="btn btn-primary release-link">
-        <span class="content-inline-zh">下载</span><span class="content-inline-en">Download</span>
+        <span data-i18n="common.download">下载</span>
       </a>
     </div>
 
     <div class="install-card">
       <div class="os-icon"><svg viewBox="0 0 485 485"><circle cx="242.5" cy="242.5" r="242.5" fill="#fff"/><path fill="#000" d="M139.157 383.053c16.613 1.984 35.279 12.746 50.9 14.646 15.705 1.983 20.565-10.695 20.565-10.695s17.673-3.951 36.253-4.406c18.598-.521 36.203 3.868 36.203 3.868s3.414 7.819 9.787 11.233c6.373 3.48 20.094 3.951 28.888-5.314 8.811-9.332 32.319-21.087 45.519-28.435 13.284-7.365 10.846-18.597 2.506-22.011-8.34-3.413-15.167-8.794-14.646-19.119.454-10.24-7.365-17.067-7.365-17.067s6.844-22.532.471-41.197c-6.373-18.58-27.392-48.461-43.551-70.926-16.159-22.532-2.439-48.545-17.151-81.789-14.714-33.294-52.867-31.326-73.432-17.135-20.565 14.192-14.26 49.386-13.268 66.084.992 16.613.454 28.501-1.446 32.773-1.9 4.338-15.167 20.094-23.978 33.294-8.794 13.267-15.168 40.659-21.608 51.959-6.306 11.233-1.9 21.473-1.9 21.473s-4.405 1.513-7.886 8.879c-3.414 7.281-10.241 10.761-22.533 13.133-12.208 2.505-12.208 10.375-9.265 19.186 2.959 8.794 0 13.721-3.414 24.954-3.431 11.266 13.653 14.679 30.333 16.647zm172.692-51.237c8.727 3.817 21.271-1.497 25.088-5.314 3.801-3.8 6.491-9.45 6.491-9.45s3.817 1.9 3.43 7.936c-.404 6.121 2.623 14.848 8.34 17.875 5.717 3.01 14.444 7.213 9.921 11.417-4.608 4.204-30.099 14.461-37.716 22.465-7.55 7.953-17.471 14.461-23.508 12.544-6.103-1.9-11.434-10.24-8.81-22.448 2.707-12.157 4.994-25.492 4.607-33.109-.403-7.617-1.9-17.874 0-19.388 1.9-1.497 4.927-.774 4.927-.774s-2.757 7.263 5.988 11.062l.242.084zm-56.633-205.783c8.407 0 15.184 8.34 15.184 18.597 0 7.281-3.414 13.587-8.408 16.614-1.261-.521-2.573-1.11-4.019-1.716 3.027-1.496 5.128-5.313 5.128-9.719 0-5.767-3.547-10.509-8.004-10.509-4.338 0-7.954 4.741-7.954 10.509 0 2.103.522 4.204 1.379 5.852-2.623-1.06-4.994-1.967-6.894-2.69-.992-2.506-1.581-5.331-1.581-8.34.001-10.258 6.76-18.598 15.169-18.598zm-20.818 32.05c4.137.723 15.503 5.65 19.708 7.163 4.204 1.446 8.861 4.136 8.407 6.827-.521 2.774-2.69 2.774-8.407 6.255-5.65 3.414-17.992 11.031-21.944 11.552-3.935.521-6.171-1.699-10.376-4.406-4.204-2.758-12.089-9.198-10.106-12.611 0 0 6.171-4.725 8.862-7.146 2.691-2.471 9.652-8.373 13.856-7.599v-.035zm-18.127-29.09c6.625 0 12.023 7.886 12.023 17.605 0 1.766-.202 3.413-.521 5.061-1.648.521-3.295 1.379-4.877 2.758-.773.656-1.497 1.244-2.152 1.9 1.042-1.967 1.446-4.792.975-7.752-.908-5.246-4.456-9.13-7.937-8.609-3.498.589-5.583 5.398-4.742 10.712.925 5.381 4.405 9.264 7.953 8.676.202-.067.387-.134.589-.202-1.698 1.648-3.279 3.094-4.927 4.271-4.792-2.237-8.34-8.929-8.34-16.815-.001-7.819 5.312-15.605 11.956-15.605zm-36.909 127.223c6.827-10.761 11.232-34.286 18.059-42.105 6.895-7.802 12.208-24.432 9.787-31.78 0 0 14.713 17.605 24.954 14.713 10.257-2.96 33.311-20.094 36.724-17.151 3.414 2.959 32.773 67.529 35.732 88.094 2.96 20.548-1.967 36.254-1.967 36.254s-11.232-2.96-12.679 3.867c-1.446 6.894-1.446 31.865-1.446 31.865s-15.184 21.019-38.692 24.499c-23.508 3.414-35.279.925-35.279.925l-13.2-15.117s10.258-1.513 8.811-11.821c-1.446-10.24-31.344-24.433-36.725-37.179-5.364-12.712-.975-34.252 5.936-44.474l-.015.01zm-58.13 77.114c1.177-5.044 16.411-5.044 22.263-8.592 5.852-3.548 7.028-13.738 11.754-16.428 4.657-2.758 13.267 7.029 16.815 12.543 3.481 5.381 16.816 28.906 22.264 34.757 5.515 5.902 10.577 13.721 8.996 20.75-1.496 7.028-9.786 12.157-9.786 12.157-7.415 2.287-28.098-6.642-37.497-10.577-9.399-3.951-33.311-5.129-36.388-8.609-3.161-3.548 1.513-11.367 2.757-18.783 1.227-7.432-2.253-12.09-1.06-17.151l-.118-.067z"/></svg></div>
       <h3>Linux</h3>
-      <div class="format"><span class="content-inline-zh">TAR.GZ / DEB / RPM<br>amd64 / arm64</span><span class="content-inline-en">TAR.GZ / DEB / RPM<br>amd64 / arm64</span></div>
+      <div class="format"><span data-i18n="install.linux">TAR.GZ / DEB / RPM<br>amd64 / arm64</span></div>
       <a href="https://github.com/ys-ll/uniterm/releases/latest" target="_blank" class="btn btn-primary release-link">
-        <span class="content-inline-zh">下载</span><span class="content-inline-en">Download</span>
+        <span data-i18n="common.download">下载</span>
       </a>
     </div>
 
     <div class="install-card">
       <div class="os-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3435-4.1021-2.6892-7.5743-6.1185-9.4396"/></svg></div>
       <h3>Android</h3>
-      <div class="format"><span class="content-inline-zh">APK 安装包<br>arm64</span><span class="content-inline-en">APK Installer<br>arm64</span></div>
+      <div class="format"><span data-i18n="install.android">APK 安装包<br>arm64</span></div>
       <a href="https://github.com/ys-ll/uniterm/releases/latest" target="_blank" class="btn btn-primary release-link">
-        <span class="content-inline-zh">下载</span><span class="content-inline-en">Download</span>
+        <span data-i18n="common.download">下载</span>
       </a>
     </div>
 
     <div class="install-card">
       <div class="os-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.082.185.185.185M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.376 11.376 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288Z"/></svg></div>
       <h3>Docker</h3>
-      <div class="format"><span class="content-inline-zh">Docker Hub 镜像 / 离线镜像包<br>amd64 / arm64</span><span class="content-inline-en">Docker Hub / Offline Archives<br>amd64 / arm64</span></div>
+      <div class="format"><span data-i18n="install.docker">Docker Hub 镜像 / 离线镜像包<br>amd64 / arm64</span></div>
       <a href="https://hub.docker.com/r/uniterm/uniterm" target="_blank" class="btn btn-primary">
-        <span class="content-inline-zh">Docker Hub</span><span class="content-inline-en">Docker Hub</span>
+        <span data-i18n="common.dockerHub">Docker Hub</span>
       </a>
       <a href="https://github.com/ys-ll/uniterm/releases/latest" target="_blank" class="btn btn-outline">
-        <span class="content-inline-zh">离线镜像包</span><span class="content-inline-en">Offline Archives</span>
+        <span data-i18n="install.offlineArchives">离线镜像包</span>
       </a>
     </div>
 
@@ -1346,21 +1343,20 @@ var _hmt = _hmt || [];
         <span>uniTerm</span>
       </div>
       <p class="footer-tagline">
-        <span class="content-inline-zh">轻量级一站式终端，内置自主执行的 AI Agent。<br>Windows · macOS · Linux · Android · Docker</span>
-        <span class="content-inline-en">A lightweight all-in-one terminal with an autonomous AI Agent.<br>Windows · macOS · Linux · Android · Docker</span>
+        <span data-i18n="footer.tagline">轻量级一站式终端，内置自主执行的 AI Agent。<br>Windows · macOS · Linux · Android · Docker</span>
       </p>
     </div>
     <div class="footer-col">
-      <div class="footer-head"><span class="content-zh">资源</span><span class="content-en">Resources</span></div>
-      <a href="/guide/zh/introduction" class="guide-link"><span class="content-zh">用户手册</span><span class="content-en">User Guide</span></a>
-      <a href="https://gitee.com/ys-l/uniterm/blob/main/CHANGELOG.md" data-github="https://github.com/ys-ll/uniterm/blob/main/CHANGELOG.md" data-gitee="https://gitee.com/ys-l/uniterm/blob/main/CHANGELOG.md" target="_blank" rel="noopener"><span class="content-zh">更新日志</span><span class="content-en">Changelog</span></a>
-      <a href="https://gitee.com/ys-l/uniterm/blob/main/ROADMAP.md" data-github="https://github.com/ys-ll/uniterm/blob/main/ROADMAP.md" data-gitee="https://gitee.com/ys-l/uniterm/blob/main/ROADMAP.md" target="_blank" rel="noopener"><span class="content-zh">路线图</span><span class="content-en">Roadmap</span></a>
+      <div class="footer-head"><span data-i18n="footer.resources">资源</span></div>
+      <a href="/guide/zh/introduction" class="guide-link"><span data-i18n="nav.guide">用户手册</span></a>
+      <a href="https://gitee.com/ys-l/uniterm/blob/main/CHANGELOG.md" data-github="https://github.com/ys-ll/uniterm/blob/main/CHANGELOG.md" data-gitee="https://gitee.com/ys-l/uniterm/blob/main/CHANGELOG.md" target="_blank" rel="noopener"><span data-i18n="footer.changelog">更新日志</span></a>
+      <a href="https://gitee.com/ys-l/uniterm/blob/main/ROADMAP.md" data-github="https://github.com/ys-ll/uniterm/blob/main/ROADMAP.md" data-gitee="https://gitee.com/ys-l/uniterm/blob/main/ROADMAP.md" target="_blank" rel="noopener"><span data-i18n="footer.roadmap">路线图</span></a>
     </div>
     <div class="footer-col">
-      <div class="footer-head"><span class="content-zh">社区</span><span class="content-en">Community</span></div>
+      <div class="footer-head"><span data-i18n="footer.community">社区</span></div>
       <a href="https://github.com/ys-ll/uniterm" target="_blank" rel="noopener">GitHub</a>
       <a href="https://gitee.com/ys-l/uniterm" target="_blank" rel="noopener">Gitee</a>
-      <a href="https://github.com/ys-ll/uniterm/issues" target="_blank" rel="noopener"><span class="content-zh">反馈与建议</span><span class="content-en">Feedback &amp; Issues</span></a>
+      <a href="https://github.com/ys-ll/uniterm/issues" target="_blank" rel="noopener"><span data-i18n="footer.feedback">反馈与建议</span></a>
     </div>
   </div>
   <div class="footer-bottom">
@@ -1373,17 +1369,707 @@ var _hmt = _hmt || [];
 var curLang = 'zh-CN';
 var curRel = { tag: 'v1.10.0', date: '2026-10-04' };
 
+/* ── UI languages ──
+   All translatable copy lives in the I18N dictionary below, keyed by the
+   data-i18n attributes in the markup. The markup itself ships with the
+   zh-CN strings as the static default (SEO / no-JS first paint); setLang()
+   re-renders every [data-i18n] element from the dictionary. To add a
+   language: add a dictionary here and a button in the #lang-menu. */
+var LANGS = ['zh-CN', 'zh-TW', 'en', 'ja', 'ko', 'de', 'es', 'fr', 'ru', 'pt', 'vi'];
+var LANG_LABEL = {
+  'zh-CN': '简体中文',
+  'zh-TW': '繁體中文',
+  'en': 'EN',
+  'ja': '日本語',
+  'ko': '한국어',
+  'de': 'Deutsch',
+  'es': 'Español',
+  'fr': 'Français',
+  'ru': 'Русский',
+  'pt': 'Português',
+  'vi': 'Tiếng Việt'
+};
+var PAGE_TITLES = {
+  'zh-CN': 'uniTerm - 轻量级一站式终端软件，内置 AI Agent',
+  'zh-TW': 'uniTerm - 輕量級一站式終端軟體，內建 AI Agent',
+  'en': 'uniTerm - Lightweight All-in-One Terminal Emulator with Built-in AI Agent',
+  'ja': 'uniTerm - 軽量オールインワンターミナル、AI エージェント内蔵',
+  'ko': 'uniTerm - AI 에이전트 내장 경량 올인원 터미널',
+  'de': 'uniTerm - Leichtes All-in-One-Terminal mit integriertem KI-Agenten',
+  'es': 'uniTerm - Terminal todo en uno ligero con Agente de IA integrado',
+  'fr': 'uniTerm - Terminal tout-en-un léger avec Agent IA intégré',
+  'ru': 'uniTerm - Лёгкий универсальный терминал со встроенным AI-агентом',
+  'pt': 'uniTerm - Terminal tudo-em-um leve com Agente de IA integrado',
+  'vi': 'uniTerm - Terminal tất cả trong một nhẹ nhàng với AI Agent tích hợp'
+};
+
+var I18N = {
+  "zh-CN": {
+    "nav.features": "功能特性",
+    "common.download": "下载",
+    "nav.guide": "用户手册",
+    "menu.repos": "代码仓库",
+    "hero.subtitle": "一站式终端，覆盖 30 余种协议<br>内置自主执行多轮命令的 AI Agent",
+    "hero.released": "发布",
+    "hero.opensource": "开源",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "下载安装",
+    "feat1.title": "全功能终端",
+    "feat1.desc": "终端、文件传输、远程桌面、数据库、容器 —— 覆盖全部远程访问场景。",
+    "feat1.terminal": "终端",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh 远程终端，PowerShell / Git Bash / WSL 本地终端与串口连接，SSH 隧道转发与服务器实时监控",
+    "feat1.file": "文件传输",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，双栏浏览、鼠标拖拽上传下载，SSH 内 `rz`/`sz`",
+    "feat1.rdp": "远程桌面",
+    "feat1.rdpDesc": "RDP（Windows 远程桌面）、VNC（Linux 远程控制）、SPICE（KVM/QEMU 虚拟机）、X11（X Window 图形界面转发）",
+    "feat1.db": "数据库客户端",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch，AI 自然语言生成查询与数据行编辑",
+    "feat1.k8s": "Kubernetes &amp; 容器",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC，集群资源与容器镜像管理、Pod 日志与 exec 终端、CPU/内存指标",
+    "feat2.agent": "AI Agent",
+    "feat2.desc": "自主执行的 AI Agent，独立规划并执行多轮 Shell 命令，直接在终端中完成复杂任务。",
+    "feat2.agentDesc": "AI Agent 自主规划并多轮执行命令，直接在终端完成复杂任务；兼容 Anthropic / OpenAI 协议，支持 Claude、GPT 等模型，四种执行模式自主权由你掌控",
+    "feat2.skills": "技能与命令",
+    "feat2.skillsDesc": "可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可触发，AI 也可自行沉淀新技能",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "外部 AI Agent 经 MCP 安全执行命令、传输文件，凭据不出应用",
+    "feat2.sql": "AI 生成 SQL",
+    "feat2.sqlDesc": "用自然语言描述查询需求，AI 结合表结构自动生成 SQL 并直接执行",
+    "feat2.completion": "智能提示",
+    "feat2.completionDesc": "输入时按历史命令与 AI 能力实时补全",
+    "feat3.title": "个性化能力",
+    "feat3.desc": "连接管理、自由分屏、云端同步、主题与国际化 —— 你的终端由你掌控。",
+    "feat3.conn": "连接管理器",
+    "feat3.connDesc": "快速搜索、新建连接、分组排序、批量操作",
+    "feat3.workspace": "工作区",
+    "feat3.workspaceDesc": "将终端标签拖到内容区即可自由分屏，任意组合成工作区",
+    "feat3.sync": "云端配置同步",
+    "feat3.syncDesc": "Git / WebDAV / SFTP / S3 / SMB 加密云同步，多设备无缝接续，无惧丢失泄露",
+    "feat3.keys": "自定义快捷键",
+    "feat3.keysDesc": "自由绑定各项操作的快捷键，实现全键盘操作",
+    "feat3.themes": "主题与国际化",
+    "feat3.themesDesc": "28 款终端主题、3 款界面主题、自定义背景图片，支持简中、英、日、韩等 11 种语言界面",
+    "install.windows": "EXE 安装版 / ZIP 便携版<br>amd64 / arm64",
+    "install.macos": "DMG 安装包<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "APK 安装包<br>arm64",
+    "install.docker": "Docker Hub 镜像 / 离线镜像包<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "离线镜像包",
+    "footer.tagline": "轻量级一站式终端，内置自主执行的 AI Agent。<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "资源",
+    "footer.changelog": "更新日志",
+    "footer.roadmap": "路线图",
+    "footer.community": "社区",
+    "footer.feedback": "反馈与建议"
+  },
+  "zh-TW": {
+    "nav.features": "功能特性",
+    "common.download": "下載",
+    "nav.guide": "使用者手冊",
+    "menu.repos": "程式碼儲存庫",
+    "hero.subtitle": "一站式終端機，涵蓋 30 種以上協定<br>內建可自主執行多輪指令的 AI Agent",
+    "hero.released": "發布",
+    "hero.opensource": "開源",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "下載安裝",
+    "feat1.title": "全功能終端機",
+    "feat1.desc": "終端機、檔案傳輸、遠端桌面、資料庫、容器 —— 涵蓋全部遠端存取場景。",
+    "feat1.terminal": "終端機",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh 遠端終端機，PowerShell / Git Bash / WSL 本地終端機與串列埠連接，SSH 隧道轉發與伺服器即時監控",
+    "feat1.file": "檔案傳輸",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，雙欄瀏覽、滑鼠拖曳上傳下載，SSH 內 `rz`/`sz`",
+    "feat1.rdp": "遠端桌面",
+    "feat1.rdpDesc": "RDP（Windows 遠端桌面）、VNC（Linux 遠端控制）、SPICE（KVM/QEMU 虛擬機器）、X11（X Window 圖形介面轉發）",
+    "feat1.db": "資料庫用戶端",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch，AI 自然語言產生查詢與資料列編輯",
+    "feat1.k8s": "Kubernetes 與容器",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC，叢集資源與容器映像管理、Pod 日誌與 exec 終端機、CPU/記憶體指標",
+    "feat2.agent": "AI Agent",
+    "feat2.desc": "自主執行的 AI Agent，獨立規劃並執行多輪 Shell 指令，直接在終端機中完成複雜任務。",
+    "feat2.agentDesc": "AI Agent 自主規劃並多輪執行指令，直接在終端機完成複雜任務；相容 Anthropic / OpenAI 協定，支援 Claude、GPT 等模型，四種執行模式自主權由你掌控",
+    "feat2.skills": "技能與指令",
+    "feat2.skillsDesc": "可複用的 Skill 工作流與 Prompt 指令範本，輸入 `/` 即可觸發，AI 也可自行沉澱新技能",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "外部 AI Agent 經 MCP 安全執行指令、傳輸檔案，憑證不出應用",
+    "feat2.sql": "AI 產生 SQL",
+    "feat2.sqlDesc": "用自然語言描述查詢需求，AI 結合資料表結構自動產生 SQL 並直接執行",
+    "feat2.completion": "智慧補全",
+    "feat2.completionDesc": "輸入時按歷史指令與 AI 能力即時補全",
+    "feat3.title": "個人化能力",
+    "feat3.desc": "連線管理、自由分屏、雲端同步、主題與國際化 —— 你的終端機由你掌控。",
+    "feat3.conn": "連線管理員",
+    "feat3.connDesc": "快速搜尋、新增連線、群組排序、批次操作",
+    "feat3.workspace": "工作區",
+    "feat3.workspaceDesc": "將終端機標籤拖到內容區即可自由分屏，任意組合成工作區",
+    "feat3.sync": "雲端配置同步",
+    "feat3.syncDesc": "Git / WebDAV / SFTP / S3 / SMB 加密雲端同步，多裝置無縫接續，無懼遺失洩露",
+    "feat3.keys": "自訂快捷鍵",
+    "feat3.keysDesc": "自由綁定各項操作的快捷鍵，實現全鍵盤操作",
+    "feat3.themes": "主題與國際化",
+    "feat3.themesDesc": "28 種終端機主題、3 種介面主題、自訂背景圖片，支援繁中、簡中、英、日、韓等 11 種語言介面",
+    "install.windows": "EXE 安裝版 / ZIP 攜帶版<br>amd64 / arm64",
+    "install.macos": "DMG 安裝包<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "APK 安裝包<br>arm64",
+    "install.docker": "Docker Hub 映像 / 離線映像包<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "離線映像包",
+    "footer.tagline": "輕量級一站式終端機，內建自主執行的 AI Agent。<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "資源",
+    "footer.changelog": "更新日誌",
+    "footer.roadmap": "路線圖",
+    "footer.community": "社群",
+    "footer.feedback": "回饋與建議"
+  },
+  "en": {
+    "nav.features": "Features",
+    "common.download": "Download",
+    "nav.guide": "User Guide",
+    "menu.repos": "Repositories",
+    "hero.subtitle": "All-in-one terminal with 30+ protocols<br>Built-in AI Agent that runs multi-turn shell commands",
+    "hero.released": "released",
+    "hero.opensource": "open source",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "Download",
+    "feat1.title": "Full-Featured Terminal",
+    "feat1.desc": "Terminal, file transfer, remote desktop, database, and containers — covering all remote access needs.",
+    "feat1.terminal": "Terminal",
+    "feat1.terminalDesc": "Remote SSH / Telnet / Mosh, local PowerShell / Git Bash / WSL and serial terminals, with SSH tunnel forwarding and live server monitoring",
+    "feat1.file": "File Transfer",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, dual-pane browse, drag-and-drop transfer, `rz`/`sz` in SSH",
+    "feat1.rdp": "Remote Desktop",
+    "feat1.rdpDesc": "RDP (Windows Remote Desktop), VNC (Linux remote control), SPICE (KVM/QEMU VMs), X11 (X Window forwarding)",
+    "feat1.db": "Database Client",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — AI natural language query generation &amp; inline row editing",
+    "feat1.k8s": "Kubernetes &amp; Containers",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — cluster resources and container/image management, Pod logs and exec terminals, CPU/memory metrics",
+    "feat2.agent": "AI Agent",
+    "feat2.desc": "Autonomous AI Agent that independently plans and executes multi-turn shell commands directly in your terminal.",
+    "feat2.agentDesc": "The AI Agent plans and executes multi-turn commands right in your terminal; Anthropic / OpenAI-compatible with Claude, GPT and more, plus four execution modes under your control",
+    "feat2.skills": "Skills &amp; Commands",
+    "feat2.skillsDesc": "Reusable skill workflows and prompt-template commands triggered with `/`; the AI can also save new skills itself",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "External AI agents run commands and transfer files via MCP — credentials never leave the app",
+    "feat2.sql": "AI SQL Generation",
+    "feat2.sqlDesc": "Describe your query in natural language and the AI generates SQL from your schema, ready to run",
+    "feat2.completion": "Smart Completion",
+    "feat2.completionDesc": "Real-time completion from command history and AI as you type",
+    "feat3.title": "Personalization",
+    "feat3.desc": "Connection management, split panes, cloud sync, themes &amp; languages — your terminal, your way.",
+    "feat3.conn": "Connection Manager",
+    "feat3.connDesc": "Quick search, new connection, grouping, sorting, batch ops",
+    "feat3.workspace": "Workspace",
+    "feat3.workspaceDesc": "Drag terminal tabs into the content area to split freely and combine into a workspace",
+    "feat3.sync": "Cloud Sync",
+    "feat3.syncDesc": "Encrypted cloud sync via Git, WebDAV, SFTP, S3 or SMB — seamless across devices",
+    "feat3.keys": "Custom Keybindings",
+    "feat3.keysDesc": "Freely bind shortcuts for every action for full keyboard-driven operation",
+    "feat3.themes": "Themes &amp; Languages",
+    "feat3.themesDesc": "28 terminal themes, 3 UI themes and a custom background image, with an 11-language UI including Chinese, English, Japanese and Korean",
+    "install.windows": "EXE Installer / ZIP Portable<br>amd64 / arm64",
+    "install.macos": "DMG Installer<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "APK Installer<br>arm64",
+    "install.docker": "Docker Hub / Offline Archives<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "Offline Archives",
+    "footer.tagline": "A lightweight all-in-one terminal with an autonomous AI Agent.<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "Resources",
+    "footer.changelog": "Changelog",
+    "footer.roadmap": "Roadmap",
+    "footer.community": "Community",
+    "footer.feedback": "Feedback &amp; Issues"
+  },
+  "ja": {
+    "nav.features": "機能",
+    "common.download": "ダウンロード",
+    "nav.guide": "ユーザーガイド",
+    "menu.repos": "リポジトリ",
+    "hero.subtitle": "30 以上のプロトコルに対応したオールインワンターミナル<br>複数ターンのシェルコマンドを自律的に実行する AI エージェントを内蔵",
+    "hero.released": "リリース",
+    "hero.opensource": "オープンソース",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "ダウンロード",
+    "feat1.title": "フル機能ターミナル",
+    "feat1.desc": "ターミナル、ファイル転送、リモートデスクトップ、データベース、コンテナ —— あらゆるリモートアクセスに対応。",
+    "feat1.terminal": "ターミナル",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh リモートターミナル、PowerShell / Git Bash / WSL ローカルターミナルとシリアル接続、SSH トンネル転送とサーバー監視",
+    "feat1.file": "ファイル転送",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem、2 ペイン表示、ドラッグ＆ドロップ転送、SSH 内 `rz`/`sz`",
+    "feat1.rdp": "リモートデスクトップ",
+    "feat1.rdpDesc": "RDP（Windows リモートデスクトップ）、VNC（Linux リモート操作）、SPICE（KVM/QEMU VM）、X11（X Window 転送）",
+    "feat1.db": "データベースクライアント",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — AI 自然言語クエリ生成と行編集",
+    "feat1.k8s": "Kubernetes とコンテナ",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — クラスターリソースとイメージ管理、Pod ログと exec ターミナル、CPU/メモリ指標",
+    "feat2.agent": "AI エージェント",
+    "feat2.desc": "自律的に動作する AI エージェント。多ターンのシェルコマンドを独立して計画・実行し、ターミナル上で複雑なタスクを完遂します。",
+    "feat2.agentDesc": "AI エージェントが自律的に計画し、複数ターンでコマンドを実行。Anthropic / OpenAI 互換で Claude、GPT 等に対応、4 つの実行モードで権限を制御",
+    "feat2.skills": "スキルとコマンド",
+    "feat2.skillsDesc": "再利用可能な Skill ワークフローとプロンプトコマンドテンプレート。`/` 入力で呼び出し、AI 自らも新しいスキルを保存できます",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "外部 AI エージェントが MCP 経由で安全にコマンド実行・ファイル転送。資格情報はアプリ外に出ません",
+    "feat2.sql": "AI SQL 生成",
+    "feat2.sqlDesc": "自然言語でクエリを説明すると、AI がテーブル構造から SQL を自動生成して実行",
+    "feat2.completion": "スマート補完",
+    "feat2.completionDesc": "入力中に履歴コマンドと AI からリアルタイム補完",
+    "feat3.title": "パーソナライズ",
+    "feat3.desc": "接続管理、自由な画面分割、クラウド同期、テーマと国際化 —— あなたのターミナルはあなた流に。",
+    "feat3.conn": "接続マネージャー",
+    "feat3.connDesc": "検索、新規接続、グループ化、並べ替え、一括操作",
+    "feat3.workspace": "ワークスペース",
+    "feat3.workspaceDesc": "ターミナルタブをコンテンツ領域へドラッグして自由に分割し、ワークスペースを組み合わせられます",
+    "feat3.sync": "クラウド同期",
+    "feat3.syncDesc": "Git / WebDAV / SFTP / S3 / SMB による暗号化クラウド同期。複数デバイスでシームレスに接続、喪失・漏えいの心配なし",
+    "feat3.keys": "カスタムキーバインド",
+    "feat3.keysDesc": "すべての操作にショートカットを自由に割り当て、フルキーボード操作を実現",
+    "feat3.themes": "テーマと言語",
+    "feat3.themesDesc": "28 種類のターミナルテーマ、3 種類の UI テーマ、カスタム背景画像。日本語を含む 11 言語の UI に対応",
+    "install.windows": "EXE インストーラー / ZIP ポータブル<br>amd64 / arm64",
+    "install.macos": "DMG インストーラー<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "APK インストーラー<br>arm64",
+    "install.docker": "Docker Hub イメージ / オフラインイメージ<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "オフラインイメージ",
+    "footer.tagline": "軽量オールインワンターミナル、自律実行する AI エージェントを内蔵。<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "リソース",
+    "footer.changelog": "更新履歴",
+    "footer.roadmap": "ロードマップ",
+    "footer.community": "コミュニティ",
+    "footer.feedback": "フィードバックと Issue"
+  },
+  "ko": {
+    "nav.features": "기능",
+    "common.download": "다운로드",
+    "nav.guide": "사용자 가이드",
+    "menu.repos": "저장소",
+    "hero.subtitle": "30개 이상의 프로토콜을 지원하는 올인원 터미널<br>여러 턴의 셸 명령을 자율적으로 실행하는 AI 에이전트 내장",
+    "hero.released": "릴리스",
+    "hero.opensource": "오픈 소스",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "다운로드",
+    "feat1.title": "풀 기능 터미널",
+    "feat1.desc": "터미널, 파일 전송, 원격 데스크톱, 데이터베이스, 컨테이너 — 모든 원격 접속 시나리오를 지원합니다.",
+    "feat1.terminal": "터미널",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh 원격 터미널, PowerShell / Git Bash / WSL 로컬 터미널과 시리얼 연결, SSH 터널 포워딩과 서버 실시간 모니터링",
+    "feat1.file": "파일 전송",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, 2분할 탐색, 드래그 앤 드롭 전송, SSH 내 `rz`/`sz`",
+    "feat1.rdp": "원격 데스크톱",
+    "feat1.rdpDesc": "RDP(Windows 원격 데스크톱), VNC(Linux 원격 제어), SPICE(KVM/QEMU 가상 머신), X11(X Window 포워딩)",
+    "feat1.db": "데이터베이스 클라이언트",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — AI 자연어 쿼리 생성과 데이터 행 편집",
+    "feat1.k8s": "Kubernetes 및 컨테이너",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — 클러스터 리소스와 컨테이너 이미지 관리, Pod 로그 및 exec 터미널, CPU/메모리 지표",
+    "feat2.agent": "AI 에이전트",
+    "feat2.desc": "자율적으로 동작하는 AI 에이전트. 여러 턴의 셸 명령을 독자적으로 계획·실행하여 터미널에서 복잡한 작업을 완수합니다.",
+    "feat2.agentDesc": "AI 에이전트가 자율적으로 계획하고 여러 턴에 걸쳐 명령을 실행합니다. Anthropic / OpenAI 호환, Claude·GPT 등 지원, 4가지 실행 모드로 권한 제어",
+    "feat2.skills": "스킬 및 명령",
+    "feat2.skillsDesc": "재사용 가능한 스킬 워크플로와 프롬프트 명령 템플릿, `/` 입력으로 호출, AI 스스로 새 스킬을 저장할 수도 있습니다",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "외부 AI 에이전트가 MCP를 통해 안전하게 명령을 실행하고 파일을 전송합니다 — 자격 증명은 앱 밖으로 나가지 않습니다",
+    "feat2.sql": "AI SQL 생성",
+    "feat2.sqlDesc": "자연어로 조회를 설명하면 AI가 테이블 구조를 반영해 SQL을 자동 생성하고 바로 실행합니다",
+    "feat2.completion": "스마트 완성",
+    "feat2.completionDesc": "입력 시 명령 기록과 AI를 기반으로 실시간 완성",
+    "feat3.title": "개인화",
+    "feat3.desc": "연결 관리, 자유로운 분할 화면, 클라우드 동기화, 테마와 다국어 — 터미널은 내 방식대로.",
+    "feat3.conn": "연결 관리자",
+    "feat3.connDesc": "빠른 검색, 새 연결, 그룹화·정렬, 일괄 작업",
+    "feat3.workspace": "워크스페이스",
+    "feat3.workspaceDesc": "터미널 탭을 콘텐츠 영역으로 드래그해 자유롭게 분할하고 워크스페이스로 조합",
+    "feat3.sync": "클라우드 동기화",
+    "feat3.syncDesc": "Git / WebDAV / SFTP / S3 / SMB 암호화 클라우드 동기화, 여러 기기에서 끊김 없이 이어서 작업",
+    "feat3.keys": "사용자 지정 단축키",
+    "feat3.keysDesc": "모든 작업에 단축키를 자유롭게 할당하여 완전한 키보드 조작 구현",
+    "feat3.themes": "테마 및 언어",
+    "feat3.themesDesc": "28가지 터미널 테마, 3가지 UI 테마, 사용자 지정 배경 이미지, 한국어 등 11개 언어 UI 지원",
+    "install.windows": "EXE 설치판 / ZIP 포터블<br>amd64 / arm64",
+    "install.macos": "DMG 설치 패키지<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "APK 설치 패키지<br>arm64",
+    "install.docker": "Docker Hub 이미지 / 오프라인 이미지<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "오프라인 이미지",
+    "footer.tagline": "가볍고 올인원인 터미널, 자율 실행 AI 에이전트 내장.<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "리소스",
+    "footer.changelog": "변경 로그",
+    "footer.roadmap": "로드맵",
+    "footer.community": "커뮤니티",
+    "footer.feedback": "피드백 및 이슈"
+  },
+  "de": {
+    "nav.features": "Funktionen",
+    "common.download": "Download",
+    "nav.guide": "Benutzerhandbuch",
+    "menu.repos": "Repositories",
+    "hero.subtitle": "All-in-One-Terminal mit 30+ Protokollen<br>Integrierter KI-Agent, der Shell-Befehle über mehrere Runden autonom ausführt",
+    "hero.released": "veröffentlicht",
+    "hero.opensource": "Open Source",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "Download",
+    "feat1.title": "Terminal mit vollem Funktionsumfang",
+    "feat1.desc": "Terminal, Dateiübertragung, Remote Desktop, Datenbanken und Container — für alle Remote-Access-Szenarien.",
+    "feat1.terminal": "Terminal",
+    "feat1.terminalDesc": "Remote SSH / Telnet / Mosh, lokale PowerShell-/Git-Bash-/WSL-Terminals und serielle Verbindungen, mit SSH-Tunnel-Forwarding und Server-Monitoring in Echtzeit",
+    "feat1.file": "Dateiübertragung",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, Zwei-Fenster-Ansicht, Drag-and-Drop-Übertragung, `rz`/`sz` in SSH",
+    "feat1.rdp": "Remote Desktop",
+    "feat1.rdpDesc": "RDP (Windows Remote Desktop), VNC (Linux-Fernsteuerung), SPICE (KVM/QEMU-VMs), X11 (X-Window-Forwarding)",
+    "feat1.db": "Datenbank-Client",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — KI-generierte Abfragen in natürlicher Sprache &amp; Inline-Zeilenbearbeitung",
+    "feat1.k8s": "Kubernetes &amp; Container",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — Cluster-Ressourcen und Image-Verwaltung, Pod-Logs und exec-Terminals, CPU-/Speicher-Metriken",
+    "feat2.agent": "AI Agent",
+    "feat2.desc": "Autonomer KI-Agent, der mehrstufige Shell-Befehle selbstständig plant und direkt im Terminal ausführt.",
+    "feat2.agentDesc": "Der KI-Agent plant und führt Befehle über mehrere Runden direkt im Terminal aus; Anthropic-/OpenAI-kompatibel mit Claude, GPT und mehr, vier Ausführungsmodi unter Ihrer Kontrolle",
+    "feat2.skills": "Skills &amp; Befehle",
+    "feat2.skillsDesc": "Wiederverwendbare Skill-Workflows und Prompt-Befehlsvorlagen, ausgelöst mit `/`; die KI kann auch selbst neue Skills speichern",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "Externe KI-Agenten führen Befehle aus und übertragen Dateien sicher über MCP — Zugangsdaten verlassen die App nie",
+    "feat2.sql": "KI-SQL-Generierung",
+    "feat2.sqlDesc": "Abfrage in natürlicher Sprache beschreiben, und die KI generiert aus dem Schema SQL, das direkt ausgeführt werden kann",
+    "feat2.completion": "Intelligente Vervollständigung",
+    "feat2.completionDesc": "Echtzeit-Vervollständigung aus Befehlsverlauf und KI während der Eingabe",
+    "feat3.title": "Personalisierung",
+    "feat3.desc": "Verbindungsverwaltung, freie Fensteranordnung, Cloud-Sync, Designs &amp; Sprachen — Ihr Terminal, Ihre Regeln.",
+    "feat3.conn": "Verbindungsmanager",
+    "feat3.connDesc": "Schnellsuche, neue Verbindungen, Gruppierung, Sortierung, Sammelaktionen",
+    "feat3.workspace": "Arbeitsbereich",
+    "feat3.workspaceDesc": "Terminal-Tabs in den Inhaltsbereich ziehen, um frei zu teilen und zu Arbeitsbereichen zu kombinieren",
+    "feat3.sync": "Cloud-Sync",
+    "feat3.syncDesc": "Verschlüsselte Cloud-Sync über Git, WebDAV, SFTP, S3 oder SMB — nahtlos auf allen Geräten",
+    "feat3.keys": "Eigene Tastenkürzel",
+    "feat3.keysDesc": "Tastenkürzel für jede Aktion frei belegen — komplett per Tastatur bedienbar",
+    "feat3.themes": "Designs &amp; Sprachen",
+    "feat3.themesDesc": "28 Terminal-Designs, 3 UI-Designs und ein anpassbares Hintergrundbild, mit Benutzeroberfläche in 11 Sprachen",
+    "install.windows": "EXE-Installer / ZIP-Portable<br>amd64 / arm64",
+    "install.macos": "DMG-Installer<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "APK-Installer<br>arm64",
+    "install.docker": "Docker-Hub-Image / Offline-Images<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "Offline-Images",
+    "footer.tagline": "Leichtes All-in-One-Terminal mit autonomem KI-Agenten.<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "Ressourcen",
+    "footer.changelog": "Änderungsprotokoll",
+    "footer.roadmap": "Roadmap",
+    "footer.community": "Community",
+    "footer.feedback": "Feedback &amp; Probleme"
+  },
+  "es": {
+    "nav.features": "Funciones",
+    "common.download": "Descargar",
+    "nav.guide": "Guía de usuario",
+    "menu.repos": "Repositorios",
+    "hero.subtitle": "Terminal todo en uno con más de 30 protocolos<br>Agente de IA integrado que ejecuta comandos de shell en múltiples turnos de forma autónoma",
+    "hero.released": "publicado",
+    "hero.opensource": "código abierto",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "Descargar",
+    "feat1.title": "Terminal con todas las funciones",
+    "feat1.desc": "Terminal, transferencia de archivos, escritorio remoto, bases de datos y contenedores — cubre todas las necesidades de acceso remoto.",
+    "feat1.terminal": "Terminal",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh remotos, terminales locales PowerShell / Git Bash / WSL y conexiones serie, con túneles SSH y monitorización de servidores en tiempo real",
+    "feat1.file": "Transferencia de archivos",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, vista de doble panel, transferencia por arrastrar y soltar, `rz`/`sz` en SSH",
+    "feat1.rdp": "Escritorio remoto",
+    "feat1.rdpDesc": "RDP (Escritorio remoto de Windows), VNC (control remoto de Linux), SPICE (VMs KVM/QEMU), X11 (reenvío de X Window)",
+    "feat1.db": "Cliente de bases de datos",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — consultas en lenguaje natural con IA y edición de filas en línea",
+    "feat1.k8s": "Kubernetes y contenedores",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — gestión de recursos de clúster e imágenes, registros de Pods y terminales exec, métricas de CPU/memoria",
+    "feat2.agent": "Agente de IA",
+    "feat2.desc": "Agente de IA autónomo que planifica y ejecuta comandos de shell en múltiples turnos directamente en tu terminal.",
+    "feat2.agentDesc": "El Agente de IA planifica y ejecuta comandos en múltiples turnos directamente en tu terminal; compatible con Anthropic / OpenAI (Claude, GPT y más), con cuatro modos de ejecución bajo tu control",
+    "feat2.skills": "Habilidades y comandos",
+    "feat2.skillsDesc": "Flujos de trabajo reutilizables y plantillas de comandos con prompts, activados con `/`; la IA también puede guardar nuevas habilidades por sí misma",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "Agentes de IA externos ejecutan comandos y transfieren archivos de forma segura vía MCP — las credenciales nunca salen de la app",
+    "feat2.sql": "Generación de SQL con IA",
+    "feat2.sqlDesc": "Describe tu consulta en lenguaje natural y la IA genera el SQL a partir del esquema, listo para ejecutar",
+    "feat2.completion": "Autocompletado inteligente",
+    "feat2.completionDesc": "Autocompletado en tiempo real a partir del historial de comandos y la IA mientras escribes",
+    "feat3.title": "Personalización",
+    "feat3.desc": "Gestión de conexiones, paneles divididos, sincronización en la nube, temas e idiomas — tu terminal, a tu manera.",
+    "feat3.conn": "Gestor de conexiones",
+    "feat3.connDesc": "Búsqueda rápida, nuevas conexiones, agrupación, ordenación y operaciones por lotes",
+    "feat3.workspace": "Espacio de trabajo",
+    "feat3.workspaceDesc": "Arrastra pestañas de terminal al área de contenido para dividir libremente y combinar en un espacio de trabajo",
+    "feat3.sync": "Sincronización en la nube",
+    "feat3.syncDesc": "Sincronización cifrada en la nube vía Git, WebDAV, SFTP, S3 o SMB — sin problemas entre dispositivos",
+    "feat3.keys": "Atajos personalizados",
+    "feat3.keysDesc": "Asigna libremente atajos a cada acción para un manejo totalmente por teclado",
+    "feat3.themes": "Temas e idiomas",
+    "feat3.themesDesc": "28 temas de terminal, 3 temas de interfaz e imagen de fondo personalizable, con interfaz en 11 idiomas",
+    "install.windows": "Instalador EXE / Portátil ZIP<br>amd64 / arm64",
+    "install.macos": "Instalador DMG<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "Instalador APK<br>arm64",
+    "install.docker": "Imagen de Docker Hub / Imágenes sin conexión<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "Imágenes sin conexión",
+    "footer.tagline": "Terminal todo en uno ligero con un Agente de IA autónomo.<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "Recursos",
+    "footer.changelog": "Registro de cambios",
+    "footer.roadmap": "Hoja de ruta",
+    "footer.community": "Comunidad",
+    "footer.feedback": "Comentarios e incidencias"
+  },
+  "fr": {
+    "nav.features": "Fonctionnalités",
+    "common.download": "Télécharger",
+    "nav.guide": "Guide de l'utilisateur",
+    "menu.repos": "Dépôts",
+    "hero.subtitle": "Terminal tout-en-un couvrant plus de 30 protocoles<br>Agent IA intégré exécutant des commandes shell en plusieurs tours de façon autonome",
+    "hero.released": "publiée",
+    "hero.opensource": "open source",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "Télécharger",
+    "feat1.title": "Terminal complet",
+    "feat1.desc": "Terminal, transfert de fichiers, bureau à distance, bases de données et conteneurs — pour tous les besoins d'accès distant.",
+    "feat1.terminal": "Terminal",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh distants, terminaux locaux PowerShell / Git Bash / WSL et connexions série, avec transfert de tunnel SSH et supervision serveur en temps réel",
+    "feat1.file": "Transfert de fichiers",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, double panneau, glisser-déposer, `rz`/`sz` dans SSH",
+    "feat1.rdp": "Bureau à distance",
+    "feat1.rdpDesc": "RDP (bureau à distance Windows), VNC (contrôle distant Linux), SPICE (VM KVM/QEMU), X11 (transfert X Window)",
+    "feat1.db": "Client de bases de données",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — requêtes en langage naturel par IA et édition de lignes en ligne",
+    "feat1.k8s": "Kubernetes et conteneurs",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — ressources de cluster et gestion d'images, logs de Pods et terminaux exec, métriques CPU/mémoire",
+    "feat2.agent": "Agent IA",
+    "feat2.desc": "Agent IA autonome qui planifie et exécute des commandes shell en plusieurs tours directement dans votre terminal.",
+    "feat2.agentDesc": "L'agent IA planifie et exécute des commandes sur plusieurs tours directement dans votre terminal ; compatible Anthropic / OpenAI (Claude, GPT et plus), quatre modes d'exécution sous votre contrôle",
+    "feat2.skills": "Compétences et commandes",
+    "feat2.skillsDesc": "Workflows de compétences réutilisables et modèles de commandes prompt, déclenchés avec `/` ; l'IA peut aussi sauvegarder elle-même de nouvelles compétences",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "Des agents IA externes exécutent des commandes et transfèrent des fichiers via MCP — les identifiants ne quittent jamais l'application",
+    "feat2.sql": "Génération de SQL par IA",
+    "feat2.sqlDesc": "Décrivez votre requête en langage naturel et l'IA génère le SQL à partir de votre schéma, prêt à exécuter",
+    "feat2.completion": "Complétion intelligente",
+    "feat2.completionDesc": "Complétion en temps réel à partir de l'historique des commandes et de l'IA pendant la saisie",
+    "feat3.title": "Personnalisation",
+    "feat3.desc": "Gestion des connexions, panneaux divisibles, synchronisation cloud, thèmes et langues — votre terminal, à votre façon.",
+    "feat3.conn": "Gestionnaire de connexions",
+    "feat3.connDesc": "Recherche rapide, nouvelle connexion, groupement, tri, opérations par lot",
+    "feat3.workspace": "Espace de travail",
+    "feat3.workspaceDesc": "Faites glisser des onglets de terminal dans la zone de contenu pour diviser librement et composer un espace de travail",
+    "feat3.sync": "Synchronisation cloud",
+    "feat3.syncDesc": "Synchronisation cloud chiffrée via Git, WebDAV, SFTP, S3 ou SMB — transparente sur tous vos appareils",
+    "feat3.keys": "Raccourcis personnalisés",
+    "feat3.keysDesc": "Attribuez librement des raccourcis à chaque action pour une utilisation entièrement au clavier",
+    "feat3.themes": "Thèmes et langues",
+    "feat3.themesDesc": "28 thèmes de terminal, 3 thèmes d'interface et image d'arrière-plan personnalisable, avec une interface en 11 langues",
+    "install.windows": "Installateur EXE / Portable ZIP<br>amd64 / arm64",
+    "install.macos": "Installateur DMG<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "Installateur APK<br>arm64",
+    "install.docker": "Image Docker Hub / Images hors ligne<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "Images hors ligne",
+    "footer.tagline": "Terminal tout-en-un léger avec un Agent IA autonome.<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "Ressources",
+    "footer.changelog": "Journal des modifications",
+    "footer.roadmap": "Feuille de route",
+    "footer.community": "Communauté",
+    "footer.feedback": "Commentaires et problèmes"
+  },
+  "ru": {
+    "nav.features": "Возможности",
+    "common.download": "Скачать",
+    "nav.guide": "Руководство пользователя",
+    "menu.repos": "Репозитории",
+    "hero.subtitle": "Универсальный терминал с поддержкой 30+ протоколов<br>Встроенный AI-агент, автономно выполняющий многошаговые команды shell",
+    "hero.released": "выпущена",
+    "hero.opensource": "открытый код",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "Скачать",
+    "feat1.title": "Терминал с полным набором функций",
+    "feat1.desc": "Терминал, передача файлов, удалённый рабочий стол, базы данных и контейнеры — все сценарии удалённого доступа.",
+    "feat1.terminal": "Терминал",
+    "feat1.terminalDesc": "Удалённые SSH / Telnet / Mosh, локальные терминалы PowerShell / Git Bash / WSL и последовательные порты, туннели SSH и мониторинг серверов в реальном времени",
+    "feat1.file": "Передача файлов",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, двухпанельный режим, передача перетаскиванием, `rz`/`sz` в SSH",
+    "feat1.rdp": "Удалённый рабочий стол",
+    "feat1.rdpDesc": "RDP (удалённый рабочий стол Windows), VNC (управление Linux), SPICE (ВМ KVM/QEMU), X11 (проброс X Window)",
+    "feat1.db": "Клиент баз данных",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — запросы на естественном языке через ИИ и редактирование строк",
+    "feat1.k8s": "Kubernetes и контейнеры",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — ресурсы кластера и управление образами, логи Pod и exec-терминалы, метрики CPU/памяти",
+    "feat2.agent": "AI-агент",
+    "feat2.desc": "Автономный AI-агент, который самостоятельно планирует и выполняет многошаговые команды shell прямо в вашем терминале.",
+    "feat2.agentDesc": "AI-агент планирует и выполняет команды за несколько шагов прямо в терминале; совместим с Anthropic / OpenAI (Claude, GPT и др.), четыре режима выполнения под вашим контролем",
+    "feat2.skills": "Навыки и команды",
+    "feat2.skillsDesc": "Многоразовые сценарии навыков и шаблоны prompt-команд, вызываемые через `/`; ИИ также может сохранять новые навыки сам",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "Внешние AI-агенты безопасно выполняют команды и передают файлы через MCP — учётные данные не покидают приложение",
+    "feat2.sql": "Генерация SQL с помощью ИИ",
+    "feat2.sqlDesc": "Опишите запрос на естественном языке — ИИ сгенерирует SQL по структуре таблиц, готовый к запуску",
+    "feat2.completion": "Умное автодополнение",
+    "feat2.completionDesc": "Автодополнение в реальном времени по истории команд и возможностям ИИ",
+    "feat3.title": "Персонализация",
+    "feat3.desc": "Управление подключениями, свободная разбивка панелей, облачная синхронизация, темы и языки — ваш терминал — ваши правила.",
+    "feat3.conn": "Менеджер подключений",
+    "feat3.connDesc": "Быстрый поиск, создание подключений, группы, сортировка, массовые операции",
+    "feat3.workspace": "Рабочая область",
+    "feat3.workspaceDesc": "Перетащите вкладки терминала в область содержимого, чтобы свободно разбивать экран и собирать рабочие области",
+    "feat3.sync": "Облачная синхронизация",
+    "feat3.syncDesc": "Шифрованная облачная синхронизация через Git, WebDAV, SFTP, S3 или SMB — бесшовно между устройствами",
+    "feat3.keys": "Свои сочетания клавиш",
+    "feat3.keysDesc": "Свободно назначайте сочетания клавиш для любых действий — полное управление с клавиатуры",
+    "feat3.themes": "Темы и языки",
+    "feat3.themesDesc": "28 тем терминала, 3 темы интерфейса и своё фоновое изображение, интерфейс на 11 языках",
+    "install.windows": "EXE-установщик / портативная ZIP<br>amd64 / arm64",
+    "install.macos": "DMG-установщик<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "APK-установщик<br>arm64",
+    "install.docker": "Образ Docker Hub / офлайн-образы<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "Офлайн-образы",
+    "footer.tagline": "Лёгкий универсальный терминал с автономным AI-агентом.<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "Ресурсы",
+    "footer.changelog": "Журнал изменений",
+    "footer.roadmap": "Дорожная карта",
+    "footer.community": "Сообщество",
+    "footer.feedback": "Отзывы и вопросы"
+  },
+  "pt": {
+    "nav.features": "Recursos",
+    "common.download": "Baixar",
+    "nav.guide": "Guia do usuário",
+    "menu.repos": "Repositórios",
+    "hero.subtitle": "Terminal tudo-em-um com mais de 30 protocolos<br>Agente de IA integrado que executa comandos de shell em múltiplas rodadas de forma autônoma",
+    "hero.released": "lançada",
+    "hero.opensource": "código aberto",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "Baixar",
+    "feat1.title": "Terminal completo",
+    "feat1.desc": "Terminal, transferência de arquivos, área de trabalho remota, bancos de dados e contêineres — cobre todas as necessidades de acesso remoto.",
+    "feat1.terminal": "Terminal",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh remotos, terminais locais PowerShell / Git Bash / WSL e conexões seriais, com encaminhamento por túnel SSH e monitoramento de servidores em tempo real",
+    "feat1.file": "Transferência de arquivos",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, navegação em dois painéis, transferência por arrastar e soltar, `rz`/`sz` no SSH",
+    "feat1.rdp": "Área de trabalho remota",
+    "feat1.rdpDesc": "RDP (Área de Trabalho Remota do Windows), VNC (controle remoto Linux), SPICE (VMs KVM/QEMU), X11 (encaminhamento X Window)",
+    "feat1.db": "Cliente de banco de dados",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — consultas em linguagem natural com IA e edição de linhas inline",
+    "feat1.k8s": "Kubernetes e contêineres",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — recursos de cluster e gerenciamento de imagens, logs de Pods e terminais exec, métricas de CPU/memória",
+    "feat2.agent": "Agente de IA",
+    "feat2.desc": "Agente de IA autônomo que planeja e executa comandos de shell em múltiplas rodadas diretamente no seu terminal.",
+    "feat2.agentDesc": "O Agente de IA planeja e executa comandos em múltiplas rodadas direto no seu terminal; compatível com Anthropic / OpenAI (Claude, GPT e mais), com quatro modos de execução sob seu controle",
+    "feat2.skills": "Habilidades e comandos",
+    "feat2.skillsDesc": "Fluxos de trabalho reutilizáveis e modelos de comandos com prompts, acionados com `/`; a IA também pode salvar novas habilidades por conta própria",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "Agentes de IA externos executam comandos e transferem arquivos com segurança via MCP — as credenciais nunca saem do app",
+    "feat2.sql": "Geração de SQL com IA",
+    "feat2.sqlDesc": "Descreva sua consulta em linguagem natural e a IA gera o SQL a partir do esquema, pronto para executar",
+    "feat2.completion": "Autocompletar inteligente",
+    "feat2.completionDesc": "Autocompletar em tempo real a partir do histórico de comandos e da IA enquanto você digita",
+    "feat3.title": "Personalização",
+    "feat3.desc": "Gerenciamento de conexões, painéis divididos, sincronização na nuvem, temas e idiomas — seu terminal, do seu jeito.",
+    "feat3.conn": "Gerenciador de conexões",
+    "feat3.connDesc": "Busca rápida, nova conexão, agrupamento, ordenação, operações em lote",
+    "feat3.workspace": "Área de trabalho",
+    "feat3.workspaceDesc": "Arraste abas de terminal para a área de conteúdo para dividir livremente e combinar em uma área de trabalho",
+    "feat3.sync": "Sincronização na nuvem",
+    "feat3.syncDesc": "Sincronização criptografada na nuvem via Git, WebDAV, SFTP, S3 ou SMB — perfeita entre dispositivos",
+    "feat3.keys": "Atalhos personalizados",
+    "feat3.keysDesc": "Atribua livremente atalhos a cada ação para operação totalmente por teclado",
+    "feat3.themes": "Temas e idiomas",
+    "feat3.themesDesc": "28 temas de terminal, 3 temas de interface e imagem de fundo personalizável, com interface em 11 idiomas",
+    "install.windows": "Instalador EXE / Portátil ZIP<br>amd64 / arm64",
+    "install.macos": "Instalador DMG<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "Instalador APK<br>arm64",
+    "install.docker": "Imagem do Docker Hub / imagens offline<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "Imagens offline",
+    "footer.tagline": "Terminal tudo-em-um leve com um Agente de IA autônomo.<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "Recursos",
+    "footer.changelog": "Registro de alterações",
+    "footer.roadmap": "Roteiro",
+    "footer.community": "Comunidade",
+    "footer.feedback": "Comentários e problemas"
+  },
+  "vi": {
+    "nav.features": "Tính năng",
+    "common.download": "Tải xuống",
+    "nav.guide": "Hướng dẫn sử dụng",
+    "menu.repos": "Kho lưu trữ",
+    "hero.subtitle": "Terminal tất cả trong một hỗ trợ hơn 30 giao thức<br>AI Agent tích hợp tự động thực thi các chuỗi lệnh shell nhiều lượt",
+    "hero.released": "phát hành",
+    "hero.opensource": "mã nguồn mở",
+    "hero.platforms": "Windows · macOS · Linux · Android · Docker",
+    "hero.downloadBtn": "Tải xuống",
+    "feat1.title": "Terminal đầy đủ tính năng",
+    "feat1.desc": "Terminal, chuyển tệp, điều khiển từ xa, cơ sở dữ liệu và container — đáp ứng mọi nhu cầu truy cập từ xa.",
+    "feat1.terminal": "Terminal",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh từ xa, terminal cục bộ PowerShell / Git Bash / WSL và kết nối serial, với chuyển tiếp tunnel SSH và giám sát máy chủ thời gian thực",
+    "feat1.file": "Chuyển tệp",
+    "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, duyệt hai khung, kéo thả tệp, `rz`/`sz` trong SSH",
+    "feat1.rdp": "Điều khiển từ xa",
+    "feat1.rdpDesc": "RDP (Remote Desktop Windows), VNC (điều khiển Linux từ xa), SPICE (máy ảo KVM/QEMU), X11 (chuyển tiếp X Window)",
+    "feat1.db": "Ứng dụng cơ sở dữ liệu",
+    "feat1.dbDesc": "MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch — AI tạo truy vấn ngôn ngữ tự nhiên và chỉnh sửa dòng dữ liệu trực tiếp",
+    "feat1.k8s": "Kubernetes và container",
+    "feat1.k8sDesc": "Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC — quản lý tài nguyên cụm và image, log Pod và terminal exec, chỉ số CPU/bộ nhớ",
+    "feat2.agent": "AI Agent",
+    "feat2.desc": "AI Agent tự chủ, tự lập kế hoạch và thực thi các chuỗi lệnh shell nhiều lượt ngay trong terminal của bạn.",
+    "feat2.agentDesc": "AI Agent lập kế hoạch và thực thi lệnh qua nhiều lượt ngay trong terminal; tương thích Anthropic / OpenAI với Claude, GPT..., bốn chế độ thực thi do bạn kiểm soát",
+    "feat2.skills": "Kỹ năng &amp; lệnh",
+    "feat2.skillsDesc": "Quy trình kỹ năng tái sử dụng và mẫu lệnh prompt, kích hoạt bằng `/`; AI cũng có thể tự lưu kỹ năng mới",
+    "feat2.mcp": "MCP Server",
+    "feat2.mcpDesc": "AI Agent bên ngoài chạy lệnh và chuyển tệp an toàn qua MCP — thông tin xác thực không bao giờ rời khỏi ứng dụng",
+    "feat2.sql": "Tạo SQL bằng AI",
+    "feat2.sqlDesc": "Mô tả truy vấn bằng ngôn ngữ tự nhiên, AI sẽ tạo SQL từ cấu trúc bảng, sẵn sàng để chạy",
+    "feat2.completion": "Gợi ý thông minh",
+    "feat2.completionDesc": "Gợi ý hoàn thành theo thời gian thực từ lịch sử lệnh và AI khi gõ",
+    "feat3.title": "Cá nhân hóa",
+    "feat3.desc": "Quản lý kết nối, chia sẻ màn hình linh hoạt, đồng bộ đám mây, chủ đề &amp; ngôn ngữ — terminal của bạn, theo cách của bạn.",
+    "feat3.conn": "Trình quản lý kết nối",
+    "feat3.connDesc": "Tìm kiếm nhanh, tạo kết nối mới, nhóm, sắp xếp, thao tác hàng loạt",
+    "feat3.workspace": "Không gian làm việc",
+    "feat3.workspaceDesc": "Kéo thẻ terminal vào vùng nội dung để chia màn hình tự do và kết hợp thành không gian làm việc",
+    "feat3.sync": "Đồng bộ đám mây",
+    "feat3.syncDesc": "Đồng bộ đám mây mã hóa qua Git, WebDAV, SFTP, S3 hoặc SMB — liền mạch giữa các thiết bị",
+    "feat3.keys": "Phím tắt tùy chỉnh",
+    "feat3.keysDesc": "Gán phím tắt tự do cho mọi thao tác để thao tác hoàn toàn bằng bàn phím",
+    "feat3.themes": "Chủ đề &amp; ngôn ngữ",
+    "feat3.themesDesc": "28 chủ đề terminal, 3 chủ đề giao diện và ảnh nền tùy chỉnh, giao diện hỗ trợ 11 ngôn ngữ",
+    "install.windows": "Trình cài EXE / bản di động ZIP<br>amd64 / arm64",
+    "install.macos": "Trình cài DMG<br>Apple Silicon / Intel",
+    "install.linux": "TAR.GZ / DEB / RPM<br>amd64 / arm64",
+    "install.android": "Trình cài APK<br>arm64",
+    "install.docker": "Image Docker Hub / image ngoại tuyến<br>amd64 / arm64",
+    "common.dockerHub": "Docker Hub",
+    "install.offlineArchives": "Image ngoại tuyến",
+    "footer.tagline": "Terminal tất cả trong một nhẹ nhàng với AI Agent tự chủ.<br>Windows · macOS · Linux · Android · Docker",
+    "footer.resources": "Tài nguyên",
+    "footer.changelog": "Nhật ký thay đổi",
+    "footer.roadmap": "Lộ trình",
+    "footer.community": "Cộng đồng",
+    "footer.feedback": "Phản hồi và vấn đề"
+  }
+};
+
 function setLang(lang) {
   curLang = lang;
   document.documentElement.lang = lang;
   document.querySelectorAll('.lang-menu .lang-btn').forEach(function(b) {
-    b.classList.toggle('active', b.textContent.trim() === (lang === 'zh-CN' ? '中文' : 'EN'));
+    b.classList.toggle('active', b.getAttribute('data-lang') === lang);
   });
   var langCurrentText = document.getElementById('lang-current-text');
-  if (langCurrentText) langCurrentText.textContent = lang === 'zh-CN' ? '中文' : 'EN';
-  document.title = lang === 'zh-CN'
-    ? 'uniTerm - 轻量级一站式终端软件，内置 AI Agent'
-    : 'uniTerm - Lightweight All-in-One Terminal Emulator with Built-in AI Agent';
+  if (langCurrentText) langCurrentText.textContent = LANG_LABEL[lang] || 'EN';
+  document.title = PAGE_TITLES[lang] || PAGE_TITLES['en'];
+  /* Re-render every translatable element from the dictionary */
+  var dict = I18N[lang] || I18N['zh-CN'];
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n');
+    if (dict.hasOwnProperty(key)) el.innerHTML = dict[key];
+  });
   var releaseUrl = lang === 'zh-CN'
     ? 'https://gitee.com/ys-l/uniterm/releases/latest'
     : 'https://github.com/ys-ll/uniterm/releases/latest';
@@ -1396,7 +2082,7 @@ function setLang(lang) {
   document.querySelectorAll('.guide-link').forEach(function(a) {
     a.title = lang === 'zh-CN' ? '查看用户手册' : 'Read the user guide';
   });
-  /* All "User Guide" links follow the language */
+  /* All "User Guide" links follow the language (docs site is zh/en only) */
   document.querySelectorAll('.guide-link').forEach(function(a) {
     a.href = lang === 'zh-CN' ? '/guide/zh/introduction' : '/guide/en/introduction';
   });
@@ -1413,7 +2099,7 @@ function setLang(lang) {
 (function() {
   var saved = null;
   try { saved = localStorage.getItem('uniterm-lang'); } catch(e) {}
-  setLang(saved === 'en' ? 'en' : 'zh-CN');
+  setLang(LANGS.indexOf(saved) >= 0 ? saved : 'zh-CN');
 })();
 
 /* ── Theme toggle ── */
