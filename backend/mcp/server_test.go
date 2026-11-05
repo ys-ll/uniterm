@@ -214,6 +214,60 @@ func TestEndToEndTools(t *testing.T) {
 	}
 }
 
+// Opening a terminal saves local state, which calls Start again. The MCP
+// transport session must survive both that call and later state saves.
+func TestStartPreservesClientSession(t *testing.T) {
+	for _, ephemeral := range []bool{false, true} {
+		t.Run(fmt.Sprintf("ephemeral=%v", ephemeral), func(t *testing.T) {
+			var srv *Server
+			port := 0
+			srv = NewServer(Env{
+				Policy:       func() Policy { return PolicyBypass },
+				ListSessions: func() []SessionSummary { return []SessionSummary{{ID: "s1"}} },
+				Connect: func(id string) (string, error) {
+					return "s1", srv.Start(port, false)
+				},
+			})
+			token, hash := GenerateToken()
+			srv.SetTokens(map[string]TokenInfo{hash: {Name: "test-agent"}})
+			if err := srv.Start(0, false); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(srv.Stop)
+			if !ephemeral {
+				port = srv.Port()
+				if err := srv.Start(port, false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1.0"}, nil)
+			cs, err := client.Connect(ctx, &mcp.StreamableClientTransport{
+				Endpoint:   "http://127.0.0.1:" + strconv.Itoa(srv.Port()) + "/mcp",
+				HTTPClient: &http.Client{Transport: tokenTransport{rt: http.DefaultTransport, token: token}},
+			}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cs.Close()
+			res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "connect", Arguments: map[string]any{"connectionId": "c1"}})
+			if err != nil {
+				t.Fatalf("connect tool: %v", err)
+			}
+			if res.IsError {
+				t.Fatalf("connect tool returned error: %+v", res)
+			}
+			if err := srv.Start(port, false); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "list_sessions"}); err != nil {
+				t.Fatalf("client session lost after repeated Start: %v", err)
+			}
+		})
+	}
+}
+
 // tokenTransport injects the bearer token on every request.
 type tokenTransport struct {
 	rt    http.RoundTripper
