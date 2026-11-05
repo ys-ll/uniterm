@@ -51,7 +51,7 @@
         >
           <span class="table-icon-spacer" />
           <component :is="row.table.type === 'view' ? Eye : Table2" class="table-icon" :size="'0.875rem'" />
-          <span class="table-name">{{ row.table.name }}</span>
+          <span class="table-name" @mouseenter="onTableNameHover($event, row.table.name)">{{ row.table.name }}</span>
         </div>
         <div v-else-if="row.kind === 'empty'" class="empty-hint">
           {{ t('db.noTables') }}
@@ -558,6 +558,18 @@ function onTableDblClick(dbName: string, table: TableInfo) {
   selectedDb.value = dbName
   selectedTable.value = table.name
   emit('selectTable', dbName, table.name, table.type === 'view')
+}
+
+// Show the full table name as a native tooltip only when the name is actually
+// truncated with an ellipsis (scrollWidth > clientWidth). Non-truncated names
+// keep no tooltip so nothing pops up when hovering them.
+function onTableNameHover(e: MouseEvent, name: string) {
+  const el = e.currentTarget as HTMLElement
+  if (el.scrollWidth > el.clientWidth) {
+    el.title = name
+  } else {
+    el.removeAttribute('title')
+  }
 }
 
 // Searching runs a full-schema, server-side name filter (LIKE) across every
