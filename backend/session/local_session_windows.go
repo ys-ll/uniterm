@@ -470,13 +470,6 @@ func wslDetectShell(distro string) (shell string, ok bool) {
 // restore. Absolute positioning, so it cannot drift with the prompt layout.
 const wslCwdHookRowCleanup = " printf '\\0337\\033[H\\033[2K\\0338';"
 
-// CwdHookInjector is implemented by terminal sessions that can type the WSL
-// cwd-reporting hook on demand. WSLSession satisfies it through the embedded
-// LocalSession.
-type CwdHookInjector interface {
-	InjectCwdHook() error
-}
-
 // InjectCwdHook types the WSL cwd-hook on demand — invoked when the user
 // enables directory follow for this session (with an explicit confirmation in
 // the UI). Never called at session start: a plain first login must show no
