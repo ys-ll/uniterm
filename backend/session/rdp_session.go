@@ -246,16 +246,17 @@ func (p *RDPProxy) Start() (string, error) {
 		}
 		p.handleWebSocket(ws)
 	})
-	// Also reachable through the server build's /api/web mount (the mux keeps
-	// its token-path guard, the dispatch rewrites the path back to it).
-	registerSessionProxyHandler(p.authToken, mux)
+	// Also reachable through the server build's /api/web mount: the gateway
+	// resolves the internal listener below via the lookup endpoint and
+	// relays the upgrade here (the asset server itself cannot upgrade).
+	addr := ln.Addr().(*net.TCPAddr)
+	registerSessionProxyHandler(p.authToken, mux, addr.String())
 
 	go func() {
 		defer p.wg.Done()
 		_ = http.Serve(ln, mux)
 	}()
 
-	addr := ln.Addr().(*net.TCPAddr)
 	return sessionProxyAddress(p.authToken, fmt.Sprintf("ws://127.0.0.1:%d/%s", addr.Port, p.authToken)), nil
 }
 

@@ -254,11 +254,77 @@ func (gw *MultiUserGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	worker.Touch()
 
+	// Session proxies ride a dedicated relay (see serveSessionProxyRelay):
+	// the worker's wails asset server rejects WebSocket upgrades on /api/web
+	// before the session-proxy route is reached.
+	if strings.HasPrefix(r.URL.Path, "/api/web/session-proxy/") {
+		gw.serveSessionProxyRelay(w, r, worker)
+		return
+	}
+
 	// Inject verified identity headers for downstream WebStreamService
 	r.Header.Set("X-Uniterm-User", claims.Username)
 	r.Header.Set("X-Uniterm-Role", claims.Role)
 
 	compressibleAssets(worker.Proxy).ServeHTTP(w, r)
+}
+
+// sessionProxyLookupClient bounds the plain-HTTP token lookup against the
+// worker: if it does not answer quickly, the upgrade attempt is not worth
+// racing.
+var sessionProxyLookupClient = &http.Client{Timeout: 5 * time.Second}
+
+// serveSessionProxyRelay forwards a browser's WebSocket upgrade for
+// /api/web/session-proxy/<token> straight to the session proxy's internal
+// loopback listener inside the worker. The normal /api/web hop cannot carry
+// it — the worker's wails asset server rejects WebSocket upgrades (501)
+// before the /api/web mount is reached — so the token is resolved to the
+// listener address via a plain-HTTP lookup on the worker (worker-token
+// guarded), and the upgrade is relayed untouched. The proxy's own
+// token-path guard still applies at the far end.
+func (gw *MultiUserGateway) serveSessionProxyRelay(w http.ResponseWriter, r *http.Request, worker *WorkerInstance) {
+	token := strings.TrimPrefix(r.URL.Path, "/api/web/session-proxy/")
+	if token == "" || strings.Contains(token, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	lookupURL := fmt.Sprintf("http://127.0.0.1:%d/api/web/session-proxy-lookup/%s", worker.Port, token)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, lookupURL, nil)
+	if err != nil {
+		http.Error(w, "session proxy lookup failed", http.StatusBadGateway)
+		return
+	}
+	req.Header.Set("X-Uniterm-Worker-Token", worker.token)
+	resp, err := sessionProxyLookupClient.Do(req)
+	if err != nil {
+		log.Printf("[uniterm-gateway] session proxy lookup for %s failed: %v", token, err)
+		http.Error(w, "session proxy lookup failed", http.StatusBadGateway)
+		return
+	}
+	var lookup struct {
+		Addr string `json:"addr"`
+	}
+	err = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&lookup)
+	resp.Body.Close()
+	if err != nil || lookup.Addr == "" {
+		http.Error(w, "session proxy not found", http.StatusNotFound)
+		return
+	}
+
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = "http"
+			req.URL.Host = lookup.Addr
+			req.URL.Path = "/" + token
+			req.Host = lookup.Addr
+			if req.Header.Get("Origin") != "" {
+				req.Header.Set("Origin", "http://"+lookup.Addr)
+			}
+		},
+		FlushInterval: -1, // flush immediately for binary RDP/VNC/SPICE frames
+	}
+	proxy.ServeHTTP(w, r)
 }
 
 // --- Static asset compression ---
