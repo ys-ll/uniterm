@@ -35,6 +35,8 @@ export interface ConnectionConfig {
   authType: 'password' | 'key' | 'keyText' | 'agent' | 'identity' | 'kerberos' | 'apikey'
   kerberosRealm?: string // realm used for IP targets, e.g. EXAMPLE.COM
   sshAlgorithms?: SSHAlgoConfig // undefined = compatible default
+  totpEnabled?: boolean
+  totpSecret?: string
   password?: string
   keyPath?: string
   keyContent?: string // inline private-key text (authType === 'keyText')

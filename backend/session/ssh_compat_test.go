@@ -16,6 +16,10 @@ func TestSavedPasswordChallenge(t *testing.T) {
 	}{
 		{"single hidden password", ConnectionConfig{AuthType: "password", Password: "pw"}, []string{"Password:"}, []bool{false}, true},
 		{"empty auth defaults to password", ConnectionConfig{Password: "pw"}, []string{"Password:"}, []bool{false}, true},
+		{"OTP prompt", ConnectionConfig{AuthType: "password", Password: "pw"}, []string{"[OTP Code]:"}, []bool{false}, false},
+		{"one time password", ConnectionConfig{AuthType: "password", Password: "pw"}, []string{"One-Time Password:"}, []bool{false}, false},
+		{"unknown hidden prompt", ConnectionConfig{AuthType: "password", Password: "pw"}, []string{"Security answer:"}, []bool{false}, false},
+		{"locked password", ConnectionConfig{AuthType: "password", Password: "enc:v1:locked"}, []string{"Password:"}, []bool{false}, false},
 		{"private key passphrase", ConnectionConfig{AuthType: "key", Password: "passphrase"}, []string{"Password:"}, []bool{false}, false},
 		{"password plus otp", ConnectionConfig{AuthType: "password", Password: "pw"}, []string{"Password:", "OTP:"}, []bool{false, false}, false},
 		{"visible challenge", ConnectionConfig{AuthType: "password", Password: "pw"}, []string{"Name:"}, []bool{true}, false},
