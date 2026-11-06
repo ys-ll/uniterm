@@ -63,8 +63,11 @@ func (p *VNCProxy) Start() (string, error) {
 		}
 		p.handleWebSocket(ws)
 	})
-	// Also reachable through the server build's /api/web mount.
-	registerSessionProxyHandler(p.authToken, mux)
+	// Also reachable through the server build's /api/web mount: the gateway
+	// resolves the internal listener via the lookup endpoint and relays the
+	// upgrade here (the asset server itself cannot upgrade).
+	addr := ln.Addr().(*net.TCPAddr)
+	registerSessionProxyHandler(p.authToken, mux, addr.String())
 
 	p.wg.Add(1)
 	go func() {
@@ -72,7 +75,6 @@ func (p *VNCProxy) Start() (string, error) {
 		_ = http.Serve(ln, mux)
 	}()
 
-	addr := ln.Addr().(*net.TCPAddr)
 	log.Writef("[VNCProxy] Listening on ws://127.0.0.1:%d, target: %s", addr.Port, p.target)
 	return sessionProxyAddress(p.authToken, fmt.Sprintf("ws://127.0.0.1:%d", addr.Port)), nil
 }

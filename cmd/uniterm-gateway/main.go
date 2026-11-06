@@ -77,6 +77,12 @@ type WorkerInstance struct {
 	// token is the per-worker shared secret the gateway injects on every
 	// proxied request; the worker rejects /api/web calls without it.
 	token string
+	// hasMasterPassword records whether the process was spawned with a login
+	// password forwarded (UNITERM_MASTER_PASSWORD). A worker without one can
+	// never silently unlock its credential store — the browser would bounce
+	// between the app and the login page — so getOrSpawnWorker replaces it
+	// once the gateway has the password cached.
+	hasMasterPassword bool
 }
 
 // MultiUserGateway manages user authentication, isolated per-user directories,
@@ -254,11 +260,77 @@ func (gw *MultiUserGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	worker.Touch()
 
+	// Session proxies ride a dedicated relay (see serveSessionProxyRelay):
+	// the worker's wails asset server rejects WebSocket upgrades on /api/web
+	// before the session-proxy route is reached.
+	if strings.HasPrefix(r.URL.Path, "/api/web/session-proxy/") {
+		gw.serveSessionProxyRelay(w, r, worker)
+		return
+	}
+
 	// Inject verified identity headers for downstream WebStreamService
 	r.Header.Set("X-Uniterm-User", claims.Username)
 	r.Header.Set("X-Uniterm-Role", claims.Role)
 
 	compressibleAssets(worker.Proxy).ServeHTTP(w, r)
+}
+
+// sessionProxyLookupClient bounds the plain-HTTP token lookup against the
+// worker: if it does not answer quickly, the upgrade attempt is not worth
+// racing.
+var sessionProxyLookupClient = &http.Client{Timeout: 5 * time.Second}
+
+// serveSessionProxyRelay forwards a browser's WebSocket upgrade for
+// /api/web/session-proxy/<token> straight to the session proxy's internal
+// loopback listener inside the worker. The normal /api/web hop cannot carry
+// it — the worker's wails asset server rejects WebSocket upgrades (501)
+// before the /api/web mount is reached — so the token is resolved to the
+// listener address via a plain-HTTP lookup on the worker (worker-token
+// guarded), and the upgrade is relayed untouched. The proxy's own
+// token-path guard still applies at the far end.
+func (gw *MultiUserGateway) serveSessionProxyRelay(w http.ResponseWriter, r *http.Request, worker *WorkerInstance) {
+	token := strings.TrimPrefix(r.URL.Path, "/api/web/session-proxy/")
+	if token == "" || strings.Contains(token, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	lookupURL := fmt.Sprintf("http://127.0.0.1:%d/api/web/session-proxy-lookup/%s", worker.Port, token)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, lookupURL, nil)
+	if err != nil {
+		http.Error(w, "session proxy lookup failed", http.StatusBadGateway)
+		return
+	}
+	req.Header.Set("X-Uniterm-Worker-Token", worker.token)
+	resp, err := sessionProxyLookupClient.Do(req)
+	if err != nil {
+		log.Printf("[uniterm-gateway] session proxy lookup for %s failed: %v", token, err)
+		http.Error(w, "session proxy lookup failed", http.StatusBadGateway)
+		return
+	}
+	var lookup struct {
+		Addr string `json:"addr"`
+	}
+	err = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&lookup)
+	resp.Body.Close()
+	if err != nil || lookup.Addr == "" {
+		http.Error(w, "session proxy not found", http.StatusNotFound)
+		return
+	}
+
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = "http"
+			req.URL.Host = lookup.Addr
+			req.URL.Path = "/" + token
+			req.Host = lookup.Addr
+			if req.Header.Get("Origin") != "" {
+				req.Header.Set("Origin", "http://"+lookup.Addr)
+			}
+		},
+		FlushInterval: -1, // flush immediately for binary RDP/VNC/SPICE frames
+	}
+	proxy.ServeHTTP(w, r)
 }
 
 // --- Static asset compression ---
@@ -405,6 +477,20 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 						continue
 					default:
 					}
+					// A worker spawned before the gateway cached the login
+					// password (e.g. a browser with a still-valid session
+					// cookie reconnecting right after a gateway restart)
+					// can never unlock its credential store, and leaving it
+					// running would wedge the user into the login loop — a
+					// later login only caches the password, it cannot deliver
+					// it into the already-running process. Replace it so the
+					// fresh spawn receives the now-cached password.
+					if forwardPassword && !instance.hasMasterPassword && gw.cachedPassword(username, true) != "" {
+						log.Printf("[uniterm-gateway] replacing password-less worker for user=%s to forward the login password", username)
+						gw.dropWorker(instance)
+						terminateWorkerInstance(instance)
+						continue
+					}
 					return instance, nil
 				}
 				if !errors.Is(err, errWorkerExited) {
@@ -438,6 +524,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 
 		targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
 		workerToken := newTransferID()
+		masterPassword := gw.cachedPassword(username, forwardPassword)
 		cmd := exec.Command(gw.workerBinary)
 		cmd.Dir = userHome
 		cmd.Env = append(os.Environ(),
@@ -451,7 +538,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 			"WAILS_SERVER_PORT="+strconv.Itoa(port),
 			"UNITERM_TENANT_USER="+username,
 			"UNITERM_WORKER_TOKEN="+workerToken,
-			"UNITERM_MASTER_PASSWORD="+gw.cachedPassword(username, forwardPassword),
+			"UNITERM_MASTER_PASSWORD="+masterPassword,
 		)
 		// The Go standard library ignores HOME/XDG_* on Windows and macOS:
 		// os.UserHomeDir reads %USERPROFILE% and os.UserConfigDir reads
@@ -492,15 +579,16 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 		}
 
 		instance := &WorkerInstance{
-			Username:   username,
-			Port:       port,
-			TargetURL:  targetURL,
-			Proxy:      proxy,
-			Cmd:        cmd,
-			LastActive: time.Now(),
-			done:       make(chan struct{}),
-			ready:      make(chan struct{}),
-			token:      workerToken,
+			Username:          username,
+			Port:              port,
+			TargetURL:         targetURL,
+			Proxy:             proxy,
+			Cmd:               cmd,
+			LastActive:        time.Now(),
+			done:              make(chan struct{}),
+			ready:             make(chan struct{}),
+			token:             workerToken,
+			hasMasterPassword: masterPassword != "",
 		}
 		gw.workers[username] = instance
 		gw.workersMu.Unlock()
