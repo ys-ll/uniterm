@@ -963,14 +963,23 @@ function escapeHtml(text: string): string {
   display: flex;
   padding: 0.875rem 1.125rem;
 }
+.ai-message.user {
+  justify-content: flex-end;
+}
 .ai-message.user .content {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
+  flex: 0 1 auto;
+  max-width: 85%;
 }
 .ai-message.user .text {
+  width: fit-content;
+  max-width: 100%;
   background: var(--bg-surface);
   padding: 0.625rem 1rem;
-  border-radius: var(--radius-sm);
+  border-radius: 0.875rem;
+  border-bottom-right-radius: 0;
   box-shadow: inset 0 0 0 1px var(--border-subtle);
 }
 .ai-message.interrupted .text {
@@ -995,6 +1004,9 @@ function escapeHtml(text: string): string {
   gap: 0.375rem;
   margin-top: 0.375rem;
 }
+.ai-message.user .msg-attachments {
+  justify-content: flex-end;
+}
 .msg-attachment {
   display: flex;
   align-items: center;
@@ -1004,6 +1016,10 @@ function escapeHtml(text: string): string {
   background: var(--bg-surface);
   border-radius: var(--radius-sm);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.ai-message.user .msg-attachment {
+  border-radius: 0.875rem;
+  border-bottom-right-radius: 0;
 }
 .msg-attachment-thumb {
   width: 4.5rem;
