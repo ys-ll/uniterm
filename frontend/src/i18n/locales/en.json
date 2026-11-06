@@ -281,6 +281,8 @@
   "ai.exportDone": "{name} exported",
   "ai.deleteMessage": "Delete this message",
   "ai.truncateFrom": "Delete this message and everything after",
+  "ai.confirmDeleteTitle": "Delete message",
+  "ai.confirmDeleteMessage": "This will delete this message together with its AI reply. This action cannot be undone. Delete it?",
   "ai.thinking": "Thinking...",
   "ai.compacting": "Organizing conversation context...",
   "ai.compactionFailed": "Context summary failed. This request uses recent complete exchanges; full chat history is preserved.",

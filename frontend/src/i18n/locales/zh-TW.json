@@ -281,6 +281,8 @@
   "ai.exportDone": "已匯出 {name}",
   "ai.deleteMessage": "刪除此訊息",
   "ai.truncateFrom": "刪除此訊息及之後內容",
+  "ai.confirmDeleteTitle": "刪除訊息",
+  "ai.confirmDeleteMessage": "將刪除此訊息及其對應的 AI 回覆。此操作不可復原，確定刪除嗎？",
   "ai.thinking": "思考中...",
   "ai.compacting": "正在整理上下文...",
   "ai.compactionFailed": "上下文摘要產生失敗，本次使用近期完整對話繼續，完整聊天記錄仍然保留。",

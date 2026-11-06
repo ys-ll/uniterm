@@ -260,6 +260,8 @@
   "ai.exportDone": "{name} exporté",
   "ai.deleteMessage": "Supprimer ce message",
   "ai.truncateFrom": "Supprimer ce message et tout ce qui suit",
+  "ai.confirmDeleteTitle": "Supprimer le message",
+  "ai.confirmDeleteMessage": "Cela supprimera ce message ainsi que la réponse IA associée. Cette action est irréversible. Supprimer ?",
   "ai.thinking": "Réflexion en cours...",
   "ai.thinkingToggleHint": "Cliquez pour afficher ou masquer le processus de réflexion",
   "ai.noThinkingContent": "Aucun contenu de réflexion pour ce tour (le modèle ne gère peut-être pas le raisonnement).",
