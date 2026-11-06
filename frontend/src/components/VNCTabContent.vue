@@ -130,6 +130,7 @@ import { queueRemoteKeyboardChange } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { readClipboardText, writeClipboard } from '../composables/useClipboardWrite'
+import { toWebSocketURL } from '../utils/webSocketUrl'
 const { t } = useI18n()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
@@ -503,7 +504,7 @@ function createRFB(RFB: any, proxyAddr: string, password: string, forceRfb33 = f
   }
 
   try {
-    rfb = new RFB(vncContainer.value, proxyAddr, {
+    rfb = new RFB(vncContainer.value, toWebSocketURL(proxyAddr), {
       credentials: { password: password || '' },
       shared: props.config?.vncShared ?? true,
       repeaterID: props.config?.vncRepeaterID || '',

@@ -83,6 +83,7 @@ import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { readClipboardText, writeClipboard } from '../composables/useClipboardWrite'
 import { queueRemoteKeyboardChange, REMOTE_KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
+import { toWebSocketURL } from '../utils/webSocketUrl'
 import { useI18n } from '../i18n'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
@@ -239,7 +240,7 @@ async function initSpice(proxyAddr: string, password: string) {
     const { SpiceMainConn } = await import('../vendor/spice-html5.js')
     if (disposed || generation !== clientGeneration) return
     sc = new SpiceMainConn({
-      uri: proxyAddr,
+      uri: toWebSocketURL(proxyAddr),
       password: password || '',
       screen_id: 'spice-screen-' + props.panelId,
       onerror: (e: any) => {

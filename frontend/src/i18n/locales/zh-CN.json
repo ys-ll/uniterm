@@ -873,6 +873,8 @@
   "rdp.reconnect": "重新连接",
   "rdp.retry": "重试",
   "rdp.timeout": "连接超时，请检查主机地址和网络连接。",
+  "rdp.hintNlaRequired": "远程计算机要求网络级身份验证（NLA）。请在连接的高级配置中开启「优先使用 NLA」后重试。",
+  "rdp.hintLegacySecurity": "远程计算机仅提供旧版标准 RDP 安全层（RC4 加密），uniTerm 不支持该加密方式。请在远程计算机上启用 TLS（xrdp 可将 /etc/xrdp/xrdp.ini 的 security_layer 改为 negotiate 或 tls，并确保 /etc/xrdp/cert.pem 与 /etc/xrdp/key.pem 存在）。",
   "remoteDesktop.resolution": "分辨率",
   "rdp.adaptive": "自适应（跟随窗口，调整大小会短暂重连）",
   "remoteDesktop.resAdaptive": "自适应",

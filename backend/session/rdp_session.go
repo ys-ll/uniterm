@@ -246,6 +246,9 @@ func (p *RDPProxy) Start() (string, error) {
 		}
 		p.handleWebSocket(ws)
 	})
+	// Also reachable through the server build's /api/web mount (the mux keeps
+	// its token-path guard, the dispatch rewrites the path back to it).
+	registerSessionProxyHandler(p.authToken, mux)
 
 	go func() {
 		defer p.wg.Done()
@@ -253,7 +256,7 @@ func (p *RDPProxy) Start() (string, error) {
 	}()
 
 	addr := ln.Addr().(*net.TCPAddr)
-	return fmt.Sprintf("ws://127.0.0.1:%d/%s", addr.Port, p.authToken), nil
+	return sessionProxyAddress(p.authToken, fmt.Sprintf("ws://127.0.0.1:%d/%s", addr.Port, p.authToken)), nil
 }
 
 func (p *RDPProxy) handleWebSocket(ws *websocket.Conn) {
@@ -360,7 +363,11 @@ func (p *RDPProxy) handleWebSocket(ws *websocket.Conn) {
 	defer upstreamConn.Close()
 	if selected == x224ProtoFailure {
 		_ = p.writeRDCleanPathNegotiationErr(ws, x224Resp)
-		log.Writef("[RDPProxy] RDP negotiation failed (server sent NEG_FAILURE)")
+		if code, ok := parseX224FailureCode(x224Resp); ok {
+			log.Writef("[RDPProxy] RDP negotiation failed (server sent NEG_FAILURE, code=%d)", code)
+		} else {
+			log.Writef("[RDPProxy] RDP negotiation failed (server sent NEG_FAILURE)")
+		}
 		ws.Close()
 		return
 	}
@@ -511,6 +518,7 @@ func (p *RDPProxy) Stop() {
 		close(p.stopCh)
 		p.cancel()
 	})
+	unregisterSessionProxyHandler(p.authToken)
 	p.mu.Lock()
 	if p.wsConn != nil {
 		p.wsConn.Close()
@@ -748,6 +756,32 @@ func parseX224SelectedProtocol(tpktPDU []byte) uint32 {
 	return x224ProtoRDP
 }
 
+// parseX224FailureCode extracts the failureCode field from a NEG_FAILURE
+// Connection Confirm (TPKT-framed), for diagnostics logging.
+func parseX224FailureCode(tpktPDU []byte) (uint32, bool) {
+	// Same layout as parseX224SelectedProtocol: [TPKT 4][LI 1][type 1]
+	// [dst 2][src 2][class 1], variable part holds RDP_NEG_FAILURE.
+	if len(tpktPDU) < 12 {
+		return 0, false
+	}
+	li := int(tpktPDU[4])
+	if li < 7 {
+		return 0, false
+	}
+	end := 4 + 1 + li
+	if end > len(tpktPDU) {
+		end = len(tpktPDU)
+	}
+	off := 11
+	for off+8 <= end {
+		if tpktPDU[off] == 0x03 { // RDP_NEG_FAILURE
+			return binary.LittleEndian.Uint32(tpktPDU[off+4 : off+8]), true
+		}
+		off++
+	}
+	return 0, false
+}
+
 // --- RDCleanPath DER codec ---------------------------------------------------
 //
 // Schema (der crate, tag_mode EXPLICIT, all definite lengths):
@@ -771,6 +805,11 @@ func parseX224SelectedProtocol(tpktPDU []byte) uint32 {
 // decode.
 
 const rdcleanErrCodeGeneral uint16 = 1
+
+// Mirrors ironrdp-rdcleanpath's NEGOTIATION_ERROR_CODE: the client only
+// decodes a NegotiationErr (and surfaces the X.224 failure code) when the
+// error field carries this code.
+const rdcleanErrCodeNegotiation uint16 = 2
 
 // rdcleanPathVersion mirrors ironrdp-rdcleanpath's VERSION_1 = BASE_VERSION+1
 // (3389 + 1). detect() rejects any other value — this burned us once as a
@@ -918,15 +957,20 @@ func encodeRDCleanPathErr(code uint16) []byte {
 }
 
 // encodeRDCleanPathNegotiationErr mirrors the client's NegotiationErr branch:
-// the raw X.224 confirm (a NEG_FAILURE) without the TPKT header.
+// a negotiation-error PDU carrying the raw X.224 confirm (a NEG_FAILURE)
+// without the TPKT header. The error field is mandatory — the client's
+// decode falls into the Error branch (no destination/server_addr present)
+// and fails with "RDCleanPath is missing error field" when it is absent,
+// hiding the server's actual failure code.
 func encodeRDCleanPathNegotiationErr(x224Resp []byte) []byte {
 	if len(x224Resp) > 4 {
 		x224Resp = x224Resp[4:]
 	}
-	pdu := derEncodeTLV(0x30, append(
+	errSeq := derExplicit(0, 0x02, derIntegerBytes(uint64(rdcleanErrCodeNegotiation)))
+	pdu := derEncodeTLV(0x30, append(append(
 		derExplicit(0, 0x02, derIntegerBytes(rdcleanPathVersion)),
-		derExplicit(6, 0x04, x224Resp)...,
-	))
+		derExplicit(1, 0x30, errSeq)...,
+	), derExplicit(6, 0x04, x224Resp)...))
 	return pdu
 }
 

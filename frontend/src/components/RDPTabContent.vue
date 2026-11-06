@@ -20,6 +20,7 @@
     <div v-else-if="status === 'error'" class="rdp-overlay">
       <p class="rdp-error-text">{{ t('rdp.error') }}</p>
       <p v-if="errorMessage" class="rdp-error-detail">{{ errorMessage }}</p>
+      <p v-if="errorHint" class="rdp-error-hint">{{ t(errorHint) }}</p>
       <el-button type="primary" @click="retryConnection">{{ t('rdp.retry') }}</el-button>
     </div>
 
@@ -158,6 +159,8 @@ import { DEFAULT_RDP_QUALITY, normalizeRdpQuality, rdpQualityProfile } from '../
 import type { RdpQuality } from '../utils/rdpQuality'
 import { RDP_RESOLUTION_PRESETS, resolutionSentinels, seedResolutionChoice } from '../utils/rdpResolutions'
 import type { RdpResolutionChoice } from '../utils/rdpResolutions'
+import { proxyAuthToken, toWebSocketURL } from '../utils/webSocketUrl'
+import { rdpErrorHintKey } from '../utils/rdpErrorHint'
 import { adaptiveSizeRatio, zoomedCssSize } from '../utils/rdpZoom'
 import RemoteDesktopZoomSelect from './RemoteDesktopZoomSelect.vue'
 import { useRemoteDesktopPreferences } from '../composables/useRemoteDesktopPreferences'
@@ -189,6 +192,7 @@ const activeResolution = ref<RdpResolutionChoice>(seedResolutionChoice(props.con
 const sessionResolution = ref<RdpResolutionChoice>(activeResolution.value)
 const currentSessionId = ref<string | null>(props.sessionId)
 const errorMessage = ref<string>('')
+const errorHint = computed(() => rdpErrorHintKey(errorMessage.value))
 const container = ref<HTMLDivElement | null>(null)
 // Display zoom from the shared desktop preferences: a number scales the
 // canvas to that factor (default 100%), 'adaptive' CSS-fits the pane — and
@@ -392,16 +396,17 @@ async function startClient(proxyUrl: string, desktopSizeOverride?: RdpDesktopSiz
     lastResizeRequest = desktopSizeOverride ?? null
     rdpLog(`client start: tier=${activeQuality.value} res=${activeResolution.value} zoom=${zoom.value} size=${size.width}x${size.height} credssp=${activeCredSSP} displayControl=${isAdaptive()} gen=${generation}`)
 
-    // proxyUrl: ws://127.0.0.1:<port>/<token> — the token path doubles as
-    // the gateway auth token the RDCleanPath handshake must echo.
-    const url = new URL(proxyUrl)
-    const authToken = url.pathname.slice(1)
+    // proxyUrl: ws://127.0.0.1:<port>/<token> on desktop, or the same-origin
+    // path /api/web/session-proxy/<token> in server mode — the token doubles
+    // as the gateway auth token the RDCleanPath handshake must echo.
+    const wsUrl = toWebSocketURL(proxyUrl)
+    const authToken = proxyAuthToken(proxyUrl)
 
     const builder = new mod.SessionBuilder()
       .username(username)
       .password(props.config.password || '')
       .destination(props.config.host)
-      .proxyAddress(proxyUrl)
+      .proxyAddress(wsUrl)
       .authToken(authToken)
       .desktopSize(new mod.DesktopSize(size.width, size.height))
       .renderCanvas(canvasEl.value)
@@ -853,6 +858,14 @@ function onMouseMove(e: MouseEvent) {
   } catch (_) {}
 }
 
+function rotationUnitFromEvent(e: WheelEvent) {
+  switch (e.deltaMode) {
+    case e.DOM_DELTA_LINE: return wasmModule.RotationUnit.Line
+    case e.DOM_DELTA_PAGE: return wasmModule.RotationUnit.Page
+    default: return wasmModule.RotationUnit.Pixel
+  }
+}
+
 function onWheel(e: WheelEvent) {
   if (!scaleCanvas.value && e.target === viewportEl.value) return
   if (!session || !wasmModule) return
@@ -862,11 +875,15 @@ function onWheel(e: WheelEvent) {
   try {
     const tx = new wasmModule.InputTransaction()
     tx.addEvent(wasmModule.DeviceEvent.mouseMove(pos.x, pos.y))
+    const rotationUnit = rotationUnitFromEvent(e)
+    // Browser wheel deltas are positive when scrolling down/right, while the
+    // RDP wire format expects positive values for wheel-up (away from user),
+    // so negate to match; same as IronRDP's reference frontend.
     if (e.deltaY !== 0) {
-      tx.addEvent(wasmModule.DeviceEvent.wheelRotations(true, Math.max(-1000, Math.min(1000, Math.round(e.deltaY))), wasmModule.RotationUnit.Pixel))
+      tx.addEvent(wasmModule.DeviceEvent.wheelRotations(true, Math.max(-1000, Math.min(1000, -Math.round(e.deltaY))), rotationUnit))
     }
     if (e.deltaX !== 0) {
-      tx.addEvent(wasmModule.DeviceEvent.wheelRotations(false, Math.max(-1000, Math.min(1000, Math.round(e.deltaX))), wasmModule.RotationUnit.Pixel))
+      tx.addEvent(wasmModule.DeviceEvent.wheelRotations(false, Math.max(-1000, Math.min(1000, -Math.round(e.deltaX))), rotationUnit))
     }
     session.applyInputs(tx)
   } catch (_) {}
@@ -1303,6 +1320,7 @@ watch(activeResolution, (mode) => {
 }
 .rdp-error-text { color: var(--error); }
 .rdp-error-detail { color: var(--text-muted); font-size: 0.8125rem; max-width: 30rem; text-align: center; word-break: break-word; }
+.rdp-error-hint { color: var(--text-secondary); font-size: 0.8125rem; max-width: 36rem; text-align: center; word-break: break-word; }
 .rdp-statusbar {
   height: 1.5rem;
   display: flex;

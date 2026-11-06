@@ -1,6 +1,8 @@
 package session
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,12 +18,15 @@ import (
 type VNCProxy struct {
 	listener net.Listener
 	target   string
-	stopCh   chan struct{}
-	stopOnce sync.Once
-	wg       sync.WaitGroup
-	mu       sync.Mutex
-	wsConn   *websocket.Conn
-	tcpConn  net.Conn
+	// authToken scopes the proxy's path in server mode; also the registry
+	// key for the /api/web dispatch.
+	authToken string
+	stopCh    chan struct{}
+	stopOnce  sync.Once
+	wg        sync.WaitGroup
+	mu        sync.Mutex
+	wsConn    *websocket.Conn
+	tcpConn   net.Conn
 }
 
 func NewVNCProxy(target string) *VNCProxy {
@@ -33,6 +38,12 @@ func NewVNCProxy(target string) *VNCProxy {
 
 // Start begins listening on a random local port and returns the WebSocket URL.
 func (p *VNCProxy) Start() (string, error) {
+	var token [16]byte
+	if _, err := rand.Read(token[:]); err != nil {
+		return "", fmt.Errorf("vnc proxy token: %w", err)
+	}
+	p.authToken = hex.EncodeToString(token[:])
+
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", fmt.Errorf("vnc proxy listen: %w", err)
@@ -52,6 +63,8 @@ func (p *VNCProxy) Start() (string, error) {
 		}
 		p.handleWebSocket(ws)
 	})
+	// Also reachable through the server build's /api/web mount.
+	registerSessionProxyHandler(p.authToken, mux)
 
 	p.wg.Add(1)
 	go func() {
@@ -61,7 +74,7 @@ func (p *VNCProxy) Start() (string, error) {
 
 	addr := ln.Addr().(*net.TCPAddr)
 	log.Writef("[VNCProxy] Listening on ws://127.0.0.1:%d, target: %s", addr.Port, p.target)
-	return fmt.Sprintf("ws://127.0.0.1:%d", addr.Port), nil
+	return sessionProxyAddress(p.authToken, fmt.Sprintf("ws://127.0.0.1:%d", addr.Port)), nil
 }
 
 func (p *VNCProxy) handleWebSocket(ws *websocket.Conn) {
@@ -148,6 +161,7 @@ func (p *VNCProxy) handleWebSocket(ws *websocket.Conn) {
 // Stop closes all connections and waits for goroutines to exit.
 func (p *VNCProxy) Stop() {
 	p.stopOnce.Do(func() { close(p.stopCh) })
+	unregisterSessionProxyHandler(p.authToken)
 	p.mu.Lock()
 	if p.wsConn != nil {
 		p.wsConn.Close()

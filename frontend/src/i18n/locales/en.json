@@ -873,6 +873,8 @@
   "rdp.reconnect": "Reconnect",
   "rdp.retry": "Retry",
   "rdp.timeout": "Connection timed out. Please check the host address and network connectivity.",
+  "rdp.hintNlaRequired": "The remote computer requires Network Level Authentication (NLA). Enable “Prefer NLA” in the connection’s advanced settings and try again.",
+  "rdp.hintLegacySecurity": "The remote computer only offers the legacy standard RDP security (RC4 encryption), which uniTerm does not support. Enable TLS on the remote computer (for xrdp: set security_layer to negotiate or tls in /etc/xrdp/xrdp.ini and make sure /etc/xrdp/cert.pem and /etc/xrdp/key.pem exist).",
   "remoteDesktop.resolution": "Resolution",
   "rdp.adaptive": "Adaptive (follows window; resizing briefly reconnects)",
   "remoteDesktop.resAdaptive": "Adaptive",

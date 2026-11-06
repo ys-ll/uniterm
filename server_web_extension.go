@@ -121,6 +121,10 @@ func (s *WebStreamService) cleanupStagingLoop() {
 // registerWebStreamService mounts WebStreamService at /api/web for the
 // headless server build.
 func registerWebStreamService(w3app *application.App, app *App) {
+	// Session proxies (RDP/VNC/SPICE) advertise path-form addresses served
+	// through this mount: the remote browser cannot reach the worker's
+	// loopback listeners (issue #1397).
+	session.ServeSessionProxiesOverHTTP = true
 	w3app.RegisterService(application.NewServiceWithOptions(
 		NewWebStreamService(app, app.resolveFileTransferSession),
 		application.ServiceOptions{Route: "/api/web"},
@@ -236,6 +240,8 @@ func (s *WebStreamService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case subPath == "/mode" && r.Method == http.MethodGet:
 		s.handleModeInfo(w, r)
+	case strings.HasPrefix(subPath, session.SessionProxyRoutePrefix):
+		s.handleSessionProxy(w, r)
 	case subPath == "/credentials/status" && r.Method == http.MethodGet:
 		s.handleCredentialsStatus(w, r)
 	case subPath == "/credentials/rekey" && r.Method == http.MethodPost:
@@ -257,6 +263,25 @@ func (s *WebStreamService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Not Found", http.StatusNotFound)
 	}
+}
+
+// handleSessionProxy upgrades a browser WebSocket to the RDP/VNC/SPICE
+// session proxy registered under <token> (see session.LookupSessionProxyHandler).
+// The proxy handlers still enforce their own token-path guard where present,
+// so the request path is rewritten back to the proxy-local form before dispatch.
+func (s *WebStreamService) handleSessionProxy(w http.ResponseWriter, r *http.Request) {
+	token := strings.TrimPrefix(r.URL.Path, "/api/web"+session.SessionProxyRoutePrefix)
+	if token == "" || strings.Contains(token, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	h, ok := session.LookupSessionProxyHandler(token)
+	if !ok {
+		http.Error(w, "session proxy not found", http.StatusNotFound)
+		return
+	}
+	r.URL.Path = "/" + token
+	h.ServeHTTP(w, r)
 }
 
 // handleModeInfo returns the current runtime mode and isolated tenant user information.

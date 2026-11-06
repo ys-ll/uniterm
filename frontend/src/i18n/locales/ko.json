@@ -850,6 +850,8 @@
   "rdp.reconnect": "재연결",
   "rdp.retry": "다시 시도",
   "rdp.timeout": "연결 시간이 초과되었습니다. 호스트 주소와 네트워크 연결을 확인하세요.",
+  "rdp.hintNlaRequired": "원격 컴퓨터에 NLA(네트워크 수준 인증)가 필요합니다. 연결의 고급 설정에서 “NLA 우선 사용”을 켠 후 다시 시도하세요.",
+  "rdp.hintLegacySecurity": "원격 컴퓨터가 레거시 표준 RDP 보안(RC4 암호화)만 제공하며, uniTerm은 이를 지원하지 않습니다. 원격 컴퓨터에서 TLS를 활성화하세요(xrdp의 경우 /etc/xrdp/xrdp.ini의 security_layer를 negotiate 또는 tls로 변경하고 /etc/xrdp/cert.pem, /etc/xrdp/key.pem 파일이 있는지 확인하세요).",
   "remoteDesktop.resolution": "해상도",
   "rdp.adaptive": "자동 (창에 맞춤, 크기 조절 시 잠시 재연결)",
   "remoteDesktop.resAdaptive": "자동",

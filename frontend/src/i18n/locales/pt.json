@@ -846,6 +846,8 @@
   "rdp.reconnect": "Reconectar",
   "rdp.retry": "Tentar novamente",
   "rdp.timeout": "A conexão excedeu o tempo limite. Verifique o endereço do host e a conectividade de rede.",
+  "rdp.hintNlaRequired": "O computador remoto exige Autenticação no Nível da Rede (NLA). Ative “Preferir NLA” nas configurações avançadas da conexão e tente novamente.",
+  "rdp.hintLegacySecurity": "O computador remoto só oferece a segurança RDP padrão herdada (criptografia RC4), que o uniTerm não suporta. Habilite o TLS no computador remoto (no xrdp: defina security_layer como negotiate ou tls em /etc/xrdp/xrdp.ini e verifique se /etc/xrdp/cert.pem e /etc/xrdp/key.pem existem).",
   "remoteDesktop.resolution": "Resolução",
   "rdp.adaptive": "Adaptável (segue a janela; redimensionar reconecta brevemente)",
   "remoteDesktop.resAdaptive": "Automática",
