@@ -2123,6 +2123,7 @@
   "netscan.portScan.columns.state": "状态",
   "netscan.portScan.portHint": "输入目标 IP 查看哪些端口开放，或点击上方已发现主机的「深度扫描」。",
   "netscan.portScan.missingHost": "请先输入目标 IP",
+  "netscan.portScan.invalidHost": "目标不是合法的 IP 地址",
   "netscan.portScan.startFailed": "启动端口扫描失败",
   "netscan.export.results": "导出扫描结果",
   "netscan.export.title": "导出扫描结果",

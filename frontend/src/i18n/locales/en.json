@@ -2123,6 +2123,7 @@
   "netscan.portScan.columns.state": "State",
   "netscan.portScan.portHint": "Enter a target IP to see which ports are open, or use Deep scan on a discovered host above.",
   "netscan.portScan.missingHost": "Please enter a target IP",
+  "netscan.portScan.invalidHost": "Target is not a valid IP address",
   "netscan.portScan.startFailed": "Failed to start port scan",
   "netscan.export.results": "Export scan results",
   "netscan.export.title": "Export scan results",

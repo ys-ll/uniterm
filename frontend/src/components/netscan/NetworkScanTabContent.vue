@@ -35,8 +35,11 @@
               v-model="octet1"
               :placeholder="'10'"
               maxlength="3"
-              class="octet-input"
+              class="octet-input ip-seg"
               :disabled="ipScanning"
+              @input="octet1 = sanitizeOctet(octet1)"
+              @focus="$event.target.select()"
+              @keydown="onIpSegmentKey"
               @keyup.enter="startIPScan"
             />
             <span class="toolbar-sep">.</span>
@@ -44,8 +47,11 @@
               v-model="octet2"
               :placeholder="'0'"
               maxlength="3"
-              class="octet-input"
+              class="octet-input ip-seg"
               :disabled="ipScanning"
+              @input="octet2 = sanitizeOctet(octet2)"
+              @focus="$event.target.select()"
+              @keydown="onIpSegmentKey"
               @keyup.enter="startIPScan"
             />
             <span class="toolbar-sep">.</span>
@@ -53,18 +59,23 @@
               v-model="octet3"
               :placeholder="'0'"
               maxlength="3"
-              class="octet-input"
+              class="octet-input ip-seg"
               :disabled="ipScanning"
+              @input="octet3 = sanitizeOctet(octet3)"
+              @focus="$event.target.select()"
+              @keydown="onIpSegmentKey"
               @keyup.enter="startIPScan"
             />
-            <span class="toolbar-sep">:</span>
+            <span class="toolbar-sep">.</span>
             <el-input-number
               v-model="lastStart"
               :min="1"
               :max="254"
               :disabled="ipScanning"
               controls-position="right"
-              class="octet-range"
+              class="octet-range ip-seg"
+              @focus="$event.target.select()"
+              @keydown="onIpSegmentKey"
             />
             <span class="toolbar-sep">→</span>
             <el-input-number
@@ -73,7 +84,9 @@
               :max="254"
               :disabled="ipScanning"
               controls-position="right"
-              class="octet-range"
+              class="octet-range ip-seg"
+              @focus="$event.target.select()"
+              @keydown="onIpSegmentKey"
             />
             <el-button v-if="!ipScanning" type="primary" class="go-btn" @click="startIPScan">
               {{ t('netscan.ipScan.start') }}
@@ -166,6 +179,8 @@
               :placeholder="t('netscan.portScan.host')"
               class="port-host-input"
               :disabled="portScanning"
+              @input="portHost = sanitizeHostInput(portHost)"
+              @focus="$event.target.select()"
               @keyup.enter="startPortScan"
             />
             <el-radio-group v-model="portMode" :disabled="portScanning" class="port-mode">
@@ -180,6 +195,8 @@
                 :disabled="portScanning"
                 controls-position="right"
                 class="port-num"
+                @focus="$event.target.select()"
+                @keydown="onNumericKey"
               />
               <span class="toolbar-sep">→</span>
               <el-input-number
@@ -189,6 +206,8 @@
                 :disabled="portScanning"
                 controls-position="right"
                 class="port-num"
+                @focus="$event.target.select()"
+                @keydown="onNumericKey"
               />
             </template>
             <span class="ctl-label" :title="t('netscan.portScan.workersHint')">{{ t('netscan.portScan.workers') }}</span>
@@ -199,6 +218,8 @@
               :disabled="portScanning"
               controls-position="right"
               class="workers-num"
+              @focus="$event.target.select()"
+              @keydown="onNumericKey"
             />
             <el-button v-if="!portScanning" type="primary" class="go-btn" @click="startPortScan">
               {{ t('netscan.portScan.start') }}
@@ -322,6 +343,56 @@ const ipDone = ref(0)
 const ipTotal = ref(0)
 // keyed by ip so re-emitted hosts (with MAC filled) upsert instead of duplicating
 const ipHosts = ref<any[]>([])
+
+// Typing "." in an octet segment jumps focus to the next segment, and only
+// digits are allowed (each octet spans 0-255). Delegated by class so it works
+// for both el-input and el-input-number. Only active for IP entry.
+function onIpSegmentKey(e: KeyboardEvent) {
+  const t = e.target as HTMLElement
+  const seg = t.closest?.('.ip-seg') as HTMLElement | null
+  if (!seg) return
+  const key = e.key
+  if (key === '.' || key === '。') {
+    e.preventDefault()
+    const segs = Array.from(document.querySelectorAll<HTMLElement>('.ip-seg'))
+    const nextInput = segs[segs.indexOf(seg) + 1]?.querySelector?.('input') as HTMLInputElement | null
+    nextInput?.focus()
+    nextInput?.select()
+    return
+  }
+  // Block any single printable character that is not a digit.
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  if (key.length === 1 && !/[0-9]/.test(key)) e.preventDefault()
+}
+
+// Keep numeric-only inputs from accepting letters / symbols / words.
+function onNumericKey(e: KeyboardEvent) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return
+  const key = e.key
+  if (key.length === 1 && !/[0-9]/.test(key)) e.preventDefault()
+}
+
+// Final backstop for digits-only octet fields (IME composition inserts text
+// after keydown, so the keydown guard alone cannot stop Chinese/letters).
+function sanitizeOctet(v: unknown): string {
+  return String(v ?? '').replace(/[^0-9]/g, '').slice(0, 3)
+}
+
+// Port-scan host may contain digits and dots only.
+function sanitizeHostInput(v: unknown): string {
+  return String(v ?? '').replace(/[^0-9.]/g, '')
+}
+
+// Basic IPv4 check (also accepts nothing but validated dotted-quad).
+function isIPv4(s: string): boolean {
+  const parts = s.split('.')
+  if (parts.length !== 4) return false
+  return parts.every((p) => {
+    if (!/^\d{1,3}$/.test(p)) return false
+    const n = Number(p)
+    return n >= 0 && n <= 255
+  })
+}
 
 // ── Port scan state ──
 const portHost = ref('')
@@ -457,6 +528,10 @@ async function startPortScan() {
   const host = portHost.value.trim()
   if (!host) {
     msg.warning(t('netscan.portScan.missingHost'))
+    return
+  }
+  if (!isIPv4(host)) {
+    msg.warning(t('netscan.portScan.invalidHost'))
     return
   }
   const commonOnly = portMode.value === 'common'
