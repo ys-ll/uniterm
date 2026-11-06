@@ -1,5 +1,59 @@
 # Changelog
 
+## v1.12.1
+
+### What's Changed
+
+**Improvements**
+
+- SSH: regular connections on macOS and Windows now support multi-hop jump chains — a jump host's own parent jump is resolved recursively (local → A → B → C), each hop with its own credentials, with loop detection and full-chain cleanup on failure or stop. (@surenwuyuwuqiu)
+- Network scan: IP octet and port inputs accept digits only (a Chinese IME no longer leaks letters into the fields), typing a dot jumps to the next octet, inputs select their content on focus, and the port scan validates that the target is a valid IPv4 before starting. (@etanman)
+- Database tree: schemas with tens of thousands of tables no longer freeze the app — table browsing is backend-paginated with virtual scrolling and server-side search, staying smooth with ~100k tables; table-name search is case-insensitive, truncated names show a full-name tooltip, schemas start collapsed with tables lazy-loaded, and schema / dictionary queries are capped at 60 s so a locked server can no longer freeze the whole app. (@etanman)
+
+**Bug Fixes**
+
+- RDP: the mouse wheel scrolls in the same direction as the local machine (also fixing near-zero scrolling with Firefox's line-mode deltas); server-side negotiation rejections now report the real error instead of an opaque decode failure; in web (Docker) deployments RDP / VNC / SPICE sessions are reachable from remote browsers again.
+- Built-in SSH service: the SSH / SFTP local service can now act as a jump host — `direct-tcpip` forwarding is supported for authenticated clients, so chains like phone → uniTerm built-in SSH → internal machine work. (@surenwuyuwuqiu)
+- MCP: opening a terminal no longer restarts the MCP service and drops active client sessions (requests no longer fail with "session not found") when the listener configuration is unchanged. (@surenwuyuwuqiu)
+- Terminal (Windows): IME commits are deduplicated — picking a candidate with the mouse, or an IME whose commit keyup precedes the input event, no longer inserts the word twice. (@sonnartliao)
+- Credentials: a missing OS keychain entry is now correctly recognized — the app shows the "cannot unlock credentials" explanation (possible causes such as a moved app directory, an OS reinstall, or a cleared keychain) instead of asking to set the credential store up again. (@gezerui888)
+- Database: a `DELIMITER` command on the very first line of a `.sql` script is honored — MySQL routine dumps that start with `DELIMITER $$` execute correctly instead of being cut at every inner `;`. (@kevin9327)
+- WSL: the cwd prompt hook is no longer typed at session start — a plain first login shows no handshake output at all; enabling "Follow terminal path" now asks once per session and types the hook on demand at an idle prompt.
+- UI: the gear (row action) menu in the Skills and Commands settings pages never opened, leaving edit / delete unreachable; the menu also gains a "reveal in file manager" item.
+
+**Notes**
+
+- As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
+- Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
+
+Thanks to @surenwuyuwuqiu, @etanman, @sonnartliao, @gezerui888 and @kevin9327 for their contributions to this release.
+
+### 更新内容
+
+**改进**
+
+- SSH：macOS 和 Windows 的普通连接支持多级跳板——跳板自身的上一级跳板会被递归解析（本机 → A → B → C），每一跳使用自己的凭据，带循环引用检测，失败或停止时清理整条链。(@surenwuyuwuqiu)
+- 网络扫描：IP 各段与端口输入只接受数字（中文输入法不再把字母带进输入框），输入点号自动跳到下一段，输入框聚焦时全选已有内容；端口扫描启动前校验目标是合法 IPv4。(@etanman)
+- 数据库树：几万张表的库不再卡死——表浏览改为后端分页 + 虚拟滚动 + 服务端搜索，约 10 万张表依然流畅；表名搜索不区分大小写、截断的表名悬停显示完整名称、库默认折叠按需加载表，schema / 字典查询增加 60 秒超时，锁住的服务器不再拖死整个应用。(@etanman)
+
+**问题修复**
+
+- RDP：鼠标滚轮方向与本地一致（同时修复 Firefox 行模式增量下几乎不滚动的问题）；服务端协商失败现在显示真实原因，而非不可读的解码错误；Web（Docker）部署下远程浏览器可以正常打开 RDP / VNC / SPICE 会话。
+- 内置 SSH 服务：SSH / SFTP 本地服务可以作为跳板机使用——为已认证客户端支持 `direct-tcpip` 转发，手机 → uniTerm 内置 SSH → 内网机器 这类链路可用了。(@surenwuyuwuqiu)
+- MCP：监听配置未变化时，打开终端不再重启 MCP 服务、不再丢失已有客户端会话（后续请求不再报 "session not found"）。(@surenwuyuwuqiu)
+- 终端（Windows）：输入法上屏去重——鼠标点选候选词、或提交时序特殊的输入法，不再把同一个词插入两次。(@sonnartliao)
+- 凭据：系统钥匙串条目丢失时能正确识别——显示「无法解锁凭证」说明及可能原因（如应用目录被移动、重装系统、清除了钥匙串），而不是直接要求重新初始化凭据库。(@gezerui888)
+- 数据库：`.sql` 脚本第一行的 `DELIMITER` 命令现在会被识别——以 `DELIMITER $$` 开头的 MySQL 存储过程导出脚本可以正确执行，不再在每个内部 `;` 处被切开。(@kevin9327)
+- WSL：会话启动时不再键入 cwd 提示钩子——普通首次登录不再出现任何握手输出；开启「跟随终端路径」时每个会话询问一次，并在空闲提示符处按需键入钩子。
+- 界面：Skills 和 Commands 设置页的行操作菜单无法弹出，编辑 / 删除不可达；菜单新增「在文件管理器中打开」项。
+
+**说明**
+
+- 本软件未购买代码签名证书，未签名的可执行文件可能被部分杀毒引擎（如 Windows Defender）误报。这是 Go/Wails 应用的已知问题（见 [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)）。可在杀毒软件中添加排除规则放行；请务必从官方开源渠道——GitHub 和 Gitee——下载。如仍有顾虑，可自行下载源码本地构建运行。
+- Android：自 1.11.0 起，Android 应用改用基于 uniterm 域名的新 application ID（`net.uniterm.app`）——如果安装过 1.11.0 之前的版本，请先卸载旧版再安装新版。
+
+感谢 @surenwuyuwuqiu, @etanman, @sonnartliao, @gezerui888, @kevin9327 对本版本发布的贡献。
+
 ## v1.12.0
 
 ### What's Changed
