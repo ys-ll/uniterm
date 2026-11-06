@@ -72,6 +72,9 @@ func (s *ConnectionStore) save(data session.ConnectionStoreData, force bool) err
 
 	for i := range connections {
 		conn := &connections[i]
+		if err := session.ValidateTOTPConfig(*conn); err != nil {
+			return err
+		}
 		if conn.AuthType == "identity" {
 			// Identity connections obtain credentials solely from the
 			// referenced identity (MaterializeIdentity resolves them at

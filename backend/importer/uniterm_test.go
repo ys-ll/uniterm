@@ -170,3 +170,24 @@ func TestExportUnitermRequiresPassword(t *testing.T) {
 		t.Fatal("an export without a password must be refused")
 	}
 }
+
+func TestUnitermTOTPEncryptedExport(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	data := sampleStore()
+	data.Connections[0].TOTPEnabled = true
+	data.Connections[0].TOTPSecret = secret
+	raw, err := ExportUniterm(data, "export-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), secret) {
+		t.Fatal("export leaked plaintext TOTP secret")
+	}
+	res, err := parseUniterm(raw, ParseOptions{Password: "export-password"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Connections[0].TOTPEnabled || res.Connections[0].TOTPSecret != secret {
+		t.Fatal("export lost TOTP configuration")
+	}
+}

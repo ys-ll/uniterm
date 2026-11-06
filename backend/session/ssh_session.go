@@ -22,6 +22,7 @@ import (
 	"golang.org/x/text/encoding/traditionalchinese"
 	"golang.org/x/text/transform"
 
+	"github.com/ys-ll/uniterm/backend/credentials"
 	"github.com/ys-ll/uniterm/backend/log"
 )
 
@@ -166,7 +167,10 @@ func (s *SSHSession) keyboardInteractiveChallenge(config ConnectionConfig, autoA
 	challenged := false
 	return func(user, instruction string, questions []string, echos []bool) ([]string, error) {
 		defer func() { challenged = true }()
-		if isSavedPasswordChallenge(config, questions, echos) && atomic.CompareAndSwapInt32(autoAnswered, 0, 1) {
+		if len(questions) != len(echos) {
+			return nil, fmt.Errorf("invalid SSH authentication challenge")
+		}
+		if !config.TOTPEnabled && isSavedPasswordChallenge(config, questions, echos) && atomic.CompareAndSwapInt32(autoAnswered, 0, 1) {
 			answers := make([]string, len(questions))
 			for i := range questions {
 				answers[i] = config.Password
@@ -568,7 +572,8 @@ func (s *SSHSession) attach(client *ssh.Client, config ConnectionConfig) error {
 // interactive so credentials are never sent to the wrong question.
 func isSavedPasswordChallenge(config ConnectionConfig, questions []string, echos []bool) bool {
 	return (config.AuthType == "" || config.AuthType == "password") &&
-		config.Password != "" && len(questions) == 1 && len(echos) == 1 && !echos[0]
+		config.Password != "" && !credentials.IsEncrypted(config.Password) &&
+		len(questions) == 1 && len(echos) == 1 && !echos[0] && isPasswordPrompt(questions[0])
 }
 
 func (s *SSHSession) readStderr() {
