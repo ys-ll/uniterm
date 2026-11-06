@@ -384,6 +384,8 @@
   "sftp.reconnecting": "Connexion perdue, reconnexion…",
   "sftp.dropHere": "Déposer les fichiers ici",
   "sftp.followPath": "Suivre le chemin du terminal",
+  "sftp.cwdHookTitle": "Suivre le chemin du terminal",
+  "sftp.cwdHookConfirm": "Pour signaler le répertoire actuel du terminal, un petit hook de prompt doit être injecté dans cette session WSL. Quelques lignes de commandes peuvent apparaître brièvement dans le terminal ; cela fonctionne mieux lorsque le shell est inactif à l’invite. Injecter ?",
   "sftp.followPathHint": "Suivre le chemin du terminal",
   "sftp.upload": "Téléverser",
   "sftp.downloadTo": "Télécharger vers...",

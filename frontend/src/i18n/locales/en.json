@@ -407,6 +407,8 @@
   "sftp.reconnecting": "Connection lost, reconnecting…",
   "sftp.dropHere": "Drop files here",
   "sftp.followPath": "Follow terminal path",
+  "sftp.cwdHookTitle": "Follow terminal path",
+  "sftp.cwdHookConfirm": "To report the terminal's current directory, a small prompt hook needs to be typed into this WSL session. A few lines of commands may briefly appear in the terminal; it works best while the shell is idle at a prompt. Inject it?",
   "sftp.followPathHint": "Follow terminal path",
   "sftp.upload": "Upload",
   "sftp.downloadTo": "Download to...",

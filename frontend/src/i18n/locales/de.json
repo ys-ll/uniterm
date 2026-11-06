@@ -384,6 +384,8 @@
   "sftp.reconnecting": "Verbindung verloren, wird neu verbunden…",
   "sftp.dropHere": "Dateien hier ablegen",
   "sftp.followPath": "Terminalpfad folgen",
+  "sftp.cwdHookTitle": "Terminalpfad folgen",
+  "sftp.cwdHookConfirm": "Um das aktuelle Verzeichnis des Terminals zu melden, muss ein kleiner Prompt-Hook in diese WSL-Sitzung eingegeben werden. Dabei können kurz einige Befehlszeilen im Terminal erscheinen; am besten funktioniert es, wenn die Shell an einer Eingabeaufforderung inaktiv ist. Jetzt injizieren?",
   "sftp.followPathHint": "Terminalpfad folgen",
   "sftp.upload": "Hochladen",
   "sftp.downloadTo": "Herunterladen nach...",

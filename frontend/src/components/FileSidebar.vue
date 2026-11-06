@@ -150,14 +150,16 @@
 <script setup lang="ts">
 import { ExternalLink, FolderSync } from '@lucide/vue'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
+import { backendErrorText } from '../utils/backendError'
 import { useCompanionStore } from '../stores/companionStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import {
   SftpListRemote, SftpChangeRemoteDir, SftpOpenExternalEditor, SftpOpenWithSystem, ListSessions,
-  SessionSetCwdTracking,
+  SessionSetCwdTracking, SessionInjectCwdHook,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import {
   useFilePanel, useConflictDialog, useFileDialogs, useFileListing, useChmodDialog,
@@ -322,14 +324,37 @@ const followActive = computed(() => {
 // terminal:cwd with POSIX paths).
 const followSupported = computed(() => !!companionStore.activeFilesPanelId)
 
-function toggleFollow() {
+// WSL sessions whose terminal reported the cwd hook as requested this
+// session: the follow toggle must not re-ask (or re-inject) for them.
+// Per-session by design — the hook lives in the session's shell, so every
+// new session asks once via the toggle confirmation.
+const cwdHookRequested = new Set<string>()
+
+async function toggleFollow() {
   const pid = companionStore.activeFilesPanelId
   if (!pid) return
   const enabling = companionStore.followPathByPanel[pid] !== true
+  const panel = panelStore.getPanel(pid)
+  if (enabling && panel?.type === 'wsl' && panel.sessionId
+    && !cwdHookRequested.has(panel.sessionId)) {
+    // The WSL cwd hook is typed into the session's shell on demand; ask
+    // once per session before the first injection (issue #1388: injecting
+    // at session start leaked handshake output into every first login).
+    try {
+      await ElMessageBox.confirm(t('sftp.cwdHookConfirm'), t('sftp.cwdHookTitle'), {
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
+        type: 'info',
+      })
+    } catch {
+      return // declined: leave follow off
+    }
+    cwdHookRequested.add(panel.sessionId)
+    SessionInjectCwdHook(panel.sessionId).catch((e: unknown) => msg.error(backendErrorText(e)))
+  }
   companionStore.toggleFollowPath(pid)
   if (!enabling) return
   // Show the last report immediately; enabling SSH polling refreshes it.
-  const panel = panelStore.getPanel(pid)
   const recorded = panel?.sessionId ? companionStore.sessionCwd[panel.sessionId] : ''
   if (recorded && recorded !== cwd.value) scheduleFollowNavigate(recorded)
 }
