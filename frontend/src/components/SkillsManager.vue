@@ -52,15 +52,19 @@
         <el-button link @click.stop="actionMenuRef?.toggle($event.currentTarget, skill)">
           <el-icon :size="'0.9375rem'"><Settings2 /></el-icon>
         </el-button>
-        <Menu ref="actionMenuRef" v-model:visible="actionMenuVisible">
-          <template #default="{ current }">
-            <MenuItem @click="onAction('edit', current)">{{ t('settings.skillsEdit') }}</MenuItem>
-            <MenuDivider />
-            <MenuItem class="danger" @click="onAction('delete', current)">{{ t('settings.skillsDelete') }}</MenuItem>
-          </template>
-        </Menu>
       </div>
     </div>
+
+    <!-- Single shared row menu, kept outside the v-for: a ref inside a loop
+         becomes an array, so toggle() never resolves to a real Menu instance. -->
+    <Menu ref="actionMenuRef" v-model:visible="actionMenuVisible">
+      <template #default="{ current }">
+        <MenuItem @click="onAction('edit', current)">{{ t('settings.skillsEdit') }}</MenuItem>
+        <MenuItem @click="onAction('openFolder', current)">{{ t('settings.skillsOpenFolder') }}</MenuItem>
+        <MenuDivider />
+        <MenuItem class="danger" @click="onAction('delete', current)">{{ t('settings.skillsDelete') }}</MenuItem>
+      </template>
+    </Menu>
 
     <SkillCreateDialog
       v-if="showCreate"
@@ -168,6 +172,7 @@ async function onSaveEdit() {
 function handleCmd(cmd: string, skill: SkillMeta) {
   if (cmd === 'delete') onDelete(skill)
   else if (cmd === 'edit') openEdit(skill)
+  else if (cmd === 'openFolder') openFolder(skill)
 }
 
 const actionMenuRef = ref<InstanceType<typeof Menu> | null>(null)
