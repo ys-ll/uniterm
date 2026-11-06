@@ -546,6 +546,38 @@ export const useAIStore = defineStore('ai', () => {
     doSave()
   }
 
+  // Issue #756: drop a user message along with the AI's reply for that turn
+  // (everything up to the next user message) so a mistyped question never
+  // leaves orphaned assistant context behind. For any other message type it
+  // behaves like deleteMessage. Same shared-array semantics as its siblings.
+  function deleteMessageWithReply(messageId: string) {
+    const idx = messages.value.findIndex(m => m.id === messageId)
+    if (idx === -1) return
+    invalidateContextSummary()
+    const m = messages.value[idx]
+    let end = idx + 1
+    if (m.role === 'user') {
+      // Consume the whole assistant turn that answers this user message:
+      // tool results and follow-up assistant blocks all belong to it, and
+      // must not be left dangling against the deleted prompt.
+      while (end < messages.value.length && messages.value[end].role !== 'user') {
+        end++
+      }
+    } else if (m.role === 'assistant' && m.tool_calls?.length) {
+      // Keep the original tool-result-pair cleanup for assistant messages.
+      const ids = new Set(m.tool_calls.map(tc => tc.id))
+      while (end < messages.value.length) {
+        const n = messages.value[end]
+        if (n.role === 'tool' && n.tool_call_id && ids.has(n.tool_call_id)) end++
+        else break
+      }
+    }
+    messages.value.splice(idx, end - idx)
+    const session = sessions.value.find(s => s.id === currentSessionId.value)
+    if (session) session.messages = messages.value
+    doSave()
+  }
+
   // Issue #756: drop the message AND everything after it (context rollback,
   // Trae-style partial deletion). Same shared-array semantics as deleteMessage.
   function truncateFrom(messageId: string) {
@@ -817,6 +849,7 @@ export const useAIStore = defineStore('ai', () => {
     switchSession,
     deleteSession,
     deleteMessage,
+    deleteMessageWithReply,
     truncateFrom,
     exportSessionMarkdown,
     renameSession,

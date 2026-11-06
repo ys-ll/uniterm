@@ -217,6 +217,17 @@
       <!-- Message timestamp (user questions and assistant answers only).
            The row shows the short clock; hovering reveals the full date and
            time. -->
+      <!-- Per-message actions for user messages: copy the question exactly, or
+           delete it together with the AI's reply for that turn (used to fix a
+           mistyped question without leaving orphaned context behind). -->
+      <div v-if="message.role === 'user'" class="user-actions">
+        <button class="user-action-btn" :class="{ active: userCopied }" @click="onUserCopy" :title="t('ai.copy')">
+          <el-icon><Check v-if="userCopied" :size="'0.8125rem'" /><Copy v-else :size="'0.8125rem'" /></el-icon>
+        </button>
+        <button class="user-action-btn danger" @click="onUserDelete" :title="t('common.delete')">
+          <el-icon><Trash2 :size="'0.8125rem'" /></el-icon>
+        </button>
+      </div>
       <el-tooltip
         v-if="createdAtLabel && message.role !== 'tool'"
         :content="createdAtFullLabel"
@@ -231,9 +242,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { writeClipboard } from '../composables/useClipboardWrite'
-import { Copy, Check, BookOpen, Terminal, FileText } from '@lucide/vue'
+import { Copy, Check, BookOpen, Terminal, FileText, Trash2 } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useI18n } from '../i18n'
 import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
@@ -469,6 +480,39 @@ async function copyAsMarkdown() {
   const copied = await writeClipboard(props.message.content)
   copyMdLabel.value = t(copied ? 'ai.copied' : 'ai.copyFailed')
   setTimeout(() => { copyMdLabel.value = t('ai.copyMarkdown') }, 2000)
+}
+
+// ── User message actions: copy the exact question, or delete it along with
+//    the AI's reply for that turn (fixing a mistyped prompt cleanly). ──
+const userCopied = ref(false)
+
+async function onUserCopy() {
+  const text = props.message.content || ''
+  if (!text) return
+  if (await writeClipboard(text)) {
+    userCopied.value = true
+    setTimeout(() => { userCopied.value = false }, 2000)
+  } else {
+    ElMessage.error(t('ai.copyFailed'))
+  }
+}
+
+async function onUserDelete() {
+  try {
+    await ElMessageBox.confirm(
+      t('ai.confirmDeleteMessage'),
+      t('ai.confirmDeleteTitle'),
+      {
+        type: 'warning',
+        confirmButtonText: t('common.delete'),
+        cancelButtonText: t('common.cancel'),
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+  } catch {
+    return // cancelled
+  }
+  aiStore.deleteMessageWithReply(props.message.id)
 }
 
 const copiedTool = ref('')
@@ -1448,6 +1492,49 @@ function escapeHtml(text: string): string {
   max-width: 9.375rem;
   opacity: 1;
   padding-left: 0.125rem;
+}
+
+/* User message actions: copy & delete shown below the question text,
+   right-aligned to match the user bubble's own timestamp. Icon-only and
+   hidden until the mouse is over the message bubble. */
+.user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.125rem;
+  margin-top: 0.25rem;
+  min-height: 1.25rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.ai-message:hover .user-actions {
+  opacity: 1;
+}
+.user-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+.user-action-btn:hover {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+.user-action-btn.active {
+  color: var(--accent);
+}
+.user-action-btn.danger:hover {
+  color: var(--error);
+  background: var(--error-subtle);
 }
 .continue-box {
   margin-top: 0.5rem;

@@ -272,6 +272,8 @@
   "ai.exportDone": "{name} exportiert",
   "ai.deleteMessage": "Diese Nachricht löschen",
   "ai.truncateFrom": "Diese Nachricht und alles danach löschen",
+  "ai.confirmDeleteTitle": "Nachricht löschen",
+  "ai.confirmDeleteMessage": "Diese Nachricht und die zugehörige KI-Antwort werden gelöscht. Dies kann nicht rückgängig gemacht werden. Löschen?",
   "ai.thinking": "Denkt nach...",
   "ai.thinkingToggleHint": "Klicken, um den Denkprozess ein- oder auszublenden",
   "ai.noThinkingContent": "Kein Denkprozess in dieser Runde (das Modell unterstützt ggf. kein Reasoning).",
