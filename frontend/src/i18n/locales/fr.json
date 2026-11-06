@@ -850,6 +850,8 @@
   "rdp.reconnect": "Reconnecter",
   "rdp.retry": "Réessayer",
   "rdp.timeout": "Délai de connexion dépassé. Veuillez vérifier l&apos;adresse de l&apos;hôte et la connectivité réseau.",
+  "rdp.hintNlaRequired": "L’ordinateur distant exige l’authentification au niveau du réseau (NLA). Activez « Préférer NLA » dans les paramètres avancés de la connexion, puis réessayez.",
+  "rdp.hintLegacySecurity": "L’ordinateur distant ne propose que la sécurité RDP standard héritée (chiffrement RC4), que uniTerm ne prend pas en charge. Activez TLS sur l’ordinateur distant (pour xrdp : définissez security_layer sur negotiate ou tls dans /etc/xrdp/xrdp.ini et assurez-vous que /etc/xrdp/cert.pem et /etc/xrdp/key.pem existent).",
   "remoteDesktop.resolution": "Résolution",
   "rdp.adaptive": "Adaptatif (suit la fenêtre ; le redimensionnement reconnecte brièvement)",
   "remoteDesktop.resAdaptive": "Auto",

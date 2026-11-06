@@ -850,6 +850,8 @@
   "rdp.reconnect": "Wieder verbinden",
   "rdp.retry": "Erneut versuchen",
   "rdp.timeout": "Zeitüberschreitung bei der Verbindung. Bitte überprüfen Sie die Hostadresse und die Netzwerkverbindung.",
+  "rdp.hintNlaRequired": "Der Remotecomputer erfordert Netzwerkauthentifizierung auf Netzwerkebene (NLA). Aktivieren Sie „NLA bevorzugen“ in den erweiterten Verbindungseinstellungen und versuchen Sie es erneut.",
+  "rdp.hintLegacySecurity": "Der Remotecomputer bietet nur die veraltete Standard-RDP-Sicherheit (RC4-Verschlüsselung) an, die uniTerm nicht unterstützt. Aktivieren Sie TLS auf dem Remotecomputer (bei xrdp: security_layer in /etc/xrdp/xrdp.ini auf negotiate oder tls setzen und sicherstellen, dass /etc/xrdp/cert.pem und /etc/xrdp/key.pem vorhanden sind).",
   "remoteDesktop.resolution": "Auflösung",
   "rdp.adaptive": "Adaptiv (folgt dem Fenster; Größenänderung verbindet kurz neu)",
   "remoteDesktop.resAdaptive": "Automatisch",

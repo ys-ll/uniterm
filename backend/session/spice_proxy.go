@@ -21,11 +21,14 @@ type SPICEProxy struct {
 	listener net.Listener
 	server   *http.Server
 	target   string
-	wg       sync.WaitGroup
-	mu       sync.Mutex
-	conns    map[*websocket.Conn]net.Conn
-	ctx      context.Context
-	cancel   context.CancelFunc
+	// authToken scopes the proxy's path in server mode; also the registry
+	// key for the /api/web dispatch.
+	authToken string
+	wg        sync.WaitGroup
+	mu        sync.Mutex
+	conns     map[*websocket.Conn]net.Conn
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 func NewSPICEProxy(target string) *SPICEProxy {
@@ -52,6 +55,7 @@ func (p *SPICEProxy) Start() (string, error) {
 	if _, err := rand.Read(token[:]); err != nil {
 		return "", fmt.Errorf("spice proxy token: %w", err)
 	}
+	p.authToken = hex.EncodeToString(token[:])
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", fmt.Errorf("spice proxy listen: %w", err)
@@ -74,6 +78,8 @@ func (p *SPICEProxy) Start() (string, error) {
 		p.handleWebSocket(ws)
 	})
 	p.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	// Also reachable through the server build's /api/web mount.
+	registerSessionProxyHandler(p.authToken, mux)
 
 	p.wg.Add(1)
 	go func() {
@@ -83,7 +89,7 @@ func (p *SPICEProxy) Start() (string, error) {
 
 	addr := ln.Addr().(*net.TCPAddr)
 	log.Writef("[SPICEProxy] Listening on ws://127.0.0.1:%d, target: %s", addr.Port, p.target)
-	return fmt.Sprintf("ws://127.0.0.1:%d%s", addr.Port, path), nil
+	return sessionProxyAddress(p.authToken, fmt.Sprintf("ws://127.0.0.1:%d%s", addr.Port, path)), nil
 }
 
 func (p *SPICEProxy) handleWebSocket(ws *websocket.Conn) {
@@ -165,6 +171,10 @@ func (p *SPICEProxy) handleWebSocket(ws *websocket.Conn) {
 // (SESSION-04).
 func (p *SPICEProxy) Stop() {
 	p.cancel()
+	// Nothing is registered when Start never ran (Stop after a failed start).
+	if p.authToken != "" {
+		unregisterSessionProxyHandler(p.authToken)
+	}
 	p.mu.Lock()
 	for ws, tcp := range p.conns {
 		ws.Close()

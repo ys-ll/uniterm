@@ -378,6 +378,75 @@ func TestParseX224SelectedProtocol(t *testing.T) {
 	}
 }
 
+// The NegotiationErr PDU must carry the mandatory error field (code 2) before
+// the x224 confirm — the client's decode requires it to reach the
+// NegotiationErr branch instead of failing with "missing error field".
+func TestNegotiationErrStructure(t *testing.T) {
+	// TPKT-framed NEG_FAILURE with failureCode 5 (HYBRID_REQUIRED_BY_SERVER).
+	x224 := []byte{0x00, 0x00, 0x00, 0x13, 0x0E, 0xD0, 0, 0, 0, 0, 0,
+		0x03, 0x00, 0x08, 0x00, 0x05, 0x00, 0x00, 0x00}
+
+	pdu := encodeRDCleanPathNegotiationErr(x224)
+
+	body := derTLVBody(pdu, 0)
+	off := 0
+	seen := map[int]bool{}
+	var errCode []byte
+	for off < len(body) {
+		fieldTag, n, err := derTLV(body, off)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fieldTag&0xA0 != 0xA0 {
+			t.Fatalf("tag %x is not context-specific constructed", fieldTag)
+		}
+		wrapped := derTLVBody(body, off)
+		switch fieldTag & 0x1f {
+		case 0: // version
+			if !bytes.Equal(derTLVBody(wrapped, 0), derIntegerBytes(rdcleanPathVersion)) {
+				t.Fatalf("version inner = % x", wrapped)
+			}
+			seen[0] = true
+		case 1: // error: SEQUENCE { [0] INTEGER code }
+			if wrapped[0] != 0x30 {
+				t.Fatalf("error tag %x", wrapped[0])
+			}
+			errBody := derTLVBody(wrapped, 0)
+			codeTag, _, err := derTLV(errBody, 0)
+			if err != nil || codeTag != 0xA0 {
+				t.Fatalf("error_code tag %x err %v", codeTag, err)
+			}
+			errCode = derTLVBody(derTLVBody(errBody, 0), 0)
+			seen[1] = true
+		case 6: // x224, TPKT stripped
+			if wrapped[0] != 0x04 {
+				t.Fatalf("x224 inner tag %x", wrapped[0])
+			}
+			got := derTLVBody(wrapped, 0)
+			if bytes.Equal(got, x224) {
+				t.Fatal("x224 still carries the TPKT header")
+			}
+			if !bytes.Equal(got, x224[4:]) {
+				t.Fatalf("x224 mismatch: % x", got)
+			}
+			seen[6] = true
+		}
+		off += n
+	}
+	for _, want := range []int{0, 1, 6} {
+		if !seen[want] {
+			t.Fatalf("missing field %d", want)
+		}
+	}
+	if !bytes.Equal(errCode, []byte{2}) {
+		t.Fatalf("error_code = % x, want 2 (negotiation)", errCode)
+	}
+
+	if code, ok := parseX224FailureCode(x224); !ok || code != 5 {
+		t.Fatalf("parseX224FailureCode = %d, %v; want 5", code, ok)
+	}
+}
+
 func concatBytes(chunks ...[]byte) []byte {
 	var out []byte
 	for _, c := range chunks {

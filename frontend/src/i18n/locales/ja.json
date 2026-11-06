@@ -850,6 +850,8 @@
   "rdp.reconnect": "再接続",
   "rdp.retry": "再試行",
   "rdp.timeout": "接続がタイムアウトしました。ホストアドレスとネットワーク接続を確認してください。",
+  "rdp.hintNlaRequired": "リモートコンピューターはネットワークレベル認証（NLA）を要求しています。接続の詳細設定で「NLA を優先」を有効にして再試行してください。",
+  "rdp.hintLegacySecurity": "リモートコンピューターはレガシーな標準 RDP セキュリティ（RC4 暗号）のみを提供しており、uniTerm は対応していません。リモート側で TLS を有効にしてください（xrdp の場合：/etc/xrdp/xrdp.ini の security_layer を negotiate または tls に変更し、/etc/xrdp/cert.pem と /etc/xrdp/key.pem を用意してください）。",
   "remoteDesktop.resolution": "解像度",
   "rdp.adaptive": "自動（ウィンドウに合わせる、サイズ変更時に再接続）",
   "remoteDesktop.resAdaptive": "自動",
