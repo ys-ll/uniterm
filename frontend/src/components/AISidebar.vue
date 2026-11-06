@@ -342,7 +342,7 @@ import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useI18n } from '../i18n'
 import { runAgent, approveTool, rejectTool, continueAgent, answerQuestion, dismissQuestion } from '../services/agent'
-import { CancelChatStream, CancelAICompaction, SaveFileDialogFiltered, WriteFileBase64, ReadLocalAttachmentFile } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { CancelChatStream, CancelAICompaction, SaveFileDialogFiltered, WriteFileBase64, ReadLocalAttachmentFile, ClipboardGetFiles, ClipboardReadFileChunkByID } from '../../bindings/github.com/ys-ll/uniterm/app'
 import type { AIAttachment, ExecutionMode, AIReasoningPreference, AIReasoningEffort } from '../types/ai'
 import { REASONING_EFFORTS, normalizeReasoning } from '../services/aiReasoning'
 import {
@@ -620,13 +620,57 @@ async function onNativePathsDropped(paths: string[]) {
   }
 }
 
-/**
- * Take an image off the clipboard. Returns true when an image was consumed so
- * the caller can stop the plain-text path.
- */
-function attachClipboardImage(blob: Blob | null | undefined, fallbackMime = ''): boolean {
+/** Max display length for a pasted image's file name (beyond this it is truncated
+ *  with an ellipsis, keeping the extension so the type stays readable). */
+const PASTED_NAME_MAX = 40
+/** Chromium names pasted screenshots with generic names like "image.png"; these
+ *  are treated as unnamed so they fall back to the localized "pasted image" label. */
+const GENERIC_IMAGE_NAME = /^image\.(png|jpe?g|bmp|webp|gif)$/i
+
+/** Strip any directory path and characters that are not valid in a file name. */
+function sanitizeBasename(name: string): string {
+  return name.replace(/^.*[\\/]/, '').replace(/["<>:/\\|?*\u0000-\u001f]/g, '_').trim()
+}
+
+/** Shorten a file name to PASTED_NAME_MAX, keeping the extension and appending an
+ *  ellipsis to the stem when truncation is needed. */
+function truncateFileName(name: string): string {
+  if (name.length <= PASTED_NAME_MAX) return name
+  const dot = name.lastIndexOf('.')
+  const ext = dot > 0 ? name.slice(dot) : ''
+  const stem = dot > 0 ? name.slice(0, dot) : name
+  const maxStem = PASTED_NAME_MAX - ext.length - 1 // "-1" reserves room for the ellipsis
+  if (maxStem <= 0) return name.slice(0, PASTED_NAME_MAX)
+  return `${stem.slice(0, maxStem)}…${ext}`
+}
+
+/** If baseName is already used by a current attachment, append a -2/-3/… suffix
+ *  before the extension so pasted images never share a name. */
+function uniqueAttachmentName(baseName: string): string {
+  const used = new Set(attachments.value.map((a) => a.name))
+  if (!used.has(baseName)) return baseName
+  const dot = baseName.lastIndexOf('.')
+  const stem = dot > 0 ? baseName.slice(0, dot) : baseName
+  const ext = dot > 0 ? baseName.slice(dot) : ''
+  let i = 2
+  while (used.has(`${stem}-${i}${ext}`)) i++
+  return `${stem}-${i}${ext}`
+}
+
+/** Resolve a pasted image's final display name. A real file name (from Explorer)
+ *  is kept and truncated; an unnamed bitmap (screenshot) falls back to the
+ *  localized "pasted image" label. Both are made unique against current atts. */
+function resolvePastedName(rawName: string): string {
+  const clean = sanitizeBasename(rawName)
+  const generic = !clean || GENERIC_IMAGE_NAME.test(clean)
+  const base = generic ? t('ai.attachPastedImage') : truncateFileName(clean)
+  return uniqueAttachmentName(base)
+}
+
+function attachClipboardImage(blob: Blob | null | undefined, fallbackMime = '', sourceName?: string): boolean {
   if (!blob || !blob.size) return false
-  const name = t('ai.attachPastedImage')
+  const rawName = sourceName || (blob instanceof File ? blob.name : '')
+  const name = resolvePastedName(rawName)
   const verdict = validateAttachment({ name, size: blob.size, type: blob.type || fallbackMime }, attachments.value)
   if (!verdict.ok) {
     showAttachmentError(attachmentErrorMessageKey(verdict.error), verdict.error.params)
@@ -682,6 +726,27 @@ async function readClipboardImage(): Promise<Blob | null> {
     const type = item.types.find((tp) => tp.startsWith('image/'))
     if (type) return await item.getType(type)
   }
+  // Screenshots arrive as image/* (handled above). Local files copied from the
+  // OS (e.g. Explorer) arrive as "Files" references instead of bitmap data:
+  // Chromium/WebView2 exposes them as FileSystemFileHandle objects. Read those
+  // and attach the first one that is an image, so a copied .png/.jpg pastes
+  // like a screenshot.
+  for (const item of items) {
+    if (!item.types.includes('Files')) continue
+    try {
+      const data = await item.getType('Files')
+      const file = typeof (data as FileSystemFileHandle).getFile === 'function'
+        ? await (data as FileSystemFileHandle).getFile()
+        : (data as File)
+      // On Windows the file handle may report an empty MIME type; fall back to
+      // a file-extension check so a copied .png/.jpg/.gif still pastes.
+      const isImage = file && (file.type.startsWith('image/') ||
+        /\.(png|jpe?g|gif|webp|bmp|avif)$/i.test(file.name))
+      if (isImage) return file
+    } catch {
+      // Ignore unreadable / unsupported file references.
+    }
+  }
   return null
 }
 
@@ -711,6 +776,90 @@ function pasteFromClipboard() {
       window.clearTimeout(timer)
       pasteText()
     })
+}
+
+/**
+ * Right-click "Paste" hook consumed by the app-wide input context menu (App.vue).
+ * The global menu only offers paste for editable targets, so a call here always
+ * means the AI input is editable.
+ *
+ * Ctrl+V works for local files copied from Explorer because Chromium surfaces the
+ * clipboard file reference in a genuine DOM paste event as an image/* item, which
+ * onPaste attaches. Right-click has no such event, so we first replay a real
+ * paste via document.execCommand('paste') (allowed on this user-gesture path) to
+ * reuse the exact same onPaste handling, then fall back to the async Clipboard API
+ * (readClipboardImage, covers screenshots/bitmaps), and finally to the Go backend's
+ * CF_HDROP reader (ClipboardGetFiles) which is the only way to see files copied from
+ * the OS file explorer.
+ */
+async function aiSidebarPasteFromClipboard(): Promise<boolean> {
+  const el = editableRef.value
+  if (!el) return false
+  el.focus()
+  // Bitmap (screenshot) content is visible to the async Clipboard API.
+  const blob = await readClipboardImage().catch(() => null)
+  if (attachClipboardImage(blob)) return true
+  // Files copied from Explorer arrive as CF_HDROP in the OS clipboard, which no
+  // browser API can see. Ask the Go backend to enumerate them and read the image
+  // ones back as base64 so they attach like a screenshot.
+  try {
+    const files = await ClipboardGetFiles()
+    let attached = 0
+    for (const f of files) {
+      const name = f.name || ''
+      if (!/\.(png|jpe?g|gif|webp|bmp|avif)$/i.test(name)) continue
+      if (!f.id || !f.size) continue
+      try {
+        const dataB64 = await ClipboardReadFileChunkByID(f.id, 0, f.size)
+        const bytes = bytesFromBase64(dataB64)
+        const attName = resolvePastedName(f.name || '')
+        const att = await createImageAttachmentFromDataURL(canvasDataURL(attName, bytes), attName, bytes.byteLength, mimeFromName(attName))
+        attachments.value = [...attachments.value, att]
+        attached++
+      } catch {
+        // Skip a single un-decodable image without aborting the rest.
+      }
+    }
+    if (attached > 0) return true
+  } catch {
+    // No CF_HDROP present or read failed — fall through.
+  }
+  // Last resort: replay a genuine paste via execCommand so onPaste's own text
+  // handling runs. Return false when nothing was pasted so App.vue can fall back
+  // to inserting plain clipboard text.
+  try {
+    return document.execCommand('paste')
+  } catch {
+    return false
+  }
+}
+
+/** Best-effort MIME for a pasted image file, keyed off its extension. */
+function mimeFromName(name: string): string {
+  switch ((name.split('.').pop() || '').toLowerCase()) {
+    case 'png': return 'image/png'
+    case 'jpg': case 'jpeg': return 'image/jpeg'
+    case 'gif': return 'image/gif'
+    case 'webp': return 'image/webp'
+    case 'bmp': return 'image/bmp'
+    case 'avif': return 'image/avif'
+    case 'svg': return 'image/svg+xml'
+    default: return 'image/png'
+  }
+}
+
+/** Encode raw image bytes (from a pasted file) as a data URL for the attachment path. */
+function canvasDataURL(name: string, bytes: Uint8Array): string {
+  return 'data:' + mimeFromName(name) + ';base64,' + base64FromBytes(bytes)
+}
+
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
 }
 
 function syncInputText() {
@@ -1956,6 +2105,7 @@ function onAskAI(e: Event) {
 
 onMounted(() => {
   window.addEventListener('ai:ask', onAskAI)
+  ;(window as any).__aiSidebarPasteFromClipboard = aiSidebarPasteFromClipboard
   skillStore.load()
   commandStore.load()
   nativeDrop.bind()
@@ -1974,6 +2124,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('ai:ask', onAskAI)
+  delete (window as any).__aiSidebarPasteFromClipboard
   nativeDrop.unbind()
 
   if (messagesRef.value) {

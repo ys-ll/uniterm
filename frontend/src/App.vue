@@ -689,6 +689,25 @@ function inputMenuPaste() {
   const selection = inputMenuSelection
   closeInputMenu()
   if (!el || !selection) return
+  // AI input (contenteditable .ai-editable): its attachment list lives in
+  // AISidebar, so let it try a clipboard image first — the same
+  // `navigator.clipboard.read()` path Ctrl+V uses — then fall back to plain
+  // text so right-click "Paste" behaves like Ctrl+V without ever dropping input.
+  if (el.isContentEditable && el.classList.contains('ai-editable')) {
+    restoreInputMenuSelection(el, selection)
+    const hook = (window as any).__aiSidebarPasteFromClipboard
+    if (typeof hook === 'function') {
+      void hook().then((handled: boolean) => {
+        if (handled) return
+        Clipboard.Text().then(text => {
+          restoreInputMenuSelection(el, selection)
+          insertTextAtContentEditable(el, text)
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+        }).catch(() => {})
+      })
+      return
+    }
+  }
   Clipboard.Text().then(text => {
     if (el.isContentEditable) {
       restoreInputMenuSelection(el, selection)
