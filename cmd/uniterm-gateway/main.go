@@ -77,6 +77,12 @@ type WorkerInstance struct {
 	// token is the per-worker shared secret the gateway injects on every
 	// proxied request; the worker rejects /api/web calls without it.
 	token string
+	// hasMasterPassword records whether the process was spawned with a login
+	// password forwarded (UNITERM_MASTER_PASSWORD). A worker without one can
+	// never silently unlock its credential store — the browser would bounce
+	// between the app and the login page — so getOrSpawnWorker replaces it
+	// once the gateway has the password cached.
+	hasMasterPassword bool
 }
 
 // MultiUserGateway manages user authentication, isolated per-user directories,
@@ -471,6 +477,20 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 						continue
 					default:
 					}
+					// A worker spawned before the gateway cached the login
+					// password (e.g. a browser with a still-valid session
+					// cookie reconnecting right after a gateway restart)
+					// can never unlock its credential store, and leaving it
+					// running would wedge the user into the login loop — a
+					// later login only caches the password, it cannot deliver
+					// it into the already-running process. Replace it so the
+					// fresh spawn receives the now-cached password.
+					if forwardPassword && !instance.hasMasterPassword && gw.cachedPassword(username, true) != "" {
+						log.Printf("[uniterm-gateway] replacing password-less worker for user=%s to forward the login password", username)
+						gw.dropWorker(instance)
+						terminateWorkerInstance(instance)
+						continue
+					}
 					return instance, nil
 				}
 				if !errors.Is(err, errWorkerExited) {
@@ -504,6 +524,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 
 		targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
 		workerToken := newTransferID()
+		masterPassword := gw.cachedPassword(username, forwardPassword)
 		cmd := exec.Command(gw.workerBinary)
 		cmd.Dir = userHome
 		cmd.Env = append(os.Environ(),
@@ -517,7 +538,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 			"WAILS_SERVER_PORT="+strconv.Itoa(port),
 			"UNITERM_TENANT_USER="+username,
 			"UNITERM_WORKER_TOKEN="+workerToken,
-			"UNITERM_MASTER_PASSWORD="+gw.cachedPassword(username, forwardPassword),
+			"UNITERM_MASTER_PASSWORD="+masterPassword,
 		)
 		// The Go standard library ignores HOME/XDG_* on Windows and macOS:
 		// os.UserHomeDir reads %USERPROFILE% and os.UserConfigDir reads
@@ -558,15 +579,16 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 		}
 
 		instance := &WorkerInstance{
-			Username:   username,
-			Port:       port,
-			TargetURL:  targetURL,
-			Proxy:      proxy,
-			Cmd:        cmd,
-			LastActive: time.Now(),
-			done:       make(chan struct{}),
-			ready:      make(chan struct{}),
-			token:      workerToken,
+			Username:          username,
+			Port:              port,
+			TargetURL:         targetURL,
+			Proxy:             proxy,
+			Cmd:               cmd,
+			LastActive:        time.Now(),
+			done:              make(chan struct{}),
+			ready:             make(chan struct{}),
+			token:             workerToken,
+			hasMasterPassword: masterPassword != "",
 		}
 		gw.workers[username] = instance
 		gw.workersMu.Unlock()
