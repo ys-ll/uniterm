@@ -143,11 +143,15 @@ type LocalSession struct {
 	// marker is seen in the output stream, so the body never renders. fish
 	// skips phase 1 (no stty in its snippet) and accepts the single-line
 	// echo leak. The marker scanners and the arm/body
-	// handoff live in the shared typedCwdHookState.
-	wslDistro      string
-	wslShellBase   string
-	wslCwdHookBody string
-	hook           typedCwdHookState
+	// handoff live in the shared typedCwdHookState. The hook is typed on
+	// demand — when the user enables directory follow for this session —
+	// never at session start, so a plain first login shows no handshake
+	// output at all (issue #1388).
+	wslDistro        string
+	wslShellBase     string
+	wslCwdHookBody   string
+	hook             typedCwdHookState
+	cwdHookRequested atomic.Bool
 
 	mu             sync.RWMutex
 	enc            encoding.Encoding
@@ -363,7 +367,6 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 		s.startEmitLoop()
 		go s.readLoop()
 		go s.runPostLoginScript(config.PostLoginScript)
-		s.injectStartupCwdHook()
 		return nil
 	}
 
@@ -395,7 +398,6 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 			s.startEmitLoop()
 			go s.readLoop()
 			go s.runPostLoginScript(config.PostLoginScript)
-			s.injectStartupCwdHook()
 			return nil
 		}
 		// Fall through to pipe mode if ConPTY fails.
@@ -432,7 +434,6 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 	s.startEmitLoop()
 	go s.readLoop()
 	go s.runPostLoginScript(config.PostLoginScript)
-	s.injectStartupCwdHook()
 	return nil
 }
 
@@ -469,31 +470,55 @@ func wslDetectShell(distro string) (shell string, ok bool) {
 // restore. Absolute positioning, so it cannot drift with the prompt layout.
 const wslCwdHookRowCleanup = " printf '\\0337\\033[H\\033[2K\\0338';"
 
-// injectStartupCwdHook starts the typed cwd-hook injection right after the
-// PTY starts. ConPTY buffers the bytes, so the shell executes the phases in
-// order: phase 1 arms echo-off (bash/zsh) and the hook body is written only
-// after the echo-armed marker is seen in the output stream (read loop);
-// phase 2's body must never render. fish skips phase 1 (no stty in its
-// snippet) and accepts the single-line echo leak.
-func (s *LocalSession) injectStartupCwdHook() {
+// CwdHookInjector is implemented by terminal sessions that can type the WSL
+// cwd-reporting hook on demand. WSLSession satisfies it through the embedded
+// LocalSession.
+type CwdHookInjector interface {
+	InjectCwdHook() error
+}
+
+// InjectCwdHook types the WSL cwd-hook on demand — invoked when the user
+// enables directory follow for this session (with an explicit confirmation in
+// the UI). Never called at session start: a plain first login must show no
+// handshake output at all (issue #1388), and cross-distro cleanup differences
+// are the user's informed choice to accept, not a startup constant. The
+// write waits briefly for in-flight output to settle so the typed lines land
+// at a prompt.
+func (s *LocalSession) InjectCwdHook() error {
 	if s.wslDistro == "" || s.wslCwdHookBody == "" {
-		return
+		return fmt.Errorf("session has no WSL cwd hook")
 	}
-	if s.wslShellBase == "bash" || s.wslShellBase == "zsh" {
-		// The body carries the row cleanup with it: the arm line's conhost
-		// echo must be erased by the time the body runs (echo off).
-		s.hook.arm(wslCwdHookRowCleanup + s.wslCwdHookBody)
-		_ = s.Write([]byte(cwdHookArmLine))
-		return
+	if s.hook.isInstalled() || !s.cwdHookRequested.CompareAndSwap(false, true) {
+		return nil
 	}
-	// fish and other supported shells without an echo-off prefix: single
-	// phase, watch for the ready marker.
-	if err := s.Write([]byte(s.wslCwdHookBody)); err != nil {
-		log.Writef("wsl: cwd hook write failed: %v", err)
-		return
-	}
-	log.Writef("wsl: cwd hook injected (shell=%s)", s.wslShellBase)
-	go s.watchCwdHookConfirm()
+	go func() {
+		if !s.waitIdle(3*time.Second, 300*time.Millisecond) {
+			log.Writef("wsl: no idle window for cwd hook, injecting anyway")
+		}
+		if s.Status() != StatusConnected {
+			return
+		}
+		if s.wslShellBase == "bash" || s.wslShellBase == "zsh" {
+			// The body carries the row cleanup with it: the arm line's conhost
+			// echo must be erased by the time the body runs (echo off).
+			s.hook.arm(wslCwdHookRowCleanup + s.wslCwdHookBody)
+			_ = s.Write([]byte(cwdHookArmLine))
+			// Bound the arm phase too: if the echo-armed marker never arrives
+			// (shell died mid-startup, exotic setup), nothing else would restore
+			// the pty echo the arm line just turned off.
+			go s.watchCwdHookConfirm()
+			return
+		}
+		// fish and other supported shells without an echo-off prefix: single
+		// phase, watch for the ready marker.
+		if err := s.Write([]byte(s.wslCwdHookBody)); err != nil {
+			log.Writef("wsl: cwd hook write failed: %v", err)
+			return
+		}
+		log.Writef("wsl: cwd hook injected (shell=%s)", s.wslShellBase)
+		go s.watchCwdHookConfirm()
+	}()
+	return nil
 }
 
 // writeWslCwdHookBody is phase 2: runs once the echo-armed marker confirmed
@@ -515,7 +540,9 @@ func (s *LocalSession) writeWslCwdHookBody(body string) {
 // watchCwdHookConfirm bounds how long the session waits for the injected
 // hook's ready marker. If the hook never confirms (unsupported setup, the
 // user exited the shell instantly), echo is restored blindly so the session
-// is never left with terminal echo off.
+// is never left with terminal echo off. The give-up is recorded exactly once
+// (a watchdog runs for the arm phase and another for the body) so settle()
+// waiters see a stable terminal state.
 func (s *LocalSession) watchCwdHookConfirm() {
 	select {
 	case <-time.After(cwdHookConfirmTimeout):
@@ -523,6 +550,9 @@ func (s *LocalSession) watchCwdHookConfirm() {
 		return
 	}
 	if s.hook.isInstalled() || s.Status() != StatusConnected {
+		return
+	}
+	if !s.hook.giveUp.CompareAndSwap(false, true) {
 		return
 	}
 	log.Writef("wsl: cwd hook not confirmed after %s, restoring echo blindly", cwdHookConfirmTimeout)

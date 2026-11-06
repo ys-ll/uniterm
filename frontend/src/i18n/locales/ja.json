@@ -384,6 +384,8 @@
   "sftp.reconnecting": "接続が切断されました。再接続中…",
   "sftp.dropHere": "ここにファイルをドロップ",
   "sftp.followPath": "ターミナルのパスに従う",
+  "sftp.cwdHookTitle": "ターミナルのパスを追従",
+  "sftp.cwdHookConfirm": "ターミナルの現在のディレクトリを報告するため、この WSL セッションに小さなプロンプトフックを注入する必要があります。注入中は端末に数行のコマンドが一瞬表示されます。シェルがアイドル状態（プロンプト表示中）のときに行うのがおすすめです。注入しますか？",
   "sftp.followPathHint": "ターミナルのパスに従う",
   "sftp.upload": "アップロード",
   "sftp.downloadTo": "ダウンロード先...",

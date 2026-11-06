@@ -384,6 +384,8 @@
   "sftp.reconnecting": "Conexão perdida, reconectando…",
   "sftp.dropHere": "Solte os arquivos aqui",
   "sftp.followPath": "Seguir caminho do terminal",
+  "sftp.cwdHookTitle": "Seguir o caminho do terminal",
+  "sftp.cwdHookConfirm": "Para reportar o diretório atual do terminal, é necessário injetar um pequeno gancho de prompt nesta sessão WSL. Algumas linhas de comandos podem aparecer brevemente no terminal; funciona melhor com o shell ocioso no prompt. Injetar?",
   "sftp.followPathHint": "Seguir caminho do terminal",
   "sftp.upload": "Enviar",
   "sftp.downloadTo": "Baixar para...",

@@ -225,6 +225,7 @@ type typedCwdHookState struct {
 	echoReady   hookReadyScanner
 	hookReady   hookReadyScanner
 	installed   atomic.Bool
+	giveUp      atomic.Bool
 }
 
 func newTypedCwdHookState() typedCwdHookState {

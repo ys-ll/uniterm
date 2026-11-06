@@ -592,6 +592,25 @@ func (a *App) SessionGetCwd(sessionID string) (string, error) {
 	return session.GetSessionCwd(sessionID), nil
 }
 
+// SessionInjectCwdHook types the WSL cwd-reporting prompt hook into a running
+// session on demand. Called when the user enables directory follow for a WSL
+// terminal (with an explicit UI confirmation); sessions are never injected at
+// start, so a plain first login shows no handshake output (issue #1388).
+func (a *App) SessionInjectCwdHook(sessionID string) error {
+	if a.sessionManager == nil {
+		return fmt.Errorf("session manager not initialized")
+	}
+	s, ok := a.sessionManager.Get(sessionID)
+	if !ok {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	local, ok := s.(session.CwdHookInjector)
+	if !ok {
+		return fmt.Errorf("session type %s does not support cwd hook injection", s.Type())
+	}
+	return local.InjectCwdHook()
+}
+
 // SessionSetCwdTracking controls read-only cwd polling for an SSH terminal.
 func (a *App) SessionSetCwdTracking(sessionID string, enabled bool) error {
 	if a.sessionManager == nil {

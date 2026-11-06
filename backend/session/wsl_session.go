@@ -13,8 +13,8 @@ import (
 // machinery by composition, overriding only the two things that differ: the
 // reported session type and a Connect that always forces the `wsl://<distro>`
 // shell. This keeps the PTY plumbing in a single implementation instead of a
-// copy-paste variant. The embedded LocalSession installs the startup cwd hook,
-// preserving directory reports without a connection-level timing option.
+// copy-paste variant. The embedded LocalSession types the cwd hook on demand
+// (when the user enables directory follow), never at session start.
 type WSLSession struct {
 	*LocalSession
 }

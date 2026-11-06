@@ -384,6 +384,8 @@
   "sftp.reconnecting": "Mất kết nối, đang kết nối lại…",
   "sftp.dropHere": "Thả tệp vào đây",
   "sftp.followPath": "Theo đường dẫn terminal",
+  "sftp.cwdHookTitle": "Theo đường dẫn terminal",
+  "sftp.cwdHookConfirm": "Để báo cáo thư mục hiện tại của terminal, cần chèn một hook nhỏ vào phiên WSL này. Khi chèn, một vài dòng lệnh có thể hiện ngắn trong terminal; hiệu quả nhất khi shell đang rảnh ở dấu nhắc. Chèn không?",
   "sftp.followPathHint": "Theo đường dẫn terminal",
   "sftp.upload": "Tải lên",
   "sftp.downloadTo": "Tải về vào...",

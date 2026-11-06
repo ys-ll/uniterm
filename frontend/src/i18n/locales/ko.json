@@ -384,6 +384,8 @@
   "sftp.reconnecting": "연결이 끊어졌습니다. 다시 연결 중…",
   "sftp.dropHere": "여기에 파일을 놓으세요",
   "sftp.followPath": "터미널 경로 따라가기",
+  "sftp.cwdHookTitle": "터미널 경로 따라가기",
+  "sftp.cwdHookConfirm": "터미널의 현재 디렉터리를 보고하려면 이 WSL 세션에 작은 프롬프트 훅을 주입해야 합니다. 주입 중에는 터미널에 몇 줄의 명령이 잠시 표시될 수 있으며, 셸이 유휴 상태(프롬프트)일 때 수행하는 것이 좋습니다. 주입하시겠습니까?",
   "sftp.followPathHint": "터미널 경로 따라가기",
   "sftp.upload": "업로드",
   "sftp.downloadTo": "다운로드 위치...",

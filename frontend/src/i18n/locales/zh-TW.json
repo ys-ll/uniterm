@@ -407,6 +407,8 @@
   "sftp.reconnecting": "連線已中斷，正在重新連線…",
   "sftp.dropHere": "拖曳檔案到此處",
   "sftp.followPath": "跟隨終端機路徑",
+  "sftp.cwdHookTitle": "跟隨終端路徑",
+  "sftp.cwdHookConfirm": "需要向目前 WSL 會話注入一個提示符鉤子，用於上報終端目前目錄。注入時終端會短暫顯示幾行命令，建議在 shell 空閒（提示符處）時進行。是否注入？",
   "sftp.followPathHint": "跟隨終端機路徑",
   "sftp.upload": "上傳",
   "sftp.downloadTo": "下載到...",
