@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.12.1
+## v1.12.2
 
 ### What's Changed
 
@@ -19,6 +19,8 @@
 - Credentials: a missing OS keychain entry is now correctly recognized — the app shows the "cannot unlock credentials" explanation (possible causes such as a moved app directory, an OS reinstall, or a cleared keychain) instead of asking to set the credential store up again. (@gezerui888)
 - Database: a `DELIMITER` command on the very first line of a `.sql` script is honored — MySQL routine dumps that start with `DELIMITER $$` execute correctly instead of being cut at every inner `;`. (@kevin9327)
 - WSL: the cwd prompt hook is no longer typed at session start — a plain first login shows no handshake output at all; enabling "Follow terminal path" now asks once per session and types the hook on demand at an idle prompt.
+- Web: RDP / VNC / SPICE sessions connect in browser deployments again — the session-proxy WebSocket is relayed by the gateway past the asset server, which rejects WebSocket upgrades, and remote browsers work too.
+- Web: a gateway restart no longer wedges an active browser into a login loop — a worker spawned without the login password is replaced automatically once the user logs in.
 - UI: the gear (row action) menu in the Skills and Commands settings pages never opened, leaving edit / delete unreachable; the menu also gains a "reveal in file manager" item.
 
 **Notes**
@@ -45,6 +47,8 @@ Thanks to @surenwuyuwuqiu, @etanman, @sonnartliao, @gezerui888 and @kevin9327 fo
 - 凭据：系统钥匙串条目丢失时能正确识别——显示「无法解锁凭证」说明及可能原因（如应用目录被移动、重装系统、清除了钥匙串），而不是直接要求重新初始化凭据库。(@gezerui888)
 - 数据库：`.sql` 脚本第一行的 `DELIMITER` 命令现在会被识别——以 `DELIMITER $$` 开头的 MySQL 存储过程导出脚本可以正确执行，不再在每个内部 `;` 处被切开。(@kevin9327)
 - WSL：会话启动时不再键入 cwd 提示钩子——普通首次登录不再出现任何握手输出；开启「跟随终端路径」时每个会话询问一次，并在空闲提示符处按需键入钩子。
+- Web：浏览器部署下 RDP / VNC / SPICE 恢复正常连接——会话代理的 WebSocket 由网关中继，绕过不支持 WebSocket 升级的 asset server，远程浏览器同样可用。
+- Web：网关重启后不再陷入登录死循环——重启瞬间由旧会话拉起的无密码 worker 会在重新登录时被自动替换。
 - 界面：Skills 和 Commands 设置页的行操作菜单无法弹出，编辑 / 删除不可达；菜单新增「在文件管理器中打开」项。
 
 **说明**
