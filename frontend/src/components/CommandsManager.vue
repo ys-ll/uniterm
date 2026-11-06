@@ -52,15 +52,19 @@
         <el-button link @click.stop="actionMenuRef?.toggle($event.currentTarget, cmd)">
           <el-icon :size="'0.9375rem'"><Settings2 /></el-icon>
         </el-button>
-        <Menu ref="actionMenuRef" v-model:visible="actionMenuVisible">
-          <template #default="{ current }">
-            <MenuItem @click="onAction('edit', current)">{{ t('settings.commandsEdit') }}</MenuItem>
-            <MenuDivider />
-            <MenuItem class="danger" @click="onAction('delete', current)">{{ t('settings.commandsDelete') }}</MenuItem>
-          </template>
-        </Menu>
       </div>
     </div>
+
+    <!-- Single shared row menu, kept outside the v-for: a ref inside a loop
+         becomes an array, so toggle() never resolves to a real Menu instance. -->
+    <Menu ref="actionMenuRef" v-model:visible="actionMenuVisible">
+      <template #default="{ current }">
+        <MenuItem @click="onAction('edit', current)">{{ t('settings.commandsEdit') }}</MenuItem>
+        <MenuItem @click="onAction('openFolder', current)">{{ t('settings.commandsOpenFolder') }}</MenuItem>
+        <MenuDivider />
+        <MenuItem class="danger" @click="onAction('delete', current)">{{ t('settings.commandsDelete') }}</MenuItem>
+      </template>
+    </Menu>
 
     <CommandCreateDialog
       v-if="showCreate"
@@ -183,6 +187,7 @@ async function onSaveEdit() {
 function handleCmd(action: string, cmd: CommandMeta) {
   if (action === 'delete') onDelete(cmd)
   else if (action === 'edit') openEdit(cmd)
+  else if (action === 'openFolder') openFolder(cmd)
 }
 
 function openFolder(cmd: CommandMeta) {
