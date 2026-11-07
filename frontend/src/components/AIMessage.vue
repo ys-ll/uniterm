@@ -248,7 +248,7 @@ import { Copy, Check, BookOpen, Terminal, FileText, Trash2 } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useI18n } from '../i18n'
 import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
-import { formatClock, formatDateTime, formatDuration } from '../utils/timeFormat'
+import { formatClock, formatMessageTime, formatDuration } from '../utils/timeFormat'
 import { attachmentPreviewUrl, formatBytes } from '../services/attachments'
 import type { AIMessage } from '../types/ai'
 
@@ -440,10 +440,10 @@ const createdAtFullLabel = computed(() => {
   }
 })
 
-// Message-list timestamp: include the date (plus year when it differs from the
-// current year), formatted in the UI language, e.g. "11月7日 14:32" or
-// "Nov 7, 14:32".
-const messageTimeLabel = computed(() => formatDateTime(props.message.createdAt, locale.value))
+// Message timestamp: today shows only the clock ("14:32"), yesterday shows a
+// relative word + clock ("昨天 14:32"), older messages show date + clock
+// ("11月5日 14:32"). All formatted in the UI language.
+const messageTimeLabel = computed(() => formatMessageTime(props.message.createdAt, locale.value))
 
 // Duration label: prefer the stored measurement; while the current turn is
 // still thinking, tick live off the store start time.
