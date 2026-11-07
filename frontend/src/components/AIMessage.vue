@@ -229,12 +229,12 @@
         </button>
       </div>
       <el-tooltip
-        v-if="createdAtLabel && message.role !== 'tool'"
+        v-if="messageTimeLabel && message.role !== 'tool'"
         :content="createdAtFullLabel"
         placement="top"
         :show-after="300"
       >
-        <div class="msg-meta">{{ createdAtLabel }}</div>
+        <div class="msg-meta">{{ messageTimeLabel }}</div>
       </el-tooltip>
     </div>
   </div>
@@ -248,7 +248,7 @@ import { Copy, Check, BookOpen, Terminal, FileText, Trash2 } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useI18n } from '../i18n'
 import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
-import { formatClock, formatDuration } from '../utils/timeFormat'
+import { formatClock, formatDateTime, formatDuration } from '../utils/timeFormat'
 import { attachmentPreviewUrl, formatBytes } from '../services/attachments'
 import type { AIMessage } from '../types/ai'
 
@@ -420,8 +420,8 @@ function handleReject() {
 }
 
 const aiStore = useAIStore()
-const { t } = useI18n()
-const inExpanded = ref(false)
+const { t, locale } = useI18n()
+const inExpanded = ref(true)
 const outExpanded = ref(false)
 const thinkingShown = ref(false)
 
@@ -439,6 +439,11 @@ const createdAtFullLabel = computed(() => {
     return ''
   }
 })
+
+// Message-list timestamp: include the date (plus year when it differs from the
+// current year), formatted in the UI language, e.g. "11月7日 14:32" or
+// "Nov 7, 14:32".
+const messageTimeLabel = computed(() => formatDateTime(props.message.createdAt, locale.value))
 
 // Duration label: prefer the stored measurement; while the current turn is
 // still thinking, tick live off the store start time.
@@ -981,6 +986,16 @@ function escapeHtml(text: string): string {
   border-radius: 0.875rem;
   border-bottom-right-radius: 0;
   box-shadow: inset 0 0 0 1px var(--border-subtle);
+  /* Cap the user bubble to ~10 text lines; a longer message gets its own
+     scrollbar instead of growing without bound. 10 lines + vertical padding:
+     calc(0.75rem * 1.6 * 10 + 0.625rem * 2) = 13.25rem. */
+  max-height: 13.25rem;
+  overflow-y: auto;
+}
+/* Lower the scrollbar top edge so it sits just below the bubble's rounded
+   top-right corner instead of meeting it flush. */
+.ai-message.user .text::-webkit-scrollbar-track {
+  margin-top: 0.5rem;
 }
 .ai-message.interrupted .text {
   font-style: italic;
