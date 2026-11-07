@@ -172,21 +172,33 @@
         </div>
       </div>
 
+      <!-- Per-message actions for user messages: copy the question exactly, or
+           delete it together with the AI's reply for that turn (used to fix a
+           mistyped question without leaving orphaned context behind). -->
+      <div v-if="message.role === 'user'" class="user-actions">
+        <button class="user-action-btn" :class="{ active: userCopied }" @click="onUserCopy" :title="t('ai.copy')">
+          <el-icon><Check v-if="userCopied" :size="'0.8125rem'" /><Copy v-else :size="'0.8125rem'" /></el-icon>
+        </button>
+        <button class="user-action-btn danger" @click="onUserDelete" :title="t('common.delete')">
+          <el-icon><Trash2 :size="'0.8125rem'" /></el-icon>
+        </button>
+      </div>
+
       <!-- Message timestamp (user questions and assistant answers only) -->
-      <div v-if="createdAtLabel && message.role !== 'tool'" class="msg-meta">{{ createdAtLabel }}</div>
+      <div v-if="messageTimeLabel && message.role !== 'tool'" class="msg-meta">{{ messageTimeLabel }}</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { writeClipboard } from '../composables/useClipboardWrite'
-import { Copy, Check, BookOpen, Terminal, FileText } from '@lucide/vue'
+import { Copy, Check, BookOpen, Terminal, FileText, Trash2 } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useI18n } from '../i18n'
 import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
-import { formatClock, formatDuration } from '../utils/timeFormat'
+import { formatClock, formatMessageTime, formatDuration } from '../utils/timeFormat'
 import { attachmentPreviewUrl, formatBytes } from '../services/attachments'
 import type { AIMessage } from '../types/ai'
 
@@ -283,13 +295,18 @@ function handleReject() {
 }
 
 const aiStore = useAIStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const inExpanded = ref(true)
 const outExpanded = ref(false)
 const thinkingShown = ref(false)
 
 // ── Timestamps & thinking status ──
 const createdAtLabel = computed(() => formatClock(props.message.createdAt))
+
+// Message timestamp: today shows only the clock ("14:32"), yesterday shows a
+// relative word + clock ("昨天 14:32"), older messages show date + clock
+// ("11月5日 14:32"). All formatted in the UI language.
+const messageTimeLabel = computed(() => formatMessageTime(props.message.createdAt, locale.value))
 
 // Duration label: prefer the stored measurement; while the current turn is
 // still thinking, tick live off the store start time.
@@ -331,6 +348,39 @@ async function copyAsMarkdown() {
   const copied = await writeClipboard(props.message.content)
   copyMdLabel.value = t(copied ? 'ai.copied' : 'ai.copyFailed')
   setTimeout(() => { copyMdLabel.value = t('ai.copyMarkdown') }, 2000)
+}
+
+// ── User message actions: copy the exact question, or delete it along with
+//    the AI's reply for that turn (fixing a mistyped prompt cleanly). ──
+const userCopied = ref(false)
+
+async function onUserCopy() {
+  const text = props.message.content || ''
+  if (!text) return
+  if (await writeClipboard(text)) {
+    userCopied.value = true
+    setTimeout(() => { userCopied.value = false }, 2000)
+  } else {
+    ElMessage.error(t('ai.copyFailed'))
+  }
+}
+
+async function onUserDelete() {
+  try {
+    await ElMessageBox.confirm(
+      t('ai.confirmDeleteMessage'),
+      t('ai.confirmDeleteTitle'),
+      {
+        type: 'warning',
+        confirmButtonText: t('common.delete'),
+        cancelButtonText: t('common.cancel'),
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+  } catch {
+    return // cancelled
+  }
+  aiStore.deleteMessageWithReply(props.message.id)
 }
 
 const copiedTool = ref('')
@@ -745,15 +795,34 @@ function escapeHtml(text: string): string {
   display: flex;
   padding: 0.875rem 1.125rem;
 }
+.ai-message.user {
+  justify-content: flex-end;
+}
 .ai-message.user .content {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
+  flex: 0 1 auto;
+  max-width: 85%;
 }
 .ai-message.user .text {
+  width: fit-content;
+  max-width: 100%;
   background: var(--bg-surface);
   padding: 0.625rem 1rem;
-  border-radius: var(--radius-sm);
+  border-radius: 0.875rem;
+  border-bottom-right-radius: 0;
   box-shadow: inset 0 0 0 1px var(--border-subtle);
+  /* Cap the user bubble to ~10 text lines; a longer message gets its own
+     scrollbar instead of growing without bound. 10 lines + vertical padding:
+     calc(0.75rem * 1.6 * 10 + 0.625rem * 2) = 13.25rem. */
+  max-height: 13.25rem;
+  overflow-y: auto;
+}
+/* Lower the scrollbar top edge so it sits just below the bubble's rounded
+   top-right corner instead of meeting it flush. */
+.ai-message.user .text::-webkit-scrollbar-track {
+  margin-top: 0.5rem;
 }
 .ai-message.interrupted .text {
   font-style: italic;
@@ -777,6 +846,9 @@ function escapeHtml(text: string): string {
   gap: 0.375rem;
   margin-top: 0.375rem;
 }
+.ai-message.user .msg-attachments {
+  justify-content: flex-end;
+}
 .msg-attachment {
   display: flex;
   align-items: center;
@@ -786,6 +858,10 @@ function escapeHtml(text: string): string {
   background: var(--bg-surface);
   border-radius: var(--radius-sm);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.ai-message.user .msg-attachment {
+  border-radius: 0.875rem;
+  border-bottom-right-radius: 0;
 }
 .msg-attachment-thumb {
   width: 4.5rem;
@@ -1261,6 +1337,49 @@ function escapeHtml(text: string): string {
   max-width: 9.375rem;
   opacity: 1;
   padding-left: 0.125rem;
+}
+
+/* User message actions: copy & delete shown below the question text,
+   right-aligned to match the user bubble's own timestamp. Icon-only and
+   hidden until the mouse is over the message bubble. */
+.user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.125rem;
+  margin-top: 0.25rem;
+  min-height: 1.25rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.ai-message:hover .user-actions {
+  opacity: 1;
+}
+.user-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+.user-action-btn:hover {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+.user-action-btn.active {
+  color: var(--accent);
+}
+.user-action-btn.danger:hover {
+  color: var(--error);
+  background: var(--error-subtle);
 }
 .continue-box {
   margin-top: 0.5rem;

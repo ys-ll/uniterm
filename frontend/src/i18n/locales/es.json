@@ -260,6 +260,8 @@
   "ai.exportDone": "{name} exportado",
   "ai.deleteMessage": "Eliminar este mensaje",
   "ai.truncateFrom": "Eliminar este mensaje y todo lo posterior",
+  "ai.confirmDeleteTitle": "Eliminar mensaje",
+  "ai.confirmDeleteMessage": "Se eliminará este mensaje junto con su respuesta de IA. Esta acción no se puede deshacer. ¿Eliminar?",
   "ai.thinking": "Pensando...",
   "ai.thinkingToggleHint": "Haz clic para mostrar u ocultar el proceso de razonamiento",
   "ai.noThinkingContent": "No hay contenido de razonamiento en este turno (el modelo puede no admitirlo).",
