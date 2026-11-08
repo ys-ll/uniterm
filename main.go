@@ -347,6 +347,35 @@ func main() {
 		}
 	})
 
+	// macOS: Wails hides the standard traffic lights on frameless windows — with
+	// the default rounded native frame, effectiveMacWindowButtonStates forces
+	// close/minimise/zoom to ButtonHidden at creation. The NSWindow itself keeps
+	// AppKit's titled frame with a transparent title bar, so switching the three
+	// buttons back on restores the real native controls over the web content,
+	// with native hover/press states and Dark/Light adaptation. This replaces
+	// the CSS facsimiles the frontend used to draw (see AppHeader.vue). Deferred
+	// to the first show because the NSWindow only exists once Run() starts, and
+	// idempotent because it re-runs on every show.
+	if runtime.GOOS == "darwin" {
+		// AppKit centres the buttons in its own 28pt title bar and starts them
+		// ~8pt from the edge; the app's header row is taller, so the buttons get
+		// re-framed to the row's centre with a stock 20pt leading inset. Re-run
+		// on resize and fullscreen transitions because AppKit re-lays out the
+		// title bar then.
+		placeButtons := func() {
+			applyMacTrafficLightLayout(window.NativeWindow())
+		}
+		window.OnWindowEvent(events.Mac.WindowShow, func(*application.WindowEvent) {
+			window.SetCloseButtonState(application.ButtonEnabled)
+			window.SetMinimiseButtonState(application.ButtonEnabled)
+			window.SetMaximiseButtonState(application.ButtonEnabled)
+			placeButtons()
+		})
+		window.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) {
+			placeButtons()
+		})
+	}
+
 	// Win11 rounded corners: Wails only extends the DWM frame from its
 	// WM_ACTIVATE handler, whose first firing (inside CreateWindowEx, before
 	// its WndProc is hooked) is missed — so a production binary starts with

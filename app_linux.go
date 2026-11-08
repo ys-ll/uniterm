@@ -30,6 +30,10 @@ func additionalWindowOptions(options application.WebviewWindowOptions) applicati
 // is Windows-specific (batch-file shims spawning cmd.exe). See app_windows.go.
 func hideProcWindow(cmd *exec.Cmd) {}
 
+// applyMacTrafficLightLayout is a no-op off macOS: only AppKit has standard
+// window buttons to re-frame (see traffic_lights_darwin.go).
+func applyMacTrafficLightLayout(unsafe.Pointer) {}
+
 func (a *App) subclassMainWindow() {}
 
 func (a *App) unsubclassMainWindow() {}
