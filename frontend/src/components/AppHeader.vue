@@ -4,15 +4,13 @@
     :class="`platform-${platform}`"
     @dblclick="onDblClick"
   >
-    <!-- macOS: custom traffic lights (Wails frameless hides the native ones) -->
-    <WindowControls
-      v-if="showWindowControls && platform === 'darwin'"
-      variant="mac"
-      :is-maximised="isMaximised"
-      @minimise="onMinimise"
-      @maximise="onMaximise"
-      @close="onClose"
-    />
+    <!-- macOS: reserve the left gutter for the native AppKit traffic lights
+         (close/minimise/zoom). The backend re-enables the real buttons on the
+         frameless window (main.go WindowShow), so nothing is drawn here. -->
+    <div
+      v-if="showMacTrafficLightGutter"
+      class="mac-traffic-light-gutter"
+    ></div>
 
     <!-- Connections button (icon only, leftmost) -->
     <button class="header-btn" :class="{ active: sidebarVisible }" @click="emit('toggle-sidebar')" :title="t('sidebar.locSidebar') + shortcutSuffix('toggleSidebar')">
@@ -372,11 +370,12 @@ const emit = defineEmits<{
 const platform = ref(detectPlatformSync())
 const isMaximised = ref(false)
 
-// The app draws its own window controls on every platform — but not when the
-// user opted into the OS native title bar at startup, which already provides
-// them, and never on mobile (no OS window to minimise/maximise/close). On
-// macOS they render as traffic lights on the left (see template). Before the
+// Windows/Linux draw their own window controls — but not when the user opted
+// into the OS native title bar at startup, which already provides them, and
+// never on mobile (no OS window to minimise/maximise/close). Before the
 // snapshot lands, fall back to the live store value (the frameless default).
+// macOS never draws them: the native traffic lights are re-enabled by the
+// backend and simply overlay the header's left gutter.
 // In headless server mode the UI runs in a browser tab — there is no OS
 // window to minimise/maximise/close, so the buttons are hidden entirely.
 const webServerMode = ref(false)
@@ -386,6 +385,18 @@ const showWindowControls = computed(
   () =>
     !(systemTitleBarAtStartup.value ?? localStateStore.state.systemTitleBar) &&
     !isMobilePlatform(platform.value) &&
+    !webServerMode.value
+)
+
+// On macOS the real AppKit traffic lights overlay the top-left of the web
+// content (main.go re-enables them on the frameless window), so leave a gutter
+// so they don't collide with the Connections button. With the system title bar
+// enabled the buttons live in the native frame instead, and in headless server
+// mode there is no OS window at all.
+const showMacTrafficLightGutter = computed(
+  () =>
+    platform.value === 'darwin' &&
+    !(systemTitleBarAtStartup.value ?? localStateStore.state.systemTitleBar) &&
     !webServerMode.value
 )
 
@@ -529,6 +540,17 @@ onUnmounted(() => {
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+  --wails-draggable: drag;
+}
+
+/* Left spacer for the macOS native traffic lights. They are re-framed in Go
+   (traffic_lights_darwin.go) to a 20pt leading inset with a 20pt pitch, so the
+   last light ends at 72px; 63px here plus the header's 9.33px (0.5rem at the
+   macOS root font-size) of padding clears them exactly and puts the sidebar
+   toggle right after. Kept draggable so window drag and double-click-to-zoom
+   still work over this area. */
+.mac-traffic-light-gutter {
+  flex: 0 0 63px;
   --wails-draggable: drag;
 }
 
