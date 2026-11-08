@@ -200,6 +200,17 @@ describe('lineToRuns', () => {
     ])
   })
 
+  it('brightens bold base palette colors (mirrors drawBoldTextInBrightColors)', () => {
+    // `ls` directories are bold + base blue (index 4); xterm paints them with
+    // the bright variant (12), and the preview must match.
+    const line = makeLine([
+      cell({ getChars: () => 'd', isBold: () => true, isFgPalette: () => true, getFgColor: () => 4 }),
+    ])
+    expect(lineToRuns(line, 1, palette)).toEqual([{ text: 'd', fg: '#3b8eea', bold: true }])
+    // Disabling the mirror keeps the base color.
+    expect(lineToRuns(line, 1, palette, undefined, false)).toEqual([{ text: 'd', fg: '#2472c8', bold: true }])
+  })
+
   it('skips zero-width continuation cells (CJK wide chars)', () => {
     const line = makeLine([
       cell({ getChars: () => '中', getWidth: () => 2 }),

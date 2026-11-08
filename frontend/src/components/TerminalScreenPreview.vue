@@ -368,7 +368,7 @@ function show(t: Terminal, sbRect: DOMRect) {
     const hlColors = line && highlightOn
       ? getLineHighlightColors(line, t.cols, t.options.theme)
       : undefined
-    const runs = line ? lineToRuns(line, t.cols, palette, hlColors ? (col) => hlColors[col] : undefined) : []
+    const runs = line ? lineToRuns(line, t.cols, palette, hlColors ? (col) => hlColors[col] : undefined, t.options.drawBoldTextInBrightColors !== false) : []
     // Mirror the gutter's semantics: numbers/timestamps come from the logical
     // line registry; wrapped continuation rows belong to the line above, so
     // they carry no number/timestamp of their own.
