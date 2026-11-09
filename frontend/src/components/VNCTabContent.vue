@@ -43,15 +43,11 @@
       <span class="vnc-status-dot" />
       <span>{{ t('vnc.connected') }}</span>
       <span class="vnc-status-sep">|</span>
-      <span>{{ config?.host }}:{{ config?.port || 5900 }}</span>
-      <span class="vnc-status-sep">|</span>
       <RemoteDisplaySelect
         :displays="displayState.displays" :width="displayState.width" :height="displayState.height"
         :view="displayState.view" allow-custom @select="selectDisplay" @focus-desktop="focusDesktop"
         @create-region="openRegionEditor()" @edit-region="openRegionEditor"
       />
-      <span class="vnc-status-sep">|</span>
-      <span class="vnc-status-label">{{ t('remoteDesktop.scale') }}</span>
       <RemoteDesktopZoomSelect v-model="zoom" />
       <span class="vnc-status-sep">|</span>
       <span class="vnc-status-label">{{ t('vnc.viewOnly') }}</span>

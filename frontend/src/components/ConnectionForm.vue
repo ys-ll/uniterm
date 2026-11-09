@@ -1377,7 +1377,11 @@ watch(() => props.editConfig, (config) => {
       }
     }
     form.x11Forwarding = config.x11Forwarding ?? false
-    form.rdpEnableNLA = config.rdpEnableNLA ?? false
+    // The NLA switch must follow the new-connection default (true) when the
+    // stored config predates the field: otherwise editing an old connection
+    // and switching its type to RDP silently turns NLA off, and NLA-only
+    // servers then reject the SSL-only negotiation.
+    form.rdpEnableNLA = config.rdpEnableNLA ?? true
     form.rdpAdminSession = config.rdpAdminSession ?? false
     // Older connections predate the tier field; they get the default tier.
     form.rdpQuality = config.rdpQuality ?? 'balanced'

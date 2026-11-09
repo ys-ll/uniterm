@@ -47,9 +47,6 @@
       <span class="spice-status-dot" />
       <span>{{ t('spice.connected') }}</span>
       <span class="spice-status-sep">|</span>
-      <span>{{ config?.host }}:{{ config?.port || 5900 }}</span>
-      <span class="spice-status-sep">|</span>
-      <span class="spice-status-label">{{ t('remoteDesktop.scale') }}</span>
       <RemoteDesktopZoomSelect v-model="zoom" />
       <span class="spice-status-spacer" />
       <button class="spice-fullscreen-btn" @click="toggleFullscreen">{{ t('remoteDesktop.fullscreen') }}</button>
