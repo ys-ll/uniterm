@@ -60,9 +60,6 @@
       <span class="rdp-status-dot" />
       <span>{{ t('rdp.connected') }}</span>
       <span class="rdp-status-sep">|</span>
-      <span>{{ config?.host }}:{{ config?.port || 3389 }}</span>
-      <span class="rdp-status-sep">|</span>
-      <span class="rdp-status-label">{{ t('remoteDesktop.resolution') }}</span>
       <el-select
         v-model="activeResolution"
         class="rdp-quality-select"
@@ -72,15 +69,11 @@
       >
         <el-option v-for="r in resolutionOptions" :key="r.value" :value="r.value" :label="r.label" />
       </el-select>
-      <span class="rdp-status-sep">|</span>
-      <span class="rdp-status-label">{{ t('remoteDesktop.scale') }}</span>
       <RemoteDesktopZoomSelect
         v-model="zoom"
         :disabled="status === 'connecting'"
         :allow-fit="activeResolution !== 'adaptive'"
       />
-      <span class="rdp-status-sep">|</span>
-      <span class="rdp-status-label">{{ t('conn.rdpQuality') }}</span>
       <el-select
         v-model="activeQuality"
         class="rdp-quality-select"
@@ -119,7 +112,9 @@
         >
           <el-option v-for="r in resolutionOptions" :key="r.value" :value="r.value" :label="r.label" />
         </el-select>
-        <span class="rdp-status-sep">|</span>
+      </template>
+      <!-- Keep the toolbar order identical to the status bar: resolution, zoom, quality. -->
+      <template #after-zoom>
         <el-select
           v-model="activeQuality"
           class="remote-desktop-toolbar-select"
@@ -131,7 +126,6 @@
         >
           <el-option v-for="q in RDP_QUALITY_OPTIONS" :key="q.value" :value="q.value" :label="t(q.label)" />
         </el-select>
-        <span class="rdp-status-sep">|</span>
       </template>
     </RemoteDesktopToolbar>
   </div>
@@ -241,7 +235,9 @@ const RDP_QUALITY_OPTIONS: { value: RdpQuality; label: string }[] = [
 const resolutionOptions = computed(() => [
   { value: 'adaptive' as const, label: t('remoteDesktop.resAdaptive') },
   { value: 'fullscreen' as const, label: t('remoteDesktop.fullscreen') },
-  ...RDP_RESOLUTION_PRESETS.map(r => ({ value: `${r.w}x${r.h}` as RdpResolutionChoice, label: r.label })),
+  // Status-bar selects are narrow: drop the "(XGA)"-style suffix so the
+  // closed select still shows the full resolution.
+  ...RDP_RESOLUTION_PRESETS.map(r => ({ value: `${r.w}x${r.h}` as RdpResolutionChoice, label: r.label.replace(/\s*\(.*\)$/, '') })),
 ])
 
 // Switching the tier needs a new session (connection_type and performance
@@ -1342,10 +1338,9 @@ watch(activeResolution, (mode) => {
   flex-shrink: 0;
 }
 .rdp-status-sep { color: var(--text-disabled); }
-.rdp-status-label { font-size: 0.6875rem; }
 .rdp-quality-select {
-  width: 8.5rem;
-  --el-select-width: 8.5rem;
+  width: 5.5rem;
+  --el-select-width: 5.5rem;
 }
 .rdp-statusbar .rdp-quality-select :deep(.el-select__wrapper) {
   min-height: 1.125rem;

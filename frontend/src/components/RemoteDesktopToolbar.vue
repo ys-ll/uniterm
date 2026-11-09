@@ -51,6 +51,7 @@
         @update:model-value="value => { emit('update:zoom', value); focusDesktop() }"
       />
     </label>
+    <slot name="after-zoom" />
     <template v-if="showDotCursor !== undefined">
       <span class="remote-desktop-toolbar-divider" />
       <label class="remote-desktop-toolbar-scale">
@@ -278,7 +279,7 @@ onBeforeUnmount(clearToolbarHideTimer)
    Slot content (resolution/quality) belongs to the host's scope, so the
    selectors go through :deep from the toolbar root. */
 .remote-desktop-fullscreen-toolbar :deep(.remote-desktop-toolbar-select) {
-  width: 6rem;
+  width: 5.5rem;
   flex: none;
 }
 .remote-desktop-fullscreen-toolbar :deep(.remote-desktop-toolbar-select .el-select__wrapper) {
