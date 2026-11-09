@@ -685,6 +685,8 @@ export namespace session {
 	    user: string;
 	    authType: string;
 	    kerberosRealm?: string;
+	    totpEnabled?: boolean;
+	    totpSecret?: string;
 	    identityId?: string;
 	    password?: string;
 	    keyPath?: string;
@@ -769,6 +771,8 @@ export namespace session {
 	        this.user = source["user"];
 	        this.authType = source["authType"];
 	        this.kerberosRealm = source["kerberosRealm"];
+	        this.totpEnabled = source["totpEnabled"];
+	        this.totpSecret = source["totpSecret"];
 	        this.identityId = source["identityId"];
 	        this.password = source["password"];
 	        this.keyPath = source["keyPath"];

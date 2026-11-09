@@ -112,8 +112,8 @@ func dialSSHTCP(addr string, clientConfig *ssh.ClientConfig, upstream *SocksProx
 }
 
 // DialSSHClient 建立非交互 SSH 连接（容器 runner 用，无 PTY、无键盘交互回显）。
-// 与 ssh_session 的交互式拨号共享认证与密钥交换配置。不提供 keyboard-interactive：
-// 此上下文中无法应答 challenge，提供它只会让普通密码拒绝被回调自身的错误掩盖。
+// 与 ssh_session 的交互式拨号共享认证与密钥交换配置。启用 TOTP 时，
+// keyboard-interactive 自动应答已知提示；其他问题直接失败，不等待手动输入。
 func DialSSHClient(config ConnectionConfig) (*ssh.Client, error) {
 	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
 	newConfig := func(challenge ssh.KeyboardInteractiveChallenge) sshClientConfigFactory {

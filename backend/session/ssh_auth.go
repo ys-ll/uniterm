@@ -53,9 +53,13 @@ func makeSSHAuthMethodsForAttempt(config ConnectionConfig, kbCallback ssh.Keyboa
 		methods = append(methods, method)
 	}
 
+	if config.TOTPEnabled && config.AuthType != "kerberos" {
+		kbCallback = automaticTOTPChallenge(config, kbCallback)
+	}
+
 	// Kerberos and agent authentication must report their own errors instead
 	// of silently falling through to an SSH password prompt.
-	if kbCallback != nil && config.AuthType != "kerberos" && config.AuthType != "agent" {
+	if kbCallback != nil && config.AuthType != "kerberos" && (config.AuthType != "agent" || config.TOTPEnabled) {
 		methods = append(methods, ssh.KeyboardInteractive(kbCallback))
 	}
 
@@ -66,15 +70,22 @@ func makeSSHAuthMethodsForAttempt(config ConnectionConfig, kbCallback ssh.Keyboa
 // (SFTP, server monitor) that dial via dialSSHTCP. It shares parsePrivateKeyFile
 // with the interactive SSH session so an encrypted private key + its passphrase
 // (config.Password) authenticates identically everywhere — the "秘钥加密码" case
-// from issue #647. Unlike makeSSHAuthMethods it has no keyboard-interactive
-// fallback (unattended), uses the passphrase as the authentication signal for
-// key files.
+// from issue #647. Unattended callers offer keyboard-interactive only when
+// automatic TOTP is enabled; unknown questions fail without waiting for input.
 func buildAuthMethods(config ConnectionConfig) ([]ssh.AuthMethod, error) {
 	methods, _, err := buildAuthMethodsWithCleanup(config)
 	return methods, err
 }
 
 func buildAuthMethodsWithCleanup(config ConnectionConfig) ([]ssh.AuthMethod, func(), error) {
+	methods, cleanup, err := buildPrimaryAuthMethods(config)
+	if err == nil && config.TOTPEnabled && config.AuthType != "kerberos" {
+		methods = append(methods, ssh.KeyboardInteractive(automaticTOTPChallenge(config, nil)))
+	}
+	return methods, cleanup, err
+}
+
+func buildPrimaryAuthMethods(config ConnectionConfig) ([]ssh.AuthMethod, func(), error) {
 	cleanup := func() {}
 	switch config.AuthType {
 	case "key", "keyText":

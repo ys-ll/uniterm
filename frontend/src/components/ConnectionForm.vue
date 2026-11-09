@@ -186,6 +186,15 @@
             <el-form-item v-if="(form.authType === 'key' || form.authType === 'keyText') && (form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop')" :label="t('conn.keyPassphrase')">
               <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" :placeholder="t('conn.keyPassphrasePlaceholder')" />
             </el-form-item>
+            <template v-if="isSSHAlgoType && form.authType !== 'kerberos'">
+              <el-form-item :label="t('conn.totpEnabled')">
+                <el-switch v-model="form.totpEnabled" />
+              </el-form-item>
+              <el-form-item v-if="form.totpEnabled" :label="t('conn.totpSecret')" required>
+                <el-input v-model="form.totpSecret" type="password" show-password :key="passwordInputKey" autocomplete="new-password" :placeholder="t('conn.totpSecretPlaceholder')" />
+                <div class="field-hint">{{ t('conn.totpHint') }}</div>
+              </el-form-item>
+            </template>
             <el-form-item v-if="(form.type === 'database' && form.dbType !== 'rqlite' && form.dbType !== 'sqlite' && form.dbType !== 'redis' && form.dbType !== 'elasticsearch') || form.type === 'mongodb'" :label="form.type === 'database' && form.dbType === 'oracle' ? t('db.serviceName') : t('db.databases')" :required="form.dbType === 'postgres' || (form.type === 'database' && form.dbType === 'oracle')">
               <el-input v-model="form.dbName" :placeholder="form.type === 'database' && form.dbType === 'oracle' ? t('db.serviceNamePlaceholder') : t('db.databases')" />
             </el-form-item>
@@ -1106,6 +1115,8 @@ const form = reactive<ConnectionConfig>({
   password: '',
   keyPath: '',
   keyContent: '',
+  totpEnabled: false,
+  totpSecret: '',
   groupId: undefined,
   rdpFixedWidth: -2,
   rdpFixedHeight: -2,
@@ -1501,6 +1512,8 @@ function resetForm() {
   form.password = ''
   form.keyPath = ''
   form.keyContent = ''
+  form.totpEnabled = false
+  form.totpSecret = ''
   form.identityId = ''
   form.groupId = undefined
   form.rdpFixedWidth = -2
@@ -1792,6 +1805,15 @@ function normalizeForm(): ConnectionConfig {
     const algo = normalized.sshAlgorithms
     if (!algo.keyExchanges?.length || !algo.ciphers?.length || !algo.macs?.length || !algo.hostKeys?.length) {
       throw new Error(t('conn.sshAlgoEmptyList'))
+    }
+  }
+  if (!isSSHAlgoType.value || normalized.authType === 'kerberos') {
+    normalized.totpEnabled = false
+    normalized.totpSecret = ''
+  } else if (normalized.totpEnabled) {
+    normalized.totpSecret = normalized.totpSecret?.replace(/\s/g, '').toUpperCase().replace(/=+$/, '') || ''
+    if (!/^[A-Z2-7]+$/.test(normalized.totpSecret) || normalized.totpSecret.length < 16) {
+      throw new Error(t('conn.totpSecretInvalid'))
     }
   }
   // Identity (密钥库) 的凭据完全由所引用的 identity 提供，连接时

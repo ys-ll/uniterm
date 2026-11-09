@@ -99,9 +99,11 @@ type ConnectionConfig struct {
 	// AuthType "identity", MaterializeIdentity resolves and injects the
 	// credentials at connect time.
 	IdentityId string `json:"identityId,omitempty"`
-	// Password is stored in plaintext JSON. Will be migrated to OS keychain in a future iteration.
-	Password string `json:"password,omitempty"`
-	KeyPath  string `json:"keyPath,omitempty"`
+	// Password and TOTPSecret are encrypted at rest by the connection store.
+	Password    string `json:"password,omitempty"`
+	TOTPEnabled bool   `json:"totpEnabled,omitempty"`
+	TOTPSecret  string `json:"totpSecret,omitempty"`
+	KeyPath     string `json:"keyPath,omitempty"`
 	// KeyContent holds the inline private-key text (PEM) for authType "keyText".
 	// When set, the connection authenticates from the text directly instead of
 	// reading KeyPath from disk. Encrypted at rest and normalized across cloud

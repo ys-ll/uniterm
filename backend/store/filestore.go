@@ -45,10 +45,10 @@ type SecretFile struct {
 //
 // connections.json: password holds the login password for password auth and
 // the private-key passphrase for key/keyText auth; keyContent holds the
-// inline private key for keyText auth. Both are secrets regardless of auth
-// type — field-based, not auth-type-based.
+// inline private key for keyText auth; totpSecret holds the per-host TOTP
+// seed. All are secrets regardless of auth type.
 var SecretFiles = []SecretFile{
-	{File: "connections.json", Paths: []string{"connections.*.password", "connections.*.keyContent"}},
+	{File: "connections.json", Paths: []string{"connections.*.password", "connections.*.keyContent", "connections.*.totpSecret"}},
 	{File: "identities.json", Paths: []string{"identities.*.password", "identities.*.keyContent"}},
 	{File: "proxies.json", Paths: []string{"proxies.*.pass"}},
 	{File: "ai.json", Paths: []string{"models.*.apiKey"}},
