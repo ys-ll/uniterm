@@ -138,6 +138,10 @@
       @tap="onMobileTap"
       @right="onMobileRight"
       @move="onMobileMove"
+      @drag-start="onMobileDragStart"
+      @drag-move="onMobileDragMove"
+      @drag-end="onMobileDragEnd"
+      @wheel="onMobileWheel"
       @text="onMobileText"
       @special="onMobileSpecial"
     />
@@ -908,6 +912,34 @@ function onMobileMove(x: number, y: number, buttonDown: boolean) {
   try {
     const tx = new wasmModule.InputTransaction()
     tx.addEvent(wasmModule.DeviceEvent.mouseMove(pos.x, pos.y))
+    session.applyInputs(tx)
+  } catch (_) {}
+}
+
+function onMobileDragStart(x: number, y: number, button: number) {
+  sendMouseButtonAt(button, true, x, y)
+}
+
+function onMobileDragMove(x: number, y: number) {
+  // The button state was sent with dragStart; only the pointer moves.
+  onMobileMove(x, y, true)
+}
+
+function onMobileDragEnd(x: number, y: number, button: number) {
+  sendMouseButtonAt(button, false, x, y)
+}
+
+function onMobileWheel(x: number, y: number, deltaY: number) {
+  if (!session || !wasmModule) return
+  const pos = canvasCoordsAt(x, y, false)
+  if (!pos) return
+  try {
+    const tx = new wasmModule.InputTransaction()
+    tx.addEvent(wasmModule.DeviceEvent.mouseMove(pos.x, pos.y))
+    // Same sign convention as onWheel: touch deltas are positive scrolling
+    // down, the RDP wire format is positive scrolling up.
+    const amount = Math.max(-1000, Math.min(1000, -deltaY))
+    tx.addEvent(wasmModule.DeviceEvent.wheelRotations(true, amount, wasmModule.RotationUnit.Pixel))
     session.applyInputs(tx)
   } catch (_) {}
 }

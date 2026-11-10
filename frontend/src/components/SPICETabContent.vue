@@ -72,6 +72,10 @@
       @tap="onMobileTap"
       @right="onMobileRight"
       @move="onMobileMove"
+      @drag-start="onMobileDragStart"
+      @drag-move="onMobileDragMove"
+      @drag-end="onMobileDragEnd"
+      @wheel="onMobileWheel"
       @text="onMobileText"
       @special="onMobileSpecial"
     />
@@ -412,6 +416,30 @@ function onMobileRight(x: number, y: number, down: boolean) {
 
 function onMobileMove(x: number, y: number) {
   dispatchSpiceMouse('mousemove', 0, x, y)
+}
+
+function onMobileDragStart(x: number, y: number, button: number) {
+  dispatchSpiceMouse('mousedown', button, x, y)
+}
+
+function onMobileDragMove(x: number, y: number) {
+  // The button state was sent with dragStart; only the pointer moves.
+  dispatchSpiceMouse('mousemove', 0, x, y)
+}
+
+function onMobileDragEnd(x: number, y: number, button: number) {
+  dispatchSpiceMouse('mouseup', button, x, y)
+}
+
+function onMobileWheel(x: number, y: number, deltaY: number) {
+  const primary = sc?.display?.surfaces?.[sc.display.primary_surface]?.canvas as HTMLCanvasElement | undefined
+  const canvas = primary && spiceContainer.value?.contains(primary)
+    ? primary
+    : spiceContainer.value?.querySelector('canvas')
+  if (!canvas) return
+  canvas.dispatchEvent(new WheelEvent('wheel', {
+    clientX: x, clientY: y, deltaY, bubbles: false, cancelable: true,
+  }))
 }
 
 function onMobileText(chars: string) {

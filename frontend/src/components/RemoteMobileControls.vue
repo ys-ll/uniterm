@@ -75,6 +75,12 @@ const emit = defineEmits<{
   (e: 'tap', x: number, y: number): void
   (e: 'right', x: number, y: number, down: boolean): void
   (e: 'move', x: number, y: number, buttonDown: boolean): void
+  /** Button-press drag lifecycle (left drag after a long-press) */
+  (e: 'dragStart', x: number, y: number, button: number): void
+  (e: 'dragMove', x: number, y: number, button: number): void
+  (e: 'dragEnd', x: number, y: number, button: number): void
+  /** Two-finger wheel scroll, deltaY in display pixels per tick */
+  (e: 'wheel', x: number, y: number, deltaY: number): void
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
@@ -250,8 +256,21 @@ function onImeBlur() {
   for (const code of STICKY_CODES) armed[code] = false
 }
 
-// ── Touch gestures (long-press = right button, tap = left click) ──
-
+// ── Touch gestures ──
+//
+// Long-press is only a *preparation*: the decision happens when the finger
+// moves or lifts. Sending the right-button press at the timer would force
+// every later drag to be a right-button drag — and undoing it (press right,
+// then release) pops the remote context menu mid-gesture.
+//
+//   press → move before long-press:
+//     viewport overflows → pan the view (restore native touch scrolling)
+//     viewport fits      → hover-move the remote pointer
+//   press → 500 ms held    → armed, nothing sent yet
+//     ├─ lift             → right click (press+release at lift)
+//     └─ move             → left-button drag (press at move start)
+//   two fingers            → wheel scroll of the remote (accumulated)
+//
 const LONG_PRESS_MS = 500
 const MOVE_SLOP_PX = 10
 // The remote's own double-click rect is tiny; consecutive touchscreen taps
@@ -260,7 +279,12 @@ const MOVE_SLOP_PX = 10
 // exact position so the remote sees two clicks at the same coordinates.
 const DOUBLE_TAP_MS = 500
 const DOUBLE_TAP_SLOP_PX = 15
+// Two-finger movement is accumulated and emitted as discrete wheel ticks.
+const WHEEL_TICK_PX = 48
 
+type GestureMode = 'idle' | 'single' | 'wheel' | 'dead'
+
+let mode: GestureMode = 'idle'
 let timer: ReturnType<typeof setTimeout> | null = null
 let startX = 0
 let startY = 0
@@ -268,10 +292,25 @@ let curX = 0
 let curY = 0
 let startedAt = 0
 let moved = false
+// Long-press confirmed, decision pending (right click on lift / left drag on move)
 let longpressed = false
+// Left-button drag in progress (started from a confirmed long-press)
+let dragButton: number | null = null
+// Panning the overflowing viewport instead of moving the remote pointer
+let panning = false
+let panLastX = 0
+let panLastY = 0
+let wheelLastY = 0
+let wheelAccum = 0
 let lastTapX = 0
 let lastTapY = 0
 let lastTapAt = 0
+
+function isScrollable(): boolean {
+  const el = props.target
+  if (!el) return false
+  return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
+}
 
 function resetGesture() {
   if (timer !== null) {
@@ -280,6 +319,8 @@ function resetGesture() {
   }
   longpressed = false
   moved = false
+  panning = false
+  dragButton = null
 }
 
 function dismissKeyboard() {
@@ -297,31 +338,65 @@ function onTouchStart(e: TouchEvent) {
   // With the hidden input still focused, Android re-summons the IME on any
   // tap, which both covers the screen and cancels in-flight tap streams.
   dismissKeyboard()
-  if (e.touches.length !== 1) {
+  if (e.touches.length >= 2) {
+    // Two-finger wheel mode (or re-anchor it when a third finger lands).
     resetGesture()
+    mode = 'wheel'
+    wheelLastY = (e.touches[0].clientY + e.touches[1].clientY) / 2
+    wheelAccum = 0
     return
   }
+  if (mode !== 'idle') {
+    // A finger landed while winding down a previous gesture — ignore it
+    // until every finger is up.
+    mode = 'dead'
+    return
+  }
+  mode = 'single'
   const touch = e.touches[0]
   startX = curX = touch.clientX
   startY = curY = touch.clientY
   startedAt = Date.now()
   moved = false
   longpressed = false
+  dragButton = null
+  panning = false
   if (timer !== null) clearTimeout(timer)
   timer = setTimeout(() => {
     timer = null
     longpressed = true
-    sendWithStickyModifiers(() => emit('right', curX, curY, true))
   }, LONG_PRESS_MS)
 }
 
 function onTouchMove(e: TouchEvent) {
   if (!props.touchEnabled || !props.active) return
   e.preventDefault()
+  if (mode === 'wheel') {
+    if (e.touches.length >= 2) {
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2
+      wheelAccum += midY - wheelLastY
+      wheelLastY = midY
+      // Emit discrete ticks so per-tick protocols (SPICE consumes one
+      // wheel event = one notch) and continuous ones (RDP pixel deltas)
+      // both behave.
+      while (Math.abs(wheelAccum) >= WHEEL_TICK_PX) {
+        const step = wheelAccum > 0 ? WHEEL_TICK_PX : -WHEEL_TICK_PX
+        wheelAccum -= step
+        emit('wheel', midX, midY, step)
+      }
+    }
+    return
+  }
+  if (mode !== 'single') return
   const touch = e.touches[0]
   if (!touch) return
   curX = touch.clientX
   curY = touch.clientY
+  if (dragButton !== null) {
+    emit('dragMove', curX, curY, dragButton)
+    return
+  }
   if (!longpressed && !moved
       && Math.hypot(curX - startX, curY - startY) > MOVE_SLOP_PX) {
     moved = true
@@ -329,41 +404,89 @@ function onTouchMove(e: TouchEvent) {
       clearTimeout(timer)
       timer = null
     }
+    if (isScrollable()) {
+      // The desktop is larger than the pane: a plain drag pans the view.
+      panning = true
+      panLastX = curX
+      panLastY = curY
+      return
+    }
   }
-  if (moved || longpressed) emit('move', curX, curY, longpressed)
+  if (longpressed) {
+    // Confirmed long-press now turns into a left-button drag.
+    dragButton = 0
+    sendWithStickyModifiers(() => emit('dragStart', curX, curY, 0))
+    return
+  }
+  if (moved) {
+    if (panning) {
+      const el = props.target
+      if (el) {
+        el.scrollLeft -= curX - panLastX
+        el.scrollTop -= curY - panLastY
+      }
+      panLastX = curX
+      panLastY = curY
+    } else {
+      emit('move', curX, curY, false)
+    }
+  }
 }
 
 function onTouchEnd(e: TouchEvent) {
   if (!props.touchEnabled || !props.active) return
   e.preventDefault()
+  if (mode === 'wheel') {
+    // Keep wheeling while at least two fingers stay down; one finger left
+    // over does nothing until all are lifted.
+    if (e.touches.length < 2) mode = 'dead'
+    else wheelLastY = (e.touches[0].clientY + e.touches[1].clientY) / 2
+    return
+  }
   if (timer !== null) {
     clearTimeout(timer)
     timer = null
   }
-  if (longpressed) {
-    emit('right', curX, curY, false)
-  } else if (!moved && Date.now() - startedAt < LONG_PRESS_MS) {
-    let tx = curX
-    let ty = curY
-    const now = Date.now()
-    if (now - lastTapAt <= DOUBLE_TAP_MS
-        && Math.hypot(tx - lastTapX, ty - lastTapY) <= DOUBLE_TAP_SLOP_PX) {
-      tx = lastTapX
-      ty = lastTapY
+  if (mode === 'single') {
+    if (dragButton !== null) {
+      emit('dragEnd', curX, curY, dragButton)
+    } else if (longpressed && !moved) {
+      // Lifted after a long-press without dragging: right click.
+      sendWithStickyModifiers(() => {
+        emit('right', curX, curY, true)
+        emit('right', curX, curY, false)
+      })
+    } else if (!moved && Date.now() - startedAt < LONG_PRESS_MS) {
+      let tx = curX
+      let ty = curY
+      const now = Date.now()
+      if (now - lastTapAt <= DOUBLE_TAP_MS
+          && Math.hypot(tx - lastTapX, ty - lastTapY) <= DOUBLE_TAP_SLOP_PX) {
+        tx = lastTapX
+        ty = lastTapY
+      }
+      lastTapX = tx
+      lastTapY = ty
+      lastTapAt = now
+      // Taps honor armed sticky modifiers too: Ctrl+click multi-select,
+      // Shift+click range select.
+      sendWithStickyModifiers(() => emit('tap', tx, ty))
     }
-    lastTapX = tx
-    lastTapY = ty
-    lastTapAt = now
-    // Taps honor armed sticky modifiers too: Ctrl+click multi-select,
-    // Shift+click range select.
-    sendWithStickyModifiers(() => emit('tap', tx, ty))
   }
-  longpressed = false
-  moved = false
+  resetGesture()
+  // Remaining fingers (e.g. one lifted out of a two-finger wheel) are
+  // ignored until all are up.
+  if (e.touches.length > 0) mode = 'dead'
+  else mode = 'idle'
 }
 
 function onTouchCancel() {
+  // A cancelled drag must still release the remote button, or it sticks.
+  if (dragButton !== null) {
+    emit('dragEnd', curX, curY, dragButton)
+  }
   resetGesture()
+  mode = 'idle'
 }
 
 // Listeners are non-passive: preventDefault suppresses the browser's
