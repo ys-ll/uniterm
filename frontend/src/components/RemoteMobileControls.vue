@@ -85,15 +85,25 @@ const composing = ref(false)
 
 // ── Soft keyboard ──
 
-// Android IMEs only report Backspace when the field actually has content to
-// delete — an always-empty input swallows the key entirely. Keep a zero-width
-// sentinel in the buffer so every delete produces a deleteContentBackward
-// event, which we translate into a remote Backspace and then restore.
+// Android IMEs only report Backspace for content they can see in the field:
+// an always-empty buffer swallows the key, and worse, IMEs that "undo" their
+// last commit (common with Chinese keyboards) skip the field entirely unless
+// the committed text is still there. So keep the committed text in the
+// buffer — only the leading zero-width sentinel is guaranteed — and trim
+// once it grows past a bound.
 const INPUT_SENTINEL = '​'
+const INPUT_LIMIT = 64
 
 function resetInputBuffer() {
   const el = inputEl.value
   if (el) el.value = INPUT_SENTINEL
+}
+
+function trimInputBuffer() {
+  const el = inputEl.value
+  if (el && (el.value.length === 0 || el.value.length > INPUT_LIMIT)) {
+    el.value = INPUT_SENTINEL
+  }
 }
 
 function toggleKeyboard() {
@@ -132,6 +142,7 @@ const KEYS: BarKey[] = [
   { label: 'Esc', code: 'Escape' },
   { label: 'Tab', code: 'Tab' },
   { label: 'Del', code: 'Delete' },
+  { label: '⌫', code: 'Backspace' },
   { label: '←', code: 'ArrowLeft' },
   { label: '↑', code: 'ArrowUp' },
   { label: '↓', code: 'ArrowDown' },
@@ -167,10 +178,17 @@ function onBarKey(key: BarKey) {
 // Printable characters are delivered by the IME as input events; keydown for
 // them is left alone so we never double-send.
 const heldSpecial = new Set<string>()
+// Some IMEs deliver Backspace as BOTH a keydown (which we preventDefault,
+// yet the IME still performs the deletion) and a deleteContentBackward
+// beforeinput — dedupe the two sources within a small window.
+let lastBackspaceAt = 0
 
 function onKeydown(e: KeyboardEvent) {
-  if (composing.value || e.key.length === 1 || e.key === 'Unidentified') return
+  if (e.key === 'Unidentified' && e.keyCode !== 8) return
+  if (composing.value && e.keyCode !== 8) return
+  if (e.key.length === 1) return
   e.preventDefault()
+  if (e.keyCode === 8) lastBackspaceAt = Date.now()
   if (e.code in armed) {
     // A physical modifier key: forward it, don't touch the sticky state.
     heldSpecial.add(e.code)
@@ -186,9 +204,9 @@ function onKeyup(e: KeyboardEvent) {
 }
 
 function onBeforeInput(e: InputEvent) {
-  if (composing.value) return
   switch (e.inputType) {
     case 'insertText':
+      if (composing.value) return
       if (e.data) sendWithStickyModifiers(() => emit('text', e.data!))
       break
     case 'insertCompositionText':
@@ -201,28 +219,30 @@ function onBeforeInput(e: InputEvent) {
       break
     case 'deleteContentBackward':
     case 'deleteWordBackward':
-      // Reachable when the IME deletes without a keydown (the common case —
-      // keydown Backspace is preventDefault'ed above). The sentinel character
-      // guarantees the IME always has something to delete here.
-      sendWithStickyModifiers(() => {
-        emit('special', 'Backspace', true)
-        emit('special', 'Backspace', false)
-      })
+      // Forward every deletion — even one happening mid-composition: the
+      // remote has no notion of the local IME's composition, so any delete
+      // must reach it as Backspace. Skipped when a Backspace keydown just
+      // handled the same press.
+      if (Date.now() - lastBackspaceAt > 120) {
+        sendWithStickyModifiers(() => {
+          emit('special', 'Backspace', true)
+          emit('special', 'Backspace', false)
+        })
+      }
       break
   }
 }
 
 function onInput() {
-  // Keep the buffer at exactly the sentinel so the next IME delete always
-  // has content to remove and fires deleteContentBackward.
-  const el = inputEl.value
-  if (el && !composing.value) el.value = INPUT_SENTINEL
+  // Keep committed text in the buffer (IMEs need it for Backspace); only
+  // trim when it grows past the bound or got emptied.
+  if (!composing.value) trimInputBuffer()
 }
 
 function onCompositionEnd(e: CompositionEvent) {
   composing.value = false
   if (e.data) sendWithStickyModifiers(() => emit('text', e.data!))
-  resetInputBuffer()
+  trimInputBuffer()
 }
 
 function onImeBlur() {
@@ -234,6 +254,12 @@ function onImeBlur() {
 
 const LONG_PRESS_MS = 500
 const MOVE_SLOP_PX = 10
+// The remote's own double-click rect is tiny; consecutive touchscreen taps
+// differ by a few display pixels, which a scaled-down remote desktop
+// magnifies far past it. Snap the second tap of a pair onto the first one's
+// exact position so the remote sees two clicks at the same coordinates.
+const DOUBLE_TAP_MS = 500
+const DOUBLE_TAP_SLOP_PX = 15
 
 let timer: ReturnType<typeof setTimeout> | null = null
 let startX = 0
@@ -243,6 +269,9 @@ let curY = 0
 let startedAt = 0
 let moved = false
 let longpressed = false
+let lastTapX = 0
+let lastTapY = 0
+let lastTapAt = 0
 
 function resetGesture() {
   if (timer !== null) {
@@ -253,9 +282,21 @@ function resetGesture() {
   moved = false
 }
 
+function dismissKeyboard() {
+  if (!open.value) return
+  const el = inputEl.value
+  if (el) el.blur()
+  open.value = false
+  for (const code of STICKY_CODES) armed[code] = false
+}
+
 function onTouchStart(e: TouchEvent) {
   if (!props.touchEnabled || !props.active) return
   e.preventDefault()
+  // Touching the desktop is a mouse interaction: dismiss the soft keyboard.
+  // With the hidden input still focused, Android re-summons the IME on any
+  // tap, which both covers the screen and cancels in-flight tap streams.
+  dismissKeyboard()
   if (e.touches.length !== 1) {
     resetGesture()
     return
@@ -270,7 +311,7 @@ function onTouchStart(e: TouchEvent) {
   timer = setTimeout(() => {
     timer = null
     longpressed = true
-    emit('right', curX, curY, true)
+    sendWithStickyModifiers(() => emit('right', curX, curY, true))
   }, LONG_PRESS_MS)
 }
 
@@ -302,7 +343,20 @@ function onTouchEnd(e: TouchEvent) {
   if (longpressed) {
     emit('right', curX, curY, false)
   } else if (!moved && Date.now() - startedAt < LONG_PRESS_MS) {
-    emit('tap', curX, curY)
+    let tx = curX
+    let ty = curY
+    const now = Date.now()
+    if (now - lastTapAt <= DOUBLE_TAP_MS
+        && Math.hypot(tx - lastTapX, ty - lastTapY) <= DOUBLE_TAP_SLOP_PX) {
+      tx = lastTapX
+      ty = lastTapY
+    }
+    lastTapX = tx
+    lastTapY = ty
+    lastTapAt = now
+    // Taps honor armed sticky modifiers too: Ctrl+click multi-select,
+    // Shift+click range select.
+    sendWithStickyModifiers(() => emit('tap', tx, ty))
   }
   longpressed = false
   moved = false
@@ -380,10 +434,16 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
   font-size: 0.8125rem;
 }
-.remote-mobile-key-btn.armed,
-.remote-mobile-key-btn:hover {
+.remote-mobile-key-btn.armed {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+/* Hover is sticky on touch screens and would make keys look stuck down. */
+@media (hover: hover) {
+  .remote-mobile-key-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
 }
 .remote-mobile-kbd-btn {
   position: absolute;
@@ -406,10 +466,16 @@ onBeforeUnmount(() => {
 .remote-mobile-kbd-btn.open {
   bottom: 4.25rem;
 }
-.remote-mobile-kbd-btn.open,
-.remote-mobile-kbd-btn:hover {
+.remote-mobile-kbd-btn.open {
   opacity: 1;
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+@media (hover: hover) {
+  .remote-mobile-kbd-btn:hover {
+    opacity: 1;
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
 }
 </style>
