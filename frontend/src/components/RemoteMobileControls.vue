@@ -13,6 +13,7 @@
       autocapitalize="none"
       autocorrect="off"
       inputmode="email"
+      enterkeyhint="send"
       spellcheck="false"
       :aria-hidden="true"
       tabindex="-1"
@@ -25,7 +26,16 @@
       @compositionend="onCompositionEnd"
       @blur="onImeBlur"
     />
-    <div v-show="open" class="remote-mobile-key-bar">
+    <div class="remote-mobile-key-bar">
+      <button
+        class="remote-mobile-key-btn remote-mobile-kbd-toggle"
+        :class="{ armed: open }"
+        :title="t('remoteDesktop.softKeyboard')"
+        :aria-label="t('remoteDesktop.softKeyboard')"
+        @pointerdown.prevent="toggleKeyboard"
+      >
+        <Keyboard :size="14" />
+      </button>
       <div class="remote-mobile-key-scroll">
         <button
           v-for="key in KEYS"
@@ -36,15 +46,6 @@
         >{{ key.label }}</button>
       </div>
     </div>
-    <button
-      class="remote-mobile-kbd-btn"
-      :class="{ open }"
-      :title="t('remoteDesktop.softKeyboard')"
-      :aria-label="t('remoteDesktop.softKeyboard')"
-      @click.prevent="toggleKeyboard"
-    >
-      <Keyboard :size="16" />
-    </button>
   </template>
 </template>
 
@@ -128,10 +129,10 @@ function toggleKeyboard() {
 
 // Sticky modifiers: armed by the key bar, wrapped around the next emitted
 // key/text, consumed after one use (same model as the terminal MobileKeyBar).
-type StickyCode = 'ControlLeft' | 'MetaLeft' | 'AltLeft' | 'ShiftLeft'
-const STICKY_CODES: StickyCode[] = ['ControlLeft', 'MetaLeft', 'AltLeft', 'ShiftLeft']
+type StickyCode = 'ControlLeft' | 'AltLeft' | 'ShiftLeft'
+const STICKY_CODES: StickyCode[] = ['ControlLeft', 'AltLeft', 'ShiftLeft']
 const armed = reactive<Record<StickyCode, boolean>>({
-  ControlLeft: false, MetaLeft: false, AltLeft: false, ShiftLeft: false,
+  ControlLeft: false, AltLeft: false, ShiftLeft: false,
 })
 
 interface BarKey {
@@ -142,17 +143,17 @@ interface BarKey {
 
 const KEYS: BarKey[] = [
   { label: 'Ctrl', code: 'ControlLeft', sticky: true },
-  { label: 'Win', code: 'MetaLeft', sticky: true },
   { label: 'Alt', code: 'AltLeft', sticky: true },
   { label: 'Shift', code: 'ShiftLeft', sticky: true },
   { label: 'Esc', code: 'Escape' },
   { label: 'Tab', code: 'Tab' },
-  { label: 'Del', code: 'Delete' },
   { label: '⌫', code: 'Backspace' },
+  { label: '⏎', code: 'Enter' },
   { label: '←', code: 'ArrowLeft' },
   { label: '↑', code: 'ArrowUp' },
   { label: '↓', code: 'ArrowDown' },
   { label: '→', code: 'ArrowRight' },
+  { label: 'Del', code: 'Delete' },
 ]
 
 function isArmed(code: string): boolean {
@@ -184,25 +185,47 @@ function onBarKey(key: BarKey) {
 // Printable characters are delivered by the IME as input events; keydown for
 // them is left alone so we never double-send.
 const heldSpecial = new Set<string>()
-// Some IMEs deliver Backspace as BOTH a keydown (which we preventDefault,
-// yet the IME still performs the deletion) and a deleteContentBackward
+// Some IMEs deliver Backspace/Enter as BOTH a keydown (which we
+// preventDefault, yet the IME may still perform the edit) and a
 // beforeinput — dedupe the two sources within a small window.
 let lastBackspaceAt = 0
+let lastEnterAt = 0
+
+// IME-generated keys often never produce a matching keyup (and Backspace /
+// Enter sent held-down would wedge the remote), so they go out as
+// transient press+release pairs.
+function isTransientKey(e: KeyboardEvent): boolean {
+  return e.keyCode === 8 || e.keyCode === 13
+}
+
+function transientCode(e: KeyboardEvent): string {
+  if (e.key !== 'Unidentified') return e.code
+  return e.keyCode === 8 ? 'Backspace' : 'Enter'
+}
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Unidentified' && e.keyCode !== 8) return
-  if (composing.value && e.keyCode !== 8) return
+  if (e.key === 'Unidentified' && e.keyCode !== 8 && e.keyCode !== 13) return
+  if (composing.value && !isTransientKey(e)) return
   if (e.key.length === 1) return
   e.preventDefault()
   if (e.keyCode === 8) lastBackspaceAt = Date.now()
-  if (e.code in armed) {
-    // A physical modifier key: forward it, don't touch the sticky state.
-    heldSpecial.add(e.code)
-    emit('special', e.code, true)
+  if (e.keyCode === 13) lastEnterAt = Date.now()
+  const code = isTransientKey(e) ? transientCode(e) : e.code
+  if (isTransientKey(e)) {
+    sendWithStickyModifiers(() => {
+      emit('special', code, true)
+      emit('special', code, false)
+    })
     return
   }
-  heldSpecial.add(e.code)
-  sendWithStickyModifiers(() => emit('special', e.code, true))
+  if (code in armed) {
+    // A physical modifier key: forward it, don't touch the sticky state.
+    heldSpecial.add(code)
+    emit('special', code, true)
+    return
+  }
+  heldSpecial.add(code)
+  sendWithStickyModifiers(() => emit('special', code, true))
 }
 
 function onKeyup(e: KeyboardEvent) {
@@ -221,7 +244,10 @@ function onBeforeInput(e: InputEvent) {
     case 'insertLineBreak':
     case 'insertParagraph':
       e.preventDefault()
-      sendWithStickyModifiers(() => emit('text', '\n'))
+      // Skipped when a keydown Enter just handled the same press.
+      if (Date.now() - lastEnterAt > 120) {
+        sendWithStickyModifiers(() => emit('text', '\n'))
+      }
       break
     case 'deleteContentBackward':
     case 'deleteWordBackward':
@@ -535,16 +561,29 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 1.5rem;
+  bottom: 0;
   z-index: 19;
+  height: 2.75rem;
   background: var(--bg-elevated);
   border-top: 1px solid var(--border-default);
 }
 .remote-mobile-key-scroll {
   display: flex;
+  align-items: center;
   gap: 0.375rem;
   overflow-x: auto;
-  padding: 0.375rem 3rem 0.375rem 0.5rem;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0.375rem 0.5rem 0.375rem 3rem;
+}
+/* The keyboard toggle stays pinned on the left, outside the scroll list. */
+.remote-mobile-kbd-toggle {
+  position: absolute;
+  left: 0.375rem;
+  top: 0.375rem;
+  bottom: 0.375rem;
+  width: 2.25rem;
+  flex: none;
 }
 .remote-mobile-key-btn {
   flex: none;
@@ -568,37 +607,9 @@ onBeforeUnmount(() => {
     color: var(--text-primary);
   }
 }
-.remote-mobile-kbd-btn {
-  position: absolute;
-  right: 0.75rem;
-  bottom: 2.25rem;
-  z-index: 20;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 50%;
-  border: 1px solid var(--border-default);
-  background: var(--bg-elevated);
-  color: var(--text-muted);
+.remote-mobile-kbd-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-md, 0 2px 8px rgba(0, 0, 0, 0.25));
-  opacity: 0.85;
-}
-/* Sit above the key bar while it is shown. */
-.remote-mobile-kbd-btn.open {
-  bottom: 4.25rem;
-}
-.remote-mobile-kbd-btn.open {
-  opacity: 1;
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-@media (hover: hover) {
-  .remote-mobile-kbd-btn:hover {
-    opacity: 1;
-    color: var(--text-primary);
-    background: var(--bg-hover);
-  }
 }
 </style>

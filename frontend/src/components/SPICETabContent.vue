@@ -2,7 +2,7 @@
   <div
     ref="container"
     class="spice-tab-content"
-    :class="{ 'is-fullscreen': isFullscreen }"
+    :class="{ 'is-fullscreen': isFullscreen, 'mobile-bar': mobileBar }"
     :data-remote-keyboard="keyboardFocused || mobileKbOpen ? 'true' : undefined"
     @focusin="onFocusIn"
     @focusout="onFocusOut"
@@ -98,6 +98,7 @@ import { readClipboardText, writeClipboard } from '../composables/useClipboardWr
 import { queueRemoteKeyboardChange, REMOTE_KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { charToScancode } from '../utils/remoteCharInput'
+import { isMobilePlatform } from '../utils/platform'
 import { toWebSocketURL } from '../utils/webSocketUrl'
 import { useI18n } from '../i18n'
 import { usePanelStore } from '../stores/panelStore'
@@ -127,6 +128,7 @@ const isFullscreen = ref(false)
 const resolution = ref('')
 const keyboardFocused = ref(false)
 const mobileKbOpen = ref(false)
+const mobileBar = isMobilePlatform()
 let keyboardCaptureId = ''
 let keyboardGeneration = 0
 let keyboardHeartbeat: ReturnType<typeof setInterval> | null = null
@@ -734,6 +736,23 @@ watch(status, value => {
 .spice-tab-content.is-fullscreen .spice-area,
 .spice-tab-content.is-fullscreen .spice-overlay {
   bottom: 0;
+}
+/* Mobile: reserve room for the always-visible key bar at the bottom. */
+.spice-tab-content.mobile-bar .spice-area {
+  bottom: 4.25rem;
+}
+.spice-tab-content.mobile-bar .spice-statusbar {
+  bottom: 2.75rem;
+}
+.spice-tab-content.mobile-bar .spice-overlay {
+  bottom: 4.25rem;
+}
+.spice-tab-content.mobile-bar.is-fullscreen .spice-area,
+.spice-tab-content.mobile-bar.is-fullscreen .spice-overlay {
+  bottom: 2.75rem;
+}
+.spice-tab-content.mobile-bar.is-fullscreen .spice-statusbar {
+  display: none;
 }
 .spice-overlay {
   position: absolute;

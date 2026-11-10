@@ -2,6 +2,7 @@
   <div
     ref="container"
     class="rdp-tab-content"
+    :class="{ 'mobile-bar': mobileBar }"
     tabindex="0"
     :data-remote-keyboard="(keyboardFocused && status === 'connected') || mobileKbOpen ? 'true' : undefined"
     @keydown="onKeyDown"
@@ -179,10 +180,12 @@ import { useRemoteDesktopPreferences } from '../composables/useRemoteDesktopPref
 import { queueRemoteKeyboardChange, isRdpPasteKey, REMOTE_KEY_SCANCODES as KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { charToScancode } from '../utils/remoteCharInput'
+import { isMobilePlatform } from '../utils/platform'
 
 const { t } = useI18n()
 const panelStore = usePanelStore()
 const connectionStore = useConnectionStore()
+const mobileBar = isMobilePlatform()
 
 const props = defineProps<{
   panelId: string
@@ -1393,6 +1396,10 @@ watch(activeResolution, (mode) => {
   background: var(--bg-primary);
   position: relative;
   outline: none;
+}
+/* Mobile: reserve room for the always-visible key bar at the bottom. */
+.rdp-tab-content.mobile-bar {
+  padding-bottom: 2.75rem;
 }
 .rdp-viewport {
   flex: 1;

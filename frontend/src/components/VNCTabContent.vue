@@ -2,7 +2,7 @@
   <div
     ref="container"
     class="vnc-tab-content"
-    :class="{ 'is-fullscreen': isFullscreen }"
+    :class="{ 'is-fullscreen': isFullscreen, 'mobile-bar': mobileBar }"
     :data-remote-keyboard="(keyboardFocused && !viewOnly) || mobileKbOpen ? 'true' : undefined"
     @focusin="onFocusIn"
     @focusout="onFocusOut"
@@ -135,6 +135,7 @@ import { msg } from '../services/message'
 import { VncNativeKeyboard } from '../utils/vncKeyboard'
 import { queueRemoteKeyboardChange } from '../utils/remoteKeyboard'
 import { charToKeysym, CODE_KEYSYMS } from '../utils/remoteCharInput'
+import { isMobilePlatform } from '../utils/platform'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { readClipboardText, writeClipboard } from '../composables/useClipboardWrite'
@@ -207,6 +208,7 @@ function selectDisplay(view: DesktopView) {
 }
 const keyboardFocused = ref(false)
 const mobileKbOpen = ref(false)
+const mobileBar = isMobilePlatform()
 let keyboardCaptureId = ''
 let keyboardHeartbeat: ReturnType<typeof setInterval> | null = null
 let clipboardPoll: ReturnType<typeof setInterval> | null = null
@@ -853,6 +855,23 @@ onActivated(onFocusIn)
 .vnc-tab-content.is-fullscreen .vnc-area,
 .vnc-tab-content.is-fullscreen .vnc-overlay {
   bottom: 0;
+}
+/* Mobile: reserve room for the always-visible key bar at the bottom. */
+.vnc-tab-content.mobile-bar .vnc-area {
+  bottom: 4.25rem;
+}
+.vnc-tab-content.mobile-bar .vnc-statusbar {
+  bottom: 2.75rem;
+}
+.vnc-tab-content.mobile-bar .vnc-overlay {
+  bottom: 4.25rem;
+}
+.vnc-tab-content.mobile-bar.is-fullscreen .vnc-area,
+.vnc-tab-content.mobile-bar.is-fullscreen .vnc-overlay {
+  bottom: 2.75rem;
+}
+.vnc-tab-content.mobile-bar.is-fullscreen .vnc-statusbar {
+  display: none;
 }
 .vnc-overlay {
   position: absolute;
