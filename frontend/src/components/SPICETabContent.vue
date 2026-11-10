@@ -2,8 +2,8 @@
   <div
     ref="container"
     class="spice-tab-content"
-    :class="{ 'is-fullscreen': isFullscreen }"
-    :data-remote-keyboard="keyboardFocused ? 'true' : undefined"
+    :class="{ 'is-fullscreen': isFullscreen, 'mobile-bar': mobileBar }"
+    :data-remote-keyboard="keyboardFocused || mobileKbOpen ? 'true' : undefined"
     @focusin="onFocusIn"
     @focusout="onFocusOut"
     @keydown.capture="onKey"
@@ -63,6 +63,22 @@
       @minimize="blurDesktop"
       @error="onToolbarError"
     />
+    <!-- Android/iOS: soft keyboard trigger + touch gestures (tap = left
+         click, long-press = right click; spice-html5 has no touch support). -->
+    <RemoteMobileControls
+      v-model:open="mobileKbOpen"
+      :active="status === 'connected'"
+      :target="viewport"
+      @tap="onMobileTap"
+      @right="onMobileRight"
+      @move="onMobileMove"
+      @drag-start="onMobileDragStart"
+      @drag-move="onMobileDragMove"
+      @drag-end="onMobileDragEnd"
+      @wheel="onMobileWheel"
+      @text="onMobileText"
+      @special="onMobileSpecial"
+    />
   </div>
 </template>
 
@@ -71,6 +87,7 @@ import { ref, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nex
 import { Loader } from '@lucide/vue'
 import RemoteDesktopToolbar from './RemoteDesktopToolbar.vue'
 import RemoteDesktopZoomSelect from './RemoteDesktopZoomSelect.vue'
+import RemoteMobileControls from './RemoteMobileControls.vue'
 import { useRemoteDesktopPreferences } from '../composables/useRemoteDesktopPreferences'
 import { spiceDesktopGeometry } from '../utils/spiceGeometry'
 import { SpiceKeyboard } from '../utils/spiceKeyboard'
@@ -80,6 +97,8 @@ import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { readClipboardText, writeClipboard } from '../composables/useClipboardWrite'
 import { queueRemoteKeyboardChange, REMOTE_KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
+import { charToScancode } from '../utils/remoteCharInput'
+import { isMobilePlatform } from '../utils/platform'
 import { toWebSocketURL } from '../utils/webSocketUrl'
 import { useI18n } from '../i18n'
 import { usePanelStore } from '../stores/panelStore'
@@ -108,6 +127,8 @@ const { zoom, scaleViewport } = useRemoteDesktopPreferences(() => props.config)
 const isFullscreen = ref(false)
 const resolution = ref('')
 const keyboardFocused = ref(false)
+const mobileKbOpen = ref(false)
+const mobileBar = isMobilePlatform()
 let keyboardCaptureId = ''
 let keyboardGeneration = 0
 let keyboardHeartbeat: ReturnType<typeof setInterval> | null = null
@@ -372,6 +393,73 @@ function onKey(event: KeyboardEvent) {
   event.stopPropagation()
 }
 
+// ── Mobile touch / soft keyboard input (issue #1425) ──
+
+// spice-html5 listens on the canvas for mouse events; the touch layer emits
+// logical gestures, so re-dispatch them as regular MouseEvents and let the
+// existing handlers do the work.
+function dispatchSpiceMouse(type: string, button: number, clientX: number, clientY: number) {
+  const primary = sc?.display?.surfaces?.[sc.display.primary_surface]?.canvas as HTMLCanvasElement | undefined
+  const canvas = primary && spiceContainer.value?.contains(primary)
+    ? primary
+    : spiceContainer.value?.querySelector('canvas')
+  if (!canvas) return
+  canvas.dispatchEvent(new MouseEvent(type, { clientX, clientY, button, bubbles: false, cancelable: true }))
+}
+
+function onMobileTap(x: number, y: number) {
+  dispatchSpiceMouse('mousedown', 0, x, y)
+  dispatchSpiceMouse('mouseup', 0, x, y)
+}
+
+function onMobileRight(x: number, y: number, down: boolean) {
+  dispatchSpiceMouse(down ? 'mousedown' : 'mouseup', 2, x, y)
+}
+
+function onMobileMove(x: number, y: number) {
+  dispatchSpiceMouse('mousemove', 0, x, y)
+}
+
+function onMobileDragStart(x: number, y: number, button: number) {
+  dispatchSpiceMouse('mousedown', button, x, y)
+}
+
+function onMobileDragMove(x: number, y: number) {
+  // The button state was sent with dragStart; only the pointer moves.
+  dispatchSpiceMouse('mousemove', 0, x, y)
+}
+
+function onMobileDragEnd(x: number, y: number, button: number) {
+  dispatchSpiceMouse('mouseup', button, x, y)
+}
+
+function onMobileWheel(x: number, y: number, deltaY: number) {
+  const primary = sc?.display?.surfaces?.[sc.display.primary_surface]?.canvas as HTMLCanvasElement | undefined
+  const canvas = primary && spiceContainer.value?.contains(primary)
+    ? primary
+    : spiceContainer.value?.querySelector('canvas')
+  if (!canvas) return
+  canvas.dispatchEvent(new WheelEvent('wheel', {
+    clientX: x, clientY: y, deltaY, bubbles: false, cancelable: true,
+  }))
+}
+
+function onMobileText(chars: string) {
+  for (const ch of chars) {
+    const key = charToScancode(ch)
+    if (!key) continue
+    if (key.shift) keyboard.key(REMOTE_KEY_SCANCODES.ShiftLeft, true)
+    keyboard.key(key.scancode, true)
+    keyboard.key(key.scancode, false)
+    if (key.shift) keyboard.key(REMOTE_KEY_SCANCODES.ShiftLeft, false)
+  }
+}
+
+function onMobileSpecial(code: string, down: boolean) {
+  const scancode = REMOTE_KEY_SCANCODES[code]
+  if (scancode !== undefined) keyboard.key(scancode, down)
+}
+
 function queueKey(scancode: number, down: boolean) {
   const paste = down && !inputKeys.has(scancode) && ((scancode === 0x2f &&
     [0x1d, 0xe01d, 0xe05b, 0xe05c].some(scan => inputKeys.has(scan))) ||
@@ -625,6 +713,8 @@ watch(status, value => {
   overflow: auto;
   background: #000;
   outline: none;
+  /* Drop the double-tap-zoom / tap-delay behavior on touch devices. */
+  touch-action: manipulation;
 }
 .spice-desktop {
   position: relative;
@@ -646,6 +736,23 @@ watch(status, value => {
 .spice-tab-content.is-fullscreen .spice-area,
 .spice-tab-content.is-fullscreen .spice-overlay {
   bottom: 0;
+}
+/* Mobile: reserve room for the always-visible key bar at the bottom. */
+.spice-tab-content.mobile-bar .spice-area {
+  bottom: 4.25rem;
+}
+.spice-tab-content.mobile-bar .spice-statusbar {
+  bottom: 2.75rem;
+}
+.spice-tab-content.mobile-bar .spice-overlay {
+  bottom: 4.25rem;
+}
+.spice-tab-content.mobile-bar.is-fullscreen .spice-area,
+.spice-tab-content.mobile-bar.is-fullscreen .spice-overlay {
+  bottom: 2.75rem;
+}
+.spice-tab-content.mobile-bar.is-fullscreen .spice-statusbar {
+  display: none;
 }
 .spice-overlay {
   position: absolute;

@@ -2,8 +2,8 @@
   <div
     ref="container"
     class="vnc-tab-content"
-    :class="{ 'is-fullscreen': isFullscreen }"
-    :data-remote-keyboard="keyboardFocused && !viewOnly ? 'true' : undefined"
+    :class="{ 'is-fullscreen': isFullscreen, 'mobile-bar': mobileBar }"
+    :data-remote-keyboard="(keyboardFocused && !viewOnly) || mobileKbOpen ? 'true' : undefined"
     @focusin="onFocusIn"
     @focusout="onFocusOut"
     @keydown.capture="onLocalKey"
@@ -97,6 +97,16 @@
       :desktop-width="displayState.width" :desktop-height="displayState.height"
       @save="saveRegion" @cancel="closeRegionEditor" @delete="deleteRegion"
     />
+    <!-- Android/iOS soft keyboard trigger (touch gestures are handled by
+         noVNC's built-in gesture handler). -->
+    <RemoteMobileControls
+      v-model:open="mobileKbOpen"
+      :active="status === 'connected' && !viewOnly"
+      :target="null"
+      :touch-enabled="false"
+      @text="onMobileText"
+      @special="onMobileSpecial"
+    />
   </div>
 </template>
 
@@ -107,6 +117,7 @@ import RemoteDesktopToolbar from './RemoteDesktopToolbar.vue'
 import RemoteDisplaySelect from './RemoteDisplaySelect.vue'
 import RemoteDesktopZoomSelect from './RemoteDesktopZoomSelect.vue'
 import DesktopRegionEditor from './DesktopRegionEditor.vue'
+import RemoteMobileControls from './RemoteMobileControls.vue'
 import { useI18n } from '../i18n'
 import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
@@ -123,6 +134,8 @@ import { deleteDesktopRegion, saveDesktopRegion, suggestedDesktopRegion } from '
 import { msg } from '../services/message'
 import { VncNativeKeyboard } from '../utils/vncKeyboard'
 import { queueRemoteKeyboardChange } from '../utils/remoteKeyboard'
+import { charToKeysym, CODE_KEYSYMS } from '../utils/remoteCharInput'
+import { isMobilePlatform } from '../utils/platform'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { readClipboardText, writeClipboard } from '../composables/useClipboardWrite'
@@ -194,6 +207,8 @@ function selectDisplay(view: DesktopView) {
   }
 }
 const keyboardFocused = ref(false)
+const mobileKbOpen = ref(false)
+const mobileBar = isMobilePlatform()
 let keyboardCaptureId = ''
 let keyboardHeartbeat: ReturnType<typeof setInterval> | null = null
 let clipboardPoll: ReturnType<typeof setInterval> | null = null
@@ -486,6 +501,25 @@ function onNativeKey(data: NativeRdpKey) {
   if (data.captureID !== keyboardCaptureId || !ownsRemoteKeyboard()) return
   if (data.reset) { onFocusOut(); onFocusIn(); return }
   nativeKeyboard?.key(data)
+}
+
+// ── Mobile soft keyboard input (issue #1425) ──
+
+function onMobileText(chars: string) {
+  if (!rfb) return
+  for (const ch of chars) {
+    const keysym = charToKeysym(ch)
+    if (keysym === null) continue
+    const code = `mobile-${keysym}`
+    queueVncKey(keysym, code, true, () => rfb?.sendKey(keysym, code, true))
+    queueVncKey(keysym, code, false, () => rfb?.sendKey(keysym, code, false))
+  }
+}
+
+function onMobileSpecial(code: string, down: boolean) {
+  const keysym = CODE_KEYSYMS[code]
+  if (keysym === undefined) return
+  queueVncKey(keysym, code, down, () => rfb?.sendKey(keysym, code, down))
 }
 
 function onVisibilityChange() {
@@ -808,6 +842,8 @@ onActivated(onFocusIn)
   background: #000;
   outline: none;
   overflow: auto;
+  /* Drop the double-tap-zoom / tap-delay behavior on touch devices. */
+  touch-action: manipulation;
 }
 .vnc-area :deep(canvas) {
   display: block;
@@ -819,6 +855,23 @@ onActivated(onFocusIn)
 .vnc-tab-content.is-fullscreen .vnc-area,
 .vnc-tab-content.is-fullscreen .vnc-overlay {
   bottom: 0;
+}
+/* Mobile: reserve room for the always-visible key bar at the bottom. */
+.vnc-tab-content.mobile-bar .vnc-area {
+  bottom: 4.25rem;
+}
+.vnc-tab-content.mobile-bar .vnc-statusbar {
+  bottom: 2.75rem;
+}
+.vnc-tab-content.mobile-bar .vnc-overlay {
+  bottom: 4.25rem;
+}
+.vnc-tab-content.mobile-bar.is-fullscreen .vnc-area,
+.vnc-tab-content.mobile-bar.is-fullscreen .vnc-overlay {
+  bottom: 2.75rem;
+}
+.vnc-tab-content.mobile-bar.is-fullscreen .vnc-statusbar {
+  display: none;
 }
 .vnc-overlay {
   position: absolute;

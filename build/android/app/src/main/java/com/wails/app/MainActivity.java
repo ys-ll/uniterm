@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.database.Cursor;
+import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -23,11 +24,17 @@ import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -76,6 +83,13 @@ public class MainActivity extends AppCompatActivity {
     private static final int CAMERA_PERMISSION_REQUEST = 7010;
     private File pendingCaptureFile;
     private boolean pendingCaptureIsVideo;
+
+    // HTML5 fullscreen (element.requestFullscreen): Android WebView only
+    // honors it when a WebChromeClient handles onShowCustomView — without
+    // one the remote-desktop fullscreen buttons silently do nothing.
+    private View customView;
+    private WebChromeClient.CustomViewCallback customViewCallback;
+    private FrameLayout fullscreenContainer;
 
     // "Save to" picker (ACTION_CREATE_DOCUMENT): the staged sandbox file that
     // gets streamed into the user-chosen destination (null when idle). The
@@ -217,6 +231,79 @@ public class MainActivity extends AppCompatActivity {
 
         // Add JavaScript interface for Go communication
         webView.addJavascriptInterface(new WailsJSBridge(bridge, webView), "wails");
+
+        // Support element.requestFullscreen() from the web content (remote
+        // desktop fullscreen buttons). The custom view is overlaid on top of
+        // the regular content view so the existing hierarchy stays intact.
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                if (customView != null) {
+                    callback.onCustomViewHidden();
+                    return;
+                }
+                customView = view;
+                customViewCallback = callback;
+                enterNativeFullscreen(view);
+            }
+
+            @Override
+            public void onHideCustomView() {
+                exitNativeFullscreen();
+            }
+        });
+    }
+
+    private void enterNativeFullscreen(View view) {
+        if (fullscreenContainer != null) return;
+        fullscreenContainer = new FrameLayout(this);
+        fullscreenContainer.setBackgroundColor(Color.BLACK);
+        fullscreenContainer.addView(view, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        addContentView(fullscreenContainer, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        applyImmersiveMode(true);
+    }
+
+    private void exitNativeFullscreen() {
+        if (fullscreenContainer == null) return;
+        ViewGroup parent = (ViewGroup) fullscreenContainer.getParent();
+        if (parent != null) parent.removeView(fullscreenContainer);
+        fullscreenContainer = null;
+        customView = null;
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        applyImmersiveMode(false);
+        if (customViewCallback != null) {
+            WebChromeClient.CustomViewCallback callback = customViewCallback;
+            customViewCallback = null;
+            callback.onCustomViewHidden();
+        }
+    }
+
+    /** Hide (fullscreen overlay) or restore the system bars. */
+    private void applyImmersiveMode(boolean hide) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                if (hide) controller.hide(WindowInsets.Type.systemBars());
+                else controller.show(WindowInsets.Type.systemBars());
+            }
+        } else {
+            View decor = getWindow().getDecorView();
+            if (hide) {
+                decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+            } else {
+                decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -930,6 +1017,11 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        if (customView != null) {
+            // System back inside a native fullscreen session exits it.
+            exitNativeFullscreen();
+            return;
+        }
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
