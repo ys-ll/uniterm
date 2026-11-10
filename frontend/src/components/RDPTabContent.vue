@@ -3,7 +3,7 @@
     ref="container"
     class="rdp-tab-content"
     tabindex="0"
-    :data-remote-keyboard="keyboardFocused && status === 'connected' ? 'true' : undefined"
+    :data-remote-keyboard="(keyboardFocused && status === 'connected') || mobileKbOpen ? 'true' : undefined"
     @keydown="onKeyDown"
     @keyup="onKeyUp"
     @paste="onPaste"
@@ -128,6 +128,20 @@
         </el-select>
       </template>
     </RemoteDesktopToolbar>
+
+    <!-- Android/iOS: soft keyboard trigger + touch gestures (tap = left
+         click, long-press = right click). -->
+    <RemoteMobileControls
+      v-model:open="mobileKbOpen"
+      :active="status === 'connected'"
+      :target="viewportEl"
+      :touch-enabled="scaleCanvas"
+      @tap="onMobileTap"
+      @right="onMobileRight"
+      @move="onMobileMove"
+      @text="onMobileText"
+      @special="onMobileSpecial"
+    />
   </div>
 </template>
 
@@ -135,6 +149,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { Loader } from '@lucide/vue'
 import RemoteDesktopToolbar from './RemoteDesktopToolbar.vue'
+import RemoteMobileControls from './RemoteMobileControls.vue'
 import { useI18n } from '../i18n'
 import type { ConnectionConfig } from '../types/session'
 import { CreateSession, CloseSession, FrontendLog, ClipboardGetFiles, ClipboardReadFileChunkByID,
@@ -160,6 +175,7 @@ import RemoteDesktopZoomSelect from './RemoteDesktopZoomSelect.vue'
 import { useRemoteDesktopPreferences } from '../composables/useRemoteDesktopPreferences'
 import { queueRemoteKeyboardChange, isRdpPasteKey, REMOTE_KEY_SCANCODES as KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
+import { charToScancode } from '../utils/remoteCharInput'
 
 const { t } = useI18n()
 const panelStore = usePanelStore()
@@ -198,6 +214,7 @@ const keyboardFocused = ref(false)
 let keyboardCaptureId = ''
 let keyboardHeartbeat: ReturnType<typeof setInterval> | null = null
 const viewportEl = ref<HTMLDivElement | null>(null)
+const mobileKbOpen = ref(false)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const displayPixelRatio = ref(window.devicePixelRatio || 1)
 const framebufferSize = ref<RdpDesktopSize | null>(null)
@@ -806,11 +823,31 @@ function onFocusOut() {
 
 const pressedMouseButtons = new Set<number>()
 
-function canvasCoords(e: MouseEvent, clampOutside = false): { x: number; y: number } | null {
+function canvasCoordsAt(clientX: number, clientY: number, clampOutside = false): { x: number; y: number } | null {
   const canvas = canvasEl.value
   const size = currentDesktopSize()
   if (!canvas || !session || status.value !== 'connected' || !size) return null
-  return rdpPointerPosition(e.clientX, e.clientY, canvas.getBoundingClientRect(), size, isAdaptive() || !scaleCanvas.value, clampOutside)
+  return rdpPointerPosition(clientX, clientY, canvas.getBoundingClientRect(), size, isAdaptive() || !scaleCanvas.value, clampOutside)
+}
+
+function canvasCoords(e: MouseEvent, clampOutside = false): { x: number; y: number } | null {
+  return canvasCoordsAt(e.clientX, e.clientY, clampOutside)
+}
+
+// Low-level button send used by both the DOM mouse path and the mobile touch
+// path. Does not touch pressedMouseButtons — callers own button tracking.
+function sendMouseButtonAt(button: number, down: boolean, clientX: number, clientY: number) {
+  if (!session || !wasmModule) return
+  const pos = canvasCoordsAt(clientX, clientY, !down)
+  if (!pos) return
+  try {
+    const tx = new wasmModule.InputTransaction()
+    tx.addEvent(wasmModule.DeviceEvent.mouseMove(pos.x, pos.y))
+    tx.addEvent(down ? wasmModule.DeviceEvent.mouseButtonPressed(button) : wasmModule.DeviceEvent.mouseButtonReleased(button))
+    session.applyInputs(tx)
+  } catch (err) {
+    rdpLog(`mouse send failed: ${String(err)}`)
+  }
 }
 
 function sendMouseButton(e: MouseEvent, down: boolean) {
@@ -852,6 +889,44 @@ function onMouseMove(e: MouseEvent) {
     tx.addEvent(wasmModule.DeviceEvent.mouseMove(pos.x, pos.y))
     session.applyInputs(tx)
   } catch (_) {}
+}
+
+// ── Mobile touch / soft keyboard input (issue #1425) ──
+
+function onMobileTap(x: number, y: number) {
+  sendMouseButtonAt(0, true, x, y)
+  sendMouseButtonAt(0, false, x, y)
+}
+
+function onMobileRight(x: number, y: number, down: boolean) {
+  sendMouseButtonAt(2, down, x, y)
+}
+
+function onMobileMove(x: number, y: number, buttonDown: boolean) {
+  if (!session || !wasmModule) return
+  const pos = canvasCoordsAt(x, y, buttonDown)
+  if (!pos) return
+  try {
+    const tx = new wasmModule.InputTransaction()
+    tx.addEvent(wasmModule.DeviceEvent.mouseMove(pos.x, pos.y))
+    session.applyInputs(tx)
+  } catch (_) {}
+}
+
+function onMobileText(chars: string) {
+  for (const ch of chars) {
+    const key = charToScancode(ch)
+    if (!key) continue
+    if (key.shift) queueKey(KEY_SCANCODES.ShiftLeft, true, false, false, false, false)
+    queueKey(key.scancode, true, false, false, false, key.shift)
+    queueKey(key.scancode, false, false, false, false, false)
+    if (key.shift) queueKey(KEY_SCANCODES.ShiftLeft, false, false, false, false, false)
+  }
+}
+
+function onMobileSpecial(code: string, down: boolean) {
+  const scancode = KEY_SCANCODES[code]
+  if (scancode !== undefined) queueKey(scancode, down, false, false, false, false)
 }
 
 function rotationUnitFromEvent(e: WheelEvent) {
@@ -1058,6 +1133,10 @@ async function reconnectWithSize(width: number, height: number) {
 function requestAdaptiveResize() {
   if (!session || status.value !== 'connected' || reconnecting) return
   if (!isAdaptive()) return
+  // The soft keyboard squeezes the viewport via the IME inset padding; do not
+  // resize (or reconnect) the remote desktop for that transient size. The
+  // ResizeObserver fires again with the restored size once it closes.
+  if (mobileKbOpen.value) return
   // Scrollbars in the unscaled view must not change the negotiated resolution.
   const targetSize = adaptiveDesktopSize()
   if (!targetSize) return
