@@ -135,7 +135,6 @@
       v-model:open="mobileKbOpen"
       :active="status === 'connected'"
       :target="viewportEl"
-      :touch-enabled="scaleCanvas"
       @tap="onMobileTap"
       @right="onMobileRight"
       @move="onMobileMove"
@@ -916,11 +915,28 @@ function onMobileMove(x: number, y: number, buttonDown: boolean) {
 function onMobileText(chars: string) {
   for (const ch of chars) {
     const key = charToScancode(ch)
-    if (!key) continue
+    if (!key) {
+      // No scancode for this character (CJK etc.) — the WASM engine exposes
+      // a Unicode input channel, so send it there instead of dropping it.
+      inputQueue.enqueue(() => sendUnicodeChar(ch))
+      continue
+    }
     if (key.shift) queueKey(KEY_SCANCODES.ShiftLeft, true, false, false, false, false)
     queueKey(key.scancode, true, false, false, false, key.shift)
     queueKey(key.scancode, false, false, false, false, false)
     if (key.shift) queueKey(KEY_SCANCODES.ShiftLeft, false, false, false, false, false)
+  }
+}
+
+function sendUnicodeChar(ch: string) {
+  if (!session || !wasmModule) return
+  try {
+    const tx = new wasmModule.InputTransaction()
+    tx.addEvent(wasmModule.DeviceEvent.unicodePressed(ch))
+    tx.addEvent(wasmModule.DeviceEvent.unicodeReleased(ch))
+    session.applyInputs(tx)
+  } catch (err) {
+    rdpLog(`unicode send failed: ${String(err)}`)
   }
 }
 
@@ -1353,6 +1369,8 @@ watch(activeResolution, (mode) => {
   position: relative;
   overflow: hidden;
   background: #000;
+  /* Drop the double-tap-zoom / tap-delay behavior on touch devices. */
+  touch-action: manipulation;
 }
 .rdp-viewport.is-unscaled {
   display: flex;

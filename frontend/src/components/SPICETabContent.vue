@@ -69,7 +69,6 @@
       v-model:open="mobileKbOpen"
       :active="status === 'connected'"
       :target="viewport"
-      :touch-enabled="scaleViewport"
       @tap="onMobileTap"
       @right="onMobileRight"
       @move="onMobileMove"
@@ -684,6 +683,8 @@ watch(status, value => {
   overflow: auto;
   background: #000;
   outline: none;
+  /* Drop the double-tap-zoom / tap-delay behavior on touch devices. */
+  touch-action: manipulation;
 }
 .spice-desktop {
   position: relative;

@@ -840,6 +840,8 @@ onActivated(onFocusIn)
   background: #000;
   outline: none;
   overflow: auto;
+  /* Drop the double-tap-zoom / tap-delay behavior on touch devices. */
+  touch-action: manipulation;
 }
 .vnc-area :deep(canvas) {
   display: block;
