@@ -2,7 +2,7 @@
   <div
     ref="container"
     class="vnc-tab-content"
-    :class="{ 'is-fullscreen': isFullscreen, 'mobile-bar': mobileBar }"
+    :class="{ 'is-fullscreen': isFullscreen }"
     :data-remote-keyboard="(keyboardFocused && !viewOnly) || mobileKbOpen ? 'true' : undefined"
     @focusin="onFocusIn"
     @focusout="onFocusOut"
@@ -40,9 +40,6 @@
 
     <!-- Status bar -->
     <div v-show="status === 'connected' && !isFullscreen" class="vnc-statusbar">
-      <span class="vnc-status-dot" />
-      <span>{{ t('vnc.connected') }}</span>
-      <span class="vnc-status-sep">|</span>
       <RemoteDisplaySelect
         :displays="displayState.displays" :width="displayState.width" :height="displayState.height"
         :view="displayState.view" allow-custom @select="selectDisplay" @focus-desktop="focusDesktop"
@@ -135,7 +132,6 @@ import { msg } from '../services/message'
 import { VncNativeKeyboard } from '../utils/vncKeyboard'
 import { queueRemoteKeyboardChange } from '../utils/remoteKeyboard'
 import { charToKeysym, CODE_KEYSYMS } from '../utils/remoteCharInput'
-import { isMobilePlatform } from '../utils/platform'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { readClipboardText, writeClipboard } from '../composables/useClipboardWrite'
@@ -208,7 +204,6 @@ function selectDisplay(view: DesktopView) {
 }
 const keyboardFocused = ref(false)
 const mobileKbOpen = ref(false)
-const mobileBar = isMobilePlatform()
 let keyboardCaptureId = ''
 let keyboardHeartbeat: ReturnType<typeof setInterval> | null = null
 let clipboardPoll: ReturnType<typeof setInterval> | null = null
@@ -856,23 +851,6 @@ onActivated(onFocusIn)
 .vnc-tab-content.is-fullscreen .vnc-overlay {
   bottom: 0;
 }
-/* Mobile: reserve room for the always-visible key bar at the bottom. */
-.vnc-tab-content.mobile-bar .vnc-area {
-  bottom: 4.25rem;
-}
-.vnc-tab-content.mobile-bar .vnc-statusbar {
-  bottom: 2.75rem;
-}
-.vnc-tab-content.mobile-bar .vnc-overlay {
-  bottom: 4.25rem;
-}
-.vnc-tab-content.mobile-bar.is-fullscreen .vnc-area,
-.vnc-tab-content.mobile-bar.is-fullscreen .vnc-overlay {
-  bottom: 2.75rem;
-}
-.vnc-tab-content.mobile-bar.is-fullscreen .vnc-statusbar {
-  display: none;
-}
 .vnc-overlay {
   position: absolute;
   inset: 0;
@@ -912,12 +890,6 @@ onActivated(onFocusIn)
   overflow-y: hidden;
   scrollbar-width: none;
   z-index: 5;
-}
-.vnc-status-dot {
-  width: 0.5rem; height: 0.5rem;
-  border-radius: 50%;
-  background: var(--success);
-  flex-shrink: 0;
 }
 .vnc-statusbar::-webkit-scrollbar { display: none; }
 .vnc-statusbar :deep(.el-switch) { height: 1.25rem; }

@@ -2,7 +2,7 @@
   <div
     ref="container"
     class="spice-tab-content"
-    :class="{ 'is-fullscreen': isFullscreen, 'mobile-bar': mobileBar }"
+    :class="{ 'is-fullscreen': isFullscreen }"
     :data-remote-keyboard="keyboardFocused || mobileKbOpen ? 'true' : undefined"
     @focusin="onFocusIn"
     @focusout="onFocusOut"
@@ -44,9 +44,6 @@
 
     <!-- Status bar -->
     <div v-show="status === 'connected' && !isFullscreen" class="spice-statusbar">
-      <span class="spice-status-dot" />
-      <span>{{ t('spice.connected') }}</span>
-      <span class="spice-status-sep">|</span>
       <RemoteDesktopZoomSelect v-model="zoom" />
       <span class="spice-status-spacer" />
       <button class="spice-fullscreen-btn" @click="toggleFullscreen">{{ t('remoteDesktop.fullscreen') }}</button>
@@ -98,7 +95,6 @@ import { readClipboardText, writeClipboard } from '../composables/useClipboardWr
 import { queueRemoteKeyboardChange, REMOTE_KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { charToScancode } from '../utils/remoteCharInput'
-import { isMobilePlatform } from '../utils/platform'
 import { toWebSocketURL } from '../utils/webSocketUrl'
 import { useI18n } from '../i18n'
 import { usePanelStore } from '../stores/panelStore'
@@ -128,7 +124,6 @@ const isFullscreen = ref(false)
 const resolution = ref('')
 const keyboardFocused = ref(false)
 const mobileKbOpen = ref(false)
-const mobileBar = isMobilePlatform()
 let keyboardCaptureId = ''
 let keyboardGeneration = 0
 let keyboardHeartbeat: ReturnType<typeof setInterval> | null = null
@@ -737,23 +732,6 @@ watch(status, value => {
 .spice-tab-content.is-fullscreen .spice-overlay {
   bottom: 0;
 }
-/* Mobile: reserve room for the always-visible key bar at the bottom. */
-.spice-tab-content.mobile-bar .spice-area {
-  bottom: 4.25rem;
-}
-.spice-tab-content.mobile-bar .spice-statusbar {
-  bottom: 2.75rem;
-}
-.spice-tab-content.mobile-bar .spice-overlay {
-  bottom: 4.25rem;
-}
-.spice-tab-content.mobile-bar.is-fullscreen .spice-area,
-.spice-tab-content.mobile-bar.is-fullscreen .spice-overlay {
-  bottom: 2.75rem;
-}
-.spice-tab-content.mobile-bar.is-fullscreen .spice-statusbar {
-  display: none;
-}
 .spice-overlay {
   position: absolute;
   inset: 0;
@@ -790,13 +768,6 @@ watch(status, value => {
   box-sizing: border-box;
   z-index: 5;
 }
-.spice-status-dot {
-  width: 0.5rem; height: 0.5rem;
-  border-radius: 50%;
-  background: var(--success);
-  flex-shrink: 0;
-}
-.spice-status-sep { color: var(--text-disabled); }
 .spice-status-label { font-size: 0.6875rem; }
 .spice-status-spacer { flex: 1; }
 .spice-fullscreen-btn {

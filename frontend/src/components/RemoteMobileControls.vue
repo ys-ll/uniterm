@@ -26,23 +26,24 @@
       @compositionend="onCompositionEnd"
       @blur="onImeBlur"
     />
-    <div class="remote-mobile-key-bar">
-      <button
-        class="remote-mobile-key-btn remote-mobile-kbd-toggle"
-        :class="{ armed: open }"
-        :title="t('remoteDesktop.softKeyboard')"
-        :aria-label="t('remoteDesktop.softKeyboard')"
-        @pointerdown.prevent="toggleKeyboard"
-      >
-        <Keyboard :size="14" />
-      </button>
+    <button
+      class="remote-mobile-kbd-btn"
+      :class="{ open }"
+      :title="t('remoteDesktop.softKeyboard')"
+      :aria-label="t('remoteDesktop.softKeyboard')"
+      @click.prevent="toggleKeyboard"
+    >
+      <Keyboard :size="16" />
+    </button>
+    <div v-show="open" class="remote-mobile-key-bar" @pointerdown.prevent="onBarDown"
+         @pointermove="onBarMove" @pointerup="onBarUp" @pointercancel="onBarCancel">
       <div class="remote-mobile-key-scroll">
         <button
           v-for="key in KEYS"
           :key="key.code"
           class="remote-mobile-key-btn"
           :class="{ armed: key.sticky && isArmed(key.code) }"
-          @pointerdown.prevent="onBarKey(key)"
+          :data-code="key.code"
         >{{ key.label }}</button>
       </div>
     </div>
@@ -169,6 +170,48 @@ function sendWithStickyModifiers(payload: () => void) {
   for (const code of STICKY_CODES) armed[code] = false
 }
 
+// Bar keys fire on a clean tap only: dragging the list horizontally to
+// scroll must not trigger the buttons (pointerdown always fires, so the
+// decision happens at pointerup). Scrolling cancels the pointer stream,
+// which lands here as a non-triggering reset.
+let barPointerId = -1
+let barStartX = 0
+let barStartY = 0
+let barMoved = false
+let barButton: HTMLElement | null = null
+
+function onBarDown(e: PointerEvent) {
+  if (barPointerId !== -1) return
+  barPointerId = e.pointerId
+  barStartX = e.clientX
+  barStartY = e.clientY
+  barMoved = false
+  barButton = (e.target as HTMLElement).closest?.('button') ?? null
+}
+
+function onBarMove(e: PointerEvent) {
+  if (e.pointerId !== barPointerId) return
+  if (!barMoved && Math.hypot(e.clientX - barStartX, e.clientY - barStartY) > 8) {
+    barMoved = true
+  }
+}
+
+function onBarUp(e: PointerEvent) {
+  if (e.pointerId !== barPointerId) return
+  barPointerId = -1
+  const button = barButton
+  barButton = null
+  if (barMoved || !button) return
+  const key = KEYS.find(k => (button as HTMLElement).dataset?.code === k.code)
+  if (key) onBarKey(key)
+}
+
+function onBarCancel(e: PointerEvent) {
+  if (e.pointerId !== barPointerId) return
+  barPointerId = -1
+  barButton = null
+}
+
 function onBarKey(key: BarKey) {
   if (key.sticky) {
     const code = key.code as StickyCode
@@ -282,6 +325,28 @@ function onImeBlur() {
   for (const code of STICKY_CODES) armed[code] = false
 }
 
+// Dismissing the IME with the system back button leaves the hidden input
+// focused — the next desktop tap would re-summon the keyboard. Track the
+// visual viewport: when it grows back to full height while we still think
+// the keyboard is open, sync the state (taps themselves never close it).
+const visualViewport = typeof window !== 'undefined' ? window.visualViewport : null
+let fullViewportHeight = visualViewport?.height ?? 0
+
+function onVisualViewportResize() {
+  if (!visualViewport) return
+  const height = visualViewport.height
+  if (height > fullViewportHeight) fullViewportHeight = height
+  if (open.value && height >= fullViewportHeight * 0.9) {
+    open.value = false
+    inputEl.value?.blur()
+    for (const code of STICKY_CODES) armed[code] = false
+  }
+}
+
+if (visualViewport) {
+  visualViewport.addEventListener('resize', onVisualViewportResize)
+}
+
 // ── Touch gestures ──
 //
 // Long-press is only a *preparation*: the decision happens when the finger
@@ -349,21 +414,9 @@ function resetGesture() {
   dragButton = null
 }
 
-function dismissKeyboard() {
-  if (!open.value) return
-  const el = inputEl.value
-  if (el) el.blur()
-  open.value = false
-  for (const code of STICKY_CODES) armed[code] = false
-}
-
 function onTouchStart(e: TouchEvent) {
   if (!props.touchEnabled || !props.active) return
   e.preventDefault()
-  // Touching the desktop is a mouse interaction: dismiss the soft keyboard.
-  // With the hidden input still focused, Android re-summons the IME on any
-  // tap, which both covers the screen and cancels in-flight tap streams.
-  dismissKeyboard()
   if (e.touches.length >= 2) {
     // Two-finger wheel mode (or re-anchor it when a third finger lands).
     resetGesture()
@@ -540,6 +593,7 @@ watch(() => props.target, (el, prev) => {
 onBeforeUnmount(() => {
   if (props.target) bindTouch(props.target, false)
   if (timer !== null) clearTimeout(timer)
+  visualViewport?.removeEventListener('resize', onVisualViewportResize)
 })
 </script>
 
@@ -561,7 +615,7 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: 1.5rem;
   z-index: 19;
   height: 2.75rem;
   background: var(--bg-elevated);
@@ -574,16 +628,36 @@ onBeforeUnmount(() => {
   overflow-x: auto;
   height: 100%;
   box-sizing: border-box;
-  padding: 0.375rem 0.5rem 0.375rem 3rem;
+  padding: 0.375rem 0.5rem;
 }
-/* The keyboard toggle stays pinned on the left, outside the scroll list. */
-.remote-mobile-kbd-toggle {
+.remote-mobile-kbd-btn {
   position: absolute;
-  left: 0.375rem;
-  top: 0.375rem;
-  bottom: 0.375rem;
+  right: 0.75rem;
+  bottom: 2.25rem;
+  z-index: 20;
   width: 2.25rem;
-  flex: none;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md, 0 2px 8px rgba(0, 0, 0, 0.25));
+  opacity: 0.85;
+}
+.remote-mobile-kbd-btn.open {
+  opacity: 1;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+@media (hover: hover) {
+  .remote-mobile-kbd-btn:hover {
+    opacity: 1;
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
 }
 .remote-mobile-key-btn {
   flex: none;

@@ -2,7 +2,6 @@
   <div
     ref="container"
     class="rdp-tab-content"
-    :class="{ 'mobile-bar': mobileBar }"
     tabindex="0"
     :data-remote-keyboard="(keyboardFocused && status === 'connected') || mobileKbOpen ? 'true' : undefined"
     @keydown="onKeyDown"
@@ -58,9 +57,6 @@
       :class="{ 'rdp-statusbar-hidden': status !== 'connected' }"
       :aria-hidden="status !== 'connected'"
     >
-      <span class="rdp-status-dot" />
-      <span>{{ t('rdp.connected') }}</span>
-      <span class="rdp-status-sep">|</span>
       <el-select
         v-model="activeResolution"
         class="rdp-quality-select"
@@ -180,12 +176,10 @@ import { useRemoteDesktopPreferences } from '../composables/useRemoteDesktopPref
 import { queueRemoteKeyboardChange, isRdpPasteKey, REMOTE_KEY_SCANCODES as KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { charToScancode } from '../utils/remoteCharInput'
-import { isMobilePlatform } from '../utils/platform'
 
 const { t } = useI18n()
 const panelStore = usePanelStore()
 const connectionStore = useConnectionStore()
-const mobileBar = isMobilePlatform()
 
 const props = defineProps<{
   panelId: string
@@ -1397,10 +1391,6 @@ watch(activeResolution, (mode) => {
   position: relative;
   outline: none;
 }
-/* Mobile: reserve room for the always-visible key bar at the bottom. */
-.rdp-tab-content.mobile-bar {
-  padding-bottom: 2.75rem;
-}
 .rdp-viewport {
   flex: 1;
   min-width: 0;
@@ -1467,13 +1457,6 @@ watch(activeResolution, (mode) => {
   z-index: 5;
 }
 .rdp-statusbar-hidden { visibility: hidden; pointer-events: none; }
-.rdp-status-dot {
-  width: 0.5rem; height: 0.5rem;
-  border-radius: 50%;
-  background: var(--success);
-  flex-shrink: 0;
-}
-.rdp-status-sep { color: var(--text-disabled); }
 .rdp-quality-select {
   width: 5.5rem;
   --el-select-width: 5.5rem;
