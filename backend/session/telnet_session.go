@@ -6,11 +6,14 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/transform"
+
+	"github.com/ys-ll/uniterm/backend/log"
 )
 
 const (
@@ -22,6 +25,8 @@ const (
 	telnetDONT = 254
 	telnetSB   = 250
 	telnetSE   = 240
+	telnetDM   = 242 // Data Mark, sent as half of the SYNCH sequence
+	telnetNUL  = 0
 
 	// Telnet options
 	telnetOptBinary          = 0
@@ -55,6 +60,20 @@ type TelnetSession struct {
 	newlineMode string // "cr" | "crlf"
 	termType    string // terminal name replied to the server's TTYPE SEND
 	lineBuf           []byte
+
+	// IAC filter state spanning TCP read boundaries (issue #1415): TCP may
+	// split an IAC sequence anywhere, so an incomplete sequence is held in
+	// iacPending and merged with the next read. lastWasCR backs the CR NUL
+	// collapse; serverBinary decides whether NUL is padding or real data.
+	iacPending   []byte
+	lastWasCR    bool
+	serverBinary bool
+
+	// Login-phase state for auto-login and the post-login script (issue
+	// #527): loginOutput keeps recent decoded output so credentials are sent
+	// when the server actually asks for them and the script waits until a
+	// shell prompt shows up past the login prompts.
+	loginOutput *postLoginOutputBuffer
 }
 
 func NewTelnetSession(id string) *TelnetSession {
@@ -78,16 +97,27 @@ func (s *TelnetSession) Connect(config ConnectionConfig) error {
 	}
 
 	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
-	dialer := net.Dialer{Timeout: 15 * time.Second}
-	conn, err := dialer.Dial("tcp", addr)
+	// Route through the configured proxy chain (SOCKS5/HTTP) like SSH does,
+	// and pick up the shared 30s dial timeout and TCP keepalive defaults.
+	// Telnet previously dialed directly, ignoring config.Proxy (issue #1424).
+	conn, err := dialFirstHop(addr, config.Proxy)
 	if err != nil {
 		s.setStatus(StatusError)
 		return fmt.Errorf("telnet dial: %w", err)
 	}
+	// Deliver telnet urgent data (the SYNCH IAC DM sequence) in the normal
+	// stream: without SO_OOBINLINE the kernel diverts the 0xFF byte to the
+	// out-of-band queue that conn.Read never touches, leaving a stray 0xF2
+	// Data Mark byte leaking into the terminal and session log (issue #1415).
+	enableTelnetOOBInline(conn)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s.conn = conn
 	s.cancel = cancel
+	s.iacPending = nil
+	s.lastWasCR = false
+	s.serverBinary = false
+	s.loginOutput = newPostLoginOutputBuffer()
 	s.setStatus(StatusConnected)
 
 	// Store telnet option configuration for use by Write()
@@ -151,52 +181,101 @@ func (s *TelnetSession) readLoop(ctx context.Context) {
 func (s *TelnetSession) handleRead(data []byte) {
 	filtered := s.filterIAC(data)
 	if len(filtered) > 0 {
-		s.emitData(s.decodeOutput(filtered))
+		decoded := s.decodeOutput(filtered)
+		if s.loginOutput != nil {
+			s.loginOutput.Append(decoded)
+		}
+		s.emitData(decoded)
 	}
 }
 
+// filterIAC strips telnet protocol bytes from an incoming stream, answering
+// negotiation and sub-negotiation as they arrive.
+//
+// The filter is stateful across reads (issue #1415): TCP may split an IAC
+// sequence anywhere, so an incomplete sequence is held in iacPending and
+// merged with the next read instead of leaking its bytes into the data
+// stream — or spinning forever when a read ends with "IAC WILL" and no
+// option byte.
+//
+// NVT CR handling: outside binary mode a bare CR is transmitted as CR NUL
+// (RFC 854); the NUL is padding, not data, so it is dropped. In binary mode
+// (server offered WILL BINARY and we accepted) NUL bytes are real data and
+// pass through untouched.
 func (s *TelnetSession) filterIAC(data []byte) []byte {
+	buf := data
+	if len(s.iacPending) > 0 {
+		buf = append(s.iacPending, data...)
+		s.iacPending = nil
+	}
 	var out []byte
 	i := 0
-	for i < len(data) {
-		if data[i] == telnetIAC && i+1 < len(data) {
-			cmd := data[i+1]
-			switch cmd {
-			case telnetWILL, telnetWONT, telnetDO, telnetDONT:
-				if i+2 < len(data) {
-					s.handleNegotiation(cmd, data[i+2])
-					i += 3
-					continue
-				}
-			case telnetSB:
-				s.handleSubNegotiation(data, i)
-				// Skip to end of sub-negotiation.
-				found := false
-				for j := i + 2; j < len(data)-1; j++ {
-					if data[j] == telnetIAC && data[j+1] == telnetSE {
-						i = j + 2
-						found = true
-						break
-					}
-				}
-				if !found {
-					i = len(data)
-				}
-				continue
-			case telnetIAC:
-				out = append(out, telnetIAC)
-				i += 2
-				continue
-			default:
-				i += 2
+	for i < len(buf) {
+		b := buf[i]
+		if b != telnetIAC {
+			if b == telnetNUL && s.lastWasCR && !s.serverBinary {
+				// CR NUL = escaped bare CR; the CR was already forwarded.
+				s.lastWasCR = false
+				i++
 				continue
 			}
-		} else {
-			out = append(out, data[i])
+			s.lastWasCR = b == '\r'
+			out = append(out, b)
 			i++
+			continue
+		}
+		s.lastWasCR = false
+		if i+1 >= len(buf) {
+			// Lone IAC at the end of the read: hold it for the next one.
+			s.holdPending(buf[i:])
+			return out
+		}
+		switch buf[i+1] {
+		case telnetWILL, telnetWONT, telnetDO, telnetDONT:
+			if i+2 >= len(buf) {
+				s.holdPending(buf[i:])
+				return out
+			}
+			s.handleNegotiation(buf[i+1], buf[i+2])
+			i += 3
+		case telnetSB:
+			end := subnegotiationEnd(buf, i)
+			if end < 0 {
+				// Sub-negotiation split across reads: hold the tail.
+				s.holdPending(buf[i:])
+				return out
+			}
+			s.handleSubNegotiation(buf[i:end], 0)
+			i = end
+		case telnetIAC:
+			out = append(out, telnetIAC) // escaped literal 0xFF
+			i += 2
+		default:
+			// IAC DM (SYNCH) and any other unhandled command: consume
+			// silently — the DM byte must not leak into the data stream.
+			i += 2
 		}
 	}
 	return out
+}
+
+// holdPending stashes an incomplete telnet sequence for the next read. The
+// copy is required: buf may alias s.iacPending's backing array, and a later
+// append(s.iacPending, ...) would overwrite the bytes we just stashed.
+func (s *TelnetSession) holdPending(tail []byte) {
+	s.iacPending = append([]byte(nil), tail...)
+}
+
+// subnegotiationEnd returns the index just past the "IAC SE" that terminates
+// the sub-negotiation starting at start ("IAC SB"), or -1 when the sequence
+// spans reads.
+func subnegotiationEnd(buf []byte, start int) int {
+	for j := start + 2; j+1 < len(buf); j++ {
+		if buf[j] == telnetIAC && buf[j+1] == telnetSE {
+			return j + 2
+		}
+	}
+	return -1
 }
 
 func (s *TelnetSession) handleSubNegotiation(data []byte, start int) {
@@ -205,6 +284,9 @@ func (s *TelnetSession) handleSubNegotiation(data []byte, start int) {
 	}
 	opt := data[start+2]
 	if opt == telnetOptTerminalType && data[start+3] == telnetTTYPESend {
+		if s.conn == nil {
+			return
+		}
 		// Server requests terminal type: reply with the configured value.
 		term := []byte(s.termType)
 		msg := make([]byte, 0, 4+len(term))
@@ -222,12 +304,20 @@ func (s *TelnetSession) handleNegotiation(cmd byte, opt byte) {
 		switch opt {
 		case telnetOptBinary, telnetOptSuppressGoAhead:
 			s.reply(telnetDO, opt) // Accept
+			if opt == telnetOptBinary {
+				// Server sends binary: NUL bytes are data, not CR padding.
+				s.serverBinary = true
+			}
 		case telnetOptEcho:
 			s.reply(telnetDO, opt) // Accept server echoing
 		case telnetOptTerminalType:
 			s.reply(telnetDO, opt) // Accept server knows terminal type
 		default:
 			s.reply(telnetDONT, opt)
+		}
+	case telnetWONT:
+		if opt == telnetOptBinary {
+			s.serverBinary = false
 		}
 	case telnetDO:
 		// Server asks us to do something.
@@ -262,38 +352,184 @@ func (s *TelnetSession) sendNAWS(cols, rows int) {
 	s.conn.Write(data)
 }
 
+// Auto-login prompt markers. "assword:" matches both "Password:" and
+// "password:" while avoiding unrelated words such as "passwordless".
+var (
+	autoLoginUserMarkers     = []string{"login:", "username:"}
+	autoLoginPasswordMarkers = []string{"assword:"}
+)
+
+// Grace periods for the prompt-driven auto-login. When a server shows no
+// recognizable prompt, credentials are sent blind after the grace timeout —
+// the same net effect as the old fixed-delay schedule, just later, so
+// prompt-less servers still log in (PTY input is buffered remotely).
+// Variables rather than constants so tests can shorten the waits.
+var (
+	autoLoginPromptTimeout = 5 * time.Second
+	autoLoginPromptPoll    = 50 * time.Millisecond
+	autoLoginGraceTimeout  = 3 * time.Second
+)
+
+// sendAutoLogin sends the configured credentials when the server asks for
+// them (issue #1415). The password is written only after the server has
+// printed its password prompt — servers disable echo right before showing
+// it, so writing there keeps the password from being echoed back in
+// cleartext. Without a recognizable prompt, credentials are sent blind after
+// a grace period.
 func (s *TelnetSession) sendAutoLogin(ctx context.Context, user, password string) {
-	// Conservative fix (SESSION-05): the previous fixed 1500ms / 1200ms
-	// sleeps could land the username in the shell prompt on slow
-	// servers. Replace with a shorter initial wait and bail early on
-	// context cancel. A full prompt-detection rewrite would require
-	// touching the readLoop and is out of scope for a conservative fix.
-	time.Sleep(500 * time.Millisecond)
+	if !s.waitForLoginPrompt(ctx, autoLoginUserMarkers) {
+		log.Writef("telnet auto-login: no login prompt seen, sending username blind")
+		if !s.sleepCtx(ctx, autoLoginGraceTimeout) {
+			return
+		}
+	}
+	s.writeCredential(ctx, user)
 
-	select {
-	case <-ctx.Done():
+	if password == "" {
 		return
-	default:
 	}
-
-	if s.conn != nil {
-		s.conn.Write([]byte(user + "\r\n"))
+	if !s.waitForLoginPrompt(ctx, autoLoginPasswordMarkers) {
+		log.Writef("telnet auto-login: no password prompt seen, sending password blind")
+		if !s.sleepCtx(ctx, autoLoginGraceTimeout) {
+			return
+		}
 	}
+	s.writeCredential(ctx, password)
+}
 
-	if password != "" {
-		time.Sleep(500 * time.Millisecond)
+// waitForLoginPrompt polls the recent output stream for any of the given
+// prompt markers, up to autoLoginPromptTimeout.
+func (s *TelnetSession) waitForLoginPrompt(ctx context.Context, markers []string) bool {
+	deadline := time.Now().Add(autoLoginPromptTimeout)
+	for time.Now().Before(deadline) {
+		if s.loginPhaseHasMarker(markers) {
+			return true
+		}
 		select {
 		case <-ctx.Done():
-			return
-		default:
+			return false
+		case <-time.After(autoLoginPromptPoll):
 		}
-		if s.conn != nil {
-			s.conn.Write([]byte(password + "\r\n"))
+	}
+	return false
+}
+
+func (s *TelnetSession) loginPhaseHasMarker(markers []string) bool {
+	if s.loginOutput == nil {
+		return false
+	}
+	out := strings.ToLower(s.loginOutput.TextSince(0))
+	for _, m := range markers {
+		if strings.Contains(out, m) {
+			return true
 		}
+	}
+	return false
+}
+
+func (s *TelnetSession) writeCredential(ctx context.Context, cred string) {
+	if cred == "" {
+		return
+	}
+	s.mu.RLock()
+	conn := s.conn
+	s.mu.RUnlock()
+	if conn == nil {
+		return
+	}
+	if _, err := conn.Write([]byte(cred + "\r\n")); err != nil {
+		log.Writef("telnet auto-login: write: %v", err)
 	}
 }
 
+func (s *TelnetSession) sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// waitForTelnetLoginDone blocks until the telnet login phase has settled so
+// the post-login script is not typed at the "login:" or "Password:" prompt
+// (issue #527): a shell prompt must be visible after the last login prompt —
+// whether credentials were typed by auto-login or manually. Falls back after
+// postLoginInitTimeout — odd servers still get the script, just later.
+func (s *TelnetSession) waitForTelnetLoginDone(ctx context.Context) {
+	deadline := time.Now().Add(postLoginInitTimeout)
+	for time.Now().Before(deadline) {
+		if s.loginPhaseOver() {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	log.Writef("telnet post-login: login phase not detected within %s, sending script anyway", postLoginInitTimeout)
+}
+
+// loginPhaseOver reports whether the output stream has progressed past the
+// login phase: either a shell prompt is already visible with no login
+// prompt seen at all (pre-authenticated server), or a shell prompt appeared
+// after the last login/password prompt.
+func (s *TelnetSession) loginPhaseOver() bool {
+	if s.loginOutput == nil {
+		return true
+	}
+	out := s.loginOutput.TextSince(0)
+	st := ansiStripper{}
+	clean := st.Strip([]byte(out))
+	lower := strings.ToLower(string(clean))
+	last := -1
+	for _, m := range telnetLoginPhaseMarkers {
+		if i := strings.LastIndex(lower, m); i > last {
+			last = i
+		}
+	}
+	if last < 0 {
+		return endsWithShellPrompt(clean)
+	}
+	return endsWithShellPrompt(clean[last:])
+}
+
+var telnetLoginPhaseMarkers = []string{"login:", "username:", "assword:"}
+
+// endsWithShellPrompt reports whether the last non-empty line looks like a
+// shell prompt ($, #, > after ANSI stripping). A heuristic, used only to
+// time the post-login script; the timeout fallback covers misses.
+func endsWithShellPrompt(text []byte) bool {
+	t := strings.TrimRight(string(text), " \t\r\n\x00")
+	if t == "" {
+		return false
+	}
+	line := t
+	if i := strings.LastIndexByte(t, '\n'); i >= 0 {
+		line = t[i+1:]
+	}
+	line = strings.TrimRight(line, " \t")
+	if line == "" {
+		return false
+	}
+	switch line[len(line)-1] {
+	case '$', '#', '>':
+		return true
+	}
+	return false
+}
+
 func (s *TelnetSession) runPostLoginScript(ctx context.Context, script string) {
+	if strings.TrimSpace(script) == "" {
+		return
+	}
+	// Issue #527: the script must not fire while the telnet login phase is
+	// still in progress — it would land at the "login:" prompt and be
+	// dropped or interleaved with the credentials.
+	s.waitForTelnetLoginDone(ctx)
 	s.baseSession.RunPostLoginScript(ctx, script, func(data []byte) {
 		if s.conn != nil {
 			s.conn.Write(data)

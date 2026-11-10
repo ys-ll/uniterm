@@ -200,7 +200,9 @@ func probeSCP(config ConnectionConfig) (string, error) {
 
 func probeTelnet(config ConnectionConfig) (string, error) {
 	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
-	conn, err := net.DialTimeout("tcp", addr, 15*time.Second)
+	// Route through the configured proxy chain like the terminal connect
+	// path does (issue #1424).
+	conn, err := dialFirstHop(addr, config.Proxy)
 	if err != nil {
 		return "", fmt.Errorf("telnet: %w", err)
 	}
