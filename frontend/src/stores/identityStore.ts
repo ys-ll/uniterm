@@ -39,20 +39,29 @@ export const useIdentityStore = defineStore('identity', () => {
     unsubIdentitiesChanged = null
   }
 
+  // add/update/remove persist BEFORE mutating the in-memory list: the save
+  // can fail closed on the backend (locked vault, unwired store), and a
+  // push-then-save used to leave a phantom entry that vanished on reload
+  // (issue #1423). The list only updates once the save succeeded.
   async function add(id: Identity) {
-    identities.value.push(id)
-    await save()
+    const next = [...identities.value, id]
+    await SaveIdentities({ identities: next } as any)
+    identities.value = next
   }
 
   async function update(id: Identity) {
     const i = identities.value.findIndex((x) => x.id === id.id)
-    if (i >= 0) identities.value[i] = id
-    await save()
+    if (i < 0) return
+    const next = identities.value.slice()
+    next[i] = id
+    await SaveIdentities({ identities: next } as any)
+    identities.value = next
   }
 
   async function remove(id: string) {
-    identities.value = identities.value.filter((x) => x.id !== id)
-    await save()
+    const next = identities.value.filter((x) => x.id !== id)
+    await SaveIdentities({ identities: next } as any)
+    identities.value = next
   }
 
   return { identities, loading, load, save, add, update, remove, dispose }

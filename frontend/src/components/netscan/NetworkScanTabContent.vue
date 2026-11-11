@@ -295,6 +295,7 @@ import { msg } from '../../services/message'
 import { useI18n } from '../../i18n'
 import { uiPx } from '../../utils/uiScale'
 import { utf8ToBase64 } from '../../utils/base64'
+import { isWebServerMode, saveFileInBrowser } from '../../services/webSftpBridge'
 
 defineOptions({ name: 'NetworkScanTabContent' })
 
@@ -666,6 +667,13 @@ async function exportResults(kind: 'ip' | 'port') {
   }
   const lines = content.split('\n').map(line => line.split(sep).map(escapeCell).join(','))
   content = '﻿' + lines.join('\n') // BOM helps Excel open UTF-8 CSV
+
+  // Web-server mode: no native save dialog — hand the CSV to the browser's
+  // download manager instead of the native save dialog.
+  if (await isWebServerMode()) {
+    saveFileInBrowser(fileName, 'text/csv', content)
+    return
+  }
 
   // Ask the user where to save via the native save dialog, then write the file.
   try {

@@ -190,7 +190,7 @@ import { useI18n } from '../i18n'
 import { ElMessageBox } from 'element-plus'
 import { GetDatabases, GetTablePage, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
-import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
+import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText, saveBase64InWebServerMode } from '../services/webSftpBridge'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
@@ -679,6 +679,9 @@ async function exportTable(withStructure: boolean, withData: boolean) {
       if (androidOutcome === 'saved') msg.success(t('db.exportDone', { name: tableName }))
       return
     }
+    // Web-server mode: no native save dialog — hand the payload to the
+    // browser's download manager instead.
+    if (await saveBase64InWebServerMode(tableName + '.sql', 'text/plain', b64)) return
     const path = await SaveFileDialogFiltered(t('db.exportSQL'), tableName + '.sql', 'SQL File', '*.sql')
     if (!path) return
     await WriteFileBase64(path, b64)

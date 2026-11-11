@@ -24,8 +24,9 @@
 import { ref, watch } from 'vue'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
-import { ExportConnections, SaveFileDialogFiltered } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { ExportConnections, ExportConnectionsData, SaveFileDialogFiltered } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { androidSaveAvailable, finishAndroidSave, stageAndroidSave } from '../utils/androidSave'
+import { isWebServerMode, saveBase64FileInBrowser } from '../services/webSftpBridge'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'done'): void }>()
@@ -49,6 +50,16 @@ async function onExport() {
   const viaAndroid = androidSaveAvailable()
   exporting.value = true
   try {
+    if (!viaAndroid && await isWebServerMode()) {
+      // Web-server mode: no native save dialog exists — render the .utm in
+      // memory and hand it to the browser's download manager instead.
+      const b64 = await ExportConnectionsData(password.value)
+      saveBase64FileInBrowser('uniterm-connections.utm', 'application/octet-stream', b64)
+      msg.success(t('importExport.exported'))
+      emit('done')
+      emit('update:visible', false)
+      return
+    }
     let dest: string
     if (viaAndroid) {
       dest = await stageAndroidSave('uniterm-connections.utm')

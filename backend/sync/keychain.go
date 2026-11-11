@@ -12,7 +12,20 @@ import (
 
 var keychainService = "uniTerm"
 
-type Keychain struct{}
+// SecretStore replaces the platform keychain as the backing storage of a
+// Keychain. Headless server containers have no OS keychain (no Secret
+// Service D-Bus), so the server build wires an encrypted-file store here;
+// desktop builds leave it nil and use the platform keychain functions.
+type SecretStore interface {
+	Get(key string) (string, error)
+	Set(key, value string) error
+	Delete(key string) error
+	List() ([]string, error)
+}
+
+type Keychain struct {
+	backend SecretStore
+}
 
 func NewKeychain() *Keychain { return &Keychain{} }
 
@@ -21,10 +34,16 @@ func NewKeychain() *Keychain { return &Keychain{} }
 // hash (copied/moved data directory). Platforms without enumeration return
 // an error — recovery is simply skipped there.
 func (k *Keychain) List() ([]string, error) {
+	if k.backend != nil {
+		return k.backend.List()
+	}
 	return keychainList(keychainService)
 }
 
 func (k *Keychain) Get(key string) (string, error) {
+	if k.backend != nil {
+		return k.backend.Get(key)
+	}
 	value, err := keychainGet(keychainService, key)
 	if errors.Is(err, keyring.ErrNotFound) {
 		return "", fmt.Errorf("%w: %w", credentials.ErrKeychainNotFound, err)
@@ -33,10 +52,16 @@ func (k *Keychain) Get(key string) (string, error) {
 }
 
 func (k *Keychain) Set(key, value string) error {
+	if k.backend != nil {
+		return k.backend.Set(key, value)
+	}
 	return keychainSet(keychainService, key, value)
 }
 
 func (k *Keychain) Delete(key string) error {
+	if k.backend != nil {
+		return k.backend.Delete(key)
+	}
 	return keychainDelete(keychainService, key)
 }
 

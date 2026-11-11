@@ -179,8 +179,16 @@ async function save() {
   // 只保留当前认证方式对应的密钥字段，避免切换后残留路径/密钥文本。
   if (form.authType !== 'key') entity.keyPath = undefined
   if (form.authType !== 'keyText') entity.keyContent = undefined
-  if (props.identity) await store.update(entity)
-  else await store.add(entity)
+  try {
+    if (props.identity) await store.update(entity)
+    else await store.add(entity)
+  } catch (e: any) {
+    // The store mutates before the backend save, so a failed save must be
+    // loud: otherwise the identity looks saved but is gone after a reload
+    // (issue #1423).
+    ElMessage.error(backendErrorText(e) || e?.message || String(e))
+    return
+  }
   ElMessage.success(t('settings.saved'))
   emit('saved', entity)
   emit('update:visible', false)

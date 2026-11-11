@@ -169,7 +169,7 @@ import { useBatchStore, stripAnsi, type BatchSession, type BatchSessionStatus } 
 import { assessLocalRisk } from '../services/localRisk'
 import { executeBatch, exportCsv, exportJson } from '../services/batchExecute'
 import { OpenFileDialogFiltered, ReadFileBase64, SaveFileDialogFiltered, WriteFileBase64 } from '../../bindings/github.com/ys-ll/uniterm/app'
-import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
+import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText, saveFileInBrowser } from '../services/webSftpBridge'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import type { ConnectionConfig } from '../types/session'
@@ -486,6 +486,12 @@ async function onExportJson() {
 
 async function saveFile(content: string, defaultName: string) {
   try {
+    // Web-server mode: no native save dialog — hand the text to the
+    // browser's download manager instead.
+    if (await isWebServerMode()) {
+      saveFileInBrowser(defaultName, defaultName.endsWith('.json') ? 'application/json' : 'text/csv', content)
+      return
+    }
     const path = await SaveFileDialogFiltered(t('batch.export'), defaultName, 'File', '*')
     if (!path) return
     await WriteFileBase64(path, encodeBase64(content))

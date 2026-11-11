@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { SaveConnections, LoadConnections } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { Events } from '@wailsio/runtime'
+import { msg } from '../services/message'
+import { backendErrorText } from '../utils/backendError'
 import type { ConnectionConfig, ConnectionGroup } from '../types/session'
 
 // Module-level un-subscriber for the cross-window store:connections:changed listener.
@@ -59,7 +61,11 @@ export const useConnectionStore = defineStore('connection', () => {
         connections: connections.value
       } as any)
     } catch (e) {
+      // A failed save must be loud: the entry is already in the in-memory
+      // list, and a silent failure makes it look saved until the next reload
+      // drops it (the server-mode wiring regression in issue #1423).
       console.error('Failed to save connections:', e)
+      msg.error(backendErrorText(e) || String(e))
     }
   }
 

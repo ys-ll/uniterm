@@ -68,6 +68,10 @@ type App struct {
 	recentStore          *store.RecentStore
 	favoriteStore        *store.FavoriteStore
 	syncService          *sync.SyncService
+	// syncSecrets is the server-build encrypted-file backing store for the
+	// sync keychain (server_secrets.go); nil on desktop, which uses the OS
+	// keychain. Kept on the App so a master-password change rekeys it.
+	syncSecrets secretRekeyer
 	tunnelService        *session.TunnelService
 	tunnelStartsMu       stdsync.Mutex
 	tunnelStarts         map[string]*tunnelStartRequest
@@ -433,6 +437,14 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 		// Normalize enc:v1: fields at the sync boundary using the credential
 		// store (set by initCredentials above).
 		syncSvc.SetPasswordStore(a.credentialStore)
+		// Server builds: the container has no OS keychain, so the sync
+		// keychain gets an encrypted-file backing store. Values re-encrypt
+		// under the login-password-derived master key, so they survive
+		// worker/container restarts (issue #1423, symptom 2).
+		if serverMode && a.credentialStore != nil {
+			a.syncSecrets = newFileSecretStore(dataDir, a.credentialStore)
+			syncSvc.SetSecretBackend(a.syncSecrets)
+		}
 		// Config-exchange registry: the sync layer holds only SyncableStore
 		// interface values (sync → store would cycle through credentials),
 		// so the concrete stores are assembled here — the only place that
@@ -494,12 +506,29 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 	}
 }
 
+// secretRekeyer is implemented by the server-build sync secret store
+// (fileSecretStore): a master-password change must carry the encrypted sync
+// secrets to the new key. Desktop has no implementation (OS keychain entries
+// are keyed by name, not by the master key) and leaves the field nil.
+type secretRekeyer interface {
+	sync.SecretStore
+	Rekey(oldKey, newKey []byte) error
+}
+
 // initCredentials wires the credential store as the PasswordStore for the
 // connection + settings stores, silently auto-upgrading existing users
 // (bootstrap + keychain mode + legacy migration) or auto-unlocking on the
 // normal path.
 func (a *App) initCredentials(dataDir string, upgrade bool) {
 	cred := credentials.New(dataDir, credentialKeychain())
+	// The reset/setup ciphertext guards scan the data dir; the declaring
+	// manifest lives in the store package. Wired for both builds: server
+	// stores need the same reset/setup guard coverage as desktop.
+	secretFiles := make([]string, 0, len(store.SecretFiles))
+	for _, sf := range store.SecretFiles {
+		secretFiles = append(secretFiles, sf.File)
+	}
+	cred.SetSecretFiles(secretFiles)
 	// Server mode: the gateway forwards the tenant's login password via
 	// UNITERM_MASTER_PASSWORD and it doubles as the credential master
 	// password — no plaintext keychain.json holds the data key. Fresh stores
@@ -537,22 +566,9 @@ func (a *App) initCredentials(dataDir string, upgrade bool) {
 			log.Writef("[server] legacy keychain-mode store found; browser setup required")
 		}
 		a.credentialStore = cred
-		if a.connectionStore != nil {
-			a.connectionStore.SetPasswordStore(cred)
-			a.connectionStore.SetLegacyKeychain(sync.NewKeychain())
-		}
-		if a.settingsStore != nil {
-			a.settingsStore.SetPasswordStore(cred)
-		}
+		a.wirePasswordStore(cred, false)
 		return
 	}
-	// The reset/setup ciphertext guards scan the data dir; the declaring
-	// manifest lives in the store package.
-	secretFiles := make([]string, 0, len(store.SecretFiles))
-	for _, sf := range store.SecretFiles {
-		secretFiles = append(secretFiles, sf.File)
-	}
-	cred.SetSecretFiles(secretFiles)
 
 	if upgrade {
 		// Only this once (the upgrade migration) is worth logging; ordinary
@@ -603,6 +619,16 @@ func (a *App) initCredentials(dataDir string, upgrade bool) {
 		log.Writef("[cred-dialog] mode=%q unlocked=%v keychainLost=%v needsSetup=%v",
 			st.Mode, st.Unlocked, st.KeychainLost, st.NeedsSetup)
 	}
+	a.wirePasswordStore(cred, true)
+}
+
+// wirePasswordStore wires the credential store into every store that keeps
+// manifest-encrypted secret fields. Shared by desktop and server. Both halves
+// of the wiring must survive the mode split: dropping connection+settings
+// broke every connection save in server builds (ErrNoCipher), dropping
+// identity/proxy/ai/mcp made browser-created identities vanish on reload
+// (issue #1423). Safe to call twice for a store.
+func (a *App) wirePasswordStore(cred *credentials.Store, runMigrations bool) {
 	if a.connectionStore != nil {
 		a.connectionStore.SetPasswordStore(cred)
 		// Fall back to the pre-enc:v1 keychain (conn/<id>) so passwords from
@@ -617,7 +643,7 @@ func (a *App) initCredentials(dataDir string, upgrade bool) {
 		// One-shot settings->ai.json migration. Runs after the password store
 		// is wired so model apiKeys land encrypted; the settings.json copy is
 		// left intact so a rollback to a pre-split build still finds them.
-		if a.settingsStore != nil {
+		if runMigrations && a.settingsStore != nil {
 			if settings, err := a.settingsStore.Load(); err == nil {
 				if err := a.aiConfigStore.MigrateFromSettingsIfNeeded(settings); err != nil {
 					log.Writef("ai.json migration failed: %v", err)
@@ -630,6 +656,9 @@ func (a *App) initCredentials(dataDir string, upgrade bool) {
 	}
 	if a.proxyStore != nil {
 		a.proxyStore.SetPasswordStore(cred)
+	}
+	if a.tunnelStore != nil {
+		a.tunnelStore.SetPasswordStore(cred)
 	}
 	if a.mcpClientStore != nil {
 		a.mcpClientStore.SetPasswordStore(cred)
@@ -1041,6 +1070,34 @@ func (a *App) ExportConnections(destPath, password string) error {
 		return err
 	}
 	return os.WriteFile(destPath, out, 0600)
+}
+
+// ExportConnectionsData renders the .utm archive in memory and returns it
+// base64-encoded — the web-server-mode replacement for ExportConnections,
+// which writes through a native save dialog the headless server build does
+// not have (issue #1423). The browser turns the bytes into a download via
+// saveBase64FileInBrowser.
+func (a *App) ExportConnectionsData(password string) (string, error) {
+	if a.connectionStore == nil {
+		return "", fmt.Errorf("connection store not initialized")
+	}
+	data, err := a.connectionStore.Load()
+	if err != nil {
+		return "", err
+	}
+	resolve, err := a.identityResolver()
+	if err != nil {
+		return "", err
+	}
+	data, err = importer.MaterializeForExport(data, resolve)
+	if err != nil {
+		return "", err
+	}
+	out, err := importer.ExportUniterm(data, password)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(out), nil
 }
 
 // ParseImportFile parses a third-party or own-format file into an ImportResult
@@ -2604,6 +2661,15 @@ func (a *App) SwitchCredentialMode(targetMode, masterPassword string) error {
 		_ = a.reencryptAll(cs, newKey, oldKey)
 		return err
 	}
+	if a.syncSecrets != nil {
+		if err := a.syncSecrets.Rekey(oldKey, newKey); err != nil {
+			// Restore consistency: put the sync secrets back under oldKey and
+			// roll the config stores back too, mirroring the Rekey rollback.
+			_ = a.syncSecrets.Rekey(newKey, oldKey)
+			_ = a.reencryptAll(cs, newKey, oldKey)
+			return err
+		}
+	}
 	if targetMode == credentials.ModeKeychain {
 		_ = cs.ClearKeychainCache()
 	}
@@ -2635,6 +2701,13 @@ func (a *App) ChangeMasterPassword(oldPassword, newPassword string) error {
 	if err := cs.Rekey(credentials.ModeMasterPassword, newSalt, newKey); err != nil {
 		_ = a.reencryptAll(cs, newKey, oldKey)
 		return err
+	}
+	if a.syncSecrets != nil {
+		if err := a.syncSecrets.Rekey(oldKey, newKey); err != nil {
+			_ = a.syncSecrets.Rekey(newKey, oldKey)
+			_ = a.reencryptAll(cs, newKey, oldKey)
+			return err
+		}
 	}
 	return nil
 }
@@ -2671,7 +2744,7 @@ func (a *App) ResetCredentials() error {
 // that once stayed under the old key) fails the rekey loudly instead of
 // being silently skipped.
 func (a *App) reencryptAll(cs *credentials.Store, oldKey, newKey []byte) error {
-	if a.connectionStore == nil || a.settingsStore == nil || a.identityStore == nil || a.proxyStore == nil || a.aiConfigStore == nil || a.mcpClientStore == nil {
+	if a.connectionStore == nil || a.settingsStore == nil || a.identityStore == nil || a.proxyStore == nil || a.aiConfigStore == nil || a.mcpClientStore == nil || a.tunnelStore == nil {
 		return errors.New("stores not initialized")
 	}
 	conns, err := a.connectionStore.Load()
@@ -2698,6 +2771,10 @@ func (a *App) reencryptAll(cs *credentials.Store, oldKey, newKey []byte) error {
 	if err != nil {
 		return err
 	}
+	tunnels, err := a.tunnelStore.Load()
+	if err != nil {
+		return err
+	}
 	saves := []func() error{
 		func() error { return a.connectionStore.ForceSave(conns) },
 		func() error { return a.settingsStore.ForceSave(settings) },
@@ -2705,6 +2782,7 @@ func (a *App) reencryptAll(cs *credentials.Store, oldKey, newKey []byte) error {
 		func() error { return a.proxyStore.ForceSave(proxies) },
 		func() error { return a.aiConfigStore.ForceSave(ai) },
 		func() error { return a.mcpClientStore.ForceSave(mcpClients) },
+		func() error { return a.tunnelStore.ForceSave(tunnels) },
 	}
 	cs.SetKey(newKey)
 	var saveErrs []error
