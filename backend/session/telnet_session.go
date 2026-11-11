@@ -51,6 +51,11 @@ type TelnetSession struct {
 
 	// Telnet option state (configured in Connect, consumed by Write)
 	localEcho   bool
+	// serverEchoes is true once the server has told us it will echo (received
+	// IAC WILL ECHO). In that case the server is responsible for echoing, so we
+	// must NOT echo locally — otherwise each keystroke is shown twice (server +
+	// local), e.g. "exit" renders as "exexiexit".
+	serverEchoes bool
 	telnetSendMode    string // "character" | "line"
 	newlineMode string // "cr" | "crlf"
 	termType    string // terminal name replied to the server's TTYPE SEND
@@ -224,6 +229,7 @@ func (s *TelnetSession) handleNegotiation(cmd byte, opt byte) {
 			s.reply(telnetDO, opt) // Accept
 		case telnetOptEcho:
 			s.reply(telnetDO, opt) // Accept server echoing
+			s.serverEchoes = true // server owns echoing → do not echo locally
 		case telnetOptTerminalType:
 			s.reply(telnetDO, opt) // Accept server knows terminal type
 		default:
@@ -331,8 +337,12 @@ func (s *TelnetSession) Write(data []byte) error {
 				return err
 			}
 		}
-		// Echo each character locally while buffering for visibility
-		s.emitData(data)
+		// Echo each character locally while buffering — but only if the server
+		// is NOT responsible for echoing (the server told us WILL ECHO, so it
+		// echoes and we must stay silent, or the keystroke shows up twice).
+		if !s.serverEchoes {
+			s.emitData(data)
+		}
 		return nil
 	}
 
@@ -351,8 +361,10 @@ func (s *TelnetSession) Write(data []byte) error {
 
 	_, err := s.conn.Write(encoded)
 
-	// Local echo: show typed characters in terminal (for servers that don't echo)
-	if err == nil && s.localEcho {
+	// Local echo: show typed characters in terminal (for servers that don't echo).
+	// Skip when the server owns echoing (received WILL ECHO) — otherwise each key
+	// is rendered twice (server/conpty echo + our local echo), e.g. "exit" → "exexiexit".
+	if err == nil && s.localEcho && !s.serverEchoes {
 		s.emitData(data)
 	}
 

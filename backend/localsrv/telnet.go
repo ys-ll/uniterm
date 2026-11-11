@@ -1,10 +1,12 @@
 package localsrv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"sync"
 )
@@ -89,6 +91,7 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 	defer conn.Close()
 
 	addr := conn.RemoteAddr().String()
+	tag := addr
 	m.log(ServiceTelnet, id, fmt.Sprintf("connection from %s", addr))
 
 	// 1. Send welcome banner.
@@ -96,6 +99,12 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 	fmt.Fprintf(conn, "Type 'exit' or Ctrl+] to close the session.\r\n\r\n")
 
 	// 2. Optional password gate.
+	// sgaAccepted records whether the client negotiated SUPPRESS-GO-AHEAD
+	// (character/stream mode). In that mode the client drives its own local
+	// echo and it would double-display if the server echoed too, so we refuse
+	// ECHO for such clients and let them echo locally.
+	var wantServerEcho bool // set true if the client asks us to echo (sends IAC DO ECHO)
+	var sgaAccepted bool
 	if cfg.Password != "" {
 		// Negotiate echo handling so the client settles, but read the password
 		// with echo permanently off (nil) so the secret never prints — accepting
@@ -104,7 +113,7 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 		// otherwise double-display each keystroke AND leak it as cleartext.)
 		_, _ = conn.Write([]byte{0xFF, 0xFB, 0x01}) // IAC WILL ECHO
 		fmt.Fprint(conn, "Password: ")
-		line, err := readTelnetLine(conn, nil)
+		line, err := readTelnetLine(conn, nil, &wantServerEcho, &sgaAccepted, tag)
 		if err != nil {
 			m.log(ServiceTelnet, id, fmt.Sprintf("auth failed from %s: %v", addr, err))
 			return
@@ -142,7 +151,24 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 	go func() {
 		for data := range sh.Data() {
 			if len(data) > 0 {
-				_, _ = writeTelnetSafe(conn, outProc.Process(data))
+				proc := outProc.Process(data)
+				// Chunk output into segments no larger than 64KB so a single huge
+				// read (e.g. a large `dir`) is still delivered incrementally to the
+				// client instead of one giant TCP write, while never silently
+				// dropping data (the old hard 200-byte cap chopped output).
+				max := len(proc)
+				if max > 65536 {
+					max = 65536
+				}
+				for off := 0; off < len(proc); off += max {
+					end := off + max
+					if end > len(proc) {
+						end = len(proc)
+					}
+					chunk := proc[off:end]
+					telidbg(tag, "OUT", chunk)
+					_, _ = writeTelnetSafe(conn, chunk)
+				}
 			}
 		}
 	}()
@@ -159,11 +185,41 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 			}
 			n, err := conn.Read(buf)
 			if n > 0 {
+				telidbg(tag, "IN ", buf[:n])
 				filtered, resp := processTelnetInput(buf[:n])
+				filtered = normalizeEditingKeys(filtered)
 				if len(filtered) > 0 {
-					_ = sh.Write(filtered)
+					telidbg(tag, "SEND", filtered)
+					// Forward the (already line-normalized) bytes to the shell.
+					// sh.Write blocks until the ConPTY accepts them (no partial
+					// writes), so a single call with an error check keeps fast
+					// typing from being silently dropped. The shell's terminal
+					// (ConPTY) echoes every input byte back on Data(), which the
+					// goroutine above streams to the client — that echo is the one
+					// rendered by well-behaved clients, so we must NOT also echo
+					// here or every key would display twice.
+					if err := sh.Write(filtered); err != nil {
+						return
+					}
+					// ConPTY does not echo spaces (0x20) back on its output stream
+					// (it has no visible glyph and is folded into the line buffer),
+					// so a typed space would never show on the client. Echo it
+					// manually — spaces are the one byte ConPTY won't double up.
+					if bytes.IndexByte(filtered, ' ') >= 0 {
+						sp := make([]byte, 0, 4)
+						for _, b := range filtered {
+							if b == ' ' {
+								sp = append(sp, ' ')
+							}
+						}
+						if len(sp) > 0 {
+							telidbg(tag, "ECHOS", sp)
+							_, _ = writeTelnetSafe(conn, sp)
+						}
+					}
 				}
 				if len(resp) > 0 {
+					telidbg(tag, "RESP", resp)
 					_, _ = writeTelnetSafe(conn, resp)
 				}
 			}
@@ -198,7 +254,7 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 // SB whose SE hasn't arrived yet) is held back until complete, so no byte is
 // lost or mis-parsed. Each typed character is echoed only when *echo is true;
 // the password gate passes nil so the secret never prints.
-func readTelnetLine(conn net.Conn, echo *bool) (string, error) {
+func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool, tag string) (string, error) {
 	var b strings.Builder
 	var buf []byte // data bytes awaiting echo / newline detection
 	chunk := make([]byte, 1024)
@@ -249,13 +305,21 @@ func readTelnetLine(conn net.Conn, echo *bool) (string, error) {
 				}
 				*resp = append(*resp, 0xFF, 0xFE, raw[i+2])
 				i += 3
-			case 0xFD: // DO opt
+			case 0xFD: // DO opt (client asks US to do opt)
 				if i+2 >= len(raw) {
 					return true, raw[i:]
 				}
 				opt := raw[i+2]
-				if opt == 0x01 { // ECHO -> accept
-					*resp = append(*resp, 0xFF, 0xFD, opt)
+				if opt == 0x01 { // ECHO -> accept: reply WILL ECHO, server owns echoing
+					*resp = append(*resp, 0xFF, 0xFB, opt)
+					if echoReq != nil {
+						*echoReq = true
+					}
+				} else if opt == 0x03 { // SUPPRESS-GO-AHEAD -> accept: switch to character/stream mode
+					*resp = append(*resp, 0xFF, 0xFB, opt)
+					if sga != nil {
+						*sga = true
+					}
 				} else {
 					*resp = append(*resp, 0xFF, 0xFC, opt)
 				}
@@ -276,6 +340,7 @@ func readTelnetLine(conn net.Conn, echo *bool) (string, error) {
 	for {
 		n, err := conn.Read(chunk)
 		if n > 0 {
+			telidbg(tag, "LIN ", chunk[:n])
 			// Split the new bytes: separate data from negotiation.
 			var data []byte
 			var newResp []byte
@@ -290,6 +355,7 @@ func readTelnetLine(conn net.Conn, echo *bool) (string, error) {
 			}
 			// Emit negotiation responses collected in this batch.
 			if len(newResp) > 0 {
+				telidbg(tag, "LRSP", newResp)
 				resp = append(resp, newResp...)
 				_, _ = conn.Write(resp)
 				resp = resp[:0]
@@ -392,12 +458,14 @@ func processTelnetInput(in []byte) (data, resp []byte) {
 				opt := in[i]
 				resp = append(resp, 0xFF, 0xFE, opt) // IAC DONT opt
 			}
-		case 0xFD: // DO opt
+		case 0xFD: // DO opt (client asks US to do opt)
 			if i+1 < len(in) {
 				i++
 				opt := in[i]
-				if opt == 0x01 { // ECHO: accept, we do server-side echo
-					resp = append(resp, 0xFF, 0xFD, opt) // IAC DO opt
+				if opt == 0x01 { // ECHO: accept -> reply WILL ECHO, we own echoing
+					resp = append(resp, 0xFF, 0xFB, opt) // IAC WILL ECHO
+				} else if opt == 0x03 { // SUPPRESS-GO-AHEAD: accept -> character/stream mode
+					resp = append(resp, 0xFF, 0xFB, opt) // IAC WILL SUPPRESS-GO-AHEAD
 				} else {
 					resp = append(resp, 0xFF, 0xFC, opt) // IAC WONT opt
 				}
@@ -409,19 +477,55 @@ func processTelnetInput(in []byte) (data, resp []byte) {
 		default: // NOP/DM/BRK/IP/AO/AYT/EC/EL/GA etc.: ignore
 		}
 	}
-	// Normalize Telnet CR (\r\n, \r\0, bare \r) to plain \n for the shell.
+	// Normalize every line ending (CRLF, CR NUL, bare CR) to a single CRLF.
+	// Windows console apps (cmd.exe) only treat CR as Enter, so a lone LF or CR
+	// would leave the return key unhandled and hang every command. Emitting
+	// CRLF satisfies both cmd.exe (Enter on CR) and clients that expect CR/LF.
+	norm := make([]byte, 0, len(data))
 	for i := 0; i < len(data); i++ {
-		if data[i] == '\r' {
+		c := data[i]
+		if c == '\r' {
+			// swallow the LF/NUL of a CRLF/CR NUL pair
 			if i+1 < len(data) && (data[i+1] == '\n' || data[i+1] == 0) {
-				copy(data[i:], data[i+1:])
-				data = data[:len(data)-1]
-			} else {
-				data = append(data[:i], data[i+1:]...)
+				i++
 			}
-			i--
+			norm = append(norm, '\r', '\n')
+		} else if c == '\n' {
+			norm = append(norm, '\r', '\n')
+		} else {
+			norm = append(norm, c)
 		}
 	}
-	return data, resp
+	return norm, resp
+}
+
+// normalizeEditingKeys maps editing keys onto the one delete primitive a dumb
+// telnet client can render ("delete the character before the cursor", echoed
+// by ConPTY as "\b \b"). Without this, ConPTY would perform its native
+// redraw — full-line redraw for Backspace, in-place redraw for Delete — and
+// our output filter would strip the CSI cursor moves, leaving only junk.
+//
+//   - 0x08 (BS, Microsoft telnet's Backspace) -> 0x7F so ConPTY emits the
+//     canonical "08 20 08" erase echo instead of a burst of CRLFs.
+//   - ESC[3~ (the Delete key on most clients) -> 0x7F, since a telnet client
+//     cannot reproduce ConPTY's forward-delete redraw without CSI.
+func normalizeEditingKeys(in []byte) []byte {
+	norm := make([]byte, 0, len(in))
+	for i := 0; i < len(in); i++ {
+		c := in[i]
+		if c == 0x1B && i+3 < len(in) &&
+			in[i+1] == '[' && in[i+2] == '3' && in[i+3] == '~' {
+			norm = append(norm, 0x7F) // Delete -> delete previous char
+			i += 3
+			continue
+		}
+		if c == 0x08 {
+			norm = append(norm, 0x7F) // Backspace -> delete previous char
+			continue
+		}
+		norm = append(norm, c)
+	}
+	return norm
 }
 
 // writeTelnetSafe writes data to the Telnet connection, doubling any 0xFF
@@ -633,5 +737,36 @@ func (o *telnetOutputProcessor) emitCR(out *[]byte, b byte) {
 		return
 	}
 	*out = append(*out, b)
+}
+
+// telidbg appends one labelled hex-dump line to telidbg.log in the working
+// directory. tag separates concurrent connections. Diagnostic aid (temporary).
+var telidbgOnce sync.Once
+var telidbgMu sync.Mutex
+var telidbgFile *os.File
+
+func telidbg(tag, label string, b []byte) {
+	telidbgOnce.Do(func() {
+		f, _ := os.Create("telidbg.log")
+		telidbgFile = f
+	})
+	if telidbgFile == nil {
+		return
+	}
+	telidbgMu.Lock()
+	defer telidbgMu.Unlock()
+	var sb strings.Builder
+	sb.WriteString(tag)
+	sb.WriteString(" ")
+	sb.WriteString(label)
+	sb.WriteString(" [")
+	for i, x := range b {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		fmt.Fprintf(&sb, "%02X", x)
+	}
+	sb.WriteString("]\n")
+	_, _ = telidbgFile.WriteString(sb.String())
 }
 

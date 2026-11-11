@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
@@ -59,15 +58,14 @@ func windowsCommandLine(argv []string) string {
 	return strings.Join(parts, " ")
 }
 
-// startLocalShell launches the user's Windows shell on a ConPTY, preferring
-// pwsh.exe, then powershell.exe, then cmd.exe.
+// Use cmd.exe as the telnet shell. PowerShell 5.1 drives its prompt/line
+// editing with heavy CSI cursor-positioning redraws; stripping those for a
+// remote telnet client leaves stale redraw text on screen and desyncs the
+// shell's read state (e.g. "exit" → "exexiexit", stray ">>" continuations).
+// cmd.exe's prompt editing is far simpler and survives control-sequence
+// stripping cleanly, so telnet sessions get a reliable interactive shell.
 func startLocalShell(ctx context.Context, cols, rows int) (telnetPty, error) {
 	shell := "cmd.exe"
-	if p, err := exec.LookPath("pwsh.exe"); err == nil {
-		shell = p
-	} else if p, err := exec.LookPath("powershell.exe"); err == nil {
-		shell = p
-	}
 	_ = ctx // ConPTY has no context-cancellable start; lifetime is managed via Close().
 
 	if cols <= 0 {
