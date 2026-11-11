@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strings"
 	"sync"
 )
@@ -91,7 +90,6 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 	defer conn.Close()
 
 	addr := conn.RemoteAddr().String()
-	tag := addr
 	m.log(ServiceTelnet, id, fmt.Sprintf("connection from %s", addr))
 
 	// 1. Send welcome banner.
@@ -113,7 +111,7 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 		// otherwise double-display each keystroke AND leak it as cleartext.)
 		_, _ = conn.Write([]byte{0xFF, 0xFB, 0x01}) // IAC WILL ECHO
 		fmt.Fprint(conn, "Password: ")
-		line, err := readTelnetLine(conn, nil, &wantServerEcho, &sgaAccepted, tag)
+		line, err := readTelnetLine(conn, nil, &wantServerEcho, &sgaAccepted)
 		if err != nil {
 			m.log(ServiceTelnet, id, fmt.Sprintf("auth failed from %s: %v", addr, err))
 			return
@@ -166,7 +164,6 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 						end = len(proc)
 					}
 					chunk := proc[off:end]
-					telidbg(tag, "OUT", chunk)
 					_, _ = writeTelnetSafe(conn, chunk)
 				}
 			}
@@ -185,11 +182,9 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 			}
 			n, err := conn.Read(buf)
 			if n > 0 {
-				telidbg(tag, "IN ", buf[:n])
 				filtered, resp := processTelnetInput(buf[:n])
 				filtered = normalizeEditingKeys(filtered)
 				if len(filtered) > 0 {
-					telidbg(tag, "SEND", filtered)
 					// Forward the (already line-normalized) bytes to the shell.
 					// sh.Write blocks until the ConPTY accepts them (no partial
 					// writes), so a single call with an error check keeps fast
@@ -213,13 +208,11 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 							}
 						}
 						if len(sp) > 0 {
-							telidbg(tag, "ECHOS", sp)
 							_, _ = writeTelnetSafe(conn, sp)
 						}
 					}
 				}
 				if len(resp) > 0 {
-					telidbg(tag, "RESP", resp)
 					_, _ = writeTelnetSafe(conn, resp)
 				}
 			}
@@ -254,7 +247,7 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 // SB whose SE hasn't arrived yet) is held back until complete, so no byte is
 // lost or mis-parsed. Each typed character is echoed only when *echo is true;
 // the password gate passes nil so the secret never prints.
-func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool, tag string) (string, error) {
+func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool) (string, error) {
 	var b strings.Builder
 	var buf []byte // data bytes awaiting echo / newline detection
 	chunk := make([]byte, 1024)
@@ -340,7 +333,6 @@ func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool, tag str
 	for {
 		n, err := conn.Read(chunk)
 		if n > 0 {
-			telidbg(tag, "LIN ", chunk[:n])
 			// Split the new bytes: separate data from negotiation.
 			var data []byte
 			var newResp []byte
@@ -355,7 +347,6 @@ func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool, tag str
 			}
 			// Emit negotiation responses collected in this batch.
 			if len(newResp) > 0 {
-				telidbg(tag, "LRSP", newResp)
 				resp = append(resp, newResp...)
 				_, _ = conn.Write(resp)
 				resp = resp[:0]
@@ -737,36 +728,5 @@ func (o *telnetOutputProcessor) emitCR(out *[]byte, b byte) {
 		return
 	}
 	*out = append(*out, b)
-}
-
-// telidbg appends one labelled hex-dump line to telidbg.log in the working
-// directory. tag separates concurrent connections. Diagnostic aid (temporary).
-var telidbgOnce sync.Once
-var telidbgMu sync.Mutex
-var telidbgFile *os.File
-
-func telidbg(tag, label string, b []byte) {
-	telidbgOnce.Do(func() {
-		f, _ := os.Create("telidbg.log")
-		telidbgFile = f
-	})
-	if telidbgFile == nil {
-		return
-	}
-	telidbgMu.Lock()
-	defer telidbgMu.Unlock()
-	var sb strings.Builder
-	sb.WriteString(tag)
-	sb.WriteString(" ")
-	sb.WriteString(label)
-	sb.WriteString(" [")
-	for i, x := range b {
-		if i > 0 {
-			sb.WriteByte(' ')
-		}
-		fmt.Fprintf(&sb, "%02X", x)
-	}
-	sb.WriteString("]\n")
-	_, _ = telidbgFile.WriteString(sb.String())
 }
 
