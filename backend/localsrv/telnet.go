@@ -1,10 +1,9 @@
 package localsrv
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -98,8 +97,14 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 
 	// 2. Optional password gate.
 	if cfg.Password != "" {
+		// Negotiate echo handling so the client settles, but read the password
+		// with echo permanently off (nil) so the secret never prints — accepting
+		// the client's DO ECHO keeps the session alive without ever echoing
+		// the password back. (Clients that keep a local echo anyway would
+		// otherwise double-display each keystroke AND leak it as cleartext.)
+		_, _ = conn.Write([]byte{0xFF, 0xFB, 0x01}) // IAC WILL ECHO
 		fmt.Fprint(conn, "Password: ")
-		line, err := readTelnetLine(conn)
+		line, err := readTelnetLine(conn, nil)
 		if err != nil {
 			m.log(ServiceTelnet, id, fmt.Sprintf("auth failed from %s: %v", addr, err))
 			return
@@ -182,51 +187,165 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 	m.log(ServiceTelnet, id, fmt.Sprintf("shell session ended for %s", addr))
 }
 
-// readTelnetLine reads one \r\n-terminated line from the connection, silently
-// swallowing Telnet IAC sequences and echoing the characters back as the
-// user types (basic local-echo behaviour).
-func readTelnetLine(conn net.Conn) (string, error) {
+// readTelnetLine reads one \n-terminated line from the connection, stripping
+// and answering every Telnet IAC negotiation the client sends (WILL/DO/WONT/
+// DONT, and SB...SE subnegotiation such as TERMINAL-TYPE and NAWS). Those
+// bytes never leak into the returned line — which is what used to break
+// password entry on clients like MobaXterm that send a TTYPE request right
+// after connecting (the leaked "xterm-256color" payload polluting the line).
+// Unlike a per-chunk call to processTelnetInput, parsing here is stateful
+// across reads: a negotiation split across TCP segments (a trailing IAC, or an
+// SB whose SE hasn't arrived yet) is held back until complete, so no byte is
+// lost or mis-parsed. Each typed character is echoed only when *echo is true;
+// the password gate passes nil so the secret never prints.
+func readTelnetLine(conn net.Conn, echo *bool) (string, error) {
 	var b strings.Builder
-	r := bufio.NewReader(conn)
-	for {
-		byt, err := r.ReadByte()
-		if err != nil {
-			return b.String(), err
-		}
-		if byt == 0xFF { // IAC
-			// skip IAC + command + subnegotiation if any
-			c1, err := r.ReadByte()
-			if err != nil {
-				return b.String(), err
+	var buf []byte // data bytes awaiting echo / newline detection
+	chunk := make([]byte, 1024)
+	// pending is the raw out-of-band bytes (negotiation) accumulated from the
+	// network but not yet fully parsed because a sequence is incomplete.
+	var pending []byte
+
+	// handle strips complete telnet IAC sequences from raw, moving everything
+	// else (plain data) into data. It appends required responses to resp. If
+	// raw ends mid-sequence (an incomplete IAC), it stops, moves the leading
+	// plain data into data, and returns (true, tail) where tail is the bytes
+	// from the incomplete IAC onward that must be retained for the next read.
+	handle := func(raw []byte, data *[]byte, resp *[]byte) (partial bool, tail []byte) {
+		i := 0
+		for i < len(raw) {
+			if raw[i] != 0xFF {
+				*data = append(*data, raw[i])
+				i++
+				continue
 			}
-			if c1 == 0xFA { // SB
-				for {
-					sb, err := r.ReadByte()
-					if err != nil {
-						return b.String(), err
+			// raw[i] == IAC
+			if i+1 >= len(raw) {
+				return true, raw[i:]
+			}
+			op := raw[i+1]
+			switch op {
+			case 0xFF: // escaped literal 0xFF -> data
+				*data = append(*data, 0xFF)
+				i += 2
+			case 0xFA: // SB ... SE
+				j := i + 2
+				found := false
+				for j+1 < len(raw) {
+					if raw[j] == 0xFF && raw[j+1] == 0xF0 {
+						j += 2
+						found = true
+						break
 					}
-					if sb == 0xFF {
-						b2, err := r.ReadByte()
-						if err != nil {
-							return b.String(), err
-						}
-						if b2 == 0xF0 { // SE
-							break
-						}
-					}
+					j++
+				}
+				if !found {
+					return true, raw[i:]
+				}
+				i = j
+			case 0xFB: // WILL opt -> DONT
+				if i+2 >= len(raw) {
+					return true, raw[i:]
+				}
+				*resp = append(*resp, 0xFF, 0xFE, raw[i+2])
+				i += 3
+			case 0xFD: // DO opt
+				if i+2 >= len(raw) {
+					return true, raw[i:]
+				}
+				opt := raw[i+2]
+				if opt == 0x01 { // ECHO -> accept
+					*resp = append(*resp, 0xFF, 0xFD, opt)
+				} else {
+					*resp = append(*resp, 0xFF, 0xFC, opt)
+				}
+				i += 3
+			case 0xFC, 0xFE: // WONT / DONT
+				if i+2 >= len(raw) {
+					return true, raw[i:]
+				}
+				i += 3
+			default: // NOP / DM / AYT / GA / BRK / IP / AO etc.
+				i += 2
+			}
+		}
+		return false, nil
+	}
+
+	var resp []byte
+	for {
+		n, err := conn.Read(chunk)
+		if n > 0 {
+			// Split the new bytes: separate data from negotiation.
+			var data []byte
+			var newResp []byte
+			pending = append(pending, chunk[:n]...)
+			partial, tail := handle(pending, &data, &newResp)
+			if partial {
+				// Keep only the incomplete IAC tail; its prefix data is already
+				// in data and must not be reprocessed next round.
+				pending = append(pending[:0], tail...)
+			} else {
+				pending = pending[:0]
+			}
+			// Emit negotiation responses collected in this batch.
+			if len(newResp) > 0 {
+				resp = append(resp, newResp...)
+				_, _ = conn.Write(resp)
+				resp = resp[:0]
+			}
+			_ = resp
+			// Now process the plain data bytes.
+			buf = append(buf, data...)
+			// Find the first line terminator. Telnet clients differ: MobaXterm
+			// and cmd send CRLF on Enter, but uniterm's own client sends a bare
+			// CR by default (NewlineMode "cr"). Treat \r, \n, or \r\n as the end
+			// of a line so a password entered from any client is delivered.
+			idx := -1
+			for i := 0; i < len(buf); i++ {
+				if buf[i] == '\r' || buf[i] == '\n' {
+					idx = i
+					break
 				}
 			}
+			if idx >= 0 {
+				line := buf[:idx]
+				// The terminator itself is dropped. Handle \r\n as one terminator:
+				// if the byte after idx is the complementary one, skip it too.
+				next := 1
+				if buf[idx] == '\r' && idx+1 < len(buf) && buf[idx+1] == '\n' {
+					next = 2
+				} else if buf[idx] == '\n' && idx+1 < len(buf) && buf[idx+1] == '\r' {
+					next = 2
+				}
+				if echo != nil && *echo {
+					for _, c := range line {
+						_, _ = conn.Write([]byte{c})
+					}
+					_, _ = conn.Write([]byte{'\r', '\n'})
+				}
+				b.Write(line)
+				// keep anything after the terminator for the next call
+				buf = append(buf[:0], buf[idx+next:]...)
+				return b.String(), nil
+			}
+			// no terminator yet; echo live input (when echo on) and carry on
+			if echo != nil && *echo {
+				for _, c := range buf {
+					_, _ = conn.Write([]byte{c})
+				}
+			}
+			b.Write(buf)
+			buf = buf[:0]
 			continue
 		}
-		if byt == '\r' || byt == '\n' {
-			// Echo local echo back (for clients that don't)
-			_, _ = conn.Write([]byte{byt})
-			break
+		if err != nil {
+			if err == io.EOF {
+				return b.String(), io.EOF
+			}
+			return b.String(), err
 		}
-		_, _ = conn.Write([]byte{byt})
-		b.WriteByte(byt)
 	}
-	return b.String(), nil
 }
 
 // processTelnetInput parses client data for Telnet IAC command sequences. It
@@ -337,6 +456,10 @@ func writeTelnetSafe(conn net.Conn, data []byte) (int, error) {
 type telnetOutputProcessor struct {
 	// Control-sequence stripping state: 0 normal, 1 escaped, 2 in-OSC, 3 in-CSI.
 	cstate int
+	// csiDigit records that the current CSI sequence carried at least one
+	// digit (e.g. "4;1H"), distinguishing CUP/HVP positioning used by ConPTY
+	// to lay out the prompt from a parameterless home "ESC[H".
+	csiDigit bool
 	// hadCR is true when the previous emitted byte was a bare CR whose
 	// following byte has not been seen yet (CRLF vs standalone CR is only
 	// decidable by peeking at the next byte).
@@ -396,7 +519,25 @@ func (o *telnetOutputProcessor) stripControls(data []byte) []byte {
 			// bytes inside the sequence are simply consumed
 		case 3: // in CSI until final byte (0x40-0x7E)
 			if b >= 0x40 && b <= 0x7E {
+				// ConPTY moves the shell prompt onto its own line with a
+				// cursor-positioning sequence (ESC[r;cH / ESC[r;cf). We strip
+				// the sequence, losing that positioning, so translate "move to
+				// the first column on a row" (a digit-carrying CUP/HVP) into a
+				// newline. Restricted to the startup-banner window so ordinary
+				// command output is untouched.
+				if !o.bannerDone && o.csiDigit && (b == 'H' || b == 'f') {
+					// Use a real CRLF: bare LF advances without returning the
+					// cursor to column 1 in Microsoft's telnet client, which
+					// leaves the prompt printed at the end of the banner line.
+					// Emit two CRLFs: ConPTY's ESC[4;1H lands the prompt on the
+					// 4th line (banner line 1, banner line 2, a blank line, then
+					// the prompt) — matching Windows' native PowerShell layout.
+					out = append(out, '\r', '\n', '\r', '\n')
+				}
 				o.cstate = 0
+				o.csiDigit = false
+			} else if b >= '0' && b <= '9' {
+				o.csiDigit = true
 			}
 		case 4: // after ESC inside OSC: ESC\ = ST ends it, else back to OSC
 			if b == '\\' {
@@ -408,16 +549,60 @@ func (o *telnetOutputProcessor) stripControls(data []byte) []byte {
 	}
 	// ConPTY moves the shell's prompt to the start of the next line by emitting
 	// a CSI cursor-control sequence, which is stripped above — leaving the banner
-	// and the "PS C:\...>" prompt glued to the same line. Anchor on PowerShell's
-	// fixed banner tail and insert a newline right after it so the prompt always
-	// starts on its own line.
+	// and the "PS C:\...>" prompt glued to the same line. PowerShell's startup
+	// banner is localized (English "All rights reserved." on en-US systems,
+	// Chinese "保留所有权利。" on zh-CN), so instead of anchoring on a fixed
+	// banner string we look for the PowerShell prompt prefix "PS " and force a
+	// newline right before it; this works regardless of the banner language. We
+	// also trim the padding spaces PowerShell inserts to right-align the
+	// second banner line, which would otherwise stream out as a run of blanks.
 	if !o.bannerDone {
-		marker := []byte("All rights reserved.")
-		if idx := bytes.Index(out, marker); idx >= 0 {
-			insertAt := idx + len(marker)
-			out = append(out[:insertAt], append([]byte{'\r', '\n'}, out[insertAt:]...)...)
-			o.bannerDone = true
+		var cleaned []byte
+		// lineStart tracks the index of the start of the current line in cleaned
+		// so we can detect and drop the banner's leading padding spaces.
+		lineStart := 0
+		trimmed := false
+		for i := 0; i < len(out); i++ {
+			c := out[i]
+			// Before appending, check whether a PS prompt prefix starts here.
+			// We do not require it to already be at the start of a line — that
+			// is exactly the broken case (banner glued to prompt) we fix.
+			if c == 'P' && i+1 < len(out) && out[i+1] == 'S' && !o.bannerDone &&
+				(i+2 >= len(out) || out[i+2] == ' ' || out[i+2] == ':' ||
+				 out[i+2] == '>' || out[i+2] == '/') {
+				// Ensure the prompt starts on its own line.
+				clen := len(cleaned)
+				if clen == 0 {
+					o.bannerDone = true
+					cleaned = append(cleaned, c)
+					continue
+				}
+				if cleaned[clen-1] != '\n' && cleaned[clen-1] != '\r' {
+					cleaned = append(cleaned, '\r', '\n')
+				}
+				lineStart = len(cleaned)
+				o.bannerDone = true
+				trimmed = true
+				cleaned = append(cleaned, c)
+				continue
+			}
+			// While still in the banner (before the prompt), drop runs of
+			// leading spaces used to pad/center the banner text.
+			if !o.bannerDone && c == ' ' {
+				// Skip leading spaces at the start of a line (banner padding).
+				if lineStart == len(cleaned) {
+					continue
+				}
+			}
+			if c == '\n' {
+				lineStart = len(cleaned) + 1
+			} else if c != '\r' && c != '\n' {
+				// any non-newline advances the line content
+			}
+			cleaned = append(cleaned, c)
 		}
+		out = cleaned
+		_ = trimmed
 	}
 	return out
 }
@@ -430,14 +615,21 @@ func (o *telnetOutputProcessor) emitCR(out *[]byte, b byte) {
 		// The previous byte was a CR; its meaning depends on what follows.
 		o.hadCR = false
 		if b == '\n' {
-			*out = append(*out, '\n') // CRLF -> single LF
+			*out = append(*out, '\r', '\n') // CRLF -> keep as a real CRLF
 			return
 		}
-		// Standalone CR -> treat as a line feed, then also handle b below.
-		*out = append(*out, '\n')
+		// Standalone CR -> turn into a CRLF, then also handle b below.
+		*out = append(*out, '\r', '\n')
 	}
 	if b == '\r' {
 		o.hadCR = true
+		return
+	}
+	if b == '\n' {
+		// A bare LF would advance the line without returning to column 1 in
+		// Microsoft's telnet client (which only honors CR for carriage return),
+		// so emit a real CRLF to keep the prompt and banner lines aligned.
+		*out = append(*out, '\r', '\n')
 		return
 	}
 	*out = append(*out, b)
