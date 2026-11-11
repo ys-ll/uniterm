@@ -415,7 +415,7 @@
   "sftp.dialog.newFileEmpty": "ファイル名を入力してください",
   "sftp.dialog.newFileInvalid": "ファイル名に / または \\ は使用できません",
   "sftp.edit.binaryFile": "バイナリファイルは編集できません",
-  "sftp.edit.fileTooLarge": "ファイルが大きすぎます（>1 MB）",
+  "sftp.edit.fileTooLarge": "ファイルが大きすぎます（>10 MB）",
   "sftp.edit.wrap": "折り返し",
   "sftp.edit.fileLargeWarning": "ファイルが大きいです（{size}）、開きますか？",
   "sftp.edit.saveSuccess": "保存しました",

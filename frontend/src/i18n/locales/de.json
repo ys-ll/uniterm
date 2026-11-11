@@ -415,7 +415,7 @@
   "sftp.dialog.newFileEmpty": "Dateiname darf nicht leer sein",
   "sftp.dialog.newFileInvalid": "Dateiname darf / oder \\ nicht enthalten",
   "sftp.edit.binaryFile": "Binärdatei kann nicht bearbeitet werden",
-  "sftp.edit.fileTooLarge": "Datei ist zu groß (>1 MB)",
+  "sftp.edit.fileTooLarge": "Datei ist zu groß (>10 MB)",
   "sftp.edit.wrap": "Zeilenumbruch",
   "sftp.edit.fileLargeWarning": "Datei ist groß ({size}), trotzdem öffnen?",
   "sftp.edit.saveSuccess": "Gespeichert",

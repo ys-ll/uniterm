@@ -415,7 +415,7 @@
   "sftp.dialog.newFileEmpty": "Tên tệp không được để trống",
   "sftp.dialog.newFileInvalid": "Tên tệp không được chứa / hoặc \\",
   "sftp.edit.binaryFile": "Không thể chỉnh sửa tệp nhị phân",
-  "sftp.edit.fileTooLarge": "Tệp quá lớn để chỉnh sửa (>1 MB)",
+  "sftp.edit.fileTooLarge": "Tệp quá lớn để chỉnh sửa (>10 MB)",
   "sftp.edit.wrap": "Tự động xuống dòng",
   "sftp.edit.fileLargeWarning": "Tệp khá lớn ({size}), vẫn mở?",
   "sftp.edit.saveSuccess": "Đã lưu",

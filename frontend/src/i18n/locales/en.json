@@ -438,7 +438,7 @@
   "sftp.dialog.newFileEmpty": "File name cannot be empty",
   "sftp.dialog.newFileInvalid": "File name cannot contain / or \\",
   "sftp.edit.binaryFile": "Cannot edit binary file",
-  "sftp.edit.fileTooLarge": "File is too large to edit (>1 MB)",
+  "sftp.edit.fileTooLarge": "File is too large to edit (>10 MB)",
   "sftp.edit.wrap": "Word wrap",
   "sftp.edit.fileLargeWarning": "File is large ({size}), open anyway?",
   "sftp.edit.saveSuccess": "Saved",
