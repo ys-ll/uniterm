@@ -1,4 +1,4 @@
-﻿package localsrv
+package localsrv
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"strings"
 	"sync"
 )
@@ -91,7 +90,6 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 	defer conn.Close()
 
 	addr := conn.RemoteAddr().String()
-	tag := addr
 	m.log(ServiceTelnet, id, fmt.Sprintf("connection from %s", addr))
 
 	// 1. Send welcome banner.
@@ -106,8 +104,14 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 	var wantServerEcho bool // set true if the client asks us to echo (sends IAC DO ECHO)
 	var sgaAccepted bool
 	if cfg.Password != "" {
+		// Negotiate echo handling so the client settles, but read the password
+		// with echo permanently off (nil) so the secret never prints — accepting
+		// the client's DO ECHO keeps the session alive without ever echoing
+		// the password back. (Clients that keep a local echo anyway would
+		// otherwise double-display each keystroke AND leak it as cleartext.)
+		_, _ = conn.Write([]byte{0xFF, 0xFB, 0x01}) // IAC WILL ECHO
 		fmt.Fprint(conn, "Password: ")
-		line, err := readTelnetLine(conn, nil, &wantServerEcho, &sgaAccepted, tag)
+		line, err := readTelnetLine(conn, nil, &wantServerEcho, &sgaAccepted)
 		if err != nil {
 			m.log(ServiceTelnet, id, fmt.Sprintf("auth failed from %s: %v", addr, err))
 			return
@@ -160,7 +164,6 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 						end = len(proc)
 					}
 					chunk := proc[off:end]
-					telidbg(tag, "OUT", chunk)
 					_, _ = writeTelnetSafe(conn, chunk)
 				}
 			}
@@ -179,11 +182,9 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 			}
 			n, err := conn.Read(buf)
 			if n > 0 {
-				telidbg(tag, "IN ", buf[:n])
 				filtered, resp := processTelnetInput(buf[:n])
 				filtered = normalizeEditingKeys(filtered)
 				if len(filtered) > 0 {
-					telidbg(tag, "SEND", filtered)
 					// Forward the (already line-normalized) bytes to the shell.
 					// sh.Write blocks until the ConPTY accepts them (no partial
 					// writes), so a single call with an error check keeps fast
@@ -207,13 +208,11 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 							}
 						}
 						if len(sp) > 0 {
-							telidbg(tag, "ECHOS", sp)
 							_, _ = writeTelnetSafe(conn, sp)
 						}
 					}
 				}
 				if len(resp) > 0 {
-					telidbg(tag, "RESP", resp)
 					_, _ = writeTelnetSafe(conn, resp)
 				}
 			}
@@ -248,7 +247,7 @@ func (m *Manager) handleTelnetConn(ctx context.Context, id string, conn net.Conn
 // SB whose SE hasn't arrived yet) is held back until complete, so no byte is
 // lost or mis-parsed. Each typed character is echoed only when *echo is true;
 // the password gate passes nil so the secret never prints.
-func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool, tag string) (string, error) {
+func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool) (string, error) {
 	var b strings.Builder
 	var buf []byte // data bytes awaiting echo / newline detection
 	chunk := make([]byte, 1024)
@@ -334,7 +333,6 @@ func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool, tag str
 	for {
 		n, err := conn.Read(chunk)
 		if n > 0 {
-			telidbg(tag, "LIN ", chunk[:n])
 			// Split the new bytes: separate data from negotiation.
 			var data []byte
 			var newResp []byte
@@ -349,7 +347,6 @@ func readTelnetLine(conn net.Conn, echo *bool, echoReq *bool, sga *bool, tag str
 			}
 			// Emit negotiation responses collected in this batch.
 			if len(newResp) > 0 {
-				telidbg(tag, "LRSP", newResp)
 				resp = append(resp, newResp...)
 				_, _ = conn.Write(resp)
 				resp = resp[:0]
@@ -548,6 +545,10 @@ func writeTelnetSafe(conn net.Conn, data []byte) (int, error) {
 type telnetOutputProcessor struct {
 	// Control-sequence stripping state: 0 normal, 1 escaped, 2 in-OSC, 3 in-CSI.
 	cstate int
+	// csiDigit records that the current CSI sequence carried at least one
+	// digit (e.g. "4;1H"), distinguishing CUP/HVP positioning used by ConPTY
+	// to lay out the prompt from a parameterless home "ESC[H".
+	csiDigit bool
 	// hadCR is true when the previous emitted byte was a bare CR whose
 	// following byte has not been seen yet (CRLF vs standalone CR is only
 	// decidable by peeking at the next byte).
@@ -607,7 +608,25 @@ func (o *telnetOutputProcessor) stripControls(data []byte) []byte {
 			// bytes inside the sequence are simply consumed
 		case 3: // in CSI until final byte (0x40-0x7E)
 			if b >= 0x40 && b <= 0x7E {
+				// ConPTY moves the shell prompt onto its own line with a
+				// cursor-positioning sequence (ESC[r;cH / ESC[r;cf). We strip
+				// the sequence, losing that positioning, so translate "move to
+				// the first column on a row" (a digit-carrying CUP/HVP) into a
+				// newline. Restricted to the startup-banner window so ordinary
+				// command output is untouched.
+				if !o.bannerDone && o.csiDigit && (b == 'H' || b == 'f') {
+					// Use a real CRLF: bare LF advances without returning the
+					// cursor to column 1 in Microsoft's telnet client, which
+					// leaves the prompt printed at the end of the banner line.
+					// Emit two CRLFs: ConPTY's ESC[4;1H lands the prompt on the
+					// 4th line (banner line 1, banner line 2, a blank line, then
+					// the prompt) — matching Windows' native PowerShell layout.
+					out = append(out, '\r', '\n', '\r', '\n')
+				}
 				o.cstate = 0
+				o.csiDigit = false
+			} else if b >= '0' && b <= '9' {
+				o.csiDigit = true
 			}
 		case 4: // after ESC inside OSC: ESC\ = ST ends it, else back to OSC
 			if b == '\\' {
@@ -618,17 +637,61 @@ func (o *telnetOutputProcessor) stripControls(data []byte) []byte {
 		}
 	}
 	// ConPTY moves the shell's prompt to the start of the next line by emitting
-	// a CSI cursor-control sequence, which is stripped above 鈥?leaving the banner
-	// and the "PS C:\...>" prompt glued to the same line. Anchor on PowerShell's
-	// fixed banner tail and insert a newline right after it so the prompt always
-	// starts on its own line.
+	// a CSI cursor-control sequence, which is stripped above — leaving the banner
+	// and the "PS C:\...>" prompt glued to the same line. PowerShell's startup
+	// banner is localized (English "All rights reserved." on en-US systems,
+	// Chinese "保留所有权利。" on zh-CN), so instead of anchoring on a fixed
+	// banner string we look for the PowerShell prompt prefix "PS " and force a
+	// newline right before it; this works regardless of the banner language. We
+	// also trim the padding spaces PowerShell inserts to right-align the
+	// second banner line, which would otherwise stream out as a run of blanks.
 	if !o.bannerDone {
-		marker := []byte("All rights reserved.")
-		if idx := bytes.Index(out, marker); idx >= 0 {
-			insertAt := idx + len(marker)
-			out = append(out[:insertAt], append([]byte{'\r', '\n'}, out[insertAt:]...)...)
-			o.bannerDone = true
+		var cleaned []byte
+		// lineStart tracks the index of the start of the current line in cleaned
+		// so we can detect and drop the banner's leading padding spaces.
+		lineStart := 0
+		trimmed := false
+		for i := 0; i < len(out); i++ {
+			c := out[i]
+			// Before appending, check whether a PS prompt prefix starts here.
+			// We do not require it to already be at the start of a line — that
+			// is exactly the broken case (banner glued to prompt) we fix.
+			if c == 'P' && i+1 < len(out) && out[i+1] == 'S' && !o.bannerDone &&
+				(i+2 >= len(out) || out[i+2] == ' ' || out[i+2] == ':' ||
+					out[i+2] == '>' || out[i+2] == '/') {
+				// Ensure the prompt starts on its own line.
+				clen := len(cleaned)
+				if clen == 0 {
+					o.bannerDone = true
+					cleaned = append(cleaned, c)
+					continue
+				}
+				if cleaned[clen-1] != '\n' && cleaned[clen-1] != '\r' {
+					cleaned = append(cleaned, '\r', '\n')
+				}
+				lineStart = len(cleaned)
+				o.bannerDone = true
+				trimmed = true
+				cleaned = append(cleaned, c)
+				continue
+			}
+			// While still in the banner (before the prompt), drop runs of
+			// leading spaces used to pad/center the banner text.
+			if !o.bannerDone && c == ' ' {
+				// Skip leading spaces at the start of a line (banner padding).
+				if lineStart == len(cleaned) {
+					continue
+				}
+			}
+			if c == '\n' {
+				lineStart = len(cleaned) + 1
+			} else if c != '\r' && c != '\n' {
+				// any non-newline advances the line content
+			}
+			cleaned = append(cleaned, c)
 		}
+		out = cleaned
+		_ = trimmed
 	}
 	return out
 }
@@ -641,47 +704,22 @@ func (o *telnetOutputProcessor) emitCR(out *[]byte, b byte) {
 		// The previous byte was a CR; its meaning depends on what follows.
 		o.hadCR = false
 		if b == '\n' {
-			*out = append(*out, '\n') // CRLF -> single LF
+			*out = append(*out, '\r', '\n') // CRLF -> keep as a real CRLF
 			return
 		}
-		// Standalone CR -> treat as a line feed, then also handle b below.
-		*out = append(*out, '\n')
+		// Standalone CR -> turn into a CRLF, then also handle b below.
+		*out = append(*out, '\r', '\n')
 	}
 	if b == '\r' {
 		o.hadCR = true
 		return
 	}
-	*out = append(*out, b)
-}
-
-// telidbg appends one labelled hex-dump line to telidbg.log in the working
-// directory. tag separates concurrent connections. Diagnostic aid (temporary).
-var telidbgOnce sync.Once
-var telidbgMu sync.Mutex
-var telidbgFile *os.File
-
-func telidbg(tag, label string, b []byte) {
-	telidbgOnce.Do(func() {
-		f, _ := os.Create("telidbg.log")
-		telidbgFile = f
-	})
-	if telidbgFile == nil {
+	if b == '\n' {
+		// A bare LF would advance the line without returning to column 1 in
+		// Microsoft's telnet client (which only honors CR for carriage return),
+		// so emit a real CRLF to keep the prompt and banner lines aligned.
+		*out = append(*out, '\r', '\n')
 		return
 	}
-	telidbgMu.Lock()
-	defer telidbgMu.Unlock()
-	var sb strings.Builder
-	sb.WriteString(tag)
-	sb.WriteString(" ")
-	sb.WriteString(label)
-	sb.WriteString(" [")
-	for i, x := range b {
-		if i > 0 {
-			sb.WriteByte(' ')
-		}
-		fmt.Fprintf(&sb, "%02X", x)
-	}
-	sb.WriteString("]\n")
-	_, _ = telidbgFile.WriteString(sb.String())
+	*out = append(*out, b)
 }
-
