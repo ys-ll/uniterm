@@ -415,7 +415,7 @@
   "sftp.dialog.newFileEmpty": "Имя файла не может быть пустым",
   "sftp.dialog.newFileInvalid": "Имя файла не может содержать / или \\",
   "sftp.edit.binaryFile": "Невозможно редактировать бинарный файл",
-  "sftp.edit.fileTooLarge": "Файл слишком большой (>1 MB)",
+  "sftp.edit.fileTooLarge": "Файл слишком большой (>10 MB)",
   "sftp.edit.wrap": "Перенос строк",
   "sftp.edit.fileLargeWarning": "Файл большой ({size}), открыть?",
   "sftp.edit.saveSuccess": "Сохранено",

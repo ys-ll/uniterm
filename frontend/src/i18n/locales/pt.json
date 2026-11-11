@@ -415,7 +415,7 @@
   "sftp.dialog.newFileEmpty": "O nome do arquivo não pode estar vazio",
   "sftp.dialog.newFileInvalid": "O nome do arquivo não pode conter / ou \\",
   "sftp.edit.binaryFile": "Não é possível editar um arquivo binário",
-  "sftp.edit.fileTooLarge": "O arquivo é grande demais para editar (>1 MB)",
+  "sftp.edit.fileTooLarge": "O arquivo é grande demais para editar (>10 MB)",
   "sftp.edit.wrap": "Quebra de linha automática",
   "sftp.edit.fileLargeWarning": "O arquivo é grande ({size}); abrir mesmo assim?",
   "sftp.edit.saveSuccess": "Salvo",

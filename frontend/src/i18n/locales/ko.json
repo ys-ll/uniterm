@@ -415,7 +415,7 @@
   "sftp.dialog.newFileEmpty": "파일 이름을 입력하세요",
   "sftp.dialog.newFileInvalid": "파일 이름에 / 또는 \\를 사용할 수 없습니다",
   "sftp.edit.binaryFile": "바이너리 파일은 편집할 수 없습니다",
-  "sftp.edit.fileTooLarge": "파일이 너무 큽니다 (>1 MB)",
+  "sftp.edit.fileTooLarge": "파일이 너무 큽니다 (>10 MB)",
   "sftp.edit.wrap": "자동 줄 바꿈",
   "sftp.edit.fileLargeWarning": "파일이 큽니다 ({size}), 열겠습니까?",
   "sftp.edit.saveSuccess": "저장됨",

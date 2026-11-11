@@ -155,7 +155,7 @@ const emit = defineEmits<{
   (e: 'saved'): void
 }>()
 
-const editorRef = ref<{ focus: () => void; undo: () => void; redo: () => void; toggleSearch: () => boolean; cut: () => Promise<boolean>; copy: () => Promise<boolean>; paste: () => Promise<boolean> } | null>(null)
+const editorRef = ref<{ focus: () => void; undo: () => void; redo: () => void; toggleSearch: () => boolean; cut: () => Promise<boolean>; copy: () => Promise<boolean>; paste: () => Promise<boolean>; flush: () => void } | null>(null)
 // Mirrors the editor's search-bar visibility (kept in sync via the
 // search-open event, so Ctrl+F inside the editor updates the button too).
 const searchOpen = ref(false)
@@ -388,12 +388,19 @@ watch(() => props.visible, (v) => { editorVisibleInternal = v })
 // discards them (with confirmation), the save-with path never touches content.
 const lastDecoded = ref('')
 
+// Large docs emit v-model updates on a debounce (SyntaxEditor), so drain any
+// pending emit before reading editorContent or the buffer looks stale.
+function flushEditorContent() {
+  editorRef.value?.flush()
+}
+
 // Re-decode the on-disk bytes with the chosen encoding (fix wrong detection /
 // mojibake). Discards unsaved edits, so confirm first when the buffer is dirty.
 async function onReopenWith(enc: Encoding) {
   encodingMenuVisible.value = false
   const bytes = editorRawBytes.value
   if (!bytes) return
+  flushEditorContent()
   if (editorContent.value !== lastDecoded.value) {
     try {
       await ElMessageBox.confirm(t('sftp.edit.reopenConfirm'), t('sftp.edit.reopenWith'))
@@ -443,6 +450,7 @@ async function onSave(closeAfter: boolean) {
   if (!sid || !editorPath.value) return
   saving.value = true
   try {
+    flushEditorContent()
     const contentBase64 = encodeContent(editorContent.value, editorEncoding.value, editorLineEnding.value)
     if (isLocal.value) {
       await SftpLocalPutContent(sid, editorPath.value, contentBase64, editorEncoding.value)

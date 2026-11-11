@@ -438,7 +438,7 @@
   "sftp.dialog.newFileEmpty": "文件名不能为空",
   "sftp.dialog.newFileInvalid": "文件名不能包含 / 或 \\",
   "sftp.edit.binaryFile": "无法编辑二进制文件",
-  "sftp.edit.fileTooLarge": "文件太大，无法编辑（>1 MB）",
+  "sftp.edit.fileTooLarge": "文件太大，无法编辑（>10 MB）",
   "sftp.edit.wrap": "自动换行",
   "sftp.edit.fileLargeWarning": "文件较大（{size}），仍然打开？",
   "sftp.edit.saveSuccess": "保存成功",

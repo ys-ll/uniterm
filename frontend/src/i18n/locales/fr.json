@@ -415,7 +415,7 @@
   "sftp.dialog.newFileEmpty": "Le nom du fichier ne peut pas être vide",
   "sftp.dialog.newFileInvalid": "Le nom du fichier ne peut pas contenir / ou \\",
   "sftp.edit.binaryFile": "Impossible d'éditer un fichier binaire",
-  "sftp.edit.fileTooLarge": "Fichier trop volumineux (>1 MB)",
+  "sftp.edit.fileTooLarge": "Fichier trop volumineux (>10 MB)",
   "sftp.edit.wrap": "Retour à la ligne",
   "sftp.edit.fileLargeWarning": "Fichier volumineux ({size}), ouvrir quand même ?",
   "sftp.edit.saveSuccess": "Enregistré",
