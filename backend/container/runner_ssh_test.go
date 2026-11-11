@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,7 +61,11 @@ func TestSSHRunnerRegistryLogin(t *testing.T) {
 			}
 			select {
 			case got := <-received:
-				if got.command != "docker login --password-stdin -u admin harbor.example" {
+				// SSHRunner prepends a PATH extension (non-interactive sshd
+				// PATH may miss /usr/local/bin, e.g. Synology DSM); the
+				// docker command itself must stay unchanged after it.
+				if !strings.HasSuffix(got.command, "docker login --password-stdin -u admin harbor.example") ||
+					!strings.HasPrefix(got.command, "PATH=$PATH:") {
 					t.Errorf("command = %q", got.command)
 				}
 				if got.stdin != "test secret ' $()\n" {

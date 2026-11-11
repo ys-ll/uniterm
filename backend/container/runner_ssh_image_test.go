@@ -80,7 +80,9 @@ func TestSSHImageArchiveBinaryStream(t *testing.T) {
 	data := bytes.Repeat([]byte{0, 255, 31, 139, 1, 2, 3}, 20000)
 	received := make(chan []byte, 1)
 	runner := imageSSHRunner(t, func(command string, ch ssh.Channel) {
-		if command != "docker load" {
+		// PATH prefix is prepended by joinSSHCommand; only the docker
+		// command tail matters here.
+		if !strings.HasSuffix(command, "docker load") {
 			received <- nil
 			return
 		}
