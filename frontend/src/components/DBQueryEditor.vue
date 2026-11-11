@@ -307,7 +307,7 @@ import MenuItem from './MenuItem.vue'
 import { ExecuteQuery, ExecuteStatement, GetTables, GetTableSchema, DBDefaultTableQuery, DBBrowseTable, DBUpdateRowsAtomic, DBPreviewCSV, DBImportCSV, DBInsertRow, DBUpdateRow, DBDeleteRow, ExecuteSQLScript, OpenFileDialogFiltered, ReadFileBase64, SaveFileDialogFiltered, WriteFileBase64, LogMessage } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { chat } from '../services/llm'
 import { msg } from '../services/message'
-import { isWebServerMode, pickAndStageLocalFileInBrowser, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
+import { isWebServerMode, pickAndStageLocalFileInBrowser, pickBrowserFiles, readBrowserFileAsText, saveBase64InWebServerMode } from '../services/webSftpBridge'
 import { loadSqlHistory, pushSqlHistory } from '../composables/useDbSqlHistory'
 import type { QueryResult, ExecResult, ColumnInfo, HistoryEntry } from '../types/database'
 import { ScriptResult } from '../../bindings/github.com/ys-ll/uniterm/backend/database/models'
@@ -595,6 +595,9 @@ async function onExportResults(format: 'csv' | 'txt' | 'json') {
       if (androidOutcome === 'saved') msg.success(t('db.exportDone', { name: defaultName }))
       return
     }
+    // Web-server mode: no native save dialog — hand the payload to the
+    // browser's download manager instead.
+    if (await saveBase64InWebServerMode(defaultName, mime, b64)) return
     const path = await SaveFileDialogFiltered(t('db.exportResults'), defaultName, label, `*.${ext}`)
     if (!path) return
     await WriteFileBase64(path, b64)

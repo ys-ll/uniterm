@@ -51,8 +51,17 @@ var SecretFiles = []SecretFile{
 	{File: "connections.json", Paths: []string{"connections.*.password", "connections.*.keyContent", "connections.*.totpSecret"}},
 	{File: "identities.json", Paths: []string{"identities.*.password", "identities.*.keyContent"}},
 	{File: "proxies.json", Paths: []string{"proxies.*.pass"}},
+	// tunnels.json: the upstream SOCKS proxy a tunnel may ride on carries its
+	// own password; used to persist as plaintext because the file was outside
+	// this manifest and the tunnel store saved with no cipher wired.
+	{File: "tunnels.json", Paths: []string{"tunnels.*.upstream.pass"}},
 	{File: "ai.json", Paths: []string{"models.*.apiKey"}},
 	{File: "mcp_clients.json", Paths: []string{"clients.*.headers.*", "clients.*.env.*"}},
+	// Server builds only (server_secrets.go): the sync keychain's encrypted
+	// entries. Registered so credential reset blanks it and the setup guard
+	// counts its ciphertext like any other secret file; never synced (not in
+	// the syncable-file vocabulary).
+	{File: "sync-keychain.json", Paths: []string{"entries.*"}},
 	{File: "settings.json", Paths: []string{"ai.models.*.apiKey"}},
 }
 

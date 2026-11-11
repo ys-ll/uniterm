@@ -1020,41 +1020,43 @@
             {{ t('settings.version') }}: {{ updateCheck.updateInfo?.current || '...' }}
           </div>
           <div class="about-links">
-            <a href="#" class="about-link" @click.prevent="Browser.OpenURL('https://uniterm.net')">
+            <a href="#" class="about-link" @click.prevent="openExternalUrl('https://uniterm.net')">
               <Globe :size="'0.875rem'" class="about-link-icon" />
               {{ t('settings.homepage') }}
             </a>
-            <a href="#" class="about-link" @click.prevent="Browser.OpenURL(locale === 'zh-CN' ? 'https://uniterm.net/guide/zh/introduction' : 'https://uniterm.net/guide/en/introduction')">
+            <a href="#" class="about-link" @click.prevent="openExternalUrl(locale === 'zh-CN' ? 'https://uniterm.net/guide/zh/introduction' : 'https://uniterm.net/guide/en/introduction')">
               <BookOpen :size="'0.875rem'" class="about-link-icon" />
               {{ t('settings.userManual') }}
             </a>
-            <a href="#" class="about-link" @click.prevent="Browser.OpenURL('https://github.com/ys-ll/uniterm')">
+            <a href="#" class="about-link" @click.prevent="openExternalUrl('https://github.com/ys-ll/uniterm')">
               <GitHubLogo class="about-link-icon" />
               GitHub
             </a>
-            <a href="#" class="about-link" @click.prevent="Browser.OpenURL('https://gitee.com/ys-l/uniterm')">
+            <a href="#" class="about-link" @click.prevent="openExternalUrl('https://gitee.com/ys-l/uniterm')">
               <GiteeLogo class="about-link-icon" />
               Gitee
             </a>
           </div>
-          <!-- In-app update download is desktop-only; mobile updates via APK -->
-          <div v-if="!isMobile" class="about-update-actions">
+          <!-- In-app update download is desktop-only; mobile updates via APK and
+               server (Docker) deployments update by pulling a new image, so the
+               update UI stays hidden there (the backend refuses the calls). -->
+          <div v-if="!isMobile && !webServerMode" class="about-update-actions">
             <el-button
-             
+
               :loading="updateCheck.checking"
               @click="handleCheckUpdate"
             >
               {{ updateCheck.checking ? t('settings.checking') : t('settings.checkUpdate') }}
             </el-button>
           </div>
-          <div v-if="!isMobile" class="about-auto-check">
+          <div v-if="!isMobile && !webServerMode" class="about-auto-check">
             <el-checkbox
               v-model="updateCheck.autoCheck"
             >
               {{ t('settings.autoCheckUpdate') }}
             </el-checkbox>
           </div>
-          <div v-if="!isMobile" class="about-update-source">
+          <div v-if="!isMobile && !webServerMode" class="about-update-source">
             <span class="about-update-source-label">{{ t('settings.updateSource') }}</span>
             <el-select
               v-model="updateCheck.source"
@@ -1751,7 +1753,7 @@
 import { ref, reactive, watch, computed, onMounted, onUnmounted, onActivated } from 'vue'
 import { Settings, Monitor, MessageCircleMore, Info, RefreshCw, Pencil, Copy, Trash2, Globe, Keyboard, Plus, BookOpen, Wrench, SquareSlash, FolderOpen, Key, Network, ArrowRightLeft, ChevronLeft, ChevronRight, ChevronDown, Plug, Server, HardDrive } from '@lucide/vue'
 import { msg } from '../services/message'
-import { isWebServerMode, pickAndStageLocalFileInBrowser } from '../services/webSftpBridge'
+import { isWebServerMode, openExternalUrl, pickAndStageLocalFileInBrowser } from '../services/webSftpBridge'
 
 // Headless server deployments hide OS-bound features (window controls,
 // MCP server exposure); resolve once at setup and reuse in templates.

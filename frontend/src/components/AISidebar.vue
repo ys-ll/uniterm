@@ -358,6 +358,7 @@ import {
 import { useNativeFileDrop } from '../composables/useFilePanel'
 import { isMobilePlatform } from '../utils/platform'
 import { tryAndroidSave } from '../utils/androidSave'
+import { saveBase64InWebServerMode } from '../services/webSftpBridge'
 import AIMessage from './AIMessage.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
@@ -947,6 +948,9 @@ async function onMsgCtxExport() {
       if (androidOutcome === 'saved') ElMessage.success(t('ai.exportDone', { name: s.name }))
       return
     }
+    // Web-server mode: no native save dialog — hand the payload to the
+    // browser's download manager instead.
+    if (await saveBase64InWebServerMode(`${safe}.md`, 'text/markdown', b64)) return
     const path = await SaveFileDialogFiltered(t('ai.exportMd'), `${safe}.md`, 'Markdown File', '*.md')
     if (!path) return
     await WriteFileBase64(path, b64)

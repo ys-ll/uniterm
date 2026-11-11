@@ -11,6 +11,7 @@ import {
   OpenPathInExplorer,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { tryAndroidSave } from '../utils/androidSave'
+import { saveBase64InWebServerMode } from '../services/webSftpBridge'
 import { msg } from '../services/message'
 import { usePanelStore } from '../stores/panelStore'
 import { queuedSessionWrite } from '../services/sessionWriter'
@@ -80,6 +81,9 @@ export function useTerminalRecorder(options: UseTerminalRecorderOptions) {
         // (unsupported) native save dialog.
         const androidOutcome = await tryAndroidSave('terminal.txt', 'text/plain', b64)
         if (androidOutcome !== 'fallback') return
+        // Web-server mode: no native save dialog — hand the payload to the
+        // browser's download manager instead.
+        if (await saveBase64InWebServerMode('terminal.txt', 'text/plain', b64)) return
         const filePath = await SaveFileDialog('terminal.txt')
         if (!filePath) return
         await WriteFileBase64(filePath, b64)

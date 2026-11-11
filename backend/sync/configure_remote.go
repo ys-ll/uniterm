@@ -19,6 +19,7 @@ func (s *SyncService) ConfigureRepoRemote(backend string, remote RemoteConfig, s
 	defer s.mu.Unlock()
 
 	if err := s.requireUnlocked(); err != nil {
+		return nil, err
 	}
 
 	// Carry over this device's existing scope/auto-sync (empty on first

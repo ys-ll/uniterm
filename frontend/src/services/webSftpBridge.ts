@@ -9,6 +9,7 @@
  * 4. Multi-user session inspection, user management (admin), and logout helpers
  */
 
+import { Browser } from '@wailsio/runtime'
 import { setLocalTerminalSupport } from '../utils/platform'
 
 export interface WebModeStatus {
@@ -269,6 +270,69 @@ export async function isWebServerMode(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Opens an external URL. Desktop shells out to the OS default browser via
+ * the Wails runtime; web-server mode opens a new tab in the user's own
+ * browser (Browser.OpenURL would try to spawn xdg-open inside the headless
+ * container, which fails silently — issue #1423).
+ */
+export async function openExternalUrl(url: string): Promise<void> {
+  if (await isWebServerMode()) {
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  await Browser.OpenURL(url);
+}
+
+/**
+ * Hands bytes to the browser's download manager as a Blob — the web-server
+ * mode replacement for the native save-file dialog (which the headless
+ * build refuses with "file dialogs not available in server mode"). There is
+ * no location picker; the browser decides where downloads land, and the
+ * given name only seeds the suggested filename.
+ */
+export function saveFileInBrowser(fileName: string, mimeType: string, data: Uint8Array | string): void {
+  const blob =
+    typeof data === 'string'
+      ? new Blob([data], { type: mimeType })
+      : new Blob([data.slice()], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName.replace(/[\\/]/g, '_');
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  setTimeout(() => {
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
+/** Decodes a base64 payload (Go bindings carry []byte as base64 strings) and triggers a browser download. */
+export function saveBase64FileInBrowser(fileName: string, mimeType: string, base64: string): void {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  saveFileInBrowser(fileName, mimeType, bytes);
+}
+
+/**
+ * Web-server-mode save-file flow for the common "native save dialog →
+ * WriteFileBase64" pattern: hands the base64 payload to the browser's
+ * download manager and returns true. Returns false on desktop/Android so
+ * callers keep their existing dialog/picker flows untouched.
+ */
+export async function saveBase64InWebServerMode(fileName: string, mimeType: string, base64: string): Promise<boolean> {
+  if (!(await isWebServerMode())) {
+    return false;
+  }
+  saveBase64FileInBrowser(fileName, mimeType, base64);
+  return true;
 }
 
 /**

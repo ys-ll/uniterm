@@ -133,8 +133,10 @@
           {{ t('netscan.title') }}
         </MenuItem>
 
-        <!-- 本地服务（右上角工具入口） -->
-        <MenuItem @click="openLocalServices">
+        <!-- 本地服务（右上角工具入口）。Server deployments hide it: the
+             servers bind inside the container and share its filesystem, so
+             "local" files/fports are not the browser user's machine. -->
+        <MenuItem v-if="!webServerMode" @click="openLocalServices">
           {{ t('localsrv.title') }}
         </MenuItem>
 
@@ -150,8 +152,9 @@
         <MenuItem :shortcut="menuShortcut('openSettings')" @click="openCategory('basic')">{{ t('settings.title') }}</MenuItem>
         <MenuItem @click="openCategory('sync')">{{ t('settings.sync') }}</MenuItem>
         <MenuItem @click="openCategory('about')">{{ t('settings.about') }}</MenuItem>
-        <!-- In-app update download is desktop-only -->
-        <MenuItem v-if="!isMobilePlatform(platform.value)" @click="checkUpdate">{{ t('settings.checkUpdate') }}</MenuItem>
+        <!-- In-app update download is desktop-only; server deployments update
+             by pulling a new image and the backend refuses the call. -->
+        <MenuItem v-if="!isMobilePlatform(platform.value) && !webServerMode" @click="checkUpdate">{{ t('settings.checkUpdate') }}</MenuItem>
       </Menu>
 
       <ImportDialog v-model:visible="showImportDialog" />

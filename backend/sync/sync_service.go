@@ -126,6 +126,17 @@ func (s *SyncService) SetPasswordStore(ps PasswordStore) {
 	s.passwordStore = ps
 }
 
+// SetSecretBackend swaps the keychain's backing storage. Server builds wire
+// an encrypted-file store here: the container has no OS keychain (no Secret
+// Service D-Bus), so every platform-keychain write would fail.
+func (s *SyncService) SetSecretBackend(backend SecretStore) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.keychain != nil {
+		s.keychain.backend = backend
+	}
+}
+
 // SetStores wires the config-exchange registry (SyncableStore). Assembled
 // in app.go — the only place that imports both sync and store. nil until
 // set; sync then skips config exchange instead of touching files itself.

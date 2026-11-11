@@ -16,11 +16,21 @@ const tunnelsFileName = "tunnels.json"
 type TunnelStore struct {
 	mu            sync.Mutex
 	configDir     string
+	passwordStore PasswordStore
 	lastSavedHash string // F-105 skip state (pre-encryption content hash)
 }
 
 func NewTunnelStore(configDir string) *TunnelStore {
 	return &TunnelStore{configDir: configDir}
+}
+
+// SetPasswordStore sets the external password store used to encrypt the
+// upstream proxy password (manifest path tunnels.*.upstream.pass). Once set,
+// existing plaintext fields are lazily re-encrypted on the next save.
+func (s *TunnelStore) SetPasswordStore(ps PasswordStore) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.passwordStore = ps
 }
 
 func (s *TunnelStore) filePath() string {
@@ -31,15 +41,28 @@ func (s *TunnelStore) filePath() string {
 func (s *TunnelStore) Save(data session.TunnelStoreData) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	h, err := saveEncryptedFile(tunnelsFileName, s.filePath(), &data, nil, s.lastSavedHash)
+	h, err := saveEncryptedFile(tunnelsFileName, s.filePath(), &data, s.passwordStore, s.lastSavedHash)
 	s.lastSavedHash = h
+	return err
+}
+
+// ForceSave bypasses the F-105 hash-skip. Used by re-keying: the plaintext is
+// unchanged, so the skip would otherwise swallow the re-encryption and leave
+// the file under the old key.
+func (s *TunnelStore) ForceSave(data session.TunnelStoreData) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, err := saveEncryptedFile(tunnelsFileName, s.filePath(), &data, s.passwordStore, "")
+	if err == nil {
+		s.lastSavedHash = h
+	}
 	return err
 }
 
 func (s *TunnelStore) Load() (session.TunnelStoreData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out, _, hash, existed, err := loadEncryptedFile[session.TunnelStoreData](tunnelsFileName, s.filePath(), nil)
+	out, _, hash, existed, err := loadEncryptedFile[session.TunnelStoreData](tunnelsFileName, s.filePath(), s.passwordStore)
 	if !existed {
 		return session.TunnelStoreData{Version: 1, Groups: []session.TunnelGroup{}, Tunnels: []session.Tunnel{}}, nil
 	}

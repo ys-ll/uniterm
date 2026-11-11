@@ -169,6 +169,7 @@ import { useNativeFileDrop } from '../composables/useFilePanel'
 import { connectFileMenuKey } from '../utils/fileTransferUtils'
 import { isMobilePlatform } from '../utils/platform'
 import { tryAndroidSave } from '../utils/androidSave'
+import { openExternalUrl, saveBase64InWebServerMode } from '../services/webSftpBridge'
 import { applyMobileCtrl } from '../utils/mobileCtrlKey'
 import { msg } from '../services/message'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -223,7 +224,7 @@ import ZmodemTransfer from './ZmodemTransfer.vue'
 import TerminalScreenPreview from './TerminalScreenPreview.vue'
 import RecordList from './RecordList.vue'
 import { getSessionRecorder, maybeWarnSensitive } from '../services/terminalRecorder'
-import { Browser, Events } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
 import type { ISearchOptions } from '@xterm/addon-search'
 import { CaseSensitive, ChevronUp, ChevronDown, Regex, WholeWord, X } from '@lucide/vue'
 
@@ -920,6 +921,9 @@ async function exportContent() {
       // (unsupported) native save dialog.
       const androidOutcome = await tryAndroidSave('terminal.txt', 'text/plain', b64)
       if (androidOutcome !== 'fallback') return
+      // Web-server mode: no native save dialog — hand the payload to the
+      // browser's download manager instead.
+      if (await saveBase64InWebServerMode('terminal.txt', 'text/plain', b64)) return
       const filePath = await SaveFileDialog('terminal.txt')
       if (!filePath) return
       await WriteFileBase64(filePath, b64)
@@ -1332,9 +1336,9 @@ onMounted(() => {
   // Load WebLinksAddon per-component (has custom callbacks)
   let hoverEl: HTMLDivElement | null = null
   const webLinksAddon = new WebLinksAddon(
-    (event, uri) => {
+    async (event, uri) => {
       if (event.ctrlKey || event.metaKey) {
-        Browser.OpenURL(uri)
+        await openExternalUrl(uri)
       }
     },
     {

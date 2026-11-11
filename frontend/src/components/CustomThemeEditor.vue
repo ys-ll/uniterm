@@ -95,7 +95,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { msg } from '../services/message'
-import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText } from '../services/webSftpBridge'
+import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText, saveBase64InWebServerMode } from '../services/webSftpBridge'
 import { Upload, Download } from '@lucide/vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
@@ -263,6 +263,9 @@ async function onExport() {
     msg.error(t('theme.exportFailed'))
     return
   }
+  // Web-server mode: no native save dialog — hand the payload to the
+  // browser's download manager instead.
+  if (await saveBase64InWebServerMode(defaultName, 'text/plain', btoa(xml))) return
   let path: string
   try {
     path = await SaveFileDialogFiltered(t('theme.exportItermcolors'), defaultName, 'iTerm2 Color Preset', '*.itermcolors')

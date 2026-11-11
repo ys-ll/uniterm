@@ -65,7 +65,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Browser } from '@wailsio/runtime'
+import { openExternalUrl } from '../services/webSftpBridge'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { useI18n, locale } from '../i18n'
 import { renderMarkdownHtml, sanitizeRenderedHtml } from '../utils/markdown'
@@ -101,7 +101,7 @@ const changelogHtml = computed(() => {
 const releaseUrl = computed(() => updateCheck.updateInfo?.releaseUrl || '')
 
 function openRelease() {
-  if (releaseUrl.value) Browser.OpenURL(releaseUrl.value)
+  if (releaseUrl.value) openExternalUrl(releaseUrl.value)
 }
 
 function fmtSize(bytes: number): string {

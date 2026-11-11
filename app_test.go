@@ -380,6 +380,7 @@ type rekeyHarness struct {
 	proxyStore    *store.ProxyStore
 	aiStore       *store.AIConfigStore
 	mcpStore      *store.MCPClientStore
+	tunnelStore   *store.TunnelStore
 }
 
 func newRekeyHarness(t *testing.T, startMode, startPass string) rekeyHarness {
@@ -423,10 +424,13 @@ func newRekeyHarness(t *testing.T, startMode, startPass string) rekeyHarness {
 	aiStore.SetPasswordStore(cs)
 	mcpStore := store.NewMCPClientStore(dir)
 	mcpStore.SetPasswordStore(cs)
+	tunnelStore := store.NewTunnelStore(dir)
+	tunnelStore.SetPasswordStore(cs)
 
 	h := rekeyHarness{dir: dir, kc: kc, cs: cs, connStore: connStore,
 		settingsStore: settingsStore, identStore: identStore,
-		proxyStore: proxyStore, aiStore: aiStore, mcpStore: mcpStore}
+		proxyStore: proxyStore, aiStore: aiStore, mcpStore: mcpStore,
+		tunnelStore: tunnelStore}
 	// Seed one encrypted secret into every manifest file.
 	if err := connStore.Save(session.ConnectionStoreData{Connections: []session.ConnectionConfig{{
 		ID: "c1", Type: "ssh", Host: "h", Port: 22, AuthType: "password", Password: "pw-conn"}}}); err != nil {
@@ -451,6 +455,13 @@ func newRekeyHarness(t *testing.T, startMode, startPass string) rekeyHarness {
 	if err := mcpStore.Save([]store.MCPClientConfig{{Name: "external", Transport: store.MCPTransportStreamableHTTP, URL: "http://localhost/mcp", Headers: map[string]string{"Authorization": "pw-mcp"}}}); err != nil {
 		t.Fatal(err)
 	}
+	if err := tunnelStore.Save(session.TunnelStoreData{Tunnels: []session.Tunnel{{
+		ID: "t1", Name: "tunnel-1", Mode: session.TunnelLocal, SSHConnID: "c1",
+		ListenHost: "127.0.0.1", ListenPort: 1081,
+		Upstream: &session.SocksProxy{Host: "127.0.0.1", Port: 1080, Pass: "pw-tunnel"},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
 	return h
 }
 
@@ -458,7 +469,8 @@ func (h rekeyHarness) app() *App {
 	return &App{dataDir: h.dir, credentialStore: h.cs,
 		connectionStore: h.connStore, settingsStore: h.settingsStore,
 		identityStore: h.identStore, proxyStore: h.proxyStore,
-		aiConfigStore: h.aiStore, mcpClientStore: h.mcpStore}
+		aiConfigStore: h.aiStore, mcpClientStore: h.mcpStore,
+		tunnelStore: h.tunnelStore}
 }
 
 // assertAllFilesDecryptUnderKey reads every manifest secret file and checks
@@ -469,6 +481,13 @@ func assertAllFilesDecryptUnderKey(t *testing.T, dir string, files []string, key
 	for _, f := range files {
 		raw, err := os.ReadFile(filepath.Join(dir, f))
 		if err != nil {
+			if os.IsNotExist(err) {
+				// A manifest file that was never written holds no secrets —
+				// every manifest consumer (reset blanking, secret counting)
+				// treats a missing file the same way. sync-keychain.json only
+				// exists on server builds once sync is configured.
+				continue
+			}
 			t.Fatalf("%s: %v", f, err)
 		}
 		s := string(raw)

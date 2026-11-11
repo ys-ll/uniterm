@@ -14,7 +14,8 @@ import { useSessionStore } from '../stores/sessionStore'
 import { stripCursorBlink } from '../utils/cursor'
 import { formatFontFamily } from '../utils/formatFontFamily'
 import { resolveXtermBackground, applyTerminalBgVar, resolveTerminalThemeName } from './useTerminalTheme'
-import { Browser, Events } from '@wailsio/runtime'
+import { Events } from '@wailsio/runtime'
+import { openExternalUrl } from '../services/webSftpBridge'
 import type { CustomTerminalTheme } from '../types/settings'
 
 export interface UseTerminalOptions {
@@ -578,7 +579,7 @@ export function useTerminal(
     const webLinksAddon = new WebLinksAddon(
       (event, uri) => {
         if (event.ctrlKey || event.metaKey) {
-          Browser.OpenURL(uri)
+          openExternalUrl(uri)
         }
       },
       {
