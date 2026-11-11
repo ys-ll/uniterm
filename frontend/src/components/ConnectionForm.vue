@@ -966,7 +966,7 @@ async function scanSerialPorts() {
   }
 }
 
-const baudRatePresets = [300, 1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
+const baudRatePresets = [300, 1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200, 230400, 460800, 921600, 1000000, 1500000, 2000000, 3000000, 4000000]
 
 function queryBaudRateSuggestions(queryString: string, cb: (results: { value: string }[]) => void) {
   const suggestions = baudRatePresets
