@@ -128,3 +128,5 @@ replace github.com/unixshells/mosh-go v0.5.2 => github.com/ys-ll/mosh-go v0.0.0-
 replace github.com/rhnvrm/simples3 => github.com/ys-ll/simples3 v0.0.0-20260930081831-3357c14e91bd
 
 replace golang.org/x/crypto => github.com/ys-ll/crypto v0.57.1-0.20260922023551-18e0be45963e
+
+replace github.com/wailsapp/wails/v3 => github.com/ys-ll/wails/v3 v3.0.0-20261111103830-1108f3295e66
