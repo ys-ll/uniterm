@@ -12,6 +12,13 @@ export interface PasteTarget {
   scrollToBottom: () => void
 }
 
+/** True when the text would execute as more than one command line. A single
+ * trailing newline is ignored — copying one command out of an editor usually
+ * carries one, and prompting for it would be noise (issue 1370). */
+export function isMultilinePaste(text: string): boolean {
+  return text.replace(/\n+$/, '').includes('\n')
+}
+
 /** Normalize line endings: \r\n -> \n, then drop leftover \r (Windows
  * clipboard). Keeps multi-line pastes from doubling newlines in vim. */
 export function normalizePastedText(text: string): string {

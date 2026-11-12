@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { normalizePastedText, bracketPaste, pasteWithScroll } from './terminalPaste'
+import { normalizePastedText, bracketPaste, pasteWithScroll, isMultilinePaste } from './terminalPaste'
 import type { PasteTarget } from './terminalPaste'
 
 function mkTarget(overrides: Partial<PasteTarget> = {}): PasteTarget & { scrollToBottom: ReturnType<typeof vi.fn> } {
@@ -19,6 +19,21 @@ describe('normalizePastedText', () => {
 
   it('leaves plain text untouched', () => {
     expect(normalizePastedText('ls -la')).toBe('ls -la')
+  })
+})
+
+describe('isMultilinePaste', () => {
+  it('detects text with multiple lines', () => {
+    expect(isMultilinePaste('a\nb')).toBe(true)
+    expect(isMultilinePaste('a\nb\nc')).toBe(true)
+  })
+
+  // Copying a single command out of an editor usually carries one trailing
+  // newline — that must not trigger the multi-line confirmation.
+  it('ignores trailing newlines', () => {
+    expect(isMultilinePaste('ls -la')).toBe(false)
+    expect(isMultilinePaste('ls -la\n')).toBe(false)
+    expect(isMultilinePaste('ls -la\n\n')).toBe(false)
   })
 })
 
