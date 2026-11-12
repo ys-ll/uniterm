@@ -30,6 +30,20 @@ const (
 	defaultOutputCap     = DefaultMaxOutput * 4
 	defaultJobTTL        = 10 * time.Minute
 	defaultMaxConcurrent = 8
+
+	// takeoverGrace is how long a still-running foreground job may hold the
+	// session before a newer Start supersedes it instead of failing with
+	// ErrSessionBusy. Without it, a command whose completion marker never
+	// arrives (TUI program, command typed into a non-shell prompt, user
+	// Ctrl+C mid-command) wedges the AI's terminal until the job TTL expires.
+	takeoverGrace = time.Minute
+	// takeoverSettle is the pause between the supersede interrupt and the new
+	// command being typed, so the shell processes the SIGINT first and the new
+	// bytes are not swallowed by the dying command's stdin.
+	takeoverSettle = 200 * time.Millisecond
+	// interruptWriteTimeout bounds the Ctrl+C write: a wedged PTY (SSH channel
+	// window exhausted by a stuck remote) must never hold the session lock.
+	interruptWriteTimeout = 2 * time.Second
 )
 
 // Job is one foreground execution lifecycle. Background jobs are tracked by the
@@ -60,8 +74,12 @@ type Job struct {
 	finished   bool
 	completion *completionScanner
 	waitUntil  time.Time
-	observe    bool
-	released   bool // guarded by Registry.mu
+	// createdAt is the job's start time, used by the takeover rule: a newer
+	// Start may supersede a job that has held the session longer than the
+	// takeover grace, even while it still looks running.
+	createdAt time.Time
+	observe   bool
+	released  bool // guarded by Registry.mu
 }
 
 // Snapshot returns a consistent copy of the current output/state.
@@ -122,20 +140,32 @@ type Registry struct {
 	jobs    map[string]*Job
 	running int
 	// busy maps sessionID → running job id. One executor per session keeps
-	// the live terminal coherent (see ErrSessionBusy).
+	// the live terminal coherent (see ErrSessionBusy). A newer Start can
+	// still take the slot over when the holder is wedged (see start).
 	busy map[string]string
-	// newID is injectable for tests (deterministic ids); default uuid.
+	// newID and now are injectable for tests (deterministic ids and job ages);
+	// defaults are uuid and time.Now.
 	newID  func() string
+	now    func() time.Time
 	latest map[string]string
+	// Supersede/interrupt knobs, defaulted from the package constants; tests
+	// may shorten them to keep fast.
+	takeoverGrace         time.Duration
+	interruptWriteTimeout time.Duration
+	takeoverSettle        time.Duration
 }
 
 // NewRegistry builds an empty registry with the uuid id generator.
 func NewRegistry() *Registry {
 	return &Registry{
-		jobs:   make(map[string]*Job),
-		busy:   make(map[string]string),
-		latest: make(map[string]string),
-		newID:  func() string { return "fg-" + uuid.New().String() },
+		jobs:                  make(map[string]*Job),
+		busy:                  make(map[string]string),
+		latest:                make(map[string]string),
+		newID:                 func() string { return "fg-" + uuid.New().String() },
+		now:                   time.Now,
+		takeoverGrace:         takeoverGrace,
+		interruptWriteTimeout: interruptWriteTimeout,
+		takeoverSettle:        takeoverSettle,
 	}
 }
 
@@ -143,6 +173,14 @@ func NewRegistry() *Registry {
 // A supported shell acknowledges command return with a per-job nonce and exit
 // code. Silence and prompt text never count as completion. On a wait timeout
 // the tap and session lock remain active so Collect can resume without loss.
+//
+// When another foreground job already holds the session, Start normally fails
+// with ErrSessionBusy. If that holder is wedged — its first wait timed out, or
+// it has held the session longer than the takeover grace — the newer command
+// supersedes it instead: the old job is finished as killed with ErrSuperseded,
+// an interrupt is typed into the terminal (bounded by interruptWriteTimeout),
+// and after takeoverSettle the new command runs. This keeps a missed
+// completion marker from wedging the AI's terminal until the job TTL.
 func (r *Registry) Start(pty Pty, sessionID, command, newline string, hardLimit time.Duration, maxOutput int) (*Job, error) {
 	return r.StartWithScreen(pty, sessionID, command, newline, hardLimit, maxOutput, 0, 0)
 }
@@ -177,9 +215,14 @@ func (r *Registry) start(pty Pty, sessionID, command, newline string, hardLimit 
 		r.mu.Unlock()
 		return nil, ErrTooMany
 	}
+	var superseded *Job
 	if _, taken := r.busy[sessionID]; taken && !observe {
-		r.mu.Unlock()
-		return nil, ErrSessionBusy
+		holder := r.jobs[r.busy[sessionID]]
+		if !r.canTakeOverLocked(holder) {
+			r.mu.Unlock()
+			return nil, ErrSessionBusy
+		}
+		superseded = holder
 	}
 	r.running++
 
@@ -189,7 +232,8 @@ func (r *Registry) start(pty Pty, sessionID, command, newline string, hardLimit 
 		state:     StateRunning,
 		done:      make(chan struct{}),
 		exitCode:  -1,
-		waitUntil: time.Now().Add(hardLimit),
+		waitUntil: r.now().Add(hardLimit),
+		createdAt: r.now(),
 		observe:   observe,
 	}
 	wireCommand := command
@@ -212,10 +256,17 @@ func (r *Registry) start(pty Pty, sessionID, command, newline string, hardLimit 
 	}
 	r.jobs[job.ID] = job
 	if !observe {
+		// Reassign the busy marker to the new job even when superseding: the
+		// old job's release (below) only clears the marker when it still
+		// points at the old id, so the new job's slot survives.
 		r.busy[sessionID] = job.ID
 		r.latest[sessionID] = job.ID
 	}
 	r.mu.Unlock()
+
+	if superseded != nil {
+		r.supersede(pty, superseded)
+	}
 
 	if !pty.Alive() {
 		r.finish(job, StateSessionClosed, -1, ErrSessionClosed)
@@ -407,21 +458,99 @@ func (r *Registry) Interrupt(jobID string) error {
 	return nil
 }
 
+// canTakeOverLocked reports whether a newer Start may take the session slot
+// from holder instead of failing with ErrSessionBusy. Callers hold r.mu.
+// Two cases qualify: the holder's first wait already timed out (its completion
+// marker was missed, so the AI was told the command timed out and moved on),
+// or it has held the session longer than the takeover grace. Freshly started
+// jobs keep rejecting with ErrSessionBusy so genuinely concurrent tool calls
+// still serialize instead of killing each other.
+func (r *Registry) canTakeOverLocked(holder *Job) bool {
+	if holder == nil {
+		return false
+	}
+	holder.mu.Lock()
+	defer holder.mu.Unlock()
+	if holder.finished || holder.state == StateTimeout {
+		return true
+	}
+	return r.now().Sub(holder.createdAt) >= r.takeoverGrace
+}
+
+// supersede cancels the previous session holder: finish it as killed and stop
+// its command with a bounded interrupt write, then pause briefly so the shell
+// processes the SIGINT before the new command's bytes are typed. Runs outside
+// r.mu; the old job's release sees the busy marker already reassigned to the
+// new job and leaves it alone.
+func (r *Registry) supersede(pty Pty, old *Job) {
+	r.finish(old, StateKilled, -1, ErrSuperseded)
+	_ = writeInterruptWithTimeout(pty, r.interruptWriteTimeout)
+	time.Sleep(r.takeoverSettle)
+}
+
+// writeInterruptWithTimeout types Ctrl+C into the terminal, giving up on the
+// write after timeout. The goroutine leaks only when the PTY write is wedged
+// past the deadline — the bytes eventually fail or land on their own.
+func writeInterruptWithTimeout(pty Pty, timeout time.Duration) error {
+	errCh := make(chan error, 1)
+	go func() {
+		defer func() { _ = recover() }()
+		errCh <- pty.Write([]byte{3})
+	}()
+	select {
+	case err := <-errCh:
+		return err
+	case <-time.After(timeout):
+		return ErrWriteTimeout
+	}
+}
+
 // InterruptSession sends a terminal interrupt, then cancels the execution that
 // owned the session when the interrupt began. Snapshot before writing: the write
 // can synchronously complete that job, and a new job must not be cancelled.
-// A failed write leaves the existing execution tracked and locked.
+// The write is best-effort with a deadline, and the job is finished even when
+// the write fails or times out — a wedged PTY must not hold the session lock
+// (a blocked Ctrl+C used to leave the session busy with no way to recover).
 func (r *Registry) InterruptSession(sessionID string, sendInterrupt func() error) error {
 	r.mu.Lock()
 	job := r.jobs[r.busy[sessionID]]
 	r.mu.Unlock()
-	if err := sendInterrupt(); err != nil {
-		return err
-	}
+	err := writeInterruptWithTimeout(
+		writeFnPty{write: func([]byte) error { return sendInterrupt() }},
+		r.interruptWriteTimeout,
+	)
 	if job != nil {
 		r.finish(job, StateKilled, -1, ErrInterrupted)
 	}
-	return nil
+	return err
+}
+
+// writeFnPty adapts a bare write function to the Pty surface so the bounded
+// interrupt helper can drive both real sessions and bare sendInterrupt funcs.
+type writeFnPty struct{ write func([]byte) error }
+
+func (w writeFnPty) Write(data []byte) error { return w.write(data) }
+func (w writeFnPty) OnData(cb func([]byte)) (off func()) {
+	return func() {}
+}
+func (w writeFnPty) OnStatusChange(cb func(string)) (off func()) {
+	return func() {}
+}
+func (w writeFnPty) Alive() bool { return true }
+
+// UserInput reports direct keyboard input from the user on a session whose
+// foreground job is active. Any manual keystroke breaks the job's coherence —
+// the bytes land in the running command's stdin and the completion marker may
+// never arrive — so the job is finished as killed and the session lock freed.
+// The caller still writes the user's bytes to the terminal in the normal way;
+// no extra interrupt is sent here.
+func (r *Registry) UserInput(sessionID string) {
+	r.mu.Lock()
+	job := r.jobs[r.busy[sessionID]]
+	r.mu.Unlock()
+	if job != nil {
+		r.finish(job, StateKilled, -1, ErrUserInterrupted)
+	}
 }
 
 // Collect resumes waiting on the original job, including buffered output
@@ -528,6 +657,16 @@ var (
 	ErrSessionClosed = errors.New("session closed")
 	ErrUnknownJob    = errors.New("job not found or expired")
 	ErrInterrupted   = errors.New("job interrupted")
+	// ErrSuperseded: the job was cancelled because a newer command took over
+	// the session (the holder was wedged — timed out or past the takeover
+	// grace — and the AI moved on to a new command).
+	ErrSuperseded = errors.New("superseded by a newer command")
+	// ErrUserInterrupted: the user typed into the terminal directly while a
+	// foreground job owned it, breaking the job's output coherence.
+	ErrUserInterrupted = errors.New("interrupted by user keyboard input")
+	// ErrWriteTimeout: the interrupt write did not complete within the
+	// deadline (wedged PTY); the job is finished regardless.
+	ErrWriteTimeout = errors.New("interrupt write timed out")
 	// ErrSessionBusy: another execution (an earlier foreground job) is still
 	// typing into / tapping this session. One executor per session keeps the
 	// live terminal coherent — two agents interleaving keystrokes corrupts

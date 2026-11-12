@@ -202,6 +202,7 @@ func (s *Server) registerJobTools(srv *mcp.Server) {
 			Description: "Run a command by typing it into the user's live terminal. Works on any connected terminal (SSH, local, telnet, serial). " +
 				"Completion requires a shell completion signal with exit code. Silence never means completion; unsupported shells wait for timeout. " +
 				"Set timeout_ms from the expected duration (see its schema). Returns a job_id; poll with uniterm_exec_result(job_id), stop with uniterm_interrupt(job_id). " +
+				"A new command on the same session automatically stops a timed-out or long-running previous one (state killed) instead of failing busy. " +
 				"Check the screen with uniterm_capture first when the command may hit an interactive prompt, and answer prompts with uniterm_send_key.",
 		}, s.toolUnitermExecFg)
 		mcp.AddTool(srv, &mcp.Tool{

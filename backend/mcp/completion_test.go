@@ -119,9 +119,10 @@ func TestTimeoutKeepsPartialLineAndOriginalSessionLock(t *testing.T) {
 	if string(out) != "partial" {
 		t.Fatalf("partial output lost: %q", out)
 	}
-	if _, err := r.Start(p, "s", "next", "\n", time.Second, 0); err != ErrSessionBusy {
-		t.Fatalf("running command unlocked: %v", err)
-	}
+	// The wait timeout keeps the session lock, but a NEW command supersedes
+	// the timed-out job (see TestTakeOverSupersedesTimedOutJob); this test
+	// exercises the no-new-command path: the tap stays installed, so output
+	// emitted after the timeout is still collected when Collect resumes.
 	p.emit(" continued\r\nlate line\r\n")
 	if resumed, ok := r.Collect("s", time.Second); !ok || resumed != j {
 		t.Fatal("did not resume original job")

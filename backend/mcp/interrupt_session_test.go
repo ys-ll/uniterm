@@ -44,21 +44,58 @@ func TestInterruptSessionReleasesUnknownShell(t *testing.T) {
 	}
 }
 
-func TestInterruptSessionFailedWriteKeepsLock(t *testing.T) {
+func TestInterruptSessionFailedWriteReleasesLock(t *testing.T) {
 	r := NewRegistry()
 	p := &fakePty{alive: true}
 	j, err := r.Start(p, "s", "sleep 60", "\n", time.Minute, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = r.Interrupt(j.ID) })
 	want := errors.New("write failed")
 	if err := r.InterruptSession("s", func() error { return want }); err != want {
 		t.Fatalf("lost write error: %v", err)
 	}
-	if _, err := r.Start(p, "s", "next", "\n", time.Second, 0); err != ErrSessionBusy {
-		t.Fatalf("failed interrupt released lock: %v", err)
+	// A failed interrupt write must not hold the session lock: the job is
+	// finished as killed anyway, so a wedged PTY cannot wedge the AI.
+	if _, _, _, st, jerr := j.Snapshot(); st != StateKilled || jerr != ErrInterrupted {
+		t.Fatalf("state=%s err=%v, want killed/%v", st, jerr, ErrInterrupted)
 	}
+	next, err := r.Start(p, "s", "next", "\n", time.Second, 0)
+	if err != nil {
+		t.Fatalf("lock not released after failed interrupt write: %v", err)
+	}
+	_ = r.Interrupt(next.ID)
+}
+
+func TestInterruptSessionHangingWriteReleasesLock(t *testing.T) {
+	r := NewRegistry()
+	r.interruptWriteTimeout = 100 * time.Millisecond
+	p := &fakePty{alive: true}
+	j, err := r.Start(p, "s", "sleep 60", "\n", time.Minute, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The write never returns (wedged PTY): InterruptSession must cap it and
+	// still release the session lock.
+	start := time.Now()
+	err = r.InterruptSession("s", func() error {
+		time.Sleep(time.Minute)
+		return nil
+	})
+	if err != ErrWriteTimeout {
+		t.Fatalf("err=%v, want %v", err, ErrWriteTimeout)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("interrupt blocked %v", elapsed)
+	}
+	if _, _, _, st, _ := j.Snapshot(); st != StateKilled {
+		t.Fatalf("state=%s, want killed", st)
+	}
+	next, err := r.Start(p, "s", "next", "\n", time.Second, 0)
+	if err != nil {
+		t.Fatalf("lock not released after hanging interrupt write: %v", err)
+	}
+	_ = r.Interrupt(next.ID)
 }
 
 func TestInterruptSessionDoesNotCancelOtherOrReplacementJob(t *testing.T) {

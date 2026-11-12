@@ -573,6 +573,13 @@ func (a *App) SessionWrite(sessionID string, data string) error {
 	if !ok {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
+	// Manual keystrokes break a foreground AI job's coherence: the bytes land
+	// in the running command's stdin and its completion marker may never
+	// arrive, wedging the session busy until the job TTL. Finish the job (the
+	// output stays pollable by id) and free the lock before the user's bytes
+	// reach the terminal; no extra interrupt is sent — the user's own Ctrl+C
+	// is one.
+	a.jobRegistry().UserInput(sessionID)
 	return s.Write([]byte(data))
 }
 

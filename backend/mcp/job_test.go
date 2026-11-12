@@ -254,6 +254,103 @@ func TestConcurrentStartsShareSessionLock(t *testing.T) {
 	_ = r.Interrupt(id)
 }
 
+// A command typed after the previous one's wait timed out supersedes it: the
+// wedged job is finished as killed, an interrupt reaches the terminal, and the
+// new command runs — a missed completion marker can no longer wedge the
+// session until the job TTL.
+func TestTakeOverSupersedesTimedOutJob(t *testing.T) {
+	r := NewRegistry()
+	r.takeoverSettle = 0
+	p := &fakePty{alive: true}
+	old, err := r.Start(p, "s", "sleep 60", "\n", 40*time.Millisecond, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, old, StateTimeout)
+
+	next, err := r.Start(p, "s", "next", "\n", time.Second, 0)
+	if err != nil {
+		t.Fatalf("timed-out job did not yield the session: %v", err)
+	}
+	if _, _, _, st, jerr := old.Snapshot(); st != StateKilled || jerr != ErrSuperseded {
+		t.Fatalf("old job state=%q err=%v, want killed/%v", st, jerr, ErrSuperseded)
+	}
+	// First the original command, then the supersede interrupt, then the new
+	// command.
+	if len(p.wrote) != 3 || p.wrote[1] != "\x03" || !strings.Contains(p.wrote[2], "next") {
+		t.Fatalf("unexpected writes: %q", p.wrote)
+	}
+	_ = r.Interrupt(next.ID)
+}
+
+// Same takeover rule for a job that is still nominally running but has held
+// the session longer than the takeover grace (marker will never arrive —
+// typed into a TUI or a non-shell prompt).
+func TestTakeOverGraceSupersedesLongHeldSession(t *testing.T) {
+	r := NewRegistry()
+	r.takeoverGrace = 50 * time.Millisecond
+	r.takeoverSettle = 0
+	p := &fakePty{alive: true}
+	old, err := r.Start(p, "s", "vim", "\n", time.Minute, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(60 * time.Millisecond)
+
+	next, err := r.Start(p, "s", "next", "\n", time.Second, 0)
+	if err != nil {
+		t.Fatalf("long-held job did not yield the session: %v", err)
+	}
+	if _, _, _, st, jerr := old.Snapshot(); st != StateKilled || jerr != ErrSuperseded {
+		t.Fatalf("old job state=%q err=%v, want killed/%v", st, jerr, ErrSuperseded)
+	}
+	_ = r.Interrupt(next.ID)
+}
+
+// Freshly started jobs keep rejecting with ErrSessionBusy so genuinely
+// concurrent tool calls serialize instead of killing each other.
+func TestTakeOverDoesNotKillFreshRunningJob(t *testing.T) {
+	r := NewRegistry()
+	r.takeoverSettle = 0
+	p := &fakePty{alive: true}
+	old, err := r.Start(p, "s", "sleep 60", "\n", time.Minute, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Interrupt(old.ID) })
+	if _, err := r.Start(p, "s", "next", "\n", time.Second, 0); err != ErrSessionBusy {
+		t.Fatalf("fresh running job superseded: %v", err)
+	}
+	if _, _, _, st, _ := old.Snapshot(); st != StateRunning {
+		t.Fatalf("old job state=%q, want running", st)
+	}
+}
+
+// Manual keyboard input on the session finishes the foreground job (the
+// keystrokes land in the running command's stdin, breaking its completion
+// coherence) and frees the lock; input on a session without a job is a no-op.
+func TestUserInputKillsForegroundJob(t *testing.T) {
+	r := NewRegistry()
+	p := &fakePty{alive: true}
+	j, err := r.Start(p, "s", "sleep 60", "\n", time.Minute, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.UserInput("s")
+	if _, _, _, st, jerr := j.Snapshot(); st != StateKilled || jerr != ErrUserInterrupted {
+		t.Fatalf("state=%q err=%v, want killed/%v", st, jerr, ErrUserInterrupted)
+	}
+	next, err := r.Start(p, "s", "next", "\n", time.Second, 0)
+	if err != nil {
+		t.Fatalf("lock not released after user input: %v", err)
+	}
+	t.Cleanup(func() { _ = r.Interrupt(next.ID) })
+	r.UserInput("other-session")
+	if _, _, _, st, _ := next.Snapshot(); st != StateRunning {
+		t.Fatalf("unrelated session input killed the job: state=%q", st)
+	}
+}
+
 func TestOutputCapPreservesPollingOffsets(t *testing.T) {
 	j := &Job{}
 	j.appendLocked(&j.stdout, []byte("prefix"))

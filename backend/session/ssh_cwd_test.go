@@ -520,15 +520,15 @@ func TestReproShellDetectFailStillReturnsResult(t *testing.T) {
 	}
 }
 
-// Interrupt semantics: when a command genuinely keeps running past the
-// deadline, the tool call returns a timeout while the watcher keeps the
-// session lock until real completion. interrupt_command must close that
-// watcher (Registry.Interrupt) alongside sending Ctrl+C, or the lock is held
-// until the TTL even though the process is already dead.
+// Takeover semantics over a real SSH session: when a command genuinely keeps
+// running past the deadline, the watcher keeps the session lock until real
+// completion — but a NEW command typed after the timeout supersedes the wedged
+// job instead of failing busy, so a missed completion marker can never wedge
+// the AI's terminal until the job TTL.
 //
 // The mock never executes the eval wrapper's printf, so the known-shell
 // session plays the genuinely-still-running command here.
-func TestReproInterruptReleasesSessionLock(t *testing.T) {
+func TestTimedOutJobYieldsSessionToNewCommand(t *testing.T) {
 	fs := newTestCwdFS()
 	addr, _ := startCwdSSHServer(t, fs, "")
 	s := NewSSHSession("repro1307-interrupt")
@@ -556,16 +556,18 @@ func TestReproInterruptReleasesSessionLock(t *testing.T) {
 	}
 	waitState(mcp.StateTimeout)
 
-	if _, err := reg.Start(pty, s.ID(), `next`, "\n", time.Second, 64*1024); err != mcp.ErrSessionBusy {
-		t.Fatalf("expected busy while the command may still be running: %v", err)
-	}
-	if err := reg.Interrupt(j.ID); err != nil {
-		t.Fatalf("interrupt: %v", err)
-	}
-	next, err := reg.Start(pty, s.ID(), `next`, "\n", time.Second, 64*1024)
+	// A command typed after the timeout supersedes the wedged job instead of
+	// failing busy: the old job is finished as killed, an interrupt reaches
+	// the terminal (killing tail -f for real), and the new command runs.
+	next, err := reg.Start(pty, s.ID(), `echo after-timeout`, "\n", 2*time.Second, 64*1024)
 	if err != nil {
-		t.Fatalf("lock not released after interrupt: %v", err)
+		t.Fatalf("timed-out job did not yield the session: %v", err)
 	}
+	if _, _, _, st, jerr := j.Snapshot(); st != mcp.StateKilled || jerr != mcp.ErrSuperseded {
+		t.Fatalf("old job state=%q err=%v, want killed/%v", st, jerr, mcp.ErrSuperseded)
+	}
+	// The mock shell never acknowledges commands, so the replacement job ends
+	// in timeout like the original; the takeover itself is what's asserted.
 	_ = reg.Interrupt(next.ID)
 }
 
