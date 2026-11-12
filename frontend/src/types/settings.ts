@@ -114,6 +114,12 @@ export interface TerminalSettings {
   // Display template for the timestamp column. Tokenized: YYYY/YY (year),
   // MM/DD (month/day), HH/mm/ss (hour/minute/second), literals pass through.
   timestampFormat: string
+  // How the command-send panel delivers multi-line content (issue #1341):
+  // 'lines' converts each newline to Enter so every line executes (works on
+  // cmd/PowerShell too), 'bracketed' sends the whole block wrapped in
+  // bracketed-paste markers without executing — targets without bracketed
+  // paste enabled fall back to 'lines' per target. Defaults to 'lines'.
+  commandSendMode?: 'lines' | 'bracketed'
 }
 
 export interface AIModelConfig {
@@ -389,6 +395,7 @@ export const SIDEBAR_TAB_DEFAULTS: Record<string, boolean> = {
   quickCommands: true,
   history: true,
   personalization: true,
+  commandSend: true,
 }
 
 // Canonical sidebar tab order shared by the tab-strip context menu and the
@@ -401,13 +408,14 @@ export const SIDEBAR_TAB_ORDER: { key: string; labelKey: string }[] = [
   { key: 'quickCommands', labelKey: 'quickCommands.quickCommandsTab' },
   { key: 'history', labelKey: 'quickCommands.historyTab' },
   { key: 'personalization', labelKey: 'sidebar.personalization' },
+  { key: 'commandSend', labelKey: 'sidebar.commandSend' },
 ]
 
 // Default dock position per sidebar view: "sidebar" (left) or "bottom"
 // (docked panel under the tab area). Views absent from a saved
 // PanelLocations map fall back to these. Everything ships docked to the
-// left sidebar by default; the bottom panel starts empty and is only used
-// when the user moves views into it.
+// left sidebar by default; the bottom panel only starts non-empty because
+// the command-send panel targets batch sends there (issue #1341).
 export const PANEL_LOCATION_DEFAULTS: Record<string, 'sidebar' | 'bottom'> = {
   connections: 'sidebar',
   files: 'sidebar',
@@ -416,6 +424,7 @@ export const PANEL_LOCATION_DEFAULTS: Record<string, 'sidebar' | 'bottom'> = {
   tunnels: 'sidebar',
   quickCommands: 'sidebar',
   history: 'sidebar',
+  commandSend: 'bottom',
 }
 
 // Monitor sections with their default enabled state. Disabled sections are
@@ -483,7 +492,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     wordSeparator: '\\ :;~`!@#$%^&*()=+|[]{}\'",<>?',
     showLineNumbers: false,
     showTimestamps: false,
-    timestampFormat: 'HH:mm:ss'
+    timestampFormat: 'HH:mm:ss',
+    commandSendMode: 'lines'
   },
   ai: {
     maxTurns: 20,

@@ -639,6 +639,19 @@
             </div>
           </div>
 
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.commandSendMode') }}</div>
+              <div class="setting-desc">{{ t('settings.commandSendModeDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-select v-model="settingsStore.settings.terminal.commandSendMode" @change="settingsStore.save()">
+                <el-option :label="t('settings.commandSendModeLines')" value="lines" />
+                <el-option :label="t('settings.commandSendModeBracketed')" value="bracketed" />
+              </el-select>
+            </div>
+          </div>
+
           <div v-if="!isMobile" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.ctrlWheelZoom') }}</div>
