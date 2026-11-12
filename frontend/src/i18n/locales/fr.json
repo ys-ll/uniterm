@@ -387,6 +387,7 @@
   "sftp.fileStatus.done": "done",
   "sftp.fileStatus.failed": "failed",
   "sftp.connectError": "Échec de la connexion SFTP",
+  "sftp.scpSwitchHint": "Le sous-système SFTP de l'hôte est peut-être désactivé — passez le protocole de transfert à SCP dans les paramètres de connexion puis réessayez.",
   "sftp.reconnecting": "Connexion perdue, reconnexion…",
   "sftp.dropHere": "Déposer les fichiers ici",
   "sftp.followPath": "Suivre le chemin du terminal",

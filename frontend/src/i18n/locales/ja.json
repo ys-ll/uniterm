@@ -387,6 +387,7 @@
   "sftp.fileStatus.done": "done",
   "sftp.fileStatus.failed": "failed",
   "sftp.connectError": "SFTP 接続に失敗しました",
+  "sftp.scpSwitchHint": "このホストでは SFTP サブシステムが無効の可能性があります。接続設定でファイル転送プロトコルを SCP に切り替えて再試行してください。",
   "sftp.reconnecting": "接続が切断されました。再接続中…",
   "sftp.dropHere": "ここにファイルをドロップ",
   "sftp.followPath": "ターミナルのパスに従う",

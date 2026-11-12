@@ -387,6 +387,7 @@
   "sftp.fileStatus.done": "hoàn tất",
   "sftp.fileStatus.failed": "thất bại",
   "sftp.connectError": "Kết nối SFTP thất bại",
+  "sftp.scpSwitchHint": "Có thể máy chủ chưa bật subsystem SFTP — hãy chuyển giao thức truyền tệp sang SCP trong cấu hình kết nối rồi thử lại.",
   "sftp.reconnecting": "Mất kết nối, đang kết nối lại…",
   "sftp.dropHere": "Thả tệp vào đây",
   "sftp.followPath": "Theo đường dẫn terminal",

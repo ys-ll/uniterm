@@ -387,6 +387,7 @@
   "sftp.fileStatus.done": "done",
   "sftp.fileStatus.failed": "failed",
   "sftp.connectError": "Ошибка подключения SFTP",
+  "sftp.scpSwitchHint": "Возможно, на узле не включена подсистема SFTP — переключите протокол передачи на SCP в настройках подключения и повторите попытку.",
   "sftp.reconnecting": "Соединение потеряно, выполняется переподключение…",
   "sftp.dropHere": "Перетащите файлы сюда",
   "sftp.followPath": "Следовать за путём терминала",
