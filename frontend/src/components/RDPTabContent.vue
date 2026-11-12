@@ -407,7 +407,11 @@ async function startClient(proxyUrl: string, desktopSizeOverride?: RdpDesktopSiz
     const { username, domain } = splitDomainUser(props.config)
     const size = desktopSizeOverride ?? resolveDesktopSize()
     lastResizeRequest = desktopSizeOverride ?? null
-    rdpLog(`client start: tier=${activeQuality.value} res=${activeResolution.value} zoom=${zoom.value} size=${size.width}x${size.height} credssp=${activeCredSSP} displayControl=${isAdaptive()} gen=${generation}`)
+    lastScaleRequest = null
+    scaleSyncAttempts = 0
+    displayControlUsable = null
+    clearScaleSync()
+    rdpLog(`client start: tier=${activeQuality.value} res=${activeResolution.value} zoom=${zoom.value} size=${size.width}x${size.height} dpi=${localScalePercent()}% credssp=${activeCredSSP} displayControl=${isAdaptive()} gen=${generation}`)
 
     // proxyUrl: ws://127.0.0.1:<port>/<token> on desktop, or the same-origin
     // path /api/web/session-proxy/<token> in server mode — the token doubles
@@ -582,6 +586,7 @@ function teardownClient() {
   clearConnectTimer()
   stopClipboardPoll()
   clearResizeProbe()
+  clearScaleSync()
   pressedMouseButtons.clear()
   if (session) {
     try { session.shutdown() } catch (_) {}
@@ -1104,6 +1109,11 @@ let canvasObserver: MutationObserver | null = null
 let pixelRatioQuery: MediaQueryList | null = null
 let reconnecting = false
 let lastResizeRequest: RdpDesktopSize | null = null
+// Desktop scale percent reported over the Display Control channel with the
+// last resize, or null before the first send after (re)connect.
+let lastScaleRequest: number | null = null
+let scaleSyncTimer: ReturnType<typeof setTimeout> | null = null
+let scaleSyncAttempts = 0
 // Infer support from actual framebuffer changes, falling back to reconnect
 // when the server does not handle Display Control resize requests.
 let displayControlUsable: boolean | null = null
@@ -1130,6 +1140,42 @@ function currentDesktopSize(): RdpDesktopSize | null {
 function clearResizeProbe() {
   if (resizeProbeTimer !== null) clearTimeout(resizeProbeTimer)
   resizeProbeTimer = null
+}
+
+function clearScaleSync() {
+  if (scaleSyncTimer !== null) clearTimeout(scaleSyncTimer)
+  scaleSyncTimer = null
+}
+
+// The local scaling (devicePixelRatio mirrors the OS setting) as the RDPEDISP
+// desktop scale factor in percent. Reporting it makes the remote session
+// render its UI at the same physical size as local apps (mstsc DPI sync).
+function localScalePercent(): number {
+  return Math.min(500, Math.max(100, Math.round(displayPixelRatio.value * 100)))
+}
+
+// A scale-only resize has no observable feedback: the canvas keeps its size,
+// and a send racing the Display Control channel's post-connect negotiation is
+// silently dropped. Re-send a few times at the probe interval; redundant
+// sends are no-ops once the server has applied the scale.
+const SCALE_SYNC_RETRIES = 2
+const SCALE_SYNC_RETRY_MS = 2000
+function scheduleScaleSync(scale: number) {
+  clearScaleSync()
+  if (scaleSyncAttempts >= SCALE_SYNC_RETRIES) return
+  scaleSyncAttempts++
+  scaleSyncTimer = setTimeout(() => {
+    scaleSyncTimer = null
+    if (!session || status.value !== 'connected' || reconnecting) return
+    if (!isAdaptive() || lastScaleRequest !== scale) return
+    if (displayControlUsable === false) return
+    const target = adaptiveDesktopSize()
+    if (!target) return
+    try {
+      session.resize(target.width, target.height, scale)
+    } catch (_) {}
+    scheduleScaleSync(scale)
+  }, SCALE_SYNC_RETRY_MS)
 }
 
 function onPixelRatioChange() {
@@ -1187,17 +1233,45 @@ function requestAdaptiveResize() {
   if (!targetSize) return
   const { width, height } = targetSize
   const cur = currentDesktopSize()
-  if (cur?.width === width && cur.height === height) return
-  // Do not reconnect repeatedly if a server clamps/refuses this resolution.
-  if (lastResizeRequest?.width === width && lastResizeRequest.height === height) return
-  lastResizeRequest = { width, height }
-  clearResizeProbe()
+  const sizeChanged = cur?.width !== width || cur.height !== height
   if (displayControlUsable === false) {
+    // The server ignores Display Control: reconnecting at the new size is
+    // the only lever, and DPI sync is unavailable on that path. The scale
+    // must NOT bypass the size checks here — it would reconnect forever.
+    if (!sizeChanged) return
+    if (lastResizeRequest?.width === width && lastResizeRequest.height === height) return
+    lastResizeRequest = { width, height }
     reconnectWithSize(width, height)
     return
   }
+  // The scale rides along on every resize, and a scale-only send (geometry
+  // unchanged — e.g. right after connect, which already negotiated the final
+  // size) keeps the DPI in sync without touching the resolution.
+  const scale = localScalePercent()
+  const scaleChanged = lastScaleRequest !== scale
+  if (scaleChanged) {
+    lastScaleRequest = scale
+    scaleSyncAttempts = 0
+  }
+  if (!scaleChanged && !sizeChanged) return
+  // Do not reconnect repeatedly if a server clamps/refuses this resolution.
+  if (!scaleChanged && lastResizeRequest?.width === width && lastResizeRequest.height === height) return
+  lastResizeRequest = { width, height }
+  clearResizeProbe()
+  if (!sizeChanged) {
+    // Scale-only: a failure says nothing about Display Control size support,
+    // so keep the session instead of falling into the reconnect path.
+    try {
+      session.resize(width, height, scale)
+    } catch (e) {
+      rdpLog(`dpi scale update failed: ${String(e)}`)
+      return
+    }
+    scheduleScaleSync(scale)
+    return
+  }
   try {
-    session.resize(width, height)
+    session.resize(width, height, scale)
     const generation = clientGeneration
     resizeProbeTimer = setTimeout(() => {
       resizeProbeTimer = null
