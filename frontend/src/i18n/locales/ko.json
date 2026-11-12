@@ -386,6 +386,7 @@
   "sftp.fileStatus.done": "done",
   "sftp.fileStatus.failed": "failed",
   "sftp.connectError": "SFTP 연결 실패",
+  "sftp.scpSwitchHint": "호스트에서 SFTP 서브시스템이 활성화되어 있지 않을 수 있습니다. 연결 설정에서 파일 전송 프로토콜을 SCP로 변경한 후 다시 시도하세요.",
   "sftp.reconnecting": "연결이 끊어졌습니다. 다시 연결 중…",
   "sftp.dropHere": "여기에 파일을 놓으세요",
   "sftp.followPath": "터미널 경로 따라가기",

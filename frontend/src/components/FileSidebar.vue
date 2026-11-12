@@ -4,7 +4,10 @@
   >
     <div v-if="!sessionId" class="companion-empty">
       <span v-if="connecting">{{ t('companion.connecting') }}</span>
-      <span v-else-if="connectError">{{ connectError }}</span>
+      <template v-else-if="connectError">
+        <span>{{ connectError }}</span>
+        <span v-if="scpSwitchHintVisible" class="companion-hint">{{ t('sftp.scpSwitchHint') }}</span>
+      </template>
       <span v-else>{{ t('companion.needSsh') }}</span>
     </div>
 
@@ -154,6 +157,7 @@ import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
 import { backendErrorText } from '../utils/backendError'
+import { fileTransferProto } from '../utils/fileTransferUtils'
 import { useCompanionStore } from '../stores/companionStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -186,6 +190,17 @@ const settingsStore = useSettingsStore()
 
 const connecting = ref(false)
 const connectError = ref('')
+// When the companion file session failed to connect: SFTP failures on hosts
+// without the subsystem are common, so point at the per-connection transfer
+// protocol setting (issue #1341 discussion — no automatic fallback, the
+// connection config is the single source of truth). Only SSH panels carry
+// the sftp/scp choice; container/wsl companions have their own transports.
+const scpSwitchHintVisible = computed(() => {
+  if (!connectError.value) return false
+  const pid = companionStore.activeFilesPanelId
+  const config = pid ? panelStore.getPanel(pid)?.config : undefined
+  return !!config && config.type === 'ssh' && fileTransferProto(config) === 'sftp'
+})
 // Transfer panel: default height (px), adjustable by dragging its top edge.
 const transferHeight = ref(130)
 // The transfer panel starts COLLAPSED (only its button bar shows) and a new
@@ -498,6 +513,9 @@ function bindListeners() {
     if (connMatch) {
       connectError.value = connMatch[1]
       msg.error(connMatch[1])
+      if (scpSwitchHintVisible.value) {
+        msg.warning(t('sftp.scpSwitchHint'))
+      }
       return
     }
   })
@@ -700,6 +718,10 @@ onUnmounted(() => {
   font-size: 0.75rem;
   padding: 1rem;
   text-align: center;
+}
+.companion-hint {
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
 }
 .file-body {
   flex: 1;

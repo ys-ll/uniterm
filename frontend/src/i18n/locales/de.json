@@ -386,6 +386,7 @@
   "sftp.fileStatus.done": "done",
   "sftp.fileStatus.failed": "failed",
   "sftp.connectError": "SFTP-Verbindung fehlgeschlagen",
+  "sftp.scpSwitchHint": "Auf dem Host ist das SFTP-Subsystem möglicherweise nicht aktiviert — stellen Sie in den Verbindungseinstellungen das Übertragungsprotokoll auf SCP um und versuchen Sie es erneut.",
   "sftp.reconnecting": "Verbindung verloren, wird neu verbunden…",
   "sftp.dropHere": "Dateien hier ablegen",
   "sftp.followPath": "Terminalpfad folgen",

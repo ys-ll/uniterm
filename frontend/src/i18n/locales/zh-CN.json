@@ -409,6 +409,7 @@
   "sftp.fileStatus.done": "已完成",
   "sftp.fileStatus.failed": "失败",
   "sftp.connectError": "SFTP 连接失败",
+  "sftp.scpSwitchHint": "主机可能未启用 SFTP 子系统,可在连接配置中把传输协议切换为 SCP 后重试。",
   "sftp.reconnecting": "连接已断开，正在重新连接…",
   "sftp.dropHere": "拖动文件到此处",
   "sftp.followPath": "跟随终端路径",

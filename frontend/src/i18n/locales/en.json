@@ -409,6 +409,7 @@
   "sftp.fileStatus.done": "done",
   "sftp.fileStatus.failed": "failed",
   "sftp.connectError": "SFTP connection failed",
+  "sftp.scpSwitchHint": "The host may not have the SFTP subsystem enabled — switch the file transfer protocol to SCP in the connection settings and retry.",
   "sftp.reconnecting": "Connection lost, reconnecting…",
   "sftp.dropHere": "Drop files here",
   "sftp.followPath": "Follow terminal path",
