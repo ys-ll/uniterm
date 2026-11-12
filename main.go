@@ -360,6 +360,34 @@ func main() {
 		})
 	}
 
+	// Native close paths (Alt+F4, taskkill, any external WM_CLOSE) close the
+	// window WITHOUT running the application quit flow: wails v3 on Windows
+	// only runs cleanup()/OnShutdown when App.Quit is called explicitly (the
+	// in-app close button and the tray Quit item do that). The window then
+	// merely unregisters, Run() returns, and main() calls os.Exit(0) with the
+	// WebView2 controller still alive — the DLL-detach teardown inside
+	// ExitProcess blocks on the browser subprocess, leaving a frozen residual
+	// process that still holds the single-instance lock, so relaunching fails.
+	// Cancel the native close and reroute it through the same
+	// full quit path as the in-app close button. The hook must run on Windows
+	// only: on macOS Cmd+Q terminates via AppKit's terminate (cleanup runs),
+	// and on Linux the GTK delete-event handler calls cleanup directly.
+	if runtime.GOOS == "windows" {
+		window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+			// Already quitting (App.shutdown started, or this close comes from
+			// cleanup()'s own window.Close()): let the default close listener
+			// proceed so the window actually closes during teardown.
+			if app.quitting.Load() {
+				return
+			}
+			event.Cancel()
+			go func() {
+				app.saveWindowStateFromRuntime()
+				app.app.Quit()
+			}()
+		})
+	}
+
 	// Wails v3 delivers OS file drops to Go-side window-event listeners rather
 	// than (as v2 did) auto-forwarding them to the frontend. Re-emit the dropped
 	// absolute paths under the original v2 event name so `Events.On(...)` pickers

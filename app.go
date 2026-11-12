@@ -42,17 +42,21 @@ import (
 )
 
 type App struct {
-	ctx                  context.Context
-	app                  *application.App
-	window               *application.WebviewWindow
-	tray                 *application.SystemTray
-	trayLang             string                             // resolved UI language the tray menu was last built with
-	notifier             *notifications.NotificationService // system notifications (MCP approval prompts)
-	sessionManager       *session.SessionManager
-	k8sManager           *k8s.Manager
-	netscanManager       *netscan.Manager
-	localsrvManager      *localsrv.Manager
-	containerManager     *container.Manager
+	ctx              context.Context
+	app              *application.App
+	window           *application.WebviewWindow
+	tray             *application.SystemTray
+	trayLang         string                             // resolved UI language the tray menu was last built with
+	notifier         *notifications.NotificationService // system notifications (MCP approval prompts)
+	sessionManager   *session.SessionManager
+	k8sManager       *k8s.Manager
+	netscanManager   *netscan.Manager
+	localsrvManager  *localsrv.Manager
+	containerManager *container.Manager
+	// quitting marks that the full shutdown sequence (App.shutdown) has begun.
+	// Set by shutdown(); the native-close hook (main.go) reads it to let
+	// already-quitting closes pass through to the default close handler.
+	quitting             atomic.Bool
 	connectionStore      *store.ConnectionStore
 	aiSessionStore       *store.AISessionStore
 	settingsStore        *store.SettingsStore
@@ -71,18 +75,18 @@ type App struct {
 	// syncSecrets is the server-build encrypted-file backing store for the
 	// sync keychain (server_secrets.go); nil on desktop, which uses the OS
 	// keychain. Kept on the App so a master-password change rekeys it.
-	syncSecrets secretRekeyer
-	tunnelService        *session.TunnelService
-	tunnelStartsMu       stdsync.Mutex
-	tunnelStarts         map[string]*tunnelStartRequest
-	tunnelsClosed        bool
-	mainHwnd             uintptr
-	rdpKeyboardMu        stdsync.Mutex
-	rdpKeyboard          *platform.RDPKeyboardCapture
-	originalWndProc      uintptr
-	wndProcCb            uintptr // keep alive to prevent GC
-	inSizeMove           bool
-	webviewDataPath      string
+	syncSecrets     secretRekeyer
+	tunnelService   *session.TunnelService
+	tunnelStartsMu  stdsync.Mutex
+	tunnelStarts    map[string]*tunnelStartRequest
+	tunnelsClosed   bool
+	mainHwnd        uintptr
+	rdpKeyboardMu   stdsync.Mutex
+	rdpKeyboard     *platform.RDPKeyboardCapture
+	originalWndProc uintptr
+	wndProcCb       uintptr // keep alive to prevent GC
+	inSizeMove      bool
+	webviewDataPath string
 	// dataDir is the resolved config data directory, passed to store
 	// constructors. Resolved at startup; finalized by bootstrap in a later task.
 	dataDir           string
@@ -912,6 +916,7 @@ func (a *App) watchForeground(ctx context.Context) {
 }
 
 func (a *App) shutdown() {
+	a.quitting.Store(true)
 	// Persist the geometry on every quit path (tray menu, Cmd+Q, OS close,
 	// relaunch) — the frontend only saves on resize/close inside the app, so
 	// without this the next launch opens at the default size (issue #1279).
