@@ -1388,7 +1388,6 @@
   "conn.ftpEncryptionNone": "Không",
   "conn.ftpEncryptionAuto": "Nếu khả dụng",
   "conn.ftpEncryptionRequired": "Bắt buộc",
-  "conn.ftpPassive": "Chế độ bị động",
   "conn.ftpSkipVerify": "Cho phép TLS không an toàn (bỏ qua xác minh)",
   "conn.ftpSkipVerifyDesc": "Tắt xác minh chứng chỉ cho FTPS. Dễ bị tấn công MITM — chỉ bật cho các chứng chỉ tự ký đáng tin cậy.",
   "conn.vncShared": "Phiên dùng chung",

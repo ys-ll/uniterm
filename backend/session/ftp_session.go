@@ -19,6 +19,12 @@ import (
 	"golang.org/x/text/transform"
 )
 
+// ftpDataIdleTimeout bounds a single read on the data connection. Old
+// single-threaded servers (e.g. AIX ftpd) can leave the data socket silent
+// forever; without it a stuck transfer never progresses and its cancel
+// button is a no-op.
+const ftpDataIdleTimeout = 60 * time.Second
+
 type FTPSession struct {
 	baseSession
 	localFSOps
@@ -74,6 +80,9 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 	}
 	enc := encodingByName(encName)
 	dialOpts := []ftp.DialOption{ftp.DialWithTimeout(30 * time.Second)}
+	// Bound the wait for the "closing data connection" status after each
+	// data transfer; some servers never send it (library default is infinite).
+	dialOpts = append(dialOpts, ftp.DialWithShutTimeout(30*time.Second))
 	if enc != nil {
 		dialOpts = append(dialOpts, ftp.DialWithDisabledUTF8(true))
 	}
@@ -333,7 +342,6 @@ func (s *FTPSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 	return FileListResult{Files: files, Dir: target}, nil
 }
 
-
 // Symlink is not supported: the FTP protocol has no link semantics.
 func (s *FTPSession) Symlink(_, _ string) error {
 	return fmt.Errorf("symlink is not supported by FTP")
@@ -435,6 +443,15 @@ func (s *FTPSession) Get(remotePath, localPath string, recursive bool) (string, 
 				delete(s.transfers, task.ID)
 				s.mu.Unlock()
 			}()
+			// Serialize against the control connection like single-file
+			// transfers; a queued cancel takes effect without waiting.
+			s.connMu.Lock()
+			defer s.connMu.Unlock()
+			if task.ctx.Err() != nil {
+				task.Status = "cancelled"
+				s.emitTransferComplete(task)
+				return
+			}
 			if err := s.downloadDir(rp, lp, task); err != nil {
 				if task.ctx.Err() != nil {
 					// cancelled mid-transfer: not a transfer error
@@ -498,6 +515,15 @@ func (s *FTPSession) Put(localPath, remotePath string, recursive bool) (string, 
 				delete(s.transfers, task.ID)
 				s.mu.Unlock()
 			}()
+			// Serialize against the control connection like single-file
+			// transfers; a queued cancel takes effect without waiting.
+			s.connMu.Lock()
+			defer s.connMu.Unlock()
+			if task.ctx.Err() != nil {
+				task.Status = "cancelled"
+				s.emitTransferComplete(task)
+				return
+			}
 			if err := s.uploadDir(lp, rp, task); err != nil {
 				if task.ctx.Err() != nil {
 					// cancelled mid-transfer: not a transfer error
@@ -773,15 +799,39 @@ func (s *FTPSession) startTransfer(task *TransferTask) {
 			s.mu.Unlock()
 		}()
 
-		task.Status = "running"
-		s.emitTransferStart(task)
-
-		// FTP control connection: serialize data transfers
+		// FTP control connection: serialize data transfers. The task stays
+		// "pending" while queued behind the lock, and a cancel that arrives
+		// while queued takes effect immediately.
 		s.connMu.Lock()
 		defer s.connMu.Unlock()
+		if task.ctx.Err() != nil {
+			task.Status = "cancelled"
+			s.emitTransferComplete(task)
+			return
+		}
+
+		// Respect a pause that arrived while the task was queued: surface it
+		// as paused and let waitIfPaused park it until resumed (the resume
+		// entry point re-emits the start event). Skip the start event when
+		// the task was resumed while queued — it was already emitted.
+		if task.isPaused() {
+			task.Status = "paused"
+		} else if task.Status != "running" {
+			task.Status = "running"
+			s.emitTransferStart(task)
+		}
 
 		var err error
 		if task.Type == "download" {
+			// Fetch the file size before issuing RETR. Single-threaded
+			// servers (e.g. AIX ftpd) do not read the control connection
+			// while RETR is streaming, so any control command sent between
+			// RETR and the last data byte deadlocks the transfer at 0%
+			//.
+			if fi, e := s.ftpFileSize(task.RemotePath); e == nil && fi > 0 {
+				task.setTotal(fi)
+			}
+
 			resp, e := s.ftpRetr(task.RemotePath)
 			if e != nil {
 				s.emitTransferEvent(task, e)
@@ -789,10 +839,17 @@ func (s *FTPSession) startTransfer(task *TransferTask) {
 			}
 			defer resp.Close()
 
-			fi, e := s.ftpFileSize(task.RemotePath)
-			if e == nil && fi > 0 {
-				task.setTotal(fi)
-			}
+			// Unblock the data-socket read parked inside the library when
+			// the task is cancelled mid-transfer.
+			watchdogDone := make(chan struct{})
+			defer close(watchdogDone)
+			go func() {
+				select {
+				case <-task.ctx.Done():
+					_ = resp.SetDeadline(time.Now())
+				case <-watchdogDone:
+				}
+			}()
 
 			localFile, e := os.Create(task.LocalPath)
 			if e != nil {
@@ -801,7 +858,7 @@ func (s *FTPSession) startTransfer(task *TransferTask) {
 			}
 			defer localFile.Close()
 
-			_, err = io.Copy(localFile, &progressReader{r: resp, task: task, s: s})
+			_, err = io.Copy(localFile, &progressReader{r: resp, task: task, s: s, deadline: resp})
 		} else {
 			localFile, e := os.Open(task.LocalPath)
 			if e != nil {
@@ -841,6 +898,10 @@ type progressReader struct {
 	r    io.Reader
 	task *TransferTask
 	s    *FTPSession
+	// deadline, when non-nil, gets an idle deadline (ftpDataIdleTimeout)
+	// re-armed before every read so a silent server cannot park the read
+	// forever.
+	deadline interface{ SetDeadline(time.Time) error }
 }
 
 func (pr *progressReader) Read(p []byte) (int, error) {
@@ -852,6 +913,11 @@ func (pr *progressReader) Read(p []byte) (int, error) {
 	default:
 	}
 	pr.task.waitIfPaused()
+	if pr.deadline != nil {
+		// Idle timeout: a server that stops sending data must not park the
+		// read forever.
+		_ = pr.deadline.SetDeadline(time.Now().Add(ftpDataIdleTimeout))
+	}
 	n, err := pr.r.Read(p)
 	if n > 0 {
 		pr.task.addProgress(int64(n))
@@ -928,29 +994,29 @@ func (s *FTPSession) transferFile(task *TransferTask, localPath, remotePath, tfT
 			return err
 		}
 		defer resp.Close()
+
+		// Unblock the data-socket read parked inside the library when the
+		// task is cancelled mid-transfer.
+		watchdogDone := make(chan struct{})
+		defer close(watchdogDone)
+		go func() {
+			select {
+			case <-task.ctx.Done():
+				_ = resp.SetDeadline(time.Now())
+			case <-watchdogDone:
+			}
+		}()
+
 		dst, err := os.Create(localPath)
 		if err != nil {
 			return err
 		}
 		defer dst.Close()
-		buf := make([]byte, 64*1024)
-		for {
-			select {
-			case <-task.ctx.Done():
-				return task.ctx.Err()
-			default:
-			}
-			task.waitIfPaused()
-			n, e := resp.Read(buf)
-			if n > 0 {
-				dst.Write(buf[:n])
-				task.addProgress(int64(n))
-				s.emitTransferProgress(task)
-			}
-			if e != nil {
-				break
-			}
-		}
+		// progressReader carries the cancel/pause checks and the data-socket
+		// idle deadline. Read errors propagate (the old loop swallowed them,
+		// silently completing on a truncated file).
+		_, err = io.Copy(dst, &progressReader{r: resp, task: task, s: s, deadline: resp})
+		return err
 	} else {
 		src, err := os.Open(localPath)
 		if err != nil {
@@ -993,4 +1059,3 @@ func (s *FTPSession) transferFile(task *TransferTask, localPath, remotePath, tfT
 	}
 	return nil
 }
-

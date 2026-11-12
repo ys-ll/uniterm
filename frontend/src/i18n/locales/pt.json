@@ -1388,7 +1388,6 @@
   "conn.ftpEncryptionNone": "Nenhuma",
   "conn.ftpEncryptionAuto": "Se disponível",
   "conn.ftpEncryptionRequired": "Obrigatória",
-  "conn.ftpPassive": "Modo passivo",
   "conn.ftpSkipVerify": "Permitir TLS inseguro (ignorar verificação)",
   "conn.ftpSkipVerifyDesc": "Desativa a verificação de certificado do FTPS. Vulnerável a ataques MITM — ative apenas para certificados autoassinados confiáveis.",
   "conn.vncShared": "Sessão compartilhada",

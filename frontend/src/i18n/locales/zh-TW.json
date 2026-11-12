@@ -1415,7 +1415,6 @@
   "conn.ftpEncryptionNone": "不加密",
   "conn.ftpEncryptionAuto": "如果可用則加密",
   "conn.ftpEncryptionRequired": "必須加密",
-  "conn.ftpPassive": "被動模式",
   "conn.ftpSkipVerify": "允許不安全的 TLS（略過驗證）",
   "conn.ftpSkipVerifyDesc": "停用 FTPS 的憑證驗證。容易受到 MITM 攻擊 — 僅在受信任的自簽憑證時啟用。",
   "conn.vncShared": "共用工作階段",
