@@ -497,9 +497,6 @@
                     <el-switch v-model="form.ftpSkipVerify" />
                     <span class="field-hint hint-after-switch">{{ t('conn.ftpSkipVerifyDesc') }}</span>
                   </el-form-item>
-                  <el-form-item :label="t('conn.ftpPassive')">
-                    <el-switch v-model="form.ftpPassive" />
-                  </el-form-item>
                 </template>
                 <template v-if="form.type === 'vnc'">
                   <el-form-item :label="t('conn.vncShared')">
@@ -1143,7 +1140,6 @@ const form = reactive<ConnectionConfig>({
   x11Forwarding: false,
   agentForwarding: false,
   ftpEncryption: 'none',
-  ftpPassive: true,
   ftpSkipVerify: false,
   vncShared: true,
   desktopPreferences: undefined,
@@ -1548,7 +1544,6 @@ function resetForm() {
   form.x11Forwarding = false
   form.agentForwarding = false
   form.ftpEncryption = 'none'
-  form.ftpPassive = true
   form.ftpSkipVerify = false
   form.vncShared = true
   form.desktopPreferences = undefined

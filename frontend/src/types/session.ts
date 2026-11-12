@@ -115,7 +115,6 @@ export interface ConnectionConfig {
   sftpMaxConcurrency?: number
   // FTP-specific
   ftpEncryption?: string  // "none" | "auto" | "required"
-  ftpPassive?: boolean
   // Opt in to FTPS InsecureSkipVerify. Defaults to false (verify enabled).
   // Off by default preserves backwards compatibility for users today who
   // rely on it for self-signed certs — but the toggle now exists so the

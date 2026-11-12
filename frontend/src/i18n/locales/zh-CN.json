@@ -1416,7 +1416,6 @@
   "conn.ftpEncryptionNone": "不加密",
   "conn.ftpEncryptionAuto": "如果可用则加密",
   "conn.ftpEncryptionRequired": "必须加密",
-  "conn.ftpPassive": "被动模式",
   "conn.ftpSkipVerify": "允许不安全的 TLS（跳过证书校验）",
   "conn.ftpSkipVerifyDesc": "关闭 FTPS 的证书校验。容易被中间人攻击，仅在自签名证书等可信场景下开启。",
   "conn.vncShared": "共享会话",

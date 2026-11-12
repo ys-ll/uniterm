@@ -210,7 +210,6 @@ type ConnectionConfig struct {
 	InitialRows int `json:"initialRows,omitempty"`
 	// FTP-specific fields
 	FtpEncryption string `json:"ftpEncryption,omitempty"` // "none"(default) | "auto" | "required"
-	FtpPassive    bool   `json:"ftpPassive"`              // passive mode (default true)
 	// FtpSkipVerify opts in to tls.Config.InsecureSkipVerify for FTPS connections.
 	// Defaults to false (verify enabled). Off by default preserves backwards
 	// compatibility for users today who rely on it for self-signed certs —

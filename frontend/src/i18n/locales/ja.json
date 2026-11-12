@@ -1392,7 +1392,6 @@
   "conn.ftpEncryptionNone": "暗号化なし",
   "conn.ftpEncryptionAuto": "可能なら暗号化",
   "conn.ftpEncryptionRequired": "必須",
-  "conn.ftpPassive": "パッシブモード",
   "conn.ftpSkipVerify": "安全でない TLS を許可する（検証をスキップ）",
   "conn.ftpSkipVerifyDesc": "FTPS の証明書検証を無効化します。MITM 攻撃に対して脆弱になるため、信頼できる自己署名証明書に対してのみ有効にしてください。",
   "conn.vncShared": "共有セッション",

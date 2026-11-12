@@ -726,7 +726,6 @@ export namespace session {
 	    initialCols?: number;
 	    initialRows?: number;
 	    ftpEncryption?: string;
-	    ftpPassive: boolean;
 	    ftpEncoding?: string;
 	    ftpSkipVerify?: boolean;
 	    vncShared?: boolean;
@@ -812,7 +811,6 @@ export namespace session {
 	        this.initialCols = source["initialCols"];
 	        this.initialRows = source["initialRows"];
 	        this.ftpEncryption = source["ftpEncryption"];
-	        this.ftpPassive = source["ftpPassive"];
 	        this.ftpEncoding = source["ftpEncoding"];
 	        this.ftpSkipVerify = source["ftpSkipVerify"];
 	        this.vncShared = source["vncShared"];

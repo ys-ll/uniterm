@@ -1396,7 +1396,6 @@
   "conn.x11ForwardingDescMac": "XQuartz 설치 및 실행 필요",
   "conn.ftpEncryptionAuto": "사용 가능한 경우",
   "conn.ftpEncryptionRequired": "필수",
-  "conn.ftpPassive": "수동 모드",
   "conn.ftpSkipVerify": "안전하지 않은 TLS 허용(검증 건너뛰기)",
   "conn.ftpSkipVerifyDesc": "FTPS의 인증서 검증을 비활성화합니다. MITM 공격에 취약하므로 신뢰할 수 있는 자체 서명 인증서에 대해서만 활성화하세요.",
   "conn.vncShared": "공유 세션",

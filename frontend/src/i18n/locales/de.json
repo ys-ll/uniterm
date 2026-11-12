@@ -1396,7 +1396,6 @@
   "conn.x11ForwardingDescMac": "erfordert installiertes und laufendes XQuartz",
   "conn.ftpEncryptionAuto": "Falls verfügbar",
   "conn.ftpEncryptionRequired": "Erforderlich",
-  "conn.ftpPassive": "Passiver Modus",
   "conn.ftpSkipVerify": "Unsicheres TLS erlauben (Verifizierung überspringen)",
   "conn.ftpSkipVerifyDesc": "Deaktiviert die Zertifikatsverifizierung für FTPS. Anfällig für MITM-Angriffe – nur für vertrauenswürdige selbstsignierte Zertifikate aktivieren.",
   "conn.vncShared": "Gemeinsame Sitzung",

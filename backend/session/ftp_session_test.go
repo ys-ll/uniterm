@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 )
@@ -128,4 +129,61 @@ func TestFTPProgressReaderCancel(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Read blocked after cancellation")
 	}
+}
+
+// The idle deadline must be re-armed before every read so a silent server
+// cannot park the data-socket read forever.
+type deadlineRecorder struct {
+	calls []time.Time
+}
+
+func (d *deadlineRecorder) SetDeadline(t time.Time) error {
+	d.calls = append(d.calls, t)
+	return nil
+}
+
+func TestFTPProgressReaderIdleDeadline(t *testing.T) {
+	s := NewFTPSession("ftp-test")
+	task := &TransferTask{ID: "t2"}
+	task.start()
+	defer task.done()
+
+	rec := &deadlineRecorder{}
+	r := &sliceReader{data: []byte("ab"), errs: []error{nil, io.EOF}}
+	pr := &progressReader{r: r, task: task, s: s, deadline: rec}
+
+	buf := make([]byte, 8)
+	for {
+		if _, err := pr.Read(buf); err != nil {
+			break
+		}
+	}
+	if len(rec.calls) != 2 {
+		t.Fatalf("SetDeadline calls: got %d, want 2", len(rec.calls))
+	}
+	for _, call := range rec.calls {
+		delay := time.Until(call)
+		if delay < ftpDataIdleTimeout-time.Second || delay > ftpDataIdleTimeout+time.Second {
+			t.Fatalf("deadline delay %v, want ~%v", delay, ftpDataIdleTimeout)
+		}
+	}
+}
+
+type sliceReader struct {
+	data []byte
+	errs []error
+	i    int
+}
+
+func (r *sliceReader) Read(p []byte) (int, error) {
+	if r.i >= len(r.errs) {
+		return 0, io.EOF
+	}
+	e := r.errs[r.i]
+	r.i++
+	if e != nil {
+		return 0, e
+	}
+	n := copy(p, r.data)
+	return n, nil
 }
