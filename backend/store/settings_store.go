@@ -74,6 +74,12 @@ type TerminalSettings struct {
 	// TimestampFormat renders the gutter time column (e.g. "HH:mm:ss").
 	// Empty means the frontend falls back to its built-in default.
 	TimestampFormat string `json:"timestampFormat,omitempty"`
+	// CommandSendMode controls how the command-send panel delivers
+	// multi-line content (issue #1341): "lines" converts each newline to
+	// Enter so every line executes, "bracketed" sends the block wrapped in
+	// bracketed-paste markers without executing. Empty means the frontend
+	// falls back to "lines".
+	CommandSendMode string `json:"commandSendMode,omitempty"`
 }
 
 // TerminalThemeColors mirrors xterm.js's ITheme shape: the 4 base colors

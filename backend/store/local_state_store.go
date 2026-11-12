@@ -58,6 +58,14 @@ type LocalState struct {
 	// (types/tabSnapshot.ts); local-only, never synced, and holds no
 	// secrets — host references are connectionIds re-resolved at restore.
 	LastTabsSnapshot json.RawMessage `json:"lastTabsSnapshot,omitempty"`
+	// CommandSendDraft keeps the command-send panel's edited content across
+	// restarts (issue #1341). Opaque text written by the frontend; local-only,
+	// never synced. Pointer + omitempty so older local_state.json still loads.
+	CommandSendDraft *string `json:"commandSendDraft,omitempty"`
+	// CommandSendWrap toggles word wrap in the command-send editor.
+	// Local-only UI preference, never synced; true for older configs keeps
+	// the wrapped default.
+	CommandSendWrap bool `json:"commandSendWrap"`
 }
 
 // AILocalState holds device-local selections, separate from the synced model catalog.
@@ -127,6 +135,7 @@ func defaultLocalState() LocalState {
 		BackgroundOpacity:             60,
 		BackgroundBlur:                3,
 		BackgroundFit:                 "cover",
+		CommandSendWrap:               true,
 	}
 }
 

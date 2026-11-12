@@ -46,6 +46,11 @@ interface LocalState {
   // config and keeps the frontend default.
   bottomPanelVisible: boolean
   bottomPanelHeight: number
+  // Command-send panel's edited content (issue #1341). Local-only text,
+  // never synced; restored when the panel mounts.
+  commandSendDraft: string
+  // Word-wrap toggle of the command-send editor. Local-only UI preference.
+  commandSendWrap: boolean
 }
 
 const DEFAULT: LocalState = {
@@ -74,6 +79,8 @@ const DEFAULT: LocalState = {
   lastTabsSnapshot: null,
   bottomPanelVisible: true,
   bottomPanelHeight: 220,
+  commandSendDraft: '',
+  commandSendWrap: true,
 } as LocalState
 
 export const useLocalStateStore = defineStore('localState', () => {
