@@ -129,4 +129,4 @@ replace github.com/rhnvrm/simples3 => github.com/ys-ll/simples3 v0.0.0-202609300
 
 replace golang.org/x/crypto => github.com/ys-ll/crypto v0.57.1-0.20260922023551-18e0be45963e
 
-replace github.com/wailsapp/wails/v3 => github.com/ys-ll/wails/v3 v3.0.0-20261111103830-1108f3295e66
+replace github.com/wailsapp/wails/v3 => github.com/ys-ll/wails/v3 v3.0.0-20261112022029-42d2d55031b2
