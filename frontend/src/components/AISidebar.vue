@@ -83,14 +83,14 @@
           <ChevronDown v-if="!aiStore.thinkingExpanded" :size="'0.75rem'" class="thinking-chevron" />
           <ChevronUp v-else :size="'0.75rem'" class="thinking-chevron" />
         </div>
-        <div v-show="aiStore.thinkingExpanded" ref="thinkingPanelRef" class="thinking-panel">
+        <div v-if="aiStore.thinkingExpanded" ref="thinkingPanelRef" class="thinking-panel">
           <div class="thinking-panel-header">
             <span class="thinking-dot" :class="aiStore.status === 'thinking' ? 'live' : 'done'">{{ aiStore.status === 'thinking' ? '○' : '●' }}</span>
             <span class="thinking-panel-title">{{ t('ai.thoughtProcess') }}</span>
             <span v-if="liveThinkingElapsed" class="thinking-panel-time">{{ liveThinkingElapsed }}</span>
             <span v-if="thinkingStartLabel" class="thinking-panel-time">· {{ thinkingStartLabel }}</span>
           </div>
-          <pre v-if="aiStore.thinkingText" class="thinking-body">{{ aiStore.thinkingText }}</pre>
+          <pre v-if="thinkingForRender" class="thinking-body">{{ thinkingForRender }}</pre>
           <div v-else class="thinking-empty">{{ t('ai.noThinkingContent') }}</div>
         </div>
       </div>
@@ -817,8 +817,26 @@ function toggleThinking() {
   if (aiStore.thinkingExpanded) nextTick(scrollThinkingToBottom)
 }
 
-watch(() => aiStore.thinkingText, () => {
-  if (aiStore.thinkingExpanded) nextTick(scrollThinkingToBottom)
+// Streaming thinking deltas append many times a second and the <pre> rewrites
+// its whole text node on each update — O(n²) DOM churn over a long reasoning
+// trace. The panel is skipped entirely while collapsed (v-if above), and while
+// open the text renders from a trailing-throttled snapshot.
+const THINKING_RENDER_THROTTLE_MS = 150
+const thinkingForRender = ref(aiStore.thinkingText)
+let thinkingRenderPending: string | null = null
+let thinkingRenderTimer: ReturnType<typeof setTimeout> | null = null
+watch(() => aiStore.thinkingText, (val) => {
+  thinkingRenderPending = val
+  if (thinkingRenderTimer !== null) return
+  thinkingRenderTimer = setTimeout(() => {
+    thinkingRenderTimer = null
+    if (thinkingRenderPending !== null) thinkingForRender.value = thinkingRenderPending
+    thinkingRenderPending = null
+    if (aiStore.thinkingExpanded) nextTick(scrollThinkingToBottom)
+  }, THINKING_RENDER_THROTTLE_MS)
+})
+onUnmounted(() => {
+  if (thinkingRenderTimer !== null) clearTimeout(thinkingRenderTimer)
 })
 
 // 1s tick feeding the live elapsed counter while the model is thinking.

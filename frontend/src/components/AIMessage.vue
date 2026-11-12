@@ -698,6 +698,42 @@ function autoLinkUrls(html: string): string {
   return result
 }
 
+// Streaming deltas append to the message content many times a second, and the
+// regex markdown pipeline below is O(content) per pass — re-rendering on every
+// token turns a long response into O(n²) work that lags the whole app while
+// the answer streams in. Render from a trailing-throttled snapshot instead: at
+// most one pass per interval while tokens land, with the final content flushed
+// when the deltas stop. Finished messages never mutate, so they always render
+// from the current content.
+const RENDER_THROTTLE_MS = 100
+const contentForRender = ref(props.message.content)
+let renderPending: string | null = null
+let renderTimer: ReturnType<typeof setTimeout> | null = null
+watch(() => props.message, (m) => {
+  // Defensive: a same-key component should never be reused for another
+  // message (v-for keys by id), but if it ever is, drop stale state.
+  if (renderTimer !== null) {
+    clearTimeout(renderTimer)
+    renderTimer = null
+  }
+  renderPending = null
+  contentForRender.value = m.content
+})
+watch(() => props.message.content, (val) => {
+  renderPending = val
+  if (renderTimer !== null) return
+  renderTimer = setTimeout(() => {
+    renderTimer = null
+    if (renderPending !== null && renderPending !== contentForRender.value) {
+      contentForRender.value = renderPending
+    }
+    renderPending = null
+  }, RENDER_THROTTLE_MS)
+})
+onUnmounted(() => {
+  if (renderTimer !== null) clearTimeout(renderTimer)
+})
+
 const renderedContent = computed(() => {
   let html: string
   if (isInterrupted.value) {
@@ -705,9 +741,9 @@ const renderedContent = computed(() => {
   } else if (isTimeout.value) {
     html = `<span class="interrupted-text">${escapeHtml(t('ai.timeout'))}</span>`
   } else if (props.message.role === 'user') {
-    html = escapeHtml(props.message.content)
+    html = escapeHtml(contentForRender.value)
   } else {
-    html = renderMarkdown(props.message.content)
+    html = renderMarkdown(contentForRender.value)
     // Sanitize the markdown output before assigning to v-html. Model
     // output can include `javascript:` / `data:` URLs in `[link](url)`
     // markdown and `![alt](x" onerror="...)` payloads that escape the
