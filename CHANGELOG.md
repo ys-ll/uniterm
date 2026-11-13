@@ -1,5 +1,77 @@
 # Changelog
 
+## v1.12.3-alpha
+
+### What's Changed
+
+**New Features**
+
+- SSH: per-host automatic TOTP authentication — attach a TOTP secret to a connection and the 2FA code is filled automatically at login. (@surenwuyuwuqiu)
+- Terminal: multi-line paste confirmation — pasting multi-line clipboard content shows an editable preview first (line numbers, word-wrap toggle); what you confirm is exactly what gets pasted, with a "don't ask again" switch.
+- Terminal: command send panel — a dockable multi-line editor (default in the bottom panel) that sends to the current terminal (expanding to the broadcast panels when broadcast is on), the whole workspace or every tab; each line can be executed via Enter (cmd / PowerShell compatible) or delivered as bracketed-paste without executing; drafts survive restarts.
+- Android: remote desktop (RDP / VNC / SPICE) touch input — tap = left click, long-press = right click, moving after a long-press = left-button drag (drag windows, select text, move files), two-finger drag = wheel scroll, and a native fullscreen mode.
+- Android: remote desktop gains soft keyboard input and an on-screen key bar (Ctrl / Alt / Shift / Esc / Tab / arrows...) with a pinned keyboard toggle; CJK characters without a scancode are sent via the protocol's Unicode input path.
+
+**Improvements**
+
+- AI: compaction reworked — history is sent in one pass on the chat request shape (chunking only beyond 100k tokens) with a raised summary budget, so thinking models no longer fail compaction; compaction records anchor at the cut point with live elapsed timers, and answered ask_user interactions stay in the transcript as read-only records.
+- AI: streaming renders are throttled — long responses no longer lag typing and scrolling across the whole app while an answer streams in.
+- SFTP: a failed SFTP connection now hints that the host may not have the SFTP subsystem enabled and that the protocol can be switched to SCP in the connection settings.
+- Remote desktop: the RDP / VNC / SPICE status bars are simplified — host:port and select titles are dropped, selects are narrower, and resolution presets show the full size.
+- Serial: high-speed baud presets (1M / 1.5M / 2M / 3M / 4M) for common SoC debug UARTs.
+- RDP: on scaled displays the remote session now renders at the local DPI scale — remote UI no longer appears physically smaller than local apps.
+
+**Bug Fixes**
+
+- AI: a foreground execution that never completes (command typed into a non-shell prompt or a TUI program, or killed by Ctrl+C) no longer wedges the session with "session is busy" until the TTL — a newer command takes over the wedged holder, and manual keyboard input finishes the active job.
+- FTP: transfers stalled at 0% on single-threaded servers are unblocked; cancel / pause now take effect immediately, and truncated downloads no longer report success.
+- Windows: Alt+F4, taskbar close and taskkill now run the full shutdown path — window state is saved and sessions / tunnels are torn down; the process no longer lingers and blocks relaunching.
+- Windows: the IME candidate window keeps caret anchoring after switching between apps — it no longer jumps to a corner of the screen, in text fields as well as inside the terminal.
+- RDP: connections no longer intermittently fail with "unexpected server message" while the remote is mid-logon.
+- RDP: legacy connections keep NLA enabled by default.
+- Telnet: an IAC sequence spanning a read boundary no longer leaks protocol bytes into the output, and CR NUL padding no longer reaches the terminal or session logs.
+- Telnet: auto-login waits for the real username / password prompts, so credentials are no longer echoed; the post-login script waits for the shell prompt; the configured proxy is no longer ignored.
+- SFTP / editor: the file size cap is raised from 1MB to 10MB with a confirmation before opening large files, and typing in multi-MB files no longer lags.
+- Containers: on hosts where docker is installed outside the default PATH (e.g. under /usr/local/bin), non-interactive SSH commands find the binary again.
+- Docker web mode: copy / paste works via the browser clipboard, and all export / save flows hand files to the browser download manager instead of a native dialog.
+- Docker web mode: identity / proxy / AI / MCP saves no longer fail closed, and browser-created identities survive a reload.
+- Tunnels: the upstream proxy password in tunnels.json is no longer stored unprotected.
+
+### 更新内容
+
+**新功能**
+
+- SSH：支持按主机配置自动 TOTP 认证——为连接绑定 TOTP 密钥后，登录时自动填写动态验证码。(@surenwuyuwuqiu)
+- 终端：多行粘贴确认——粘贴多行剪贴板内容时先弹出可编辑预览（行号、自动换行开关），确认的内容就是实际粘贴的内容，支持"不再询问"开关。
+- 终端：命令发送面板——可停靠的多行编辑器（默认停靠在底部面板），可发送到当前终端（开启广播时扩展到所有广播面板）、当前工作区或所有标签页；可逐行转回车执行（兼容 cmd / PowerShell），或以 bracketed-paste 包裹不执行；草稿重启后保留。
+- Android：远程桌面（RDP / VNC / SPICE）触控输入——单击=左键、长按=右键、长按后移动=左键拖拽（拖窗口、选文本、移动文件）、双指拖动=滚轮，并支持原生全屏。
+- Android：远程桌面支持软键盘输入与屏幕按键栏（Ctrl / Alt / Shift / Esc / Tab / 方向键等），软键盘开关固定在按键栏上；无扫描码的中日韩字符走协议的 Unicode 输入路径。
+
+**改进**
+
+- AI：上下文压缩重构——历史以单次请求发送（超过 100k token 才分块），摘要输出预算上调，思考型模型不再压缩失败；压缩记录锚定在对话截断位置并显示实时耗时；已回答的 ask_user 交互以只读记录保留在对话中。
+- AI：流式渲染节流——长回答输出期间不再拖慢全应用的输入与滚动。
+- SFTP：SFTP 连接失败时提示主机可能未开启 SFTP 子系统，可在连接设置中把传输协议切换为 SCP。
+- 远程桌面：RDP / VNC / SPICE 状态栏精简——去掉 host:port 与下拉框标题，分辨率预设完整显示尺寸。
+- 串口：新增高速波特率预设（1M / 1.5M / 2M / 3M / 4M），常见 SoC 调试串口可直接选择。
+- RDP：缩放屏下远程会话按本地 DPI 缩放渲染，远程界面不再比本地应用"小一圈"。
+
+**问题修复**
+
+- AI：前台执行等不到完成标记时（命令被键入非 shell 提示符、TUI 程序，或被 Ctrl+C 终止），不再让会话一直报 "session is busy" 直到超时——新命令会接管卡住的持有者，手动键入也会结束当前任务。
+- FTP：单线程服务器上传输卡在 0% 的问题已解决；取消 / 暂停立即生效；被截断的下载不再误报成功。
+- Windows：Alt+F4、任务栏关闭与 taskkill 现在走完整退出流程——保存窗口状态、清理会话与隧道；进程不再残留占用单实例锁导致无法再次启动。
+- Windows：应用前后台切换后输入法候选框保持光标锚定，不再跑到屏幕角落（普通输入框与终端内均适用）。
+- RDP：远端登录过程中不再间歇性报 "unexpected server message"。
+- RDP：旧连接默认优先开启 NLA。
+- Telnet：跨读取边界的 IAC 序列不再把协议字节漏进输出，CR NUL 填充不再进入终端与会话日志。
+- Telnet：自动登录等待真实的用户名 / 密码提示符，凭据不再被回显；登录后脚本等提示符稳定后再执行；连接遵循已配置的代理。
+- SFTP / 编辑器：可编辑文件上限从 1MB 提升到 10MB，打开较大文件前先确认；在数 MB 的文件中输入不再卡顿。
+- 容器：docker 安装在默认 PATH 之外（如 /usr/local/bin）的主机上，非交互 SSH 命令现在能找到可执行文件，容器功能恢复正常。
+- Docker Web 模式：复制 / 粘贴走浏览器剪贴板，所有导出 / 保存流程改为交给浏览器下载。
+- Docker Web 模式：身份 / 代理 / AI / MCP 的保存不再失败，浏览器里创建的身份刷新后仍在。
+- 隧道：tunnels.json 中的上游代理密码不再以不受保护的方式存储。
+
 ## v1.12.2
 
 ### What's Changed

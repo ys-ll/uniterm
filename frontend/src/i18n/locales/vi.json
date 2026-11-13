@@ -272,6 +272,8 @@
   "ai.exportDone": "Đã xuất {name}",
   "ai.deleteMessage": "Xóa tin nhắn này",
   "ai.truncateFrom": "Xóa tin nhắn này và mọi nội dung sau đó",
+  "ai.confirmDeleteTitle": "Xóa tin nhắn",
+  "ai.confirmDeleteMessage": "Sẽ xóa tin nhắn này cùng với phản hồi AI tương ứng. Thao tác này không thể hoàn tác. Xóa không?",
   "ai.thinking": "Đang suy nghĩ...",
   "ai.thinkingToggleHint": "Nhấp để hiện hoặc ẩn quá trình suy nghĩ",
   "ai.noThinkingContent": "Không có nội dung suy nghĩ trong lượt này (mô hình có thể không hỗ trợ suy luận).",

@@ -272,6 +272,8 @@
   "ai.exportDone": "{name} をエクスポートしました",
   "ai.deleteMessage": "このメッセージを削除",
   "ai.truncateFrom": "このメッセージ以降を削除",
+  "ai.confirmDeleteTitle": "メッセージを削除",
+  "ai.confirmDeleteMessage": "このメッセージとそれに対するAIの返信を削除します。この操作は元に戻せません。削除しますか？",
   "ai.thinking": "考え中...",
   "ai.thinkingToggleHint": "クリックで思考プロセスを表示/非表示",
   "ai.noThinkingContent": "今回の思考コンテンツはありません（モデルが推論に対応していない可能性があります）。",

@@ -293,6 +293,8 @@
   "ai.exportDone": "已导出 {name}",
   "ai.deleteMessage": "删除此消息",
   "ai.truncateFrom": "删除此消息及之后内容",
+  "ai.confirmDeleteTitle": "删除消息",
+  "ai.confirmDeleteMessage": "将删除这条消息及其对应的 AI 回复。此操作不可撤销，确定删除吗？",
   "ai.thinking": "思考中...",
   "ai.compacting": "正在整理上下文（可能需要几分钟）...",
   "ai.compactionFailed": "上下文摘要生成失败，本次使用近期完整对话继续，完整聊天记录仍然保留。",

@@ -62,13 +62,6 @@
         </div>
       </div>
 
-      <div v-if="message.role === 'assistant' && message.content?.trim()" class="copy-action">
-        <button class="copy-md-btn" @click="copyAsMarkdown" :title="t('ai.copyMarkdown')">
-          <el-icon><Copy :size="'0.875rem'" /></el-icon>
-          <span class="copy-md-label">{{ copyMdLabel }}</span>
-        </button>
-      </div>
-
       <div v-if="message.needsContinue" class="continue-box">
         <el-button type="primary" @click="$emit('continue')">
           {{ t('ai.continue') }}
@@ -217,27 +210,51 @@
       <!-- Message timestamp (user questions and assistant answers only).
            The row shows the short clock; hovering reveals the full date and
            time. -->
-      <el-tooltip
-        v-if="createdAtLabel && message.role !== 'tool'"
-        :content="createdAtFullLabel"
-        placement="top"
-        :show-after="300"
-      >
-        <div class="msg-meta">{{ createdAtLabel }}</div>
-      </el-tooltip>
+      <!-- Shared meta row below every message (tool results excluded): the
+           timestamp first, then hover-revealed actions to its right — copy the
+           reply for assistant messages, copy/delete the turn for user ones. -->
+      <div v-if="message.role !== 'tool'" class="msg-meta-row">
+        <el-tooltip
+          v-if="messageTimeLabel"
+          :content="createdAtFullLabel"
+          placement="top"
+          :show-after="300"
+        >
+          <div class="msg-meta">{{ messageTimeLabel }}</div>
+        </el-tooltip>
+        <div class="msg-actions">
+          <button
+            v-if="message.role === 'assistant' && message.content?.trim()"
+            class="msg-action-btn"
+            :class="{ active: replyCopied }"
+            @click="onReplyCopy"
+            :title="t('ai.copyMarkdown')"
+          >
+            <el-icon><Check v-if="replyCopied" :size="'0.8125rem'" /><Copy v-else :size="'0.8125rem'" /></el-icon>
+          </button>
+          <template v-if="message.role === 'user'">
+            <button class="msg-action-btn" :class="{ active: userCopied }" @click="onUserCopy" :title="t('ai.copy')">
+              <el-icon><Check v-if="userCopied" :size="'0.8125rem'" /><Copy v-else :size="'0.8125rem'" /></el-icon>
+            </button>
+            <button class="msg-action-btn danger" @click="onUserDelete" :title="t('common.delete')">
+              <el-icon><Trash2 :size="'0.8125rem'" /></el-icon>
+            </button>
+          </template>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { writeClipboard } from '../composables/useClipboardWrite'
-import { Copy, Check, BookOpen, Terminal, FileText } from '@lucide/vue'
+import { Copy, Check, BookOpen, Terminal, FileText, Trash2 } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useI18n } from '../i18n'
 import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
-import { formatClock, formatDuration } from '../utils/timeFormat'
+import { formatClock, formatMessageTime, formatDuration } from '../utils/timeFormat'
 import { attachmentPreviewUrl, formatBytes } from '../services/attachments'
 import type { AIMessage } from '../types/ai'
 
@@ -409,7 +426,7 @@ function handleReject() {
 }
 
 const aiStore = useAIStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const inExpanded = ref(false)
 const outExpanded = ref(false)
 const thinkingShown = ref(false)
@@ -428,6 +445,11 @@ const createdAtFullLabel = computed(() => {
     return ''
   }
 })
+
+// Message timestamp: today shows only the clock ("14:32"), yesterday shows a
+// relative word + clock ("昨天 14:32"), older messages show date + clock
+// ("11月5日 14:32"). All formatted in the UI language.
+const messageTimeLabel = computed(() => formatMessageTime(props.message.createdAt, locale.value))
 
 // Duration label: prefer the stored measurement; while the current turn is
 // still thinking, tick live off the store start time.
@@ -460,15 +482,54 @@ const thinkingDurationLabel = computed(() => {
 
 watch(thinkingLive, (on) => ensureLiveTimer(on), { immediate: true })
 onUnmounted(() => ensureLiveTimer(false))
-const copyMdLabel = ref(t('ai.copyMarkdown'))
-
 const COPY_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="0.75rem" height="0.75rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
 const CHECK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="0.75rem" height="0.75rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
 
-async function copyAsMarkdown() {
-  const copied = await writeClipboard(props.message.content)
-  copyMdLabel.value = t(copied ? 'ai.copied' : 'ai.copyFailed')
-  setTimeout(() => { copyMdLabel.value = t('ai.copyMarkdown') }, 2000)
+// Copy the assistant reply (markdown source) from the shared meta row.
+const replyCopied = ref(false)
+
+async function onReplyCopy() {
+  const text = props.message.content || ''
+  if (!text) return
+  if (await writeClipboard(text)) {
+    replyCopied.value = true
+    setTimeout(() => { replyCopied.value = false }, 2000)
+  } else {
+    ElMessage.error(t('ai.copyFailed'))
+  }
+}
+
+// ── User message actions: copy the exact question, or delete it along with
+//    the AI's reply for that turn (fixing a mistyped prompt cleanly). ──
+const userCopied = ref(false)
+
+async function onUserCopy() {
+  const text = props.message.content || ''
+  if (!text) return
+  if (await writeClipboard(text)) {
+    userCopied.value = true
+    setTimeout(() => { userCopied.value = false }, 2000)
+  } else {
+    ElMessage.error(t('ai.copyFailed'))
+  }
+}
+
+async function onUserDelete() {
+  try {
+    await ElMessageBox.confirm(
+      t('ai.confirmDeleteMessage'),
+      t('ai.confirmDeleteTitle'),
+      {
+        type: 'warning',
+        confirmButtonText: t('common.delete'),
+        cancelButtonText: t('common.cancel'),
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+  } catch {
+    return // cancelled
+  }
+  aiStore.deleteMessageWithReply(props.message.id)
 }
 
 const copiedTool = ref('')
@@ -929,6 +990,11 @@ function escapeHtml(text: string): string {
   border-radius: var(--radius-sm);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
 }
+/* Lower the scrollbar top edge so it sits just below the bubble's rounded
+   top-right corner instead of meeting it flush. */
+.ai-message.user .text::-webkit-scrollbar-track {
+  margin-top: 0.5rem;
+}
 .ai-message.interrupted .text {
   font-style: italic;
   color: var(--text-muted);
@@ -1215,9 +1281,8 @@ function escapeHtml(text: string): string {
      box, and a full-width box would pop the tooltip mid-sidebar. */
   width: fit-content;
 }
-.ai-message.user .msg-meta {
-  margin-left: auto;
-  text-align: right;
+.msg-meta-row .msg-meta {
+  margin-top: 0;
 }
 .thinking-content {
   margin: 0.25rem 0 0 0;
@@ -1414,40 +1479,50 @@ function escapeHtml(text: string): string {
   margin-top: 0.5rem;
 }
 
-.copy-action {
+/* Shared message meta row: timestamp first, hover-revealed icon actions to
+   its right, for both user and assistant messages. */
+.msg-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
   margin-top: 0.25rem;
 }
-.copy-md-btn {
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  min-height: 1.25rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.ai-message:hover .msg-actions {
+  opacity: 1;
+}
+.msg-action-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0;
-  padding: 0.125rem 0.25rem;
-  font-size: 0.6875rem;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  font-size: 0.8125rem;
   color: var(--text-muted);
   background: transparent;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
-  transition: all 0.2s;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
 }
-.copy-md-label {
-  max-width: 0;
-  overflow: hidden;
-  opacity: 0;
-  white-space: nowrap;
-  padding-left: 0;
-  transition: max-width 0.2s, opacity 0.15s, padding-left 0.2s;
-}
-.copy-md-btn:hover {
-  gap: 0.25rem;
-  padding: 0.125rem 0.5rem;
+.msg-action-btn:hover {
   color: var(--accent);
-  border-color: var(--accent-glow);
   background: var(--accent-subtle);
 }
-.copy-md-btn:hover .copy-md-label {
-  max-width: 9.375rem;
-  opacity: 1;
-  padding-left: 0.125rem;
+.msg-action-btn.active {
+  color: var(--accent);
+}
+.msg-action-btn.danger:hover {
+  color: var(--error);
+  background: var(--error-subtle);
 }
 .continue-box {
   margin-top: 0.5rem;
