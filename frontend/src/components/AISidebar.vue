@@ -727,26 +727,9 @@ async function readClipboardImage(): Promise<Blob | null> {
     if (type) return await item.getType(type)
   }
   // Screenshots arrive as image/* (handled above). Local files copied from the
-  // OS (e.g. Explorer) arrive as "Files" references instead of bitmap data:
-  // Chromium/WebView2 exposes them as FileSystemFileHandle objects. Read those
-  // and attach the first one that is an image, so a copied .png/.jpg pastes
-  // like a screenshot.
-  for (const item of items) {
-    if (!item.types.includes('Files')) continue
-    try {
-      const data = await item.getType('Files')
-      const file = typeof (data as FileSystemFileHandle).getFile === 'function'
-        ? await (data as FileSystemFileHandle).getFile()
-        : (data as File)
-      // On Windows the file handle may report an empty MIME type; fall back to
-      // a file-extension check so a copied .png/.jpg/.gif still pastes.
-      const isImage = file && (file.type.startsWith('image/') ||
-        /\.(png|jpe?g|gif|webp|bmp|avif)$/i.test(file.name))
-      if (isImage) return file
-    } catch {
-      // Ignore unreadable / unsupported file references.
-    }
-  }
+  // OS (e.g. Explorer) are not visible to this API — 'Files' is not a MIME
+  // type, so there is nothing to getType; those are covered by the Go
+  // backend's CF_HDROP reader (ClipboardGetFiles) in aiSidebarPasteFromClipboard.
   return null
 }
 
@@ -785,12 +768,12 @@ function pasteFromClipboard() {
  *
  * Ctrl+V works for local files copied from Explorer because Chromium surfaces the
  * clipboard file reference in a genuine DOM paste event as an image/* item, which
- * onPaste attaches. Right-click has no such event, so we first replay a real
- * paste via document.execCommand('paste') (allowed on this user-gesture path) to
- * reuse the exact same onPaste handling, then fall back to the async Clipboard API
- * (readClipboardImage, covers screenshots/bitmaps), and finally to the Go backend's
- * CF_HDROP reader (ClipboardGetFiles) which is the only way to see files copied from
- * the OS file explorer.
+ * onPaste attaches. Right-click has no such event, so we try the async Clipboard
+ * API first (readClipboardImage, covers screenshots/bitmaps), then the Go
+ * backend's CF_HDROP reader (ClipboardGetFiles), which is the only way to see
+ * files copied from the OS file explorer, and finally replay a real paste via
+ * document.execCommand('paste') — a no-op in Chromium, so App.vue then falls
+ * back to inserting plain clipboard text.
  */
 async function aiSidebarPasteFromClipboard(): Promise<boolean> {
   const el = editableRef.value
@@ -809,6 +792,14 @@ async function aiSidebarPasteFromClipboard(): Promise<boolean> {
       const name = f.name || ''
       if (!/\.(png|jpe?g|gif|webp|bmp|avif)$/i.test(name)) continue
       if (!f.id || !f.size) continue
+      // Same gate as every other attach path, so size/count rejections show a
+      // visible error instead of the backend read failing silently (the Go
+      // reader also caps chunks at 8MB; images are capped lower anyway).
+      const verdict = validateAttachment({ name, size: f.size, type: mimeFromName(name) }, attachments.value)
+      if (!verdict.ok) {
+        showAttachmentError(attachmentErrorMessageKey(verdict.error), verdict.error.params)
+        continue
+      }
       try {
         const dataB64 = await ClipboardReadFileChunkByID(f.id, 0, f.size)
         const bytes = bytesFromBase64(dataB64)

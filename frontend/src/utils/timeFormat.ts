@@ -61,7 +61,7 @@ export function formatMessageTime(ts?: number, locale?: string, now: Date = new 
     const t = startOfDay(ts)
     const today = startOfDay(now)
     if (t === today) return clockTime(ts, locale)
-    if (t === today - DAY_MS) {
+    if (t === startOfDay(now.getTime() - DAY_MS)) {
       const yesterday = new Intl.RelativeTimeFormat(locale ?? undefined, {
         numeric: 'auto',
       }).format(-1, 'day')
