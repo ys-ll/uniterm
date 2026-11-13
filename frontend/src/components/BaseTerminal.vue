@@ -208,7 +208,7 @@ import { stripCursorBlink } from '../utils/cursor'
 import { applyBackspaceKey } from '../utils/terminalOptions'
 import { handleTerminalWordDelete } from '../utils/terminalWordDelete'
 import { formatFontFamily } from '../utils/formatFontFamily'
-import { isMultilinePaste, normalizePastedText, pasteWithScroll } from '../utils/terminalPaste'
+import { normalizePastedText, pasteWithScroll } from '../utils/terminalPaste'
 import { confirmMultilinePaste } from '../composables/multilinePasteDialog'
 import {
   sanitizeTerminalOutput,

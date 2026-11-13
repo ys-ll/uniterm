@@ -17,6 +17,7 @@ export type SidebarView =
   | 'files'
   | 'monitor'
   | 'tunnels'
+  | 'commandSend'
 
 export const BOTTOM_PANEL_MIN_HEIGHT = 120
 

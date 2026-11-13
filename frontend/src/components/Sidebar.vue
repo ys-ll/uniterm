@@ -290,6 +290,13 @@
       <MonitorOverviewSidebar v-if="uiLayout.isViewActive('monitor')" />
     </DockHost>
 
+    <DockHost :docked="uiLayout.panelLocation('commandSend') === 'bottom'">
+      <template #title>
+        <PanelTitleBar v-if="uiLayout.isViewActive('commandSend')" view="commandSend" />
+      </template>
+      <CommandSendPanel v-if="uiLayout.isViewActive('commandSend')" />
+    </DockHost>
+
     <DockHost :docked="uiLayout.panelLocation('personalization') === 'bottom'">
       <template #title>
         <PanelTitleBar v-if="uiLayout.isViewActive('personalization')" view="personalization" />
@@ -473,7 +480,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide } from 'vue'
 import { storeToRefs } from 'pinia'
-import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Activity, Pencil, MoreHorizontal, FolderTree, ArrowRightLeft, Star } from '@lucide/vue'
+import { X, ChevronRight, ChevronDown, Filter, Check, Network, Zap, Clock, Plus, Palette, SquareTerminal, Activity, Pencil, MoreHorizontal, FolderTree, ArrowRightLeft, Star, Send } from '@lucide/vue'
 import { getShellLabel as getShellLabelBase } from '../utils/shellLabel'
 import { useConnectionStore } from '../stores/connectionStore'
 import { useFavoriteStore } from '../stores/favoriteStore'
@@ -488,6 +495,7 @@ import ImportDialog from './ImportDialog.vue'
 import QuickCommandsPanel from './QuickCommandsPanel.vue'
 import TunnelsPanel from './TunnelsPanel.vue'
 import HistoryPanel from './HistoryPanel.vue'
+import CommandSendPanel from './CommandSendPanel.vue'
 import FileSidebar from './FileSidebar.vue'
 import MonitorOverviewSidebar from './MonitorOverviewSidebar.vue'
 import { useCompanionStore } from '../stores/companionStore'
@@ -653,6 +661,7 @@ const SIDEBAR_TAB_ICONS: Record<string, any> = {
   quickCommands: Zap,
   history: Clock,
   personalization: Palette,
+  commandSend: Send,
 }
 
 function sidebarTabTitle(key: string): string {
