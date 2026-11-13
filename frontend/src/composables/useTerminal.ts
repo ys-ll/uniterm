@@ -348,12 +348,12 @@ export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]
     // MobaXterm default ANSI palette (official DefaultColorScheme=0)
     case 'mobaxterm-default':
       return {
-        background: '#000000', foreground: '#ececec', cursor: '#b4b4c0',
+        background: '#1e1e1e', foreground: '#ececec', cursor: '#b4b4c0',
         selectionBackground: 'rgba(236,236,236,0.2)',
-        black: '#000000', red: '#ff6060', green: '#60ff60', yellow: '#ffff36',
+        black: '#000000', red: '#ff6060', green: '#0eb16c', yellow: '#ffff36',
         blue: '#6060ff', magenta: '#ff36ff', cyan: '#36ffff', white: '#ececec',
-        brightBlack: '#363636', brightRed: '#ff8080', brightGreen: '#80ff80',
-        brightYellow: '#ffff80', brightBlue: '#8080ff', brightMagenta: '#ff80ff',
+        brightBlack: '#363636', brightRed: '#ff8080', brightGreen: '#18ed93',
+        brightYellow: '#ffff80', brightBlue: '#1bbae9', brightMagenta: '#ff80ff',
         brightCyan: '#80ffff', brightWhite: '#ffffff'
       }
     // MobaXterm / GNOME Ubuntu terminal style (common built-in alternative)

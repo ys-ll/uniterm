@@ -117,6 +117,7 @@ export function lineToRuns(
   cols: number,
   palette: PreviewPalette,
   colorOverride?: (col: number) => string | undefined,
+  boldBright = true,
 ): PreviewStyleRun[] {
   const runs: PreviewStyleRun[] = []
   for (let x = 0; x < cols; x++) {
@@ -128,7 +129,14 @@ export function lineToRuns(
     // getFgColorMode()'s numeric value is a flag mask, not 0/1/2.
     const fgMode = cell.isFgRGB() ? 2 : cell.isFgPalette() ? 1 : 0
     const bgMode = cell.isBgRGB() ? 2 : cell.isBgPalette() ? 1 : 0
-    const fgRaw = colorToCss(fgMode, cell.getFgColor(), palette)
+    // Mirror xterm's main renderer (DomRendererRowFactory): when
+    // `drawBoldTextInBrightColors` is on (the default), a bold cell whose
+    // foreground is a base palette color (0-7) is painted with its bright
+    // variant (8-15). Without this the preview showed `ls` directories as the
+    // dim base blue while the terminal itself brightened them (index 4 -> 12).
+    let fgColor = cell.getFgColor()
+    if (boldBright && fgMode === 1 && cell.isBold() && fgColor < 8) fgColor += 8
+    const fgRaw = colorToCss(fgMode, fgColor, palette)
     const bgRaw = colorToCss(bgMode, cell.getBgColor(), palette)
     const inverse = cell.isInverse()
     const fg = inverse ? (bgRaw ?? palette.defaultBg) : fgRaw
