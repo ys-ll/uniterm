@@ -350,6 +350,7 @@ Cảm ơn những người đã đóng góp mã nguồn và cải tiến dưới
     <td align="center"><a href="https://github.com/kevin9327">@kevin9327</a></td>
     <td align="center"><a href="https://github.com/gezerui888">@gezerui888</a></td>
     <td align="center"><a href="https://github.com/eltociear">@eltociear</a></td>
+    <td align="center"><a href="https://github.com/dajiaohuang">@dajiaohuang</a></td>
   </tr>
 </table>
 

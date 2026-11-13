@@ -9,8 +9,8 @@
 - SSH: per-host automatic TOTP authentication — attach a TOTP secret to a connection and the 2FA code is filled automatically at login. (@surenwuyuwuqiu)
 - Terminal: multi-line paste confirmation — pasting multi-line clipboard content shows an editable preview first (line numbers, word-wrap toggle); what you confirm is exactly what gets pasted, with a "don't ask again" switch.
 - Terminal: command send panel — a dockable multi-line editor (default in the bottom panel) that sends to the current terminal (expanding to the broadcast panels when broadcast is on), the whole workspace or every tab; each line can be executed via Enter (cmd / PowerShell compatible) or delivered as bracketed-paste without executing; drafts survive restarts.
-- Android: remote desktop (RDP / VNC / SPICE) touch input — tap = left click, long-press = right click, moving after a long-press = left-button drag (drag windows, select text, move files), two-finger drag = wheel scroll, and a native fullscreen mode.
-- Android: remote desktop gains soft keyboard input and an on-screen key bar (Ctrl / Alt / Shift / Esc / Tab / arrows...) with a pinned keyboard toggle; CJK characters without a scancode are sent via the protocol's Unicode input path.
+- Android: remote desktop (RDP / VNC / SPICE) gains touch input (tap = left click, long-press = right click / drag, two-finger drag = wheel scroll, native fullscreen) plus soft keyboard input and an on-screen key bar; CJK characters without a scancode are sent via the protocol's Unicode input path.
+- Credentials: keystore identity auth now covers password-based connection types beyond the SSH family (RDP, VNC, telnet, FTP, databases and more); editing the password once in the keystore updates every connection that references it.
 
 **Improvements**
 
@@ -20,6 +20,9 @@
 - Remote desktop: the RDP / VNC / SPICE status bars are simplified — host:port and select titles are dropped, selects are narrower, and resolution presets show the full size.
 - Serial: high-speed baud presets (1M / 1.5M / 2M / 3M / 4M) for common SoC debug UARTs.
 - RDP: on scaled displays the remote session now renders at the local DPI scale — remote UI no longer appears physically smaller than local apps.
+- MCP: a "Maximum concurrent commands" setting (default 8, range 1–64) is added; commands that time out or stall no longer keep holding their concurrency slot, and long-running commands return a pollable ID promptly. (@surenwuyuwuqiu)
+- MCP: file transfers (upload_file / download_file) accept any local path — the SFTP-bookmark allowlist is dropped, and both transfers raise the approval dialog showing the full source and destination paths (download is now treated as a write).
+- AI: user messages in a conversation can be copied or deleted — delete removes the message together with the whole reply of that turn, after confirmation; user bubbles are right-aligned and content-sized, and message timestamps show a clock for today, a relative word for yesterday and the date for older ones, locale-aware. (@etanman)
 
 **Bug Fixes**
 
@@ -36,6 +39,19 @@
 - Docker web mode: copy / paste works via the browser clipboard, and all export / save flows hand files to the browser download manager instead of a native dialog.
 - Docker web mode: identity / proxy / AI / MCP saves no longer fail closed, and browser-created identities survive a reload.
 - Tunnels: the upstream proxy password in tunnels.json is no longer stored unprotected.
+- Database: exporting a PostgreSQL table's structure no longer fails with "column a.adbin does not exist" — the default-value expression is read from the right catalog table, and columns without a default export as NULL.
+- Telnet: a large burst of output (e.g. listing a big directory) no longer freezes for ~3 s between the front half and the rest of the output. (@etanman)
+- SFTP: the bookmark control in the path breadcrumb stays visible and clickable when a long path overflows the side panel. (@dajiaohuang)
+- Windows: when the app is launched by double-click (no stderr handle), panic and fatal-error output is captured to `panic-stderr.log` next to the main log instead of being lost, so crash reports carry the stack trace.
+- Terminal theme: the mobaxterm-default palette matches the theme it replicates, and bold text in the scrollback screen preview uses brighter colors instead of washing out. (@etanman)
+- Docker web mode: the headless server binary is fully statically linked again — on linux/arm64 the user worker no longer fails to start right after login.
+
+**Notes**
+
+- As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
+- Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
+
+Thanks to @surenwuyuwuqiu, @etanman and @dajiaohuang for their contributions to this release.
 
 ### 更新内容
 
@@ -44,8 +60,8 @@
 - SSH：支持按主机配置自动 TOTP 认证——为连接绑定 TOTP 密钥后，登录时自动填写动态验证码。(@surenwuyuwuqiu)
 - 终端：多行粘贴确认——粘贴多行剪贴板内容时先弹出可编辑预览（行号、自动换行开关），确认的内容就是实际粘贴的内容，支持"不再询问"开关。
 - 终端：命令发送面板——可停靠的多行编辑器（默认停靠在底部面板），可发送到当前终端（开启广播时扩展到所有广播面板）、当前工作区或所有标签页；可逐行转回车执行（兼容 cmd / PowerShell），或以 bracketed-paste 包裹不执行；草稿重启后保留。
-- Android：远程桌面（RDP / VNC / SPICE）触控输入——单击=左键、长按=右键、长按后移动=左键拖拽（拖窗口、选文本、移动文件）、双指拖动=滚轮，并支持原生全屏。
-- Android：远程桌面支持软键盘输入与屏幕按键栏（Ctrl / Alt / Shift / Esc / Tab / 方向键等），软键盘开关固定在按键栏上；无扫描码的中日韩字符走协议的 Unicode 输入路径。
+- Android：远程桌面（RDP / VNC / SPICE）支持触控输入（单击=左键、长按=右键 / 拖拽、双指拖动=滚轮、原生全屏）与软键盘输入、屏幕按键栏；无扫描码的中日韩字符走协议的 Unicode 输入路径。
+- 凭据：密钥库身份认证扩展到 SSH 系列之外的用户名 + 密码类连接（RDP、VNC、telnet、FTP、数据库等）；在密钥库中改一次密码，所有引用该身份的连接同步生效。
 
 **改进**
 
@@ -55,6 +71,9 @@
 - 远程桌面：RDP / VNC / SPICE 状态栏精简——去掉 host:port 与下拉框标题，分辨率预设完整显示尺寸。
 - 串口：新增高速波特率预设（1M / 1.5M / 2M / 3M / 4M），常见 SoC 调试串口可直接选择。
 - RDP：缩放屏下远程会话按本地 DPI 缩放渲染，远程界面不再比本地应用"小一圈"。
+- MCP：新增「最大并发命令数」设置（默认 8，范围 1–64）；超时或卡住的命令不再一直占用并发额度，长时间命令立即返回可轮询的 ID。(@surenwuyuwuqiu)
+- MCP：文件传输（upload_file / download_file）接受任意本地路径——取消 SFTP 书签目录白名单，两种传输都会弹出展示源 / 目标完整路径的确认对话框（下载现在也按写操作确认）。
+- AI：会话中的用户消息支持复制与删除——删除会连同该轮的完整回复一起移除，删除前确认；用户气泡右对齐且随内容自适应宽度，消息时间按"今天显示时刻、昨天显示相对词、更早显示日期"降级展示，多语言自适应。(@etanman)
 
 **问题修复**
 
@@ -71,6 +90,19 @@
 - Docker Web 模式：复制 / 粘贴走浏览器剪贴板，所有导出 / 保存流程改为交给浏览器下载。
 - Docker Web 模式：身份 / 代理 / AI / MCP 的保存不再失败，浏览器里创建的身份刷新后仍在。
 - 隧道：tunnels.json 中的上游代理密码不再以不受保护的方式存储。
+- 数据库：导出 PostgreSQL 表结构不再报 "column a.adbin does not exist"——默认值表达式改从正确的系统表读取，无默认值的列按 NULL 导出。
+- Telnet：大量输出瞬间到达时（如列大目录），前后两段输出之间不再出现约 3 秒的卡顿。(@etanman)
+- SFTP：路径过长撑出侧栏时，面包屑中的书签按钮保持可见、可点击。(@dajiaohuang)
+- Windows：双击启动（无 stderr 句柄）时，panic 与致命错误输出会捕获到主日志旁的 `panic-stderr.log`，不再丢失，崩溃报告因此带上堆栈。
+- 终端主题：mobaXterm-default 配色与其复刻的主题一致，回滚区屏幕预览中的加粗文字使用更亮的颜色，不再发灰。(@etanman)
+- Docker Web 模式：headless server 二进制恢复完全静态链接——linux/arm64 下登录后用户 worker 不再启动失败。
+
+**说明**
+
+- 本软件未购买代码签名证书，未签名的可执行文件可能被部分杀毒引擎（如 Windows Defender）误报。这是 Go/Wails 应用的已知问题（见 [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)）。可在杀毒软件中添加排除规则放行；请务必从官方开源渠道——GitHub 和 Gitee——下载。如仍有顾虑，可自行下载源码本地构建运行。
+- Android：自 1.11.0 起，Android 应用改用基于 uniterm 域名的新 application ID（`net.uniterm.app`）——如果安装过 1.11.0 之前的版本，请先卸载旧版再安装新版。
+
+感谢 @surenwuyuwuqiu、@etanman、@dajiaohuang 对本版本发布的贡献。
 
 ## v1.12.2
 
