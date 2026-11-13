@@ -351,9 +351,10 @@ function onBookmarkClick(path: string) {
 
 <style scoped>
 .sftp-breadcrumb {
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 0.25rem 0.75rem;
+  padding: 0.25rem 2.75rem 0.25rem 0.75rem;
   font-size: 0.75rem;
   font-family: var(--font-mono);
   color: var(--text-primary);
@@ -399,12 +400,15 @@ function onBookmarkClick(path: string) {
   flex-shrink: 0;
 }
 .bookmark-btn {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
   width: 1.5rem;
   height: 1.5rem;
-  margin-left: auto;
   flex-shrink: 0;
   background: transparent;
   border: none;
