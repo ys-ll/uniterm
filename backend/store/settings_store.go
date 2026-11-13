@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+
+	"github.com/ys-ll/uniterm/backend/commandlimit"
 )
 
 const settingsFileName = "settings.json"
@@ -179,14 +181,18 @@ type MCPSettings struct {
 	// (mcpExecMode in app_mcp.go). Takes effect on the next MCP server start
 	// (StartMCP runs after every SaveLocalState).
 	ExecMode string `json:"execMode,omitempty"`
+	// MaxConcurrentCommands applies independently to the global background command
+	// and foreground job budgets. 0 uses the default; valid limits are 1–64.
+	MaxConcurrentCommands int `json:"maxConcurrentCommands,omitempty"`
 }
 
 // DefaultMCPSettings is the off-by-default MCP block for settings.json.
 func DefaultMCPSettings() MCPSettings {
 	return MCPSettings{
-		Enabled:  false,
-		Policy:   "confirm_write",
-		ExecMode: "background",
+		Enabled:               false,
+		Policy:                "confirm_write",
+		ExecMode:              "background",
+		MaxConcurrentCommands: commandlimit.Default,
 	}
 }
 

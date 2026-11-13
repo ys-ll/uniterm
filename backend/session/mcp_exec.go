@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh"
 
+	"github.com/ys-ll/uniterm/backend/commandlimit"
 	"github.com/ys-ll/uniterm/backend/log"
 )
 
@@ -28,9 +29,9 @@ const (
 	// pollable after completion.
 	mcpCommandTTL = 10 * time.Minute
 
-	// mcpMaxConcurrentCommands caps simultaneously running exec channels
-	// (defense against runaway agent loops).
-	mcpMaxConcurrentCommands = 8
+	// mcpMaxConcurrentCommands is the default global exec-channel budget;
+	// settings may override it within commandlimit bounds.
+	mcpMaxConcurrentCommands = commandlimit.Default
 
 	// mcpOutputCap bounds in-memory output accumulation per stream before the
 	// tail starts overwriting the head.
@@ -39,10 +40,13 @@ const (
 
 // mcpCommand is one exec-channel command lifecycle.
 type mcpCommand struct {
-	id     string
-	sessMu sync.Mutex
-	sess   *ssh.Session
-	done   chan struct{}
+	id         string
+	sessMu     sync.Mutex
+	sess       *ssh.Session
+	done       chan struct{}
+	closed     bool // guarded by sessMu; rejects channels opened after cancellation
+	cancel     chan struct{}
+	cancelOnce sync.Once
 
 	mu       sync.Mutex
 	stdout   []byte
@@ -68,7 +72,7 @@ func (c *mcpCommand) appendLocked(dst *[]byte, b []byte) {
 func (c *mcpCommand) snapshot() (stdout, stderr []byte, exitCode int, state string, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.stdout, c.stderr, c.exitCode, c.state, c.err
+	return append([]byte(nil), c.stdout...), append([]byte(nil), c.stderr...), c.exitCode, c.state, c.err
 }
 
 func (c *mcpCommand) setState(state string, exitCode int, err error) {
@@ -79,33 +83,49 @@ func (c *mcpCommand) setState(state string, exitCode int, err error) {
 	c.mu.Unlock()
 }
 
-// closeChannel closes the exec channel (idempotent via ssh internals).
+// closeChannel also rejects a channel that is still being opened. SSH channel
+// operations can block on the transport, so never hold sessMu across I/O.
 func (c *mcpCommand) closeChannel() {
 	c.sessMu.Lock()
-	if c.sess != nil {
-		_ = c.sess.Close()
-	}
+	c.closed = true
+	sess := c.sess
 	c.sessMu.Unlock()
+	if sess != nil {
+		go sess.Close()
+	}
 }
 
-// signalChannel delivers an SSH exec-channel signal request.
 func (c *mcpCommand) signalChannel(sig ssh.Signal) error {
 	c.sessMu.Lock()
-	defer c.sessMu.Unlock()
-	if c.sess == nil {
+	sess, closed := c.sess, c.closed
+	c.sessMu.Unlock()
+	if sess == nil || closed {
 		return fmt.Errorf("channel closed")
 	}
-	return c.sess.Signal(sig)
+	return sess.Signal(sig)
+}
+
+func (c *mcpCommand) interrupt() {
+	c.cancelOnce.Do(func() { close(c.cancel) })
 }
 
 // mcpRegistry tracks commands across all SSH sessions (keyed by commandId):
 // MCP tool calls arrive with only a commandId, so it must be resolvable
 // without knowing the session.
 var mcpRegistry = struct {
-	mu       sync.Mutex
-	commands map[string]*mcpCommand
-	running  int
-}{commands: make(map[string]*mcpCommand)}
+	mu            sync.Mutex
+	commands      map[string]*mcpCommand
+	running       int
+	maxConcurrent int
+}{commands: make(map[string]*mcpCommand), maxConcurrent: mcpMaxConcurrentCommands}
+
+// SetMCPMaxConcurrentCommands updates the global background-command budget.
+// Lowering it only prevents new commands; existing commands keep running.
+func SetMCPMaxConcurrentCommands(limit int) {
+	mcpRegistry.mu.Lock()
+	mcpRegistry.maxConcurrent = commandlimit.Normalize(limit)
+	mcpRegistry.mu.Unlock()
+}
 
 // MCPExec implements the mcp.SSHExecutor contract on SSHSession. It opens a
 // new exec channel on the shared authenticated client, holds a clientRef for
@@ -120,43 +140,25 @@ func (s *SSHSession) MCPExec(cmd string, syncTimeoutMs, hardTimeoutMs, maxOutput
 	}
 
 	mcpRegistry.mu.Lock()
-	if mcpRegistry.running >= mcpMaxConcurrentCommands {
+	if mcpRegistry.running >= mcpRegistry.maxConcurrent {
+		limit := mcpRegistry.maxConcurrent
 		mcpRegistry.mu.Unlock()
-		return nil, nil, -1, "", fmt.Errorf("too many concurrent MCP commands (max %d)", mcpMaxConcurrentCommands)
+		return nil, nil, -1, "", fmt.Errorf("too many concurrent MCP commands (max %d across all SSH sessions); poll or interrupt existing commands, or adjust Maximum concurrent commands in MCP settings (higher limits increase memory use and remote load and may exceed SSH server channel limits)", limit)
 	}
 	mcpRegistry.running++
 	mcpRegistry.mu.Unlock()
-	defer func() {
-		mcpRegistry.mu.Lock()
-		mcpRegistry.running--
-		mcpRegistry.mu.Unlock()
-	}()
-
-	// Hold the client for the command's whole lifetime so closing the source
-	// tab mid-command does not tear down the transport under us.
+	// The supervisor owns the slot and client reference until completion,
+	// independently of the synchronous caller's wait budget.
 	ref.acquire()
-	defer ref.release()
-
 	c := &mcpCommand{
-		id:    uuid.New().String(),
-		done:  make(chan struct{}),
-		state: "running",
+		id:       uuid.New().String(),
+		done:     make(chan struct{}),
+		cancel:   make(chan struct{}),
+		state:    "running",
+		exitCode: -1,
 	}
 	mcpRegisterCommand(c)
-	defer mcpRetireCommand(c)
-
-	// Session teardown (tab closed / disconnect) kills running commands.
-	quitCh := s.quit
-	go func() {
-		select {
-		case <-quitCh:
-			c.closeChannel()
-			c.setState("session_closed", -1, fmt.Errorf("session closed"))
-		case <-c.done:
-		}
-	}()
-
-	go s.mcpRunCommand(c, ref.client, cmd, hardTimeoutMs)
+	go s.mcpRunCommand(c, ref, cmd, hardTimeoutMs)
 
 	syncTimeout := time.Duration(syncTimeoutMs) * time.Millisecond
 	select {
@@ -170,12 +172,14 @@ func (s *SSHSession) MCPExec(cmd string, syncTimeoutMs, hardTimeoutMs, maxOutput
 	}
 }
 
-// mcpRegisterCommand installs the command in the global registry with a TTL
-// reaper so finished commands don't accumulate.
+// Running commands remain registered; the result TTL starts on completion.
 func mcpRegisterCommand(c *mcpCommand) {
 	mcpRegistry.mu.Lock()
 	mcpRegistry.commands[c.id] = c
 	mcpRegistry.mu.Unlock()
+}
+
+func mcpRetireCommand(c *mcpCommand) {
 	time.AfterFunc(mcpCommandTTL, func() {
 		mcpRegistry.mu.Lock()
 		delete(mcpRegistry.commands, c.id)
@@ -183,109 +187,90 @@ func mcpRegisterCommand(c *mcpCommand) {
 	})
 }
 
-func mcpRetireCommand(c *mcpCommand) {
-	<-c.done // wait for the runner to finish before allowing removal
+type mcpRunResult struct {
+	state string
+	code  int
+	err   error
 }
 
-// mcpRunCommand drives one exec channel to completion.
-func (s *SSHSession) mcpRunCommand(c *mcpCommand, client *ssh.Client, cmd string, hardTimeoutMs int) {
-	defer close(c.done)
+// The supervisor bounds the entire lifecycle, including NewSession and Start.
+// OpenChannel has no cancellation API on a shared SSH transport. A late result
+// is therefore closed by the worker without disturbing the interactive session.
+func (s *SSHSession) mcpRunCommand(c *mcpCommand, ref *sshClientRef, cmd string, hardTimeoutMs int) {
+	timer := time.NewTimer(time.Duration(hardTimeoutMs) * time.Millisecond)
+	defer timer.Stop()
+	result := make(chan mcpRunResult, 1)
+	go func() { result <- mcpExecuteCommand(c, ref.client, cmd) }()
 
+	var r mcpRunResult
+	select {
+	case r = <-result:
+	case <-timer.C:
+		r = mcpRunResult{"killed", -1, fmt.Errorf("command exceeded hard timeout (%dms)", hardTimeoutMs)}
+	case <-s.quit:
+		r = mcpRunResult{"session_closed", -1, fmt.Errorf("session closed")}
+	case <-c.cancel:
+		r = mcpRunResult{"killed", -1, fmt.Errorf("command interrupted")}
+	}
+	c.setState(r.state, r.code, r.err)
+	log.Writef("mcp: command %s finished state=%s exit=%d", c.id, r.state, r.code)
+	c.closeChannel()
+	mcpRegistry.mu.Lock()
+	mcpRegistry.running--
+	mcpRegistry.mu.Unlock()
+	mcpRetireCommand(c)
+	// release can close the transport when this was its last owner.
+	// Keep completion independent of a stalled network write during Close.
+	go ref.release()
+	close(c.done)
+}
+
+type mcpOutputWriter struct {
+	command *mcpCommand
+	stderr  bool
+}
+
+func (w mcpOutputWriter) Write(p []byte) (int, error) {
+	c := w.command
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state == "running" {
+		dst := &c.stdout
+		if w.stderr {
+			dst = &c.stderr
+		}
+		c.appendLocked(dst, p)
+	}
+	return len(p), nil
+}
+
+func mcpExecuteCommand(c *mcpCommand, client *ssh.Client, cmd string) mcpRunResult {
 	sess, err := client.NewSession()
 	if err != nil {
-		c.setState("error", -1, err)
-		return
+		return mcpRunResult{"error", -1, err}
 	}
 	c.sessMu.Lock()
+	if c.closed {
+		c.sessMu.Unlock()
+		_ = sess.Close()
+		return mcpRunResult{"killed", -1, fmt.Errorf("command already finished")}
+	}
 	c.sess = sess
 	c.sessMu.Unlock()
-
-	stdoutPipe, err := sess.StdoutPipe()
-	if err != nil {
-		sess.Close()
-		c.setState("error", -1, err)
-		return
-	}
-	stderrPipe, err := sess.StderrPipe()
-	if err != nil {
-		sess.Close()
-		c.setState("error", -1, err)
-		return
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		buf := make([]byte, 32*1024)
-		for {
-			n, rerr := stdoutPipe.Read(buf)
-			if n > 0 {
-				c.mu.Lock()
-				c.appendLocked(&c.stdout, buf[:n])
-				c.mu.Unlock()
-			}
-			if rerr != nil {
-				return
-			}
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		buf := make([]byte, 32*1024)
-		for {
-			n, rerr := stderrPipe.Read(buf)
-			if n > 0 {
-				c.mu.Lock()
-				c.appendLocked(&c.stderr, buf[:n])
-				c.mu.Unlock()
-			}
-			if rerr != nil {
-				return
-			}
-		}
-	}()
-
+	sess.Stdout = mcpOutputWriter{command: c}
+	sess.Stderr = mcpOutputWriter{command: c, stderr: true}
 	if err := sess.Start(cmd); err != nil {
-		sess.Close()
-		wg.Wait()
-		c.setState("error", -1, err)
-		return
+		return mcpRunResult{"error", -1, err}
 	}
-
-	hardTimer := time.NewTimer(time.Duration(hardTimeoutMs) * time.Millisecond)
-	defer hardTimer.Stop()
-
-	waitDone := make(chan error, 1)
-	go func() { waitDone <- sess.Wait() }()
-
-	select {
-	case werr := <-waitDone:
-		wg.Wait()
-		sess.Close()
-		exitCode := 0
-		state := "exited"
-		if werr != nil {
-			var exitErr *ssh.ExitError
-			if errors.As(werr, &exitErr) {
-				exitCode = exitErr.ExitStatus()
-			} else {
-				exitCode = -1
-				state = "error"
-			}
-		}
-		c.mu.Lock()
-		c.exitCode = exitCode
-		c.state = state
-		c.err = werr
-		c.mu.Unlock()
-	case <-hardTimer.C:
-		sess.Close()
-		wg.Wait()
-		c.setState("killed", -1, fmt.Errorf("command exceeded hard timeout (%dms)", hardTimeoutMs))
+	err = sess.Wait()
+	if err == nil {
+		return mcpRunResult{"exited", 0, nil}
 	}
-
-	log.Writef("mcp: command %s finished state=%s exit=%d", c.id, c.state, c.exitCode)
+	var exitErr *ssh.ExitError
+	if errors.As(err, &exitErr) {
+		return mcpRunResult{"exited", exitErr.ExitStatus(), err}
+	}
+	return mcpRunResult{"error", -1, err}
 }
 
 // MCPLatestOutput implements the poll contract for one commandId.
@@ -332,16 +317,16 @@ func (s *SSHSession) MCPInterrupt(commandID string, signal string) error {
 	}
 	switch signal {
 	case "SIGKILL":
-		c.closeChannel()
+		c.interrupt()
 		return nil
 	case "SIGTERM":
 		if err := c.signalChannel(ssh.SIGTERM); err != nil {
-			c.closeChannel()
+			c.interrupt()
 		}
 		return nil
 	default: // SIGINT
 		if err := c.signalChannel(ssh.SIGINT); err != nil {
-			c.closeChannel()
+			c.interrupt()
 		}
 		return nil
 	}

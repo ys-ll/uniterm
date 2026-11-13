@@ -93,6 +93,12 @@ func (a *App) StartMCP() error {
 		return err
 	}
 	cfg := state.MCP
+	limit := 0
+	if cfg != nil {
+		limit = cfg.MaxConcurrentCommands
+	}
+	session.SetMCPMaxConcurrentCommands(limit)
+	a.jobRegistry().SetMaxConcurrent(limit)
 	if cfg == nil || !cfg.Enabled {
 		srv.Stop()
 		return nil
