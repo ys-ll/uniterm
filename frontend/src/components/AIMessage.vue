@@ -421,7 +421,7 @@ function handleReject() {
 
 const aiStore = useAIStore()
 const { t, locale } = useI18n()
-const inExpanded = ref(true)
+const inExpanded = ref(false)
 const outExpanded = ref(false)
 const thinkingShown = ref(false)
 
@@ -986,11 +986,6 @@ function escapeHtml(text: string): string {
   border-radius: 0.875rem;
   border-bottom-right-radius: 0;
   box-shadow: inset 0 0 0 1px var(--border-subtle);
-  /* Cap the user bubble to ~10 text lines; a longer message gets its own
-     scrollbar instead of growing without bound. 10 lines + vertical padding:
-     calc(0.75rem * 1.6 * 10 + 0.625rem * 2) = 13.25rem. */
-  max-height: 13.25rem;
-  overflow-y: auto;
 }
 /* Lower the scrollbar top edge so it sits just below the bubble's rounded
    top-right corner instead of meeting it flush. */
