@@ -767,6 +767,14 @@ func (s *baseSession) drainEmitQueue() [][]byte {
 	dropped := s.emitDropped
 	s.emitDropped = 0
 	s.emitMu.Unlock()
+	// Wake any producer blocked in queueEmit on a full queue now that space
+	// has freed. Without this the readLoop waits out the full
+	// emitBlockWatchdog (3s) on EVERY queue-full episode — even when the
+	// consumer drains promptly — turning a big burst (e.g. `dir`) into
+	// "front half, then a ~3s freeze, then the rest". Broadcast is a no-op
+	// when no producer is waiting, and drop-oldest (degraded) mode is
+	// unaffected because it no longer blocks on the condition.
+	s.emitCond.Broadcast()
 	if dropped > 0 {
 		log.Writef("session %s: emit queue overflow, dropped %d stale chunk(s)", s.id, dropped)
 	}
