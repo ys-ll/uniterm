@@ -76,8 +76,8 @@
       </div>
 
       <!-- Tool call pairs: IN + OUT grouped together -->
-      <div v-if="message.tool_calls?.length" class="tool-pairs">
-        <div v-for="tc in message.tool_calls" :key="tc.id" class="tool-pair">
+      <div v-if="displayToolCalls.length" class="tool-pairs">
+        <div v-for="tc in displayToolCalls" :key="tc.id" class="tool-pair">
           <!-- IN box -->
           <div class="tool-box in-box">
             <div class="tool-box-header" @click="inExpanded = !inExpanded">
@@ -172,8 +172,59 @@
         </div>
       </div>
 
-      <!-- Message timestamp (user questions and assistant answers only) -->
-      <div v-if="createdAtLabel && message.role !== 'tool'" class="msg-meta">{{ createdAtLabel }}</div>
+      <!-- Answered ask_user interactions stay in the stream as read-only
+           records: the form is rebuilt from the ask_user tool call arguments
+           plus its structured tool result, with the chosen options marked. -->
+      <div
+        v-for="aq in answeredQuestions"
+        :key="aq.toolCallId"
+        class="question-box locked"
+      >
+        <div v-if="aq.args.header" class="question-header">{{ aq.args.header }}</div>
+        <div class="question-text">{{ aq.args.question }}</div>
+        <div class="question-options">
+          <label
+            v-for="(opt, i) in aq.args.options || []"
+            :key="i"
+            class="question-option"
+            :class="{ selected: aq.answer.selectedLabels.includes(opt.label) }"
+          >
+            <span v-if="aq.args.multiSelect" class="option-check">
+              <el-icon v-if="aq.answer.selectedLabels.includes(opt.label)"><Check :size="14" /></el-icon>
+              <span v-else class="option-check-empty"></span>
+            </span>
+            <span v-else class="option-radio" :class="{ on: aq.answer.selectedLabels.includes(opt.label) }"></span>
+            <span class="option-body">
+              <span class="option-label">{{ opt.label }}</span>
+              <span class="option-desc">{{ opt.description }}</span>
+            </span>
+          </label>
+          <label class="question-option" :class="{ selected: aq.answer.customText !== undefined }">
+            <span v-if="aq.args.multiSelect" class="option-check">
+              <el-icon v-if="aq.answer.customText !== undefined"><Check :size="14" /></el-icon>
+              <span v-else class="option-check-empty"></span>
+            </span>
+            <span v-else class="option-radio" :class="{ on: aq.answer.customText !== undefined }"></span>
+            <span class="option-body">
+              <span class="option-label">{{ t('ai.other') }}</span>
+              <input class="other-input" :value="aq.answer.customText ?? ''" disabled />
+            </span>
+          </label>
+        </div>
+        <div v-if="aq.answer.dismissed" class="question-dismissed">{{ t('ai.questionDismissed') }}</div>
+      </div>
+
+      <!-- Message timestamp (user questions and assistant answers only).
+           The row shows the short clock; hovering reveals the full date and
+           time. -->
+      <el-tooltip
+        v-if="createdAtLabel && message.role !== 'tool'"
+        :content="createdAtFullLabel"
+        placement="top"
+        :show-after="300"
+      >
+        <div class="msg-meta">{{ createdAtLabel }}</div>
+      </el-tooltip>
     </div>
   </div>
 </template>
@@ -211,6 +262,69 @@ const isPendingQ = computed(() =>
   aiStore.pendingQuestion?.messageId === props.message.id
 )
 const pendingQ = computed(() => isPendingQ.value ? aiStore.pendingQuestion! : null)
+
+// Rebuilds answered ask_user forms from data that already exists in the
+// stream: the ask_user tool call arguments (question, options) plus its tool
+// result (the structured answer). Anything missing or unparseable — legacy
+// sessions, deleted results, unexpected shapes — is simply skipped, and the
+// regular IN/OUT tool boxes remain the record. Never throws.
+const answeredQuestions = computed(() => {
+  if (pendingQ.value || props.message.role !== 'assistant' || !props.message.tool_calls?.length) return []
+  const out: Array<{
+    toolCallId: string
+    args: { question: string; header?: string; multiSelect?: boolean; options?: Array<{ label: string; description: string }> }
+    answer: { selectedLabels: string[]; customText?: string; dismissed?: boolean }
+  }> = []
+  for (const tc of props.message.tool_calls) {
+    if (tc.function?.name !== 'ask_user') continue
+    try {
+      const args = JSON.parse(tc.function.arguments || '{}') as {
+        question?: unknown; header?: unknown; multiSelect?: unknown; options?: unknown
+      }
+      if (typeof args.question !== 'string') continue
+      const result = getToolResult(tc.id)?.content || ''
+      let answer: { selectedLabels?: unknown; customText?: unknown; dismissed?: unknown } | null = null
+      if (result.startsWith('User dismissed this question.') || result.includes('question was dismissed')) {
+        answer = { selectedLabels: [], dismissed: true }
+      } else if (result.startsWith('User answered: ')) {
+        answer = JSON.parse(result.slice('User answered: '.length))
+      }
+      if (!answer || !Array.isArray(answer.selectedLabels)) continue
+      const selectedLabels = answer.selectedLabels.every(l => typeof l === 'string') ? answer.selectedLabels as string[] : []
+      const options = Array.isArray(args.options)
+        ? args.options.filter((o): o is { label: string; description: string } =>
+            !!o && typeof (o as any).label === 'string')
+        : undefined
+      out.push({
+        toolCallId: tc.id,
+        args: {
+          question: args.question,
+          header: typeof args.header === 'string' ? args.header : undefined,
+          multiSelect: args.multiSelect === true,
+          options,
+        },
+        answer: {
+          selectedLabels,
+          customText: typeof answer.customText === 'string' ? answer.customText : undefined,
+          dismissed: answer.dismissed === true,
+        },
+      })
+    } catch {
+      // Malformed history: leave this one to the plain IN/OUT boxes.
+    }
+  }
+  return out
+})
+
+// When a question form is shown for an ask_user call — pending or answered —
+// the raw IN/OUT tool boxes for that call are redundant and hidden. Calls
+// whose form could not be rebuilt keep the plain IN/OUT boxes as the record.
+const displayToolCalls = computed(() => {
+  if (!props.message.tool_calls?.length) return []
+  const hidden = new Set(answeredQuestions.value.map(aq => aq.toolCallId))
+  if (pendingQ.value) hidden.add(pendingQ.value.toolId)
+  return props.message.tool_calls.filter(tc => !hidden.has(tc.id))
+})
 
 // Question state
 const selectedOptions = ref<number[]>([])
@@ -250,6 +364,18 @@ function toggleOther() {
 
 function onOtherInput(e: Event) {
   otherText.value = (e.target as HTMLInputElement).value
+  // Typing a custom answer selects the "Other" option automatically — the
+  // user should not have to click the radio separately.
+  if (otherText.value.trim() && !otherSelected.value) {
+    otherSelected.value = true
+    if (!pendingQ.value?.multiSelect) selectedOptions.value = []
+  }
+  // Clearing the text unchecks "Other" again in multi-select mode; in
+  // single-select mode the radio stays on the last chosen option instead of
+  // silently deselecting everything.
+  if (!otherText.value.trim() && pendingQ.value?.multiSelect && otherSelected.value) {
+    otherSelected.value = false
+  }
 }
 
 function handleAnswer() {
@@ -284,12 +410,24 @@ function handleReject() {
 
 const aiStore = useAIStore()
 const { t } = useI18n()
-const inExpanded = ref(true)
+const inExpanded = ref(false)
 const outExpanded = ref(false)
 const thinkingShown = ref(false)
 
 // ── Timestamps & thinking status ──
 const createdAtLabel = computed(() => formatClock(props.message.createdAt))
+// Hover detail for the timestamp row: full local date and time.
+const createdAtFullLabel = computed(() => {
+  if (!props.message.createdAt) return ''
+  try {
+    return new Date(props.message.createdAt).toLocaleString([], {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+})
 
 // Duration label: prefer the stored measurement; while the current turn is
 // still thinking, tick live off the store start time.
@@ -852,6 +990,13 @@ function escapeHtml(text: string): string {
   user-select: text;
   -webkit-user-select: text;
 }
+/* A user message can carry a huge paste; clamp it like tool output so one
+   message cannot dominate the transcript. Assistant answers stream into .text
+   and stay unclamped. */
+.ai-message.user .text {
+  max-height: 8rem;
+  overflow-y: auto;
+}
 .text :deep(.code-block-wrapper) {
   margin: 0.375rem 0;
   border: 1px solid var(--border-subtle);
@@ -1066,14 +1211,18 @@ function escapeHtml(text: string): string {
   color: var(--text-muted);
   opacity: 0.75;
   user-select: none;
+  /* Hug the text instead of stretching: the hover tooltip anchors to this
+     box, and a full-width box would pop the tooltip mid-sidebar. */
+  width: fit-content;
 }
 .ai-message.user .msg-meta {
+  margin-left: auto;
   text-align: right;
 }
 .thinking-content {
   margin: 0.25rem 0 0 0;
   padding: 0.375rem 0.625rem;
-  max-height: 16rem;
+  max-height: 8rem;
   overflow-y: auto;
   border-left: 2px solid var(--border-subtle);
   background: var(--bg-elevated);
@@ -1165,6 +1314,8 @@ function escapeHtml(text: string): string {
   font-size: 0.6875rem;
   white-space: pre-wrap;
   word-break: break-word;
+  max-height: 8rem;
+  overflow-y: auto;
 }
 
 /* OUT box - accent themed */
@@ -1200,7 +1351,7 @@ function escapeHtml(text: string): string {
   font-size: 0.6875rem;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 18.75rem;
+  max-height: 8rem;
   overflow-y: auto;
 }
 
@@ -1339,13 +1490,32 @@ function escapeHtml(text: string): string {
   transition: border-color 0.15s, background 0.15s;
   user-select: none;
 }
-.question-option:hover {
+.question-box:not(.locked) .question-option:hover {
   border-color: var(--accent-glow);
   background: var(--accent-subtle);
 }
 .question-option.selected {
   border-color: var(--accent);
   background: var(--accent-subtle);
+}
+/* Answered question: options are a read-only record, no hover affordance. */
+.question-box.locked {
+  border-color: var(--border-subtle);
+}
+.question-box.locked .question-option {
+  cursor: default;
+  opacity: 0.75;
+}
+.question-box.locked .question-option.selected {
+  opacity: 1;
+}
+.other-input:disabled {
+  color: var(--text-muted);
+}
+.question-dismissed {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 .option-radio {
   width: 0.875rem;

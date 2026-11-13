@@ -1140,6 +1140,21 @@ func TestMCPClientUpdateRenamesWithoutCreatingDuplicate(t *testing.T) {
 }
 
 func TestSummarizeAIContextProtocols(t *testing.T) {
+	neutral := map[string]interface{}{
+		"model":      "test-model",
+		"max_tokens": 16384,
+		"system":     "chat system",
+		"messages": []interface{}{
+			map[string]interface{}{"role": "user", "content": "history to summarize"},
+		},
+		"tools": []interface{}{
+			map[string]interface{}{"name": "run", "description": "run it", "input_schema": map[string]interface{}{"type": "object"}},
+		},
+	}
+	requestJSON, err := json.Marshal(neutral)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, protocol := range []string{"anthropic", "openai", "responses"} {
 		t.Run(protocol, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1148,8 +1163,8 @@ func TestSummarizeAIContextProtocols(t *testing.T) {
 					t.Error(err)
 					return
 				}
-				if body["stream"] != false || body["tools"] != nil {
-					t.Error("summary must be non-streaming and tool-free")
+				if body["stream"] != false {
+					t.Error("summary must be non-streaming")
 				}
 				if r.Header.Get("User-Agent") != "test-agent" {
 					t.Error("user agent lost")
@@ -1159,18 +1174,46 @@ func TestSummarizeAIContextProtocols(t *testing.T) {
 					if r.URL.Path != "/v1/messages" || r.Header.Get("x-api-key") != "test-key" {
 						t.Error("wrong Anthropic endpoint/auth")
 					}
+					if body["system"] != "chat system" {
+						t.Error("system prompt must match the chat request")
+					}
+					if body["max_tokens"] != float64(16384) {
+						t.Error("summary output budget lost")
+					}
+					tc, _ := body["tool_choice"].(map[string]interface{})
+					if tc["type"] != "none" {
+						t.Error("tool_choice none missing")
+					}
+					msgs, _ := body["messages"].([]interface{})
+					if len(msgs) != 1 {
+						t.Error("history messages lost")
+					}
 					fmt.Fprint(w, `{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":"hidden"},{"type":"text","text":"handoff"}]}`)
 				case "responses":
 					if r.URL.Path != "/v1/responses" || r.Header.Get("Authorization") != "Bearer test-key" {
 						t.Error("wrong Responses endpoint/auth")
 					}
-					if !strings.Contains(body["input"].(string), "prior goal") {
-						t.Error("previous summary lost")
+					if body["instructions"] != "chat system" {
+						t.Error("system prompt must match the chat request")
+					}
+					if body["tool_choice"] != "none" {
+						t.Error("tool_choice none missing")
+					}
+					input, _ := body["input"].([]interface{})
+					if len(input) == 0 {
+						t.Error("history messages lost")
 					}
 					fmt.Fprint(w, `{"status":"completed","output":[{"type":"reasoning","summary":[]},{"type":"message","content":[{"type":"output_text","text":"handoff"}]}]}`)
 				default:
 					if r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer test-key" {
 						t.Error("wrong Chat Completions endpoint/auth")
+					}
+					if body["tool_choice"] != "none" {
+						t.Error("tool_choice none missing")
+					}
+					msgs, _ := body["messages"].([]interface{})
+					if len(msgs) < 2 {
+						t.Error("system + history messages lost")
 					}
 					fmt.Fprint(w, `{"choices":[{"finish_reason":"stop","message":{"content":"handoff"}}]}`)
 				}
@@ -1180,7 +1223,7 @@ func TestSummarizeAIContextProtocols(t *testing.T) {
 			var chatCancelled atomic.Bool
 			chatCancel := context.CancelFunc(func() { chatCancelled.Store(true) })
 			app.chatCancel.Store(&chatCancel)
-			got, err := app.SummarizeAIContext("test-key", server.URL+"/v1", "test-model", protocol, "test-agent", "", "request", "prior goal", "observed result")
+			got, err := app.SummarizeAIContext("test-key", server.URL+"/v1", "test-model", protocol, "test-agent", "", "request", string(requestJSON))
 			if err != nil || got != "handoff" {
 				t.Fatalf("summary = %q, %v", got, err)
 			}
@@ -1191,6 +1234,42 @@ func TestSummarizeAIContextProtocols(t *testing.T) {
 				t.Fatal("request cancellation leaked")
 			}
 		})
+	}
+}
+
+func TestSummarizeAIContextRetriesWithoutToolChoice(t *testing.T) {
+	// A relay that rejects tool_choice must not fail the compaction: the
+	// request is retried once without the parameter.
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		attempts++
+		if _, present := body["tool_choice"]; attempts == 1 && present {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"tool_choice not supported"}`)
+			return
+		}
+		if attempts == 1 && body["tool_choice"] != nil {
+			t.Error("first attempt must carry tool_choice none")
+		}
+		fmt.Fprint(w, `{"stop_reason":"end_turn","content":[{"type":"text","text":"handoff"}]}`)
+	}))
+	defer server.Close()
+	app := &App{}
+	neutral := map[string]interface{}{
+		"model":    "m",
+		"system":   "s",
+		"messages": []interface{}{map[string]interface{}{"role": "user", "content": "h"}},
+		"tools":    []interface{}{map[string]interface{}{"name": "run"}},
+	}
+	requestJSON, _ := json.Marshal(neutral)
+	got, err := app.SummarizeAIContext("k", server.URL, "m", "anthropic", "", "", "request", string(requestJSON))
+	if err != nil || got != "handoff" {
+		t.Fatalf("summary = %q, %v", got, err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
 	}
 }
 
@@ -1212,7 +1291,7 @@ func TestSummarizeAIContextCancellationIsIsolated(t *testing.T) {
 	app.compactionCancels.Store("other-request", otherCancel)
 	done := make(chan error, 1)
 	go func() {
-		_, err := app.SummarizeAIContext("k", server.URL, "m", "openai", "", "", "cancel-me", "", "history")
+		_, err := app.SummarizeAIContext("k", server.URL, "m", "openai", "", "", "cancel-me", `{"messages":[{"role":"user","content":"history"}]}`)
 		done <- err
 	}()
 	select {
@@ -1248,6 +1327,30 @@ func TestParseAISummaryRejectsIncompleteResults(t *testing.T) {
 		if _, err := parseAISummary([]byte(c.data), c.protocol); err == nil {
 			t.Errorf("accepted invalid %s summary", c.protocol)
 		}
+	}
+}
+
+func TestParseAISummaryAcceptsSubstantialTruncatedHandoff(t *testing.T) {
+	long := strings.Repeat("x", 600)
+	if _, err := parseAISummary([]byte(`{"stop_reason":"max_tokens","content":[{"type":"thinking","thinking":"long"},{"type":"text","text":"`+long+`"}]}`), "anthropic"); err != nil {
+		t.Fatalf("rejected truncated anthropic handoff: %v", err)
+	}
+	if _, err := parseAISummary([]byte(`{"choices":[{"finish_reason":"length","message":{"content":"`+long+`"}}]}`), "openai"); err != nil {
+		t.Fatalf("rejected truncated chat handoff: %v", err)
+	}
+	// Short truncations are useless and keep failing.
+	if _, err := parseAISummary([]byte(`{"stop_reason":"max_tokens","content":[{"type":"text","text":"partial"}]}`), "anthropic"); err == nil {
+		t.Fatal("accepted short anthropic truncation")
+	}
+	if _, err := parseAISummary([]byte(`{"choices":[{"finish_reason":"length","message":{"content":"partial"}}]}`), "openai"); err == nil {
+		t.Fatal("accepted short chat truncation")
+	}
+	// Truncation acceptance never widens to other stop reasons.
+	if _, err := parseAISummary([]byte(`{"stop_reason":"stop_sequence","content":[{"type":"text","text":"`+long+`"}]}`), "anthropic"); err == nil {
+		t.Fatal("accepted stop_sequence result")
+	}
+	if _, err := parseAISummary([]byte(`{"choices":[{"finish_reason":"tool_calls","message":{"content":"`+long+`"}}]}`), "openai"); err == nil {
+		t.Fatal("accepted tool_calls result")
 	}
 }
 

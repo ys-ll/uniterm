@@ -108,6 +108,28 @@ export function formatAttachmentError(raw: string): string | null {
   }
 }
 
+// Single construction path for the protocol-neutral request body. The main
+// chat request and the compaction summary request must serialize the history
+// identically — same system string, same tools array, same message blocks —
+// so providers with prefix caching can serve the summary from the
+// conversation's cached prefix. Never duplicate this shape elsewhere.
+export function buildChatRequestBody(
+  model: string,
+  system: string,
+  messages: Array<Record<string, unknown>>,
+  tools: unknown[] | undefined,
+  reasoning?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    model,
+    max_tokens: 16384,
+    system,
+    messages,
+    tools,
+    ...(reasoning || {}),
+  }
+}
+
 export async function chat(options: ChatOptions): Promise<void> {
   const settingsStore = useSettingsStore()
   const aiStore = useAIStore()
@@ -126,14 +148,13 @@ export async function chat(options: ChatOptions): Promise<void> {
 
   if (!apiKey) throw new Error('API key not configured')
 
-  const requestBody: Record<string, unknown> = {
+  const requestBody = buildChatRequestBody(
     model,
-    max_tokens: 16384,
-    system: options.system,
-    messages: options.messages,
-    tools: options.tools,
-    ...(activeModel ? reasoningParameters(activeModel, configuration?.reasoning) : {}),
-  }
+    options.system,
+    options.messages,
+    options.tools,
+    activeModel ? reasoningParameters(activeModel, configuration?.reasoning) : undefined,
+  )
 
   const requestJSON = JSON.stringify(requestBody)
 
