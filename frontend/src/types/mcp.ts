@@ -21,6 +21,7 @@ export interface MCPSettings {
   port?: number
   policy?: string
   execMode?: string
+  maxConcurrentCommands?: number
 }
 
 export const DEFAULT_MCP_SETTINGS: MCPSettings = {
@@ -28,4 +29,5 @@ export const DEFAULT_MCP_SETTINGS: MCPSettings = {
   allowRemote: false,
   policy: 'confirm_write',
   execMode: 'background',
+  maxConcurrentCommands: 8,
 }

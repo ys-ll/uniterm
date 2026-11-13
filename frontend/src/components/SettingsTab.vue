@@ -1412,6 +1412,17 @@
 
           <div class="setting-card">
             <div class="setting-info">
+              <div class="setting-title">{{ t('settings.mcpMaxConcurrentCommands') }}</div>
+              <div class="setting-desc">{{ t('settings.mcpMaxConcurrentCommandsDesc') }}</div>
+              <div v-if="(mcp.maxConcurrentCommands || 8) > 8" class="setting-desc mcp-concurrency-warning" role="status">{{ t('settings.mcpMaxConcurrentCommandsWarning') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-input-number v-model="mcp.maxConcurrentCommands" :disabled="mcpSaving" :min="1" :max="64" :precision="0" :value-on-clear="8" controls-position="right" @change="saveMcp()" />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-info">
               <div class="setting-title">{{ t('settings.mcpPolicy') }}</div>
               <div class="setting-desc">{{ t('settings.mcpPolicyDesc') }}</div>
             </div>
@@ -2138,6 +2149,7 @@ const mcpSetupVisible = ref(false)
 watch(() => localStateStore.state.mcp, (v) => {
   if (v) {
     Object.assign(mcp, DEFAULT_MCP_SETTINGS, v)
+    mcp.maxConcurrentCommands = normalizeMcpConcurrency(v.maxConcurrentCommands)
     mcpPort.value = v.port || 61207
   }
 }, { immediate: true })
@@ -2147,7 +2159,13 @@ async function refreshMcpState() {
   try { mcpTokens.value = (await ListMCPTokens()) || [] } catch { mcpTokens.value = [] }
 }
 
+function normalizeMcpConcurrency(value: number | undefined): number {
+  if (!Number.isFinite(value) || !value || value < 1) return 8
+  return Math.min(64, Math.floor(value))
+}
+
 async function saveMcp() {
+  mcp.maxConcurrentCommands = normalizeMcpConcurrency(mcp.maxConcurrentCommands)
   mcpSaving.value = true
   try {
     await localStateStore.update({
@@ -2157,6 +2175,7 @@ async function saveMcp() {
         port: mcpPort.value,
         policy: mcp.policy,
         execMode: mcp.execMode || 'background',
+        maxConcurrentCommands: mcp.maxConcurrentCommands,
       },
     })
     await refreshMcpState()
@@ -3643,6 +3662,11 @@ async function onToggleSystemTitleBar(v: boolean) {
   font-family: var(--font-ui);
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+.mcp-concurrency-warning {
+  color: var(--el-color-warning);
+  margin-top: 0.375rem;
 }
 
 .mcp-client-field {

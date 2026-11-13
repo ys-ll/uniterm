@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -975,4 +976,55 @@ func TestRandomBytesByteAtATime(t *testing.T) {
 	for _, b := range buf {
 		s.Feed([]byte{b})
 	}
+}
+
+func TestRegistryConcurrencySetting(t *testing.T) {
+	r := NewRegistry()
+	r.SetMaxConcurrent(1)
+	var jobs []*Job
+	start := func(id string) (*Job, error) {
+		return r.Start(&fakePty{alive: true}, id, "sleep 30", "\n", time.Minute, 1024)
+	}
+	t.Cleanup(func() {
+		for _, job := range jobs {
+			_ = r.Interrupt(job.ID)
+		}
+	})
+	first, err := start("first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobs = append(jobs, first)
+	if _, err := start("blocked"); !errors.Is(err, ErrTooMany) || !strings.Contains(err.Error(), "max 1") {
+		t.Fatalf("limit 1: %v", err)
+	}
+	r.SetMaxConcurrent(10)
+	for len(jobs) < 9 {
+		job, err := start(fmt.Sprintf("terminal-%d", len(jobs)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		jobs = append(jobs, job)
+	}
+	if _, err := start("first"); !errors.Is(err, ErrSessionBusy) {
+		t.Fatalf("per-terminal lock: %v", err)
+	}
+	r.SetMaxConcurrent(2)
+	if _, err := start("blocked"); !errors.Is(err, ErrTooMany) || !strings.Contains(err.Error(), "max 2") {
+		t.Fatalf("lowered limit: %v", err)
+	}
+	for _, job := range jobs {
+		_, _, _, state, _ := job.Snapshot()
+		if state != StateRunning {
+			t.Fatalf("lowering limit stopped existing task: %s", state)
+		}
+		if err := r.Interrupt(job.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	job, err := start("recovered")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobs = append(jobs, job)
 }

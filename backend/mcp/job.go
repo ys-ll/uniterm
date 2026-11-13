@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/ys-ll/uniterm/backend/commandlimit"
 )
 
 // Job states shared by both modes. The MCP tool layer maps these onto the
@@ -29,7 +30,7 @@ const (
 	DefaultMaxOutput     = 64 * 1024
 	defaultOutputCap     = DefaultMaxOutput * 4
 	defaultJobTTL        = 10 * time.Minute
-	defaultMaxConcurrent = 8
+	defaultMaxConcurrent = commandlimit.Default
 
 	// takeoverGrace is how long a still-running foreground job may hold the
 	// session before a newer Start supersedes it instead of failing with
@@ -136,9 +137,10 @@ type Pty interface {
 
 // Registry tracks foreground jobs across all live sessions.
 type Registry struct {
-	mu      sync.Mutex
-	jobs    map[string]*Job
-	running int
+	mu            sync.Mutex
+	jobs          map[string]*Job
+	running       int
+	maxConcurrent int
 	// busy maps sessionID → running job id. One executor per session keeps
 	// the live terminal coherent (see ErrSessionBusy). A newer Start can
 	// still take the slot over when the holder is wedged (see start).
@@ -159,6 +161,7 @@ type Registry struct {
 func NewRegistry() *Registry {
 	return &Registry{
 		jobs:                  make(map[string]*Job),
+		maxConcurrent:         defaultMaxConcurrent,
 		busy:                  make(map[string]string),
 		latest:                make(map[string]string),
 		newID:                 func() string { return "fg-" + uuid.New().String() },
@@ -167,6 +170,14 @@ func NewRegistry() *Registry {
 		interruptWriteTimeout: interruptWriteTimeout,
 		takeoverSettle:        takeoverSettle,
 	}
+}
+
+// SetMaxConcurrent changes the foreground job budget without terminating jobs.
+// The one-executor-per-terminal restriction remains independent of this budget.
+func (r *Registry) SetMaxConcurrent(limit int) {
+	r.mu.Lock()
+	r.maxConcurrent = commandlimit.Normalize(limit)
+	r.mu.Unlock()
 }
 
 // Start types a command into the live terminal and returns a pollable job.
@@ -211,9 +222,10 @@ func (r *Registry) start(pty Pty, sessionID, command, newline string, hardLimit 
 	}
 
 	r.mu.Lock()
-	if r.running >= defaultMaxConcurrent {
+	if r.running >= commandlimit.Normalize(r.maxConcurrent) {
+		limit := commandlimit.Normalize(r.maxConcurrent)
 		r.mu.Unlock()
-		return nil, ErrTooMany
+		return nil, fmt.Errorf("%w (max %d); wait for or interrupt existing jobs, or adjust Maximum concurrent commands in MCP settings (higher limits increase memory use and terminal load)", ErrTooMany, limit)
 	}
 	var superseded *Job
 	if _, taken := r.busy[sessionID]; taken && !observe {
