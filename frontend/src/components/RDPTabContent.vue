@@ -176,16 +176,31 @@ import { useRemoteDesktopPreferences } from '../composables/useRemoteDesktopPref
 import { queueRemoteKeyboardChange, isRdpPasteKey, REMOTE_KEY_SCANCODES as KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { charToScancode } from '../utils/remoteCharInput'
+import { resolveIdentityCredentials } from '../utils/identityCredentials'
+import { useIdentityStore } from '../stores/identityStore'
 
 const { t } = useI18n()
 const panelStore = usePanelStore()
 const connectionStore = useConnectionStore()
+const identityStore = useIdentityStore()
 
 const props = defineProps<{
   panelId: string
   config: ConnectionConfig | null
   sessionId: string | null
 }>()
+
+// The RDP protocol runs in the webview's WASM client, which reads the
+// credentials straight off the panel config — the backend's identity
+// materialization never reaches it. Resolve an identity reference here
+// (password-type identities only; user override per #959 semantics).
+// The store may not be loaded yet on a fresh window; refresh it lazily.
+identityStore.load()
+const identityCreds = computed(() =>
+  props.config ? resolveIdentityCredentials(props.config, identityStore.identities) : null
+)
+const effectiveUser = computed(() => identityCreds.value?.user ?? props.config?.user ?? '')
+const effectivePassword = computed(() => identityCreds.value?.password ?? props.config?.password ?? '')
 
 const status = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting')
 // Graphics/network tier. Seed from the saved connection; the status bar
@@ -372,8 +387,7 @@ function resolveDesktopSize(): { width: number; height: number } {
 }
 
 // "DOMAIN\user" falls back to domain like mstsc accepts; rdpDomain wins.
-function splitDomainUser(cfg: ConnectionConfig): { username: string; domain: string } {
-  let username = cfg.user || ''
+function splitDomainUser(username: string, cfg: ConnectionConfig): { username: string; domain: string } {
   let domain = cfg.rdpDomain || ''
   const idx = username.indexOf('\\')
   if (idx > 0 && !domain) {
@@ -404,7 +418,7 @@ async function startClient(proxyUrl: string, desktopSizeOverride?: RdpDesktopSiz
   try {
     const mod = await loadWasm()
     if (generation !== clientGeneration) return
-    const { username, domain } = splitDomainUser(props.config)
+    const { username, domain } = splitDomainUser(effectiveUser.value, props.config)
     const size = desktopSizeOverride ?? resolveDesktopSize()
     lastResizeRequest = desktopSizeOverride ?? null
     lastScaleRequest = null
@@ -421,7 +435,7 @@ async function startClient(proxyUrl: string, desktopSizeOverride?: RdpDesktopSiz
 
     const builder = new mod.SessionBuilder()
       .username(username)
-      .password(props.config.password || '')
+      .password(effectivePassword.value)
       .destination(props.config.host)
       .proxyAddress(wsUrl)
       .authToken(authToken)
@@ -431,7 +445,7 @@ async function startClient(proxyUrl: string, desktopSizeOverride?: RdpDesktopSiz
     builder.extension(new mod.Extension('enable_credssp', activeCredSSP))
     // Auto-logon with the saved credentials (mstsc saved-creds equivalent) —
     // requires the autologon extension patch in the WASM build.
-    builder.extension(new mod.Extension('autologon', !!props.config.password))
+    builder.extension(new mod.Extension('autologon', !!effectivePassword.value))
     // Low-bandwidth tiers negotiate a smaller connection_type and strip
     // server-side graphics features (wallpaper, theming, animations). The
     // default tier equals the engine's built-in values, so it is not sent —
