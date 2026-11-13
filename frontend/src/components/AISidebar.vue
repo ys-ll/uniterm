@@ -61,29 +61,32 @@
     </div>
 
     <div ref="messagesRef" class="ai-messages" @contextmenu="onAIContextMenu">
-      <div
-        v-for="msg in visibleMessages"
-        :key="msg.id"
-        @contextmenu.stop.prevent="onMessageContextMenu($event, msg.id)"
-      >
-        <AIMessage
-          :message="msg"
-          :search-text="searchText"
-          @approve="onApprove"
-          @reject="onReject"
-          @continue="onContinue"
-          @answer="onAnswer"
-          @dismiss="onDismiss"
-        />
-      </div>
-      <div v-if="aiStore.contextNotice" class="ai-context-notice" role="status">{{ aiStore.contextNotice }}</div>
-      <div v-if="aiStore.isRunning || aiStore.pendingCommand || aiStore.pendingQuestion" class="ai-thinking">
-        <div class="thinking-row" :title="t('ai.thinkingToggleHint')" @click="toggleThinking">
-          <div class="thinking-text">{{ statusText }}</div>
-          <ChevronDown v-if="!aiStore.thinkingExpanded" :size="'0.75rem'" class="thinking-chevron" />
-          <ChevronUp v-else :size="'0.75rem'" class="thinking-chevron" />
+      <template v-for="(msg, msgIndex) in visibleMessages" :key="msg.id">
+        <div @contextmenu.stop.prevent="onMessageContextMenu($event, msg.id)">
+          <AIMessage
+            :message="msg"
+            :search-text="searchText"
+            @approve="onApprove"
+            @reject="onReject"
+            @continue="onContinue"
+            @answer="onAnswer"
+            @dismiss="onDismiss"
+          />
         </div>
-        <div v-if="aiStore.thinkingExpanded" ref="thinkingPanelRef" class="thinking-panel">
+        <div v-if="msgIndex === contextRecordIndex" class="ai-context-notice" :class="{ 'ai-context-record-failed': aiStore.contextRecord?.failed }" role="status">{{ aiStore.contextRecord?.text }}</div>
+      </template>
+      <div v-if="aiStore.contextRecord && contextRecordIndex < 0" class="ai-context-notice" :class="{ 'ai-context-record-failed': aiStore.contextRecord.failed }" role="status">{{ aiStore.contextRecord.text }}</div>
+      <div v-if="aiStore.isRunning || aiStore.pendingCommand || aiStore.pendingQuestion" class="ai-thinking">
+        <div class="thinking-row" :class="{ clickable: thinkingToggleVisible }" :title="thinkingToggleVisible ? t('ai.thinkingToggleHint') : undefined" @click="thinkingToggleVisible && toggleThinking()">
+          <div class="thinking-text">{{ statusText }}</div>
+          <span v-if="liveThinkingElapsed" class="thinking-panel-time">{{ liveThinkingElapsed }}</span>
+          <span v-if="liveCompactionElapsed" class="thinking-panel-time">{{ liveCompactionElapsed }}</span>
+          <template v-if="thinkingToggleVisible">
+            <ChevronDown v-if="!aiStore.thinkingExpanded" :size="'0.75rem'" class="thinking-chevron" />
+            <ChevronUp v-else :size="'0.75rem'" class="thinking-chevron" />
+          </template>
+        </div>
+        <div v-if="thinkingToggleVisible && aiStore.thinkingExpanded" ref="thinkingPanelRef" class="thinking-panel">
           <div class="thinking-panel-header">
             <span class="thinking-dot" :class="aiStore.status === 'thinking' ? 'live' : 'done'">{{ aiStore.status === 'thinking' ? '○' : '●' }}</span>
             <span class="thinking-panel-title">{{ t('ai.thoughtProcess') }}</span>
@@ -744,6 +747,28 @@ const visibleMessages = computed(() => {
   })
 })
 
+// Index in visibleMessages after which the compaction record renders:
+// the message the last summary attempt split the history at, not the
+// bottom of the transcript. If the anchor message itself is hidden (a paired
+// tool result), the record rides with the nearest visible message above it;
+// if the anchor is gone entirely, the record falls back to the bottom
+// (contextRecordIndex < 0).
+const contextRecordIndex = computed(() => {
+  const record = aiStore.contextRecord
+  if (!record?.afterId) return -1
+  const full = aiStore.messages
+  const cutFull = full.findIndex(m => m.id === record.afterId)
+  if (cutFull < 0) return -1
+  const visible = visibleMessages.value
+  const visibleIdx = visible.findIndex(m => m.id === record.afterId)
+  if (visibleIdx >= 0) return visibleIdx
+  for (let i = cutFull - 1; i >= 0; i--) {
+    const idx = visible.findIndex(m => m.id === full[i].id)
+    if (idx >= 0) return idx
+  }
+  return 0
+})
+
 // ── Search ──
 const searchVisible = ref(false)
 const searchText = ref('')
@@ -805,6 +830,12 @@ const statusText = computed(() => {
 })
 
 // ── Live thinking box (click the status text to expand/collapse) ──
+// The panel shows the live thinking stream, which only exists while the
+// status is 'thinking'. In every other running state (outputting, executing,
+// compacting) the content would be the previous thinking phase's leftover,
+// so the toggle affordance is hidden there; per-message thinking stays
+// reviewable in the message bubbles.
+const thinkingToggleVisible = computed(() => aiStore.isRunning && aiStore.status === 'thinking')
 const thinkingPanelRef = ref<HTMLDivElement>()
 
 function scrollThinkingToBottom() {
@@ -839,11 +870,12 @@ onUnmounted(() => {
   if (thinkingRenderTimer !== null) clearTimeout(thinkingRenderTimer)
 })
 
-// 1s tick feeding the live elapsed counter while the model is thinking.
+// 1s tick feeding the live elapsed counters shown in the status row while
+// the model is thinking or the context summary is running.
 const thinkingTick = ref(0)
 let thinkingTickTimer: ReturnType<typeof setInterval> | null = null
 watch(
-  () => aiStore.thinkingExpanded && aiStore.isRunning && aiStore.status === 'thinking',
+  () => aiStore.isRunning && (aiStore.status === 'thinking' || aiStore.status === 'compacting'),
   (on) => {
     if (on && thinkingTickTimer === null) {
       thinkingTick.value = Date.now()
@@ -860,6 +892,11 @@ onUnmounted(() => { if (thinkingTickTimer !== null) clearInterval(thinkingTickTi
 const liveThinkingElapsed = computed(() => {
   if (aiStore.status !== 'thinking' || !aiStore.thinkingStartedAt) return ''
   return formatDuration(Math.max(0, thinkingTick.value - aiStore.thinkingStartedAt))
+})
+
+const liveCompactionElapsed = computed(() => {
+  if (aiStore.status !== 'compacting' || !aiStore.compactionStartedAt) return ''
+  return formatDuration(Math.max(0, thinkingTick.value - aiStore.compactionStartedAt))
 })
 
 const thinkingStartLabel = computed(() => formatClock(aiStore.thinkingStartedAt))
@@ -2137,9 +2174,12 @@ defineExpose({ focusInput })
 }
 .ai-context-notice {
   padding: 0.5rem 0.75rem;
-  color: var(--el-color-warning);
+  color: var(--text-muted);
   font-size: 0.75rem;
   line-height: 1.5;
+}
+.ai-context-record-failed {
+  color: var(--el-color-warning);
 }
 
 .ai-thinking {
@@ -2152,9 +2192,11 @@ defineExpose({ focusInput })
   align-items: center;
   gap: 0.25rem;
   align-self: flex-start;
+}
+.thinking-row.clickable {
   cursor: pointer;
 }
-.thinking-row:hover .thinking-text {
+.thinking-row.clickable:hover .thinking-text {
   color: var(--text-secondary);
 }
 .thinking-text {

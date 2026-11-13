@@ -129,7 +129,13 @@ export const useAIStore = defineStore('ai', () => {
   const status = ref<AIAgentStatus>('thinking')
   const contextRevision = ref(0)
   const compactionRequestId = ref('')
-  const contextNotice = ref('')
+  // Anchored record of the last compaction attempt, success or failure:
+  // rendered at the cut point in the transcript (afterId) with the elapsed
+  // time baked into the text. Failure records also carry the failure code.
+  const contextRecord = ref<{ text: string; afterId: string; failed: boolean } | null>(null)
+  // Timestamp when the running summarization started, driving the live
+  // elapsed counter in the status row.
+  const compactionStartedAt = ref(0)
   const contextStats = ref<{ beforeTokens: number; afterTokens: number; durationMs: number; fallback: boolean } | null>(null)
   const contextSummary = computed(() => {
     const summary = sessions.value.find(s => s.id === currentSessionId.value)?.contextSummary
@@ -330,7 +336,7 @@ export const useAIStore = defineStore('ai', () => {
 
   function clearMessages() {
     invalidateContextSummary()
-    contextNotice.value = ''
+    contextRecord.value = null
     contextStats.value = null
     messages.value = []
     if (currentSessionId.value) {
@@ -457,7 +463,7 @@ export const useAIStore = defineStore('ai', () => {
 
   function createSession(name?: string) {
     contextRevision.value++
-    contextNotice.value = ''
+    contextRecord.value = null
     contextStats.value = null
     const now = Date.now()
     const auto = !name
@@ -487,7 +493,7 @@ export const useAIStore = defineStore('ai', () => {
     const s = sessions.value.find(s => s.id === sessionId)
     if (!s) return
     contextRevision.value++
-    contextNotice.value = ''
+    contextRecord.value = null
     contextStats.value = null
     currentSessionId.value = sessionId
     messages.value = s.messages.map(m => reactive({ ...m }) as AIMessage)
@@ -798,7 +804,8 @@ export const useAIStore = defineStore('ai', () => {
     contextRevision,
     applyContextSummary,
     compactionRequestId,
-    contextNotice,
+    contextRecord,
+    compactionStartedAt,
     contextStats,
     systemPrompt,
     stopRequested,

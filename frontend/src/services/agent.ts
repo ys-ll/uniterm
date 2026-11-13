@@ -500,7 +500,6 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
   store.resetStop()
   store.isRunning = true
   store.status = 'thinking'
-  store.contextNotice = ''
   store.contextStats = null
   store.thinkingText = ''
   store.thinkingStartedAt = 0
@@ -1316,14 +1315,12 @@ export function answerQuestion(selectedLabels: string[], customText?: string) {
 
   store.clearPendingQuestion()
 
-  let answer: string
-  if (customText !== undefined && customText.trim() !== '') {
-    answer = `User chose "Other": ${customText.trim()}`
-  } else if (q.multiSelect && selectedLabels.length > 1) {
-    answer = `User selected: ${selectedLabels.join(', ')}`
-  } else {
-    answer = `User chose: ${selectedLabels[0]}`
-  }
+  // Structured but model-readable: the answered question form is rebuilt in
+  // the UI from this tool result, so the payload must stay parseable.
+  const payload: Record<string, unknown> = {}
+  if (selectedLabels.length) payload.selectedLabels = selectedLabels
+  if (customText !== undefined && customText.trim() !== '') payload.customText = customText.trim()
+  const answer = `User answered: ${JSON.stringify(payload)}`
 
   store.addMessage({
     id: `msg-${Date.now()}`,

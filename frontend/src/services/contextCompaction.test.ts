@@ -60,7 +60,7 @@ describe('incremental context compaction', () => {
     expect(JSON.stringify(result.messages)).toContain('0:history')
     expect(SummarizeAIContext).not.toHaveBeenCalled()
     expect(result.failed).toBe(false)
-    expect(store.contextNotice).toBe('')
+    expect(store.contextRecord).toBeNull()
   })
 
   it('uses the configured budget instead of compacting every model at 32K', async () => {
@@ -109,6 +109,8 @@ describe('incremental context compaction', () => {
     const full = JSON.stringify(store.messages)
     const result = await prepareAgentContext('rules', [{ description: 'read files' }])
     expect(result.failed).toBe(false)
+    expect(store.contextRecord?.failed).toBe(false)
+    expect(store.contextRecord?.afterId).toBe(store.contextSummary?.throughMessageId)
     expect(JSON.stringify(store.messages)).toBe(full)
     expect(store.contextSummary?.content).toContain('pending fix')
     expect(estimateRequestTokens('rules', result.messages, [])).toBeLessThan(24000)
@@ -116,25 +118,38 @@ describe('incremental context compaction', () => {
     expect(JSON.stringify(result.messages)).toContain('Goal: pending fix')
     expect(store.compactionRequestId).toBe('')
     const calls = vi.mocked(SummarizeAIContext).mock.calls
-    expect(calls.length).toBeGreaterThan(1)
-    expect(calls[1][7]).toContain('Goal: pending fix')
+    // Whole history fits in one summary request now (the conversation
+    // request that just went out was larger).
+    expect(calls.length).toBe(1)
+    // The summary pass reuses the chat request shape: the system prompt and
+    // serialized history match the conversation, the instruction is the
+    // final user message.
+    const summaryRequest = JSON.parse(calls[0][7] as unknown as string)
+    expect(summaryRequest.system).toBe('rules')
+    expect(summaryRequest.messages[summaryRequest.messages.length - 1].content).toContain('handoff')
+    expect(summaryRequest.messages[summaryRequest.messages.length - 1].role).toBe('user')
     expect(JSON.stringify(vi.mocked(SaveAISessions).mock.calls)).toContain('contextSummary')
-    const count = calls.length
     await prepareAgentContext('rules', [])
-    expect(SummarizeAIContext).toHaveBeenCalledTimes(count)
+    expect(SummarizeAIContext).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps complete recent exchanges and shows a notice after summary failure', async () => {
+  it('keeps complete recent exchanges and shows a record after summary failure', async () => {
     const store = longSession()
-    vi.mocked(SummarizeAIContext).mockRejectedValue(new Error('offline'))
+    vi.mocked(SummarizeAIContext).mockRejectedValue(new Error('AI_COMPACTION_HTTP_404'))
     const result = await prepareAgentContext('rules', [])
     expect(result.failed).toBe(true)
     expect(store.contextSummary).toBeUndefined()
-    expect(store.contextNotice).toContain('failed')
+    expect(store.contextRecord?.failed).toBe(true)
+    expect(store.contextRecord?.text).toContain('failed')
+    expect(store.contextRecord?.text).toContain('AI_COMPACTION_HTTP_404')
+    // The record is anchored at the cut point, not pinned to the bottom.
+    expect(store.contextRecord?.afterId).toMatch(/^message-/)
     expect(JSON.stringify(result.messages)).toContain('Continue with the pending fix')
     expect(store.messages.length).toBe(21)
+    // A later step re-enters with skipCompaction and must keep the reason.
     await prepareAgentContext('rules', [], true)
     expect(SummarizeAIContext).toHaveBeenCalledTimes(1)
+    expect(store.contextRecord?.text).toContain('AI_COMPACTION_HTTP_404')
   })
 
   it('carries the checkpoint into later compression passes', async () => {
@@ -147,16 +162,24 @@ describe('incremental context compaction', () => {
     })
     vi.mocked(SummarizeAIContext).mockResolvedValue('Updated goal and new evidence')
     await prepareAgentContext('rules', [])
-    expect(vi.mocked(SummarizeAIContext).mock.calls[count][7]).toBe(firstCheckpoint.content)
+    const laterPass = JSON.parse(vi.mocked(SummarizeAIContext).mock.calls[count][7] as unknown as string)
+    expect(JSON.stringify(laterPass.messages[0])).toContain(firstCheckpoint.content)
     expect(store.contextSummary?.throughMessageId).not.toBe(firstCheckpoint.throughMessageId)
     expect(store.contextSummary?.content).toBe('Updated goal and new evidence')
     expect(store.messages.some(m => m.id === 'message-0')).toBe(true)
   })
 
-  it('does not commit partial summaries when a later chunk fails', async () => {
-    const store = longSession()
+  it('does not commit partial summaries when a later pass fails', async () => {
+    const store = useAIStore()
+    store.createSession()
+    // Large enough that the summary input splits into two request-sized runs.
+    for (let i = 0; i < 70; i++) store.addMessage({
+      id: `message-${i}`, role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `${i}:` + 'history '.repeat(1400), createdAt: 1,
+    })
     vi.mocked(SummarizeAIContext).mockResolvedValueOnce('partial handoff').mockRejectedValueOnce(new Error('offline'))
     const result = await prepareAgentContext('rules', [])
+    expect(vi.mocked(SummarizeAIContext).mock.calls.length).toBe(2)
     expect(result.failed).toBe(true)
     expect(store.contextSummary).toBeUndefined()
   })
@@ -167,7 +190,7 @@ describe('incremental context compaction', () => {
     const result = await prepareAgentContext('rules', [])
     expect(result.failed).toBe(true)
     expect(useAIStore().contextSummary).toBeUndefined()
-    expect(useAIStore().contextNotice).toContain('failed')
+    expect(useAIStore().contextRecord?.failed).toBe(true)
   })
 
   it.each(['stop', 'rollback', 'session', 'superseded'])('discards results after %s', async (action) => {

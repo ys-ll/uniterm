@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AIMessage } from '../types/ai'
 import {
   activeHistory, compactionCut, contextGroups, estimateRequestTokens,
-  estimateTokens, splitSummaryTranscript, summaryTranscript, SUMMARY_CHUNK_TOKENS,
+  estimateTokens, splitSummaryGroups,
 } from './aiContext'
 
 const message = (id: string, role: AIMessage['role'], content = 'hello'): AIMessage => ({ id, role, content })
@@ -65,29 +65,25 @@ describe('AI context budgeting and compaction boundaries', () => {
     expect(activeHistory(history, { ...summary, throughMessageId: 'deleted' })).toEqual(history)
   })
 
-  it('includes task evidence, headers and text files but excludes hidden thinking and image bytes', () => {
-    const m = { ...message('a', 'assistant', 'observed failure'), _contextHeader: 'PowerShell',
-      _rawApiMsg: { content: [{ type: 'thinking', thinking: 'PRIVATE' }, { type: 'tool_use', id: 't', name: 'run', input: { command: 'pwd' } }] },
-      attachments: [{ id: 'i', kind: 'image' as const, name: 'screenshot.png', mime: 'image/png', size: 10, data: 'SECRET_BASE64' },
-        { id: 't', kind: 'text' as const, name: 'error.log', mime: 'text/plain', size: 10, data: 'actual error' }] }
-    const transcript = summaryTranscript([m])
-    expect(transcript).toContain('actual error')
-    expect(transcript).toContain('PowerShell')
-    expect(transcript).toContain('pwd')
-    expect(transcript).not.toContain('PRIVATE')
-    expect(transcript).not.toContain('SECRET_BASE64')
-    expect(transcript).toContain('Image unavailable')
+  it('splits history into request-sized runs of complete tool groups', () => {
+    const call = { ...message('call', 'assistant'), tool_calls: [{ id: 'run1', type: 'function' as const, function: { name: 'run', arguments: '{}' } }] }
+    const history = [
+      message('a', 'user', 'x'.repeat(14000)),
+      call,
+      { ...message('run1-result', 'tool', 'x'.repeat(14000)), tool_call_id: 'run1' },
+      message('b', 'user', 'x'.repeat(14000)),
+    ]
+    const runs = splitSummaryGroups(history, 6000)
+    expect(runs.length).toBe(3)
+    // A tool invocation and its result never land in different requests.
+    const ids = runs.map(run => run.map(m => m.id))
+    expect(ids).toEqual([['a'], ['call', 'run1-result'], ['b']])
   })
 
-  it('chunks legacy large histories losslessly within the summary request budget', () => {
-    const text = ('终端日志😀 result\n').repeat(15000)
-    const chunks = splitSummaryTranscript(text)
-    expect(chunks.length).toBeGreaterThan(2)
-    expect(chunks.join('')).toBe(text)
-    for (const chunk of chunks) {
-      expect(estimateTokens(chunk)).toBeLessThanOrEqual(SUMMARY_CHUNK_TOKENS + 2)
-      const last = chunk.charCodeAt(chunk.length - 1)
-      expect(last < 0xd800 || last > 0xdbff).toBe(true)
-    }
+  it('keeps a single oversized group whole instead of splitting it', () => {
+    const huge = message('huge', 'user', 'x'.repeat(100000))
+    const history = [message('a', 'user', 'x'.repeat(14000)), huge]
+    const runs = splitSummaryGroups(history, 6000)
+    expect(runs.map(run => run.map(m => m.id))).toEqual([['a'], ['huge']])
   })
 })

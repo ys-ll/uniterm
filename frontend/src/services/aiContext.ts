@@ -4,7 +4,11 @@ import { DEFAULT_CONTEXT_TOKEN_BUDGET } from '../types/settings'
 export const CONTEXT_TRIGGER_TOKENS = DEFAULT_CONTEXT_TOKEN_BUDGET
 export const CONTEXT_TARGET_TOKENS = 60_000
 export const SUMMARY_MAX_TOKENS = 4096
-export const SUMMARY_CHUNK_TOKENS = 16_000
+// Budget for a single summary request. One whole-history request is preferred
+// (it is no larger than the conversation request that just went out, and it
+// can be served from the conversation's prompt-cache prefix); splitting only
+// kicks in for extreme transcripts.
+export const SUMMARY_REQUEST_BUDGET_TOKENS = 100_000
 
 // Approximation, not a model tokenizer. Images have a conservative fixed
 // allowance; base64 bytes must never be treated as natural-language tokens.
@@ -104,40 +108,25 @@ export function compactionCut(messages: AIMessage[], recentBudget: number): numb
   return cut
 }
 
-export function summaryTranscript(messages: AIMessage[]): string {
-  return messages.filter(isContextMessage).map(m => {
-    const record: Record<string, unknown> = { role: m.role }
-    if (m._contextHeader) record.environmentAndInstructions = m._contextHeader
-    record.content = m.content
-    if (m._rawApiMsg && Array.isArray(m._rawApiMsg.content)) {
-      if (!m.content) record.content = m._rawApiMsg.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
-      record.toolCalls = m._rawApiMsg.content.filter(b => b.type === 'tool_use')
-    } else if (m.tool_calls?.length) record.toolCalls = m.tool_calls
-    if (m.tool_call_id) record.toolCallId = m.tool_call_id
-    if (m.attachments?.length) record.attachments = m.attachments.map(a => ({
-      name: a.name,
-      content: a.kind === 'text' ? a.data : '[Image unavailable in this text handoff; original attachment remains in chat history. Do not infer its contents.]',
-    }))
-    return JSON.stringify(record)
-  }).join('\n')
-}
-
-// Bounded chunks also handle old sessions and individual multi-MB tool results.
-// Only the summarizer's text transcript is split, never the live tool chain.
-export function splitSummaryTranscript(transcript: string): string[] {
-  const chunks: string[] = []
-  let start = 0
+// Splits the to-be-summarized history into request-sized runs of complete
+// context groups, so a tool invocation and all of its results never land in
+// different requests. A single group larger than the budget is kept whole —
+// the request still goes out; the provider is the authority on its own limits.
+export function splitSummaryGroups(messages: AIMessage[], budgetTokens: number): AIMessage[][] {
+  const groups = contextGroups(messages)
+  const out: AIMessage[][] = []
+  let current: AIMessage[] = []
   let cost = 0
-  for (let i = 0; i < transcript.length; i++) {
-    cost += transcript.charCodeAt(i) <= 0x7f ? 1 / 3.5 : 1 / 1.8
-    if (cost >= SUMMARY_CHUNK_TOKENS && i + 1 < transcript.length) {
-      // Do not split a UTF-16 surrogate pair.
-      if (transcript.charCodeAt(i) >= 0xd800 && transcript.charCodeAt(i) <= 0xdbff) continue
-      chunks.push(transcript.slice(start, i + 1))
-      start = i + 1
+  for (const group of groups) {
+    const groupTokens = group.reduce((n, m) => n + messageTokens(m), 0)
+    if (current.length && cost + groupTokens > budgetTokens) {
+      out.push(current)
+      current = []
       cost = 0
     }
+    current.push(...group)
+    cost += groupTokens
   }
-  if (start < transcript.length) chunks.push(transcript.slice(start))
-  return chunks
+  if (current.length) out.push(current)
+  return out
 }
