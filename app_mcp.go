@@ -51,23 +51,22 @@ func (a *App) mcpTokensPath() string {
 func (a *App) ensureMCPServer() *mcp.Server {
 	a.mcpOnce.Do(func() {
 		env := mcp.Env{
-			Sessions:         a.mcpSessionExec,
-			Commands:         a.mcpCommandOwner,
-			ListSessions:     a.mcpListSessions,
-			ListConnections:  a.mcpListConnections,
-			Connect:          a.mcpConnect,
-			OpenTerminal:     a.mcpOpenTerminal,
-			Approve:          a.mcpApprove,
-			Audit:            a.mcpAudit,
-			Policy:           a.mcpPolicy,
-			ResolveToken:     a.mcpResolveToken,
-			FileSession:      a.mcpFileSession,
-			ResolveLocalPath: a.mcpResolveLocalPath,
-			Foreground:       a,
-			ExecMode:         a.mcpExecMode,
-			Capture:          a.CaptureScreen,
-			SendKey:          a.SendKey,
-			Collect:          a.StartForegroundCapture,
+			Sessions:        a.mcpSessionExec,
+			Commands:        a.mcpCommandOwner,
+			ListSessions:    a.mcpListSessions,
+			ListConnections: a.mcpListConnections,
+			Connect:         a.mcpConnect,
+			OpenTerminal:    a.mcpOpenTerminal,
+			Approve:         a.mcpApprove,
+			Audit:           a.mcpAudit,
+			Policy:          a.mcpPolicy,
+			ResolveToken:    a.mcpResolveToken,
+			FileSession:     a.mcpFileSession,
+			Foreground:      a,
+			ExecMode:        a.mcpExecMode,
+			Capture:         a.CaptureScreen,
+			SendKey:         a.SendKey,
+			Collect:         a.StartForegroundCapture,
 		}
 		a.mcpServer = mcp.NewServer(env)
 	})
@@ -608,17 +607,6 @@ func localFileSize(path string) (int64, error) {
 		return 0, err
 	}
 	return fi.Size(), nil
-}
-
-// mcpResolveLocalPath validates an agent-supplied local path against the
-// user's SFTP local bookmarks (settings.sftpBookmarks.localPaths): resolved
-// paths must sit inside one of them; an empty list rejects everything.
-func (a *App) mcpResolveLocalPath(path string) (string, error) {
-	settings, err := a.settingsStore.Load()
-	if err != nil {
-		return "", err
-	}
-	return mcp.ResolveMcpLocalPath(path, settings.SFTPBookmarks.LocalPaths)
 }
 
 func (a *App) mcpListConnections() []mcp.ConnectionSummary {
