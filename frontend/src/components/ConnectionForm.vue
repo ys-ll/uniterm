@@ -80,9 +80,9 @@
                 <el-button @click="selectSqliteFile">{{ t('db.sqliteBrowse') }}</el-button>
               </div>
             </el-form-item>
-            <el-form-item v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop' || isElasticsearch" :label="t('conn.authType')">
+            <el-form-item v-if="supportsIdentityAuth" :label="t('conn.authType')">
               <el-radio-group v-model="form.authType">
-                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="identity">{{ t('conn.identity') }}</el-radio-button>
+                <el-radio-button v-if="supportsIdentityAuth" value="identity">{{ t('conn.identity') }}</el-radio-button>
                 <el-radio-button value="password">{{ t('conn.password') }}</el-radio-button>
                 <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="key">{{ t('conn.keyPath') }}</el-radio-button>
                 <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="keyText">{{ t('conn.keyText') }}</el-radio-button>
@@ -92,19 +92,19 @@
               </el-radio-group>
             </el-form-item>
             <el-form-item
-              v-if="form.authType === 'identity' && isSSHAlgoType"
+              v-if="form.authType === 'identity' && supportsIdentityAuth"
               :label="t('conn.identity')"
             >
               <div class="inline-add-row">
                 <el-select v-model="form.identityId" filterable style="flex: 1; min-width: 0">
-                  <el-option v-for="id in identityStore.identities" :key="id.id" :label="`${id.name} (${id.username})`" :value="id.id" />
+                  <el-option v-for="id in selectableIdentities" :key="id.id" :label="`${id.name} (${id.username})`" :value="id.id" />
                 </el-select>
                 <el-button class="inline-add-btn" :title="t('conn.newIdentity')" @click="openNewIdentityDialog">
                   <Plus :size="'0.875rem'" />
                 </el-button>
               </div>
             </el-form-item>
-            <el-form-item v-if="(form.authType !== 'identity' || isSSHAlgoType) && form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && !isSqliteDb && form.type !== 'local' && form.type !== 'wsl' && form.type !== 'serial' && form.type !== 'tcp' && form.type !== 'k8s' && form.type !== 'container' && !isEsApiKey" :label="form.authType === 'identity' ? t('conn.identityUserOverride') : (form.type === 's3' ? 'Access Key' : t('conn.user'))">
+            <el-form-item v-if="(form.authType !== 'identity' || showsIdentityUserField) && form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && !isSqliteDb && form.type !== 'local' && form.type !== 'wsl' && form.type !== 'serial' && form.type !== 'tcp' && form.type !== 'k8s' && form.type !== 'container' && !isEsApiKey" :label="form.authType === 'identity' ? t('conn.identityUserOverride') : (form.type === 's3' ? 'Access Key' : t('conn.user'))">
               <el-input v-model="form.user" :placeholder="form.authType === 'identity' ? t('conn.identityUserOverrideHint') : (form.type === 's3' ? 'Access Key ID' : t('conn.userPlaceholder'))" />
             </el-form-item>
             <el-form-item v-if="form.type !== 'local' && form.type !== 'wsl' && form.type !== 'serial' && form.type !== 'tcp' && form.type !== 'k8s' && form.type !== 'container' && form.authType !== 'identity' && ((form.authType === 'password') || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3' || form.type === 'elasticsearch') && !(form.type === 'database' && form.dbType === 'rqlite') && !isSqliteDb" :label="form.type === 's3' ? 'Secret Key' : (isEsApiKey ? t('conn.esApiKey') : t('conn.password'))">
@@ -428,7 +428,9 @@
                   <span v-if="x11HintKey" class="field-hint hint-after-switch">{{ t(x11HintKey) }}</span>
                 </el-form-item>
                 <template v-if="form.type === 'rdp'">
-                  <el-form-item v-if="form.authType !== 'identity'" :label="t('conn.rdpDomain')">
+                  <!-- rdpDomain stays connection-local even under identity auth:
+                       the keystore identity carries no domain. -->
+                  <el-form-item :label="t('conn.rdpDomain')">
                     <el-input v-model="form.rdpDomain" placeholder="e.g. WORKGROUP or WIN-ABC123" />
                   </el-form-item>
                   <el-form-item :label="t('remoteDesktop.resolution')">
@@ -1180,6 +1182,28 @@ const form = reactive<ConnectionConfig>({
 // mode opens the algorithm editor to fill the four preference lists.
 const isSSHAlgoType = computed(() => ['ssh', 'scp', 'sftp', 'mosh', 'x11-desktop'].includes(form.type))
 
+// Identity (密钥库) auth extends beyond the SSH family (issues #1389/#1440):
+// every protocol that authenticates with a username+password pair can
+// reference a password-type identity. VNC/SPICE are password-only protocols
+// (no username concept), so they hide the user-override field. SQLite/rqlite
+// carry no credentials at all. Key-type identities only make sense for the
+// SSH family — the identity select filters to password entries elsewhere.
+const IDENTITY_USERLESS_TYPES = ['vnc', 'spice']
+const IDENTITY_EXTRA_TYPES = ['rdp', 'telnet', 'ftp', 'smb', 'webdav', 's3', 'vnc', 'spice', 'redis', 'mongodb', 'elasticsearch']
+const supportsIdentityAuth = computed(() => {
+  if (isSSHAlgoType.value) return true
+  if (form.type === 'database') return form.dbType !== 'sqlite' && form.dbType !== 'rqlite'
+  return IDENTITY_EXTRA_TYPES.includes(form.type)
+})
+const showsIdentityUserField = computed(() =>
+  supportsIdentityAuth.value && !IDENTITY_USERLESS_TYPES.includes(form.type)
+)
+const selectableIdentities = computed(() =>
+  isSSHAlgoType.value
+    ? identityStore.identities
+    : identityStore.identities.filter(i => i.authType === 'password')
+)
+
 // Advanced tabs: a pane renders only when at least one of its fields applies
 // to the selected type. Individual fields keep their own v-if conditions —
 // these only gate whole panes.
@@ -1443,6 +1467,12 @@ watch(() => form.type, (newType) => {
   if (newType !== 'ssh' && postLoginMode.value === 'expect') {
     postLoginMode.value = 'script'
   }
+  // A key-type identity reference can't drive non-SSH protocols; drop it when
+  // switching to one (the select only lists password identities there).
+  if (!isSSHAlgoType.value) {
+    const selected = identityStore.identities.find(i => i.id === form.identityId)
+    if (selected && selected.authType !== 'password') form.identityId = ''
+  }
   if (isEdit.value) return
   const port = defaultPortFor(newType)
   if (port !== undefined) form.port = port
@@ -1450,7 +1480,18 @@ watch(() => form.type, (newType) => {
     // ES shares the common `authType` field; default to 'password' unless an API key was already chosen.
     form.authType = form.authType === 'apikey' ? 'apikey' : 'password'
   }
-  if (['rdp', 'vnc', 'spice', 'x11-desktop'].includes(newType) || newType === 'database') {
+  // Auth modes the new type can't use fall back to password: key/keyText/
+  // kerberos/agent are SSH-family-only, apikey is ES-only, and identity needs
+  // an identity-capable type (the remote-desktop/file/db families support it
+  // too now — issues #1389/#1440). A password-type identity survives a switch
+  // between two identity-capable types (e.g. rdp → vnc).
+  if (!isSSHAlgoType.value && ['key', 'keyText', 'kerberos', 'agent'].includes(form.authType)) {
+    form.authType = 'password'
+  }
+  if (form.authType === 'apikey' && newType !== 'elasticsearch') {
+    form.authType = 'password'
+  }
+  if (form.authType === 'identity' && !supportsIdentityAuth.value) {
     form.authType = 'password'
   }
   // The shell ("terminal type") is specific to local/wsl; always reset to the

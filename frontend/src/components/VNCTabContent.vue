@@ -108,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { Loader } from '@lucide/vue'
 import RemoteDesktopToolbar from './RemoteDesktopToolbar.vue'
 import RemoteDisplaySelect from './RemoteDisplaySelect.vue'
@@ -136,16 +136,31 @@ import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { readClipboardText, writeClipboard } from '../composables/useClipboardWrite'
 import { toWebSocketURL } from '../utils/webSocketUrl'
+import { resolveIdentityCredentials } from '../utils/identityCredentials'
+import { useIdentityStore } from '../stores/identityStore'
 const { t } = useI18n()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
 const connectionStore = useConnectionStore()
+const identityStore = useIdentityStore()
 
 const props = defineProps<{
   panelId: string
   config: ConnectionConfig | null
   sessionId: string | null
 }>()
+
+// The VNC protocol runs in the webview's noVNC client, which reads the
+// password straight off the panel config — the backend's identity
+// materialization never reaches it. Resolve an identity reference here
+// (password-type identities only; VNC has no username concept).
+// The store may not be loaded yet on a fresh window; refresh it lazily.
+identityStore.load()
+const effectivePassword = computed(() => {
+  if (!props.config) return ''
+  return resolveIdentityCredentials(props.config, identityStore.identities)?.password
+    ?? props.config.password ?? ''
+})
 
 const status = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected')
 const lastError = ref<string>('')
@@ -276,7 +291,7 @@ async function connect() {
     sessionStore.initSession(info.id)
     if (info.proxyAddr) {
       panelStore.setProxyAddr(props.panelId, info.proxyAddr)
-      savedPassword.value = props.config.password || ''
+      savedPassword.value = effectivePassword.value
 
       initRFB(info.proxyAddr, savedPassword.value)
     }
@@ -721,10 +736,10 @@ onMounted(() => {
           panelStore.setProxyAddr(props.panelId, data.proxyAddr)
         }
         if (props.config) {
-          savedPassword.value = props.config.password || ''
+          savedPassword.value = effectivePassword.value
         }
         if (data.proxyAddr && props.config) {
-          initRFB(data.proxyAddr, props.config.password || '')
+          initRFB(data.proxyAddr, effectivePassword.value)
         } else {
           const proxy = panelStore.getProxyAddr(props.panelId)
           if (proxy) {
@@ -744,7 +759,7 @@ onMounted(() => {
 
   const storedProxy = panelStore.getProxyAddr(props.panelId)
   if (storedProxy && props.config) {
-    savedPassword.value = props.config.password || ''
+    savedPassword.value = effectivePassword.value
     initRFB(storedProxy, savedPassword.value)
   } else {
     connect()

@@ -80,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { Loader } from '@lucide/vue'
 import RemoteDesktopToolbar from './RemoteDesktopToolbar.vue'
 import RemoteDesktopZoomSelect from './RemoteDesktopZoomSelect.vue'
@@ -102,15 +102,30 @@ import { useSessionStore } from '../stores/sessionStore'
 import type { ConnectionConfig } from '../types/session'
 import { Events } from '@wailsio/runtime'
 import { CreateSession, CloseSession, SetSPICEKeyboardCapture } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { resolveIdentityCredentials } from '../utils/identityCredentials'
+import { useIdentityStore } from '../stores/identityStore'
 const { t } = useI18n()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
+const identityStore = useIdentityStore()
 
 const props = defineProps<{
   panelId: string
   config: ConnectionConfig | null
   sessionId: string | null
 }>()
+
+// The SPICE protocol runs in the webview client, which reads the password
+// straight off the panel config — the backend's identity materialization
+// never reaches it. Resolve an identity reference here (password-type
+// identities only; SPICE has no username concept). The store may not be
+// loaded yet on a fresh window; refresh it lazily.
+identityStore.load()
+const effectivePassword = computed(() => {
+  if (!props.config) return ''
+  return resolveIdentityCredentials(props.config, identityStore.identities)?.password
+    ?? props.config.password ?? ''
+})
 
 const status = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected')
 const lastError = ref('')
@@ -171,7 +186,7 @@ async function connect() {
     sessionStore.initSession(info.id)
     if (info.proxyAddr) {
       panelStore.setProxyAddr(props.panelId, info.proxyAddr)
-      await initSpice(info.proxyAddr, props.config.password || '')
+      await initSpice(info.proxyAddr, effectivePassword.value)
     } else throw new Error('SPICE proxy address is unavailable.')
   } catch (e: any) {
     if (disposed || generation !== clientGeneration) return
@@ -603,7 +618,7 @@ onMounted(() => {
   } else {
     const storedProxy = panelStore.getProxyAddr(props.panelId)
     if (storedProxy && props.config) {
-      initSpice(storedProxy, props.config.password || '')
+      initSpice(storedProxy, effectivePassword.value)
     } else {
       connect()
     }
@@ -618,7 +633,7 @@ onMounted(() => {
         }
         if (!sc && status.value === 'connecting') {
           const proxy = data.proxyAddr || panelStore.getProxyAddr(props.panelId)
-          if (proxy) initSpice(proxy, props.config?.password || '')
+          if (proxy) initSpice(proxy, effectivePassword.value)
         }
         syncSessionStatus()
         break
