@@ -686,10 +686,11 @@ func pgCreateTableSQL(conn *sql.Conn, schema, tableName, quotedTable string) (st
 		SELECT a.attname,
 		       format_type(a.atttypid, a.atttypmod),
 		       a.attnotnull,
-		       pg_get_expr(a.adbin, a.attrelid) AS default
+		       pg_get_expr(ad.adbin, ad.adrelid) AS default
 		FROM pg_attribute a
 		JOIN pg_class t ON a.attrelid = t.oid
 		JOIN pg_namespace n ON t.relnamespace = n.oid
+		LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
 		WHERE t.relname = $1 AND n.nspname = $2
 		  AND a.attnum > 0 AND NOT a.attisdropped
 		ORDER BY a.attnum`, tableName, schema)
