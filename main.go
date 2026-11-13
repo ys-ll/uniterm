@@ -356,7 +356,10 @@ func main() {
 	// the CSS facsimiles the frontend used to draw (see AppHeader.vue). Deferred
 	// to the first show because the NSWindow only exists once Run() starts, and
 	// idempotent because it re-runs on every show.
-	if runtime.GOOS == "darwin" {
+	// Only for the frameless window the gutter is drawn for: with the native
+	// system title bar the stock buttons already sit where AppKit puts them,
+	// and re-framing them would corrupt the standard title bar.
+	if runtime.GOOS == "darwin" && !systemTitleBar {
 		// AppKit centres the buttons in its own 28pt title bar and starts them
 		// ~8pt from the edge; the app's header row is taller, so the buttons get
 		// re-framed to the row's centre with a stock 20pt leading inset. Re-run
