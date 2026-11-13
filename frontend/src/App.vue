@@ -159,6 +159,7 @@
     <SyncConflictDialog />
     <UpdateDialog />
     <WorkspaceSaveDialog />
+    <MultilinePasteDialog />
     <DataDirDialog v-model:visible="dataDirVisible" :first-run="credStore.firstRun || credStore.dataDirInfo.firstRun" @done="onDataDirDone" />
     <EncryptionModeDialog v-model:visible="encryptVisible" :existing-secrets="credStore.status.existingSecrets" @done="onEncryptDone" />
     <CredentialUnlockDialog v-model:visible="unlockVisible" @done="onUnlockDone" @reset="onReset" />
@@ -212,6 +213,7 @@ import AISidebar from './components/AISidebar.vue'
 import BottomPanel from './components/BottomPanel.vue'
 import SyncConflictDialog from './components/SyncConflictDialog.vue'
 import WorkspaceSaveDialog from './components/WorkspaceSaveDialog.vue'
+import MultilinePasteDialog from './components/MultilinePasteDialog.vue'
 import UpdateDialog from './components/UpdateDialog.vue'
 import DataDirDialog from './components/DataDirDialog.vue'
 import EncryptionModeDialog from './components/EncryptionModeDialog.vue'

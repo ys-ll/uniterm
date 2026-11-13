@@ -21,6 +21,11 @@ type TerminalSettings struct {
 	SelectionAction   string `json:"selectionAction"`
 	RightClickAction  string `json:"rightClickAction"`
 	MiddleClickAction string `json:"middleClickAction"`
+	// MultilinePaste controls multi-line paste protection (issue #1370):
+	// "confirm" opens an editable preview dialog before multi-line clipboard
+	// content is written to the terminal, "direct" pastes without asking.
+	// Empty means the frontend falls back to "confirm".
+	MultilinePaste string `json:"multilinePaste,omitempty"`
 	MaxHistoryLines   int    `json:"maxHistoryLines"`
 	SmartCompletion   *bool  `json:"smartCompletion"`
 	SuggestionPopup   *bool  `json:"suggestionPopup"`

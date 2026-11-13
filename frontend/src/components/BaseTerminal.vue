@@ -209,6 +209,7 @@ import { applyBackspaceKey } from '../utils/terminalOptions'
 import { handleTerminalWordDelete } from '../utils/terminalWordDelete'
 import { formatFontFamily } from '../utils/formatFontFamily'
 import { normalizePastedText, pasteWithScroll } from '../utils/terminalPaste'
+import { confirmMultilinePaste } from '../composables/multilinePasteDialog'
 import {
   sanitizeTerminalOutput,
   sanitizeLiveTerminalOutput,
@@ -2403,9 +2404,13 @@ onUnmounted(() => {
 })
 
 // Paste handling
-function pasteToTerminal(text: string) {
+async function pasteToTerminal(text: string) {
   if (props.mode === 'sftp' && terminal) {
-    for (const char of text) {
+    // Multi-line paste protection (issue #1370): ask before writing several
+    // lines at once — the SFTP path drops newlines, silently joining them.
+    const confirmed = await confirmMultilinePaste(text)
+    if (confirmed === null) return
+    for (const char of confirmed) {
       const code = char.charCodeAt(0)
       if (code >= 32 && code <= 126) {
         inputBuffer += char
@@ -2420,6 +2425,13 @@ async function pasteToSession(text: string) {
     // Normalize line endings (CRLF -> LF, drop stray CR) so pasting into
     // editors like vim doesn't double newlines (Windows clipboard has \r\n).
     const normalized = normalizePastedText(text)
+
+    // Multi-line paste protection (issue #1370): ask before writing several
+    // lines at once — each line becomes its own Enter press on the remote
+    // side, and an unattended multi-line paste can run commands unseen.
+    // The dialog shows an editable preview; what it returns is what pastes.
+    const confirmed = await confirmMultilinePaste(normalized)
+    if (confirmed === null) return
 
     // Broadcast mode: write to every target panel instead of only this
     // session (issue #597 — pasted command must sync like keyboard input).
@@ -2439,7 +2451,7 @@ async function pasteToSession(text: string) {
                 write: (payload) => queuedSessionWrite(p.sessionId, payload),
                 scrollToBottom: () => managed.terminal.scrollToBottom(),
               },
-              normalized,
+              confirmed,
             )
           }
         }
@@ -2456,7 +2468,7 @@ async function pasteToSession(text: string) {
           write: (payload) => queuedSessionWrite(sid, payload),
           scrollToBottom: () => terminal?.scrollToBottom(),
         },
-        normalized,
+        confirmed,
       )
     }
   }
