@@ -105,7 +105,7 @@ The following data is synchronized by default (stored encrypted):
 - AI configuration (model catalog and autonomous turn limit)
 - Quick commands
 - SSH tunnels
-- Keystore identities
+- Identities
 - Proxies
 
 Additional opt-in entries in the sync scope (off by default):

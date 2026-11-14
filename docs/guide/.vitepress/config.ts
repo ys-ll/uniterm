@@ -38,7 +38,7 @@ const sidebarZh = [
       { text: 'uniTerm MCP', link: '/zh/features/uniterm-mcp' },
       { text: '边栏', link: '/zh/features/sidebar' },
       { text: '网络工具箱', link: '/zh/features/network-toolbox' },
-      { text: '密钥库', link: '/zh/features/keystore' },
+      { text: '密钥库', link: '/zh/features/identities' },
       { text: '代理', link: '/zh/features/proxy' },
       { text: '云同步', link: '/zh/features/sync' },
       { text: '个性化', link: '/zh/features/personalization' }
@@ -87,7 +87,7 @@ const sidebarEn = [
       { text: 'uniTerm MCP', link: '/en/features/uniterm-mcp' },
       { text: 'Sidebar', link: '/en/features/sidebar' },
       { text: 'Network Toolbox', link: '/en/features/network-toolbox' },
-      { text: 'Keystore', link: '/en/features/keystore' },
+      { text: 'Identities', link: '/en/features/identities' },
       { text: 'Proxy', link: '/en/features/proxy' },
       { text: 'Cloud Sync', link: '/en/features/sync' },
       { text: 'Personalization', link: '/en/features/personalization' }

@@ -22,7 +22,7 @@ This software does not ship with a code-signing certificate, so unsigned executa
 
 - Verify the key file path and permissions are correct; if the private key is passphrase-protected, enter it in the Key Password field
 - Use the one-click Use Default Key button in the key path field to auto-fill the standard local OpenSSH key
-- You can also paste a PEM private key directly in the Key Text field, or use a [Keystore](/en/features/keystore) identity
+- You can also paste a PEM private key directly in the Key Text field, or use a [Identities](/en/features/identities) identity
 - Ensure the server's `~/.ssh/authorized_keys` contains the corresponding public key
 - Try password authentication to verify server reachability
 

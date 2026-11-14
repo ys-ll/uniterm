@@ -72,7 +72,7 @@ uniTerm ships with a built-in autonomous AI Agent that can independently plan an
 
 Group, search, create, and batch-manage server connections, with frequently used connections **pinned as favorites**. One-click import from Xshell, MobaXterm, DBeaver, Navicat, virt-viewer (.vv), and more — everything at your fingertips.
 
-#### Keystore & Proxies
+#### Identities & Proxies
 
 Centrally manage reusable login credentials (passwords / private keys) and SOCKS5 / HTTP proxies. Reference them directly when connecting and sync them across devices.
 
