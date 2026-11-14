@@ -131,18 +131,10 @@ func (s *TelnetSession) Connect(config ConnectionConfig) error {
 	s.newlineMode = config.NewlineMode
 	s.termType = EffectiveTermType(config.TermType)
 
-	// Proactively negotiate binary transmission, character-at-a-time mode,
-	// and terminal type — unless the user opted for passive negotiation.
+	// Proactively negotiate character-at-a-time mode and terminal type —
+	// unless the user opted for passive negotiation.
 	if config.TelnetNegotiationMode != "passive" {
-		s.conn.Write([]byte{telnetIAC, telnetWILL, telnetOptBinary})
-		s.conn.Write([]byte{telnetIAC, telnetDO, telnetOptSuppressGoAhead})
-		s.conn.Write([]byte{telnetIAC, telnetWILL, telnetOptTerminalType})
-
-		if cols, rows := s.GetPendingSize(); cols > 0 && rows > 0 {
-			s.sendNAWS(cols, rows)
-		} else {
-			s.sendNAWS(80, 24)
-		}
+		s.sendActiveNegotiation()
 	}
 
 	s.startEmitLoop()
@@ -345,16 +337,40 @@ func (s *TelnetSession) reply(cmd byte, opt byte) {
 	s.conn.Write([]byte{telnetIAC, cmd, opt})
 }
 
+// sendActiveNegotiation proactively offers the options the client drives in
+// active mode: character-at-a-time (suppress Go Ahead) and terminal type,
+// plus an initial window size. BINARY is deliberately not offered (issue
+// #1486): Cisco's telnet server switches to its binary path, where the login
+// code skips the echo-off before the password prompt, so passwords come back
+// echoed in cleartext. Servers that need binary negotiate it themselves —
+// handleNegotiation answers DO BINARY with WILL BINARY as before.
+func (s *TelnetSession) sendActiveNegotiation() {
+	s.conn.Write([]byte{telnetIAC, telnetDO, telnetOptSuppressGoAhead})
+	s.conn.Write([]byte{telnetIAC, telnetWILL, telnetOptTerminalType})
+
+	if cols, rows := s.GetPendingSize(); cols > 0 && rows > 0 {
+		s.sendNAWS(cols, rows)
+	} else {
+		s.sendNAWS(80, 24)
+	}
+}
+
 func (s *TelnetSession) sendNAWS(cols, rows int) {
 	if s.conn == nil {
 		return
 	}
-	data := []byte{
-		telnetIAC, telnetSB, telnetOptNAWS,
-		byte(cols >> 8), byte(cols & 0xff),
-		byte(rows >> 8), byte(rows & 0xff),
-		telnetIAC, telnetSE,
+	// RFC 1073: any 0xFF byte inside the sub-negotiation must be doubled
+	// (IAC IAC) or the server parses it as a command and the whole
+	// negotiation desynchronizes (e.g. cols=255 leaking a bare IAC).
+	data := []byte{telnetIAC, telnetSB, telnetOptNAWS}
+	for _, v := range []int{cols >> 8, cols & 0xff, rows >> 8, rows & 0xff} {
+		if b := byte(v); b == telnetIAC {
+			data = append(data, telnetIAC, telnetIAC)
+		} else {
+			data = append(data, b)
+		}
 	}
+	data = append(data, telnetIAC, telnetSE)
 	s.conn.Write(data)
 }
 
