@@ -115,11 +115,14 @@ export function useTerminalMenu(options: UseTerminalMenuOptions): UseTerminalMen
 
   async function copyAndPaste() {
     const text = options.getSelection()
+    // Close before awaiting: onPaste may open the multi-line paste dialog
+    // (issue #1370) and wait on it — closing afterwards would leave the menu
+    // floating over that dialog (issue #1481).
+    closeMenu()
     if (text) {
       await writeClipboard(text)
       await options.onPaste(text)
     }
-    closeMenu()
   }
 
   function askAI() {
@@ -131,6 +134,11 @@ export function useTerminalMenu(options: UseTerminalMenuOptions): UseTerminalMen
   }
 
   async function pasteFromClipboard() {
+    // Close before the paste, not after: onPaste may open the multi-line paste
+    // dialog and wait on it, and a menu that lingers until the dialog resolves
+    // floats over the dialog (issue #1481). Closing first also covers the
+    // clipboard-read failure path.
+    closeMenu()
     try {
       // readClipboardText, not navigator.clipboard.readText() — the latter pops
       // a system "Paste" confirmation on macOS WKWebView. It also retries once
@@ -142,7 +150,6 @@ export function useTerminalMenu(options: UseTerminalMenuOptions): UseTerminalMen
     } catch {
       // clipboard read failed
     }
-    closeMenu()
   }
 
   return {
