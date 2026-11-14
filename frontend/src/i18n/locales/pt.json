@@ -647,6 +647,14 @@
   "settings.browse": "Procurar…",
   "settings.maxTurns": "Máx. de rodadas autônomas",
   "settings.maxTurnsDesc": "Número máximo de rodadas de interação autônoma por requisição da IA. Use 0 para ilimitado. Padrão: 20.",
+
+  "settings.userMessageStyle": "Modo de exibição da conversa",
+
+  "settings.userMessageStyleDesc": "Como as mensagens do usuário são exibidas no painel de IA.",
+
+  "settings.userMessageStylePlain": "Alinhado à esquerda",
+
+  "settings.userMessageStyleBubble": "Alinhado à direita",
   "settings.modelList": "Lista de modelos",
   "settings.modelListDesc": "Configure e gerencie modelos de IA",
   "settings.addModel": "Adicionar modelo",

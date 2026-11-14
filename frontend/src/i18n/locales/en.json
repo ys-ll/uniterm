@@ -675,6 +675,14 @@
   "settings.browse": "Browse…",
   "settings.maxTurns": "Max Autonomous Rounds",
   "settings.maxTurnsDesc": "Maximum autonomous interaction rounds per AI request. Set to 0 for unlimited. Default 20.",
+
+  "settings.userMessageStyle": "AI Chat Layout",
+
+  "settings.userMessageStyleDesc": "How user messages are displayed in the AI panel.",
+
+  "settings.userMessageStylePlain": "Left-aligned",
+
+  "settings.userMessageStyleBubble": "Right-aligned",
   "settings.modelList": "Model List",
   "settings.modelListDesc": "Configure and manage AI models",
   "settings.addModel": "Add Model",

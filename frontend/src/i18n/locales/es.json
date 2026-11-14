@@ -651,6 +651,14 @@
   "settings.browse": "Examinar…",
   "settings.maxTurns": "Máx. rondas autónomas",
   "settings.maxTurnsDesc": "Rondas máximas de interacción autónoma por solicitud de IA. 0 = ilimitado. Predeterminado: 20.",
+
+  "settings.userMessageStyle": "Modo de visualización del chat",
+
+  "settings.userMessageStyleDesc": "Cómo se muestran los mensajes del usuario en el panel de IA.",
+
+  "settings.userMessageStylePlain": "Alineado a la izquierda",
+
+  "settings.userMessageStyleBubble": "Alineado a la derecha",
   "settings.modelList": "Lista de Modelos",
   "settings.modelListDesc": "Configurar y gestionar modelos de IA",
   "settings.addModel": "Agregar Modelo",

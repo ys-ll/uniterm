@@ -651,6 +651,14 @@
   "settings.browse": "Обзор…",
   "settings.maxTurns": "Макс. автономных раундов",
   "settings.maxTurnsDesc": "Максимальное количество автономных раундов взаимодействия на один запрос ИИ. 0 — без ограничений. По умолчанию: 20.",
+
+  "settings.userMessageStyle": "Режим отображения чата",
+
+  "settings.userMessageStyleDesc": "Отображение сообщений пользователя в панели ИИ.",
+
+  "settings.userMessageStylePlain": "По левому краю",
+
+  "settings.userMessageStyleBubble": "По правому краю",
   "settings.modelList": "Список моделей",
   "settings.modelListDesc": "Настройка и управление ИИ-моделями",
   "settings.addModel": "Добавить модель",

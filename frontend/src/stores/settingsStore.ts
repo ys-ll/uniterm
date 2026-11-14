@@ -61,6 +61,7 @@ export const useSettingsStore = defineStore('settings', () => {
       autoCompact: aiCfg.autoCompact,
       contextTokenBudget: aiCfg.contextTokenBudget,
       summaryModelId: aiCfg.summaryModelId,
+      userMessageStyle: aiCfg.userMessageStyle,
       models,
     }
   }
@@ -74,6 +75,7 @@ export const useSettingsStore = defineStore('settings', () => {
     aiCfg.autoCompact = settings.value.ai.autoCompact ?? true
     aiCfg.contextTokenBudget = normalizeContextTokenBudget(settings.value.ai.contextTokenBudget)
     aiCfg.summaryModelId = settings.value.ai.summaryModelId || ''
+    aiCfg.userMessageStyle = settings.value.ai.userMessageStyle === 'bubble' ? 'bubble' : 'plain'
     aiCfg.models = settings.value.ai.models
     aiCfg.save()
   }

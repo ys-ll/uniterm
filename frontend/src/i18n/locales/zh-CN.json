@@ -675,6 +675,14 @@
   "settings.browse": "浏览…",
   "settings.maxTurns": "AI 自主交互最大轮次",
   "settings.maxTurnsDesc": "AI 自主执行命令与反馈的对话轮数上限。设为 0 表示不限制。默认 20。",
+
+  "settings.userMessageStyle": "AI会话展示模式",
+
+  "settings.userMessageStyleDesc": "AI 对话中用户消息的展示形式",
+
+  "settings.userMessageStylePlain": "左对齐",
+
+  "settings.userMessageStyleBubble": "右对齐",
   "settings.modelList": "模型列表",
   "settings.modelListDesc": "配置和管理 AI 模型",
   "settings.addModel": "添加模型",

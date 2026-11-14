@@ -20,7 +20,11 @@ type AIStoreData struct {
 	AutoCompact        *bool           `json:"autoCompact,omitempty"`
 	ContextTokenBudget int             `json:"contextTokenBudget,omitempty"`
 	SummaryModelID     string          `json:"summaryModelId,omitempty"`
-	Models             []AIModelConfig `json:"models"`
+	// UserMessageStyle controls how user messages render in the AI panel:
+	// "" (plain, default) keeps the shared left-aligned full-width layout,
+	// "bubble" right-aligns a content-sized chat bubble (issue #1478).
+	UserMessageStyle string          `json:"userMessageStyle,omitempty"`
+	Models           []AIModelConfig `json:"models"`
 }
 
 type AIConfigStore struct {
@@ -133,7 +137,7 @@ func (s *AIConfigStore) MigrateFromSettingsIfNeeded(settings AppSettings) error 
 	}
 	return s.Save(AIStoreData{MaxTurns: maxTurns, Models: settings.AI.Models,
 		AutoCompact: settings.AI.AutoCompact, ContextTokenBudget: settings.AI.ContextTokenBudget,
-		SummaryModelID: settings.AI.SummaryModelID})
+		SummaryModelID: settings.AI.SummaryModelID, UserMessageStyle: settings.AI.UserMessageStyle})
 }
 
 // BlobName, ExportPlain and ImportPlain implement the sync exchange contract
