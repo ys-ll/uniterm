@@ -5,12 +5,15 @@
     <!-- Teleported to <body>: a fixed-positioned flyout can never be clipped by
          the parent menu (e.g. its overflow scrollbar container), on any platform. -->
     <Teleport to="body">
+      <!-- Same as Menu.vue's root: swallow right-clicks instead of letting the
+           native context menu pop over the flyout rows. -->
       <div
         v-show="submenu.active === name"
         ref="flyEl"
         class="menu-submenu"
         :style="flyStyle"
         @mouseleave="submenu.active = ''"
+        @contextmenu.stop.prevent
       >
         <slot />
       </div>
