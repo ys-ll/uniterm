@@ -2050,6 +2050,13 @@ async function onContinue() {
 }
 
 function onResizeStart(e: MouseEvent) {
+  // Without this, the browser keeps the mousedown default action alive during
+  // the drag: the handle point starts a text selection that can promote to a
+  // native OLE drag mid-resize — the drag loop stalls the UI, swallows the
+  // mouseup (resize keeps following the cursor after release) and, on
+  // WebView2 131.x, ends with Edge killing the renderer over a bad
+  // proprietary LocalFrameHost message.
+  e.preventDefault()
   isResizing.value = true
   const el = sidebarEl.value
   if (!el) return
@@ -2162,6 +2169,8 @@ defineExpose({ focusInput })
   bottom: 0;
   width: 0.375rem;
   cursor: col-resize;
+  user-select: none;
+  -webkit-user-drag: none;
   z-index: 10;
   background: transparent;
   transition: background 0.15s ease;

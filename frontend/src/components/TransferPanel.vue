@@ -139,6 +139,9 @@ const hasFinished = computed(() =>
 )
 
 function onResizeStart(e: MouseEvent) {
+  // Block the mousedown default action so the drag cannot promote into a text
+  // selection / native drag (see AISidebar.onResizeStart for the full story).
+  e.preventDefault()
   const el = panelRef.value
   if (!el) return
   const startY = e.clientY

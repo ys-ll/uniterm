@@ -800,6 +800,19 @@ async function applySuggestion(item: ReturnType<typeof suggestions.getSelectedIt
   suggestions.close()
 }
 
+// Last applied resize state: lets resize() skip redundant work. After a
+// split-drag ends, several deferred triggers (split:resize-end timer, the
+// gate-clearing trailing resize, the ResizeObserver debounce) all fire within
+// a few hundred ms even though nothing changed — a burst of identical
+// full-viewport refreshes and SessionResize IPCs. Beyond the wasted work,
+// that burst trips a WebView2-runtime bug (Edge 131.0.2903.86 kills the
+// renderer with "Validation failed for blink.mojom.LocalFrameHost.88"), so
+// the dedup below is a crash mitigation, not just a tidy-up.
+let lastResizeRectW = 0
+let lastResizeRectH = 0
+let lastResizeCols = 0
+let lastResizeRows = 0
+
 function resize() {
   if (props.mode === 'ssh' || props.mode === 'local') {
     const sid = props.sessionId
@@ -827,6 +840,20 @@ function resize() {
     // (e.g. after duplicating a session tab).
     fitAddon.fit()
     if (terminal.cols <= 0 || terminal.rows <= 0) return
+
+    // Drop no-op resizes: same container rect and same grid as the last
+    // applied resize means terminal.resize/refresh/SessionResize would all
+    // repeat identical work (see comment above lastResizeRectW).
+    if (Math.round(rect.width) === lastResizeRectW &&
+        Math.round(rect.height) === lastResizeRectH &&
+        terminal.cols === lastResizeCols &&
+        terminal.rows === lastResizeRows) {
+      return
+    }
+    lastResizeRectW = Math.round(rect.width)
+    lastResizeRectH = Math.round(rect.height)
+    lastResizeCols = terminal.cols
+    lastResizeRows = terminal.rows
 
     // Trust fitAddon.fit() — its measure already accounts for the scrollbar
     // gutter; manual recomputation double-subtracts it.

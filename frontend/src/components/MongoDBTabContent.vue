@@ -327,6 +327,9 @@ let resizeStartWidth = 0
 let resizing = false
 
 function onResizeStart(e: MouseEvent) {
+  // Block the mousedown default action so the drag cannot promote into a text
+  // selection / native drag (see AISidebar.onResizeStart for the full story).
+  e.preventDefault()
   resizeStartX = e.clientX
   resizeStartWidth = leftWidth.value
   resizing = true

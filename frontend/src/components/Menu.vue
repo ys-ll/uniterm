@@ -1,5 +1,8 @@
 <template>
   <Teleport to="body">
+    <!-- .stop keeps the app-wide "close menus" capture handler in main.ts from
+         firing on a right-click inside the menu; .prevent suppresses the
+         native context menu that would otherwise pop over our rows. -->
     <div
       v-show="visible"
       ref="menuEl"
@@ -9,7 +12,7 @@
       @mouseover="onInnerMouseOver"
       @mouseleave="onRootLeave"
       @scroll="submenu.active = ''"
-      @contextmenu.stop
+      @contextmenu.stop.prevent
     >
       <slot :current="current" />
     </div>

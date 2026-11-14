@@ -89,8 +89,14 @@ app.mount('#app')
   }, true)
 }
 
-// Global context menu closer: broadcast to all menu components via window event
-document.addEventListener('contextmenu', () => {
+// Global context menu closer: broadcast to all menu components via window event.
+// A right-click landing on one of our own menus must NOT close it — the menu
+// stays put and nothing happens (same as native menus), so skip the broadcast
+// for events targeting our menu surfaces (.stop on the menu root can't do this
+// because this listener runs in the capture phase, before the event gets there).
+document.addEventListener('contextmenu', (e) => {
+  const t = e.target as HTMLElement | null
+  if (t?.closest('.conn-context-menu') || t?.closest('.menu-submenu')) return
   window.dispatchEvent(new CustomEvent('global:close-context-menus'))
 }, true)
 
