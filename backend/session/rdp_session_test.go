@@ -244,12 +244,12 @@ func TestRDPProxyReportsHandshakeError(t *testing.T) {
 }
 
 func TestRDPConfigurationRoundTrip(t *testing.T) {
-	const saved = `{"type":"rdp","host":"example","rdpEngine":"microsoft","rdpSmartSizing":true,"rdpDomain":"EXAMPLE","rdpFixedWidth":1600,"rdpFixedHeight":900,"rdpAdminSession":true,"rdpEnableNLA":true}`
+	const saved = `{"type":"rdp","host":"example","rdpEngine":"microsoft","rdpSmartSizing":true,"rdpDomain":"EXAMPLE","rdpFixedWidth":1600,"rdpFixedHeight":900,"rdpAdminSession":true,"rdpEnableNLA":true,"rdpSecurityMode":"nla-prefer"}`
 	var config ConnectionConfig
 	if err := json.Unmarshal([]byte(saved), &config); err != nil {
 		t.Fatal(err)
 	}
-	if !config.RdpAdminSession || !config.RdpEnableNLA || config.RdpDomain != "EXAMPLE" || config.RdpFixedWidth != 1600 {
+	if !config.RdpAdminSession || !config.RdpEnableNLA || config.RdpSecurityMode != "nla-prefer" || config.RdpDomain != "EXAMPLE" || config.RdpFixedWidth != 1600 {
 		t.Fatal("supported RDP settings were lost")
 	}
 	encoded, err := json.Marshal(config)
@@ -258,6 +258,29 @@ func TestRDPConfigurationRoundTrip(t *testing.T) {
 	}
 	if bytes.Contains(encoded, []byte("rdpEngine")) || bytes.Contains(encoded, []byte("rdpSmartSizing")) {
 		t.Fatal("obsolete engine-specific settings were reserialized")
+	}
+}
+
+func TestSecurityOffersCredSSP(t *testing.T) {
+	cases := []struct {
+		mode string
+		nla  bool
+		want bool
+	}{
+		{mode: "nla-prefer", nla: true, want: true},
+		{mode: "nla-prefer", nla: false, want: true},
+		{mode: "nla", want: true},
+		{mode: "tls", nla: true, want: false},
+		{mode: "unencrypted", nla: true, want: false},
+		// Legacy connections without the mode field follow the old boolean.
+		{mode: "", nla: true, want: true},
+		{mode: "", nla: false, want: false},
+	}
+	for _, tc := range cases {
+		config := ConnectionConfig{RdpSecurityMode: tc.mode, RdpEnableNLA: tc.nla}
+		if got := config.SecurityOffersCredSSP(); got != tc.want {
+			t.Fatalf("mode=%q nla=%v: got %v, want %v", tc.mode, tc.nla, got, tc.want)
+		}
 	}
 }
 

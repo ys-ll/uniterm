@@ -119,6 +119,14 @@ type ConnectionConfig struct {
 	RdpFixedWidth  int  `json:"rdpFixedWidth,omitempty"`
 	RdpFixedHeight int  `json:"rdpFixedHeight,omitempty"`
 	RdpEnableNLA   bool `json:"rdpEnableNLA"`
+	// RdpSecurityMode selects the security-protocol preference:
+	// "nla-prefer" offers TLS + CredSSP and falls back to TLS when the
+	// server's CredSSP handshake breaks, "nla" offers both without any
+	// fallback, "tls" offers TLS only, and "unencrypted" forces Standard
+	// RDP Security with ENCRYPTION_LEVEL_NONE (plaintext traffic — never
+	// for confidential targets). Connections saved before the field
+	// existed resolve from RdpEnableNLA instead.
+	RdpSecurityMode string `json:"rdpSecurityMode,omitempty"`
 	// RdpDomain is the Windows domain (or computer name for local accounts)
 	// sent to the RDP ActiveX control's Domain property. When empty, a
 	// "DOMAIN\user" prefix in User is used as a fallback, mirroring the
@@ -318,6 +326,21 @@ type ConnectionConfig struct {
 	// secret is ever duplicated here.
 	WorkspaceMembers []SavedWorkspaceMember    `json:"workspaceMembers,omitempty"`
 	WorkspaceLayout  *SavedWorkspaceLayoutNode `json:"workspaceLayout,omitempty"`
+}
+
+// SecurityOffersCredSSP reports whether the RDP client should offer CredSSP
+// (NLA) during X.224 negotiation. RdpSecurityMode is the current control:
+// "nla-prefer" and "nla" offer it; "tls" and "unencrypted" do not.
+// Connections saved before the field existed fall back to the legacy
+// RdpEnableNLA boolean.
+func (c ConnectionConfig) SecurityOffersCredSSP() bool {
+	switch c.RdpSecurityMode {
+	case "nla-prefer", "nla":
+		return true
+	case "tls", "unencrypted": // unencrypted: the client never offers HYBRID anyway
+		return false
+	}
+	return c.RdpEnableNLA
 }
 
 // DefaultTermType is the terminal type reported to remote hosts when the
