@@ -49,8 +49,7 @@
 
 Remote terminal, local & serial terminal, file transfer, remote desktop, database, containers, and server monitor — covering all remote access needs.
 
-- **Remote Terminal** — SSH / Telnet / Mosh / Raw TCP with password or key authentication; includes SSH tunnel port forwarding so any connection can route through an SSH jump host.
-- **Local & Serial Terminal** — PowerShell / CMD / Git Bash / WSL plus serial connections with configurable baud rate, data bits, stop bits, parity, and local echo.
+- **Terminal** — SSH / Telnet / Mosh / Raw TCP / Serial, plus local shells (PowerShell / CMD / Git Bash / WSL).
 - **File Transfer** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem with dual-pane browsing and `rz`/`sz` support in SSH terminals.
 - **Remote Desktop** — RDP (Windows Remote Desktop), VNC (Linux remote control), SPICE (KVM/QEMU VMs), X11 (X Window forwarding)
 - **Database Client** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, with AI-powered natural-language queries and data-row editing.
@@ -72,10 +71,10 @@ Autonomous AI Agent that independently plans and executes multi-turn shell comma
 
 Connection management, split panes, cloud sync, themes & i18n — your terminal, your way.
 
-- **Connection Manager** — Group, quickly search, create, and batch-operate server connections.
+- **Connection Manager** — Group, search, and batch-manage server connections; encrypted import/export, and import from other terminal apps (MobaXterm, Xshell, etc.).
 - **Workspace** — Drag terminal tabs into the content area to split freely and combine them into a workspace; drag panel edges to resize and rearrange.
+- **Network Toolbox** — Network scanning, SSH port forwarding tunnels, and local services to run temporary servers for other devices.
 - **Cloud Sync** — Encrypted cloud sync in five modes: Git repository, WebDAV, SFTP, S3 and SMB — no worry about data loss or leaks, and pick up your work seamlessly across devices.
-- **Custom Keybindings** — Freely bind keyboard shortcuts for every action for full keyboard-driven operation, hands never leaving the keyboard.
 - **Themes & Internationalization** — 28 terminal themes plus 3 UI themes (Dark / Deep Blue / Light) and a customizable background image; 11-language UI: Simplified Chinese, Traditional Chinese, English, Japanese, Korean, German, Spanish, French, Russian, Portuguese, Vietnamese.
 
 ## Supported Protocols

@@ -49,8 +49,7 @@
 
 Terminal từ xa, terminal cục bộ & cổng serial, truyền tệp, máy tính từ xa, cơ sở dữ liệu, container và giám sát máy chủ — đáp ứng mọi nhu cầu truy cập từ xa.
 
-- **Terminal từ xa** — SSH / Telnet / Mosh / Raw TCP với xác thực bằng mật khẩu hoặc khóa; hỗ trợ chuyển tiếp cổng qua đường hầm SSH để mọi kết nối đều có thể đi qua máy chủ nhảy (jump host) SSH.
-- **Terminal cục bộ & cổng serial** — PowerShell / CMD / Git Bash / WSL cùng với kết nối serial cho phép cấu hình baud rate, data bits, stop bits, parity và local echo.
+- **Terminal** — SSH / Telnet / Mosh / Raw TCP / Serial, cùng các shell cục bộ (PowerShell / CMD / Git Bash / WSL).
 - **Truyền tệp** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem với duyệt tệp hai khung và hỗ trợ `rz`/`sz` trong terminal SSH.
 - **Máy tính từ xa** — RDP (Remote Desktop của Windows), VNC (điều khiển từ xa Linux), SPICE (máy ảo KVM/QEMU), X11 (chuyển tiếp X Window)
 - **Ứng dụng khách cơ sở dữ liệu** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, với truy vấn ngôn ngữ tự nhiên hỗ trợ bởi AI và chỉnh sửa trực tiếp các dòng dữ liệu.
@@ -72,10 +71,10 @@ AI Agent tự động lập kế hoạch và thực thi các chuỗi lệnh shel
 
 Quản lý kết nối, chia khung, đồng bộ đám mây, chủ đề & đa ngôn ngữ — terminal của bạn, theo cách của bạn.
 
-- **Trình quản lý kết nối** — Nhóm, tìm kiếm nhanh, tạo và thao tác hàng loạt các kết nối máy chủ.
+- **Trình quản lý kết nối** — Nhóm, tìm kiếm và quản lý hàng loạt các kết nối máy chủ; nhập/xuất mã hóa và nhập từ các ứng dụng terminal khác (MobaXterm, Xshell, v.v.).
 - **Không gian làm việc** — Kéo tab terminal vào vùng nội dung để chia tách tự do và kết hợp chúng thành một không gian làm việc; kéo mép các khung để thay đổi kích thước và sắp xếp lại.
+- **Bộ công cụ mạng** — Quét mạng, đường hầm chuyển tiếp cổng SSH và dịch vụ cục bộ để chạy máy chủ tạm thời cho các thiết bị khác.
 - **Đồng bộ đám mây** — Đồng bộ đám mây mã hóa với năm chế độ: kho lưu trữ Git, WebDAV, SFTP, S3 và SMB — không lo mất dữ liệu hoặc rò rỉ, và tiếp tục công việc liền mạch trên nhiều thiết bị.
-- **Tổ hợp phím tùy chỉnh** — Tự do gán phím tắt cho mọi thao tác để vận hành hoàn toàn bằng bàn phím, tay không bao giờ rời khỏi bàn phím.
 - **Chủ đề & Quốc tế hóa** — 28 chủ đề terminal cùng 3 chủ đề giao diện (Tối / Xanh đậm / Sáng) và hình nền có thể tùy chỉnh; giao diện 11 ngôn ngữ: tiếng Trung giản thể, tiếng Trung phồn thể, tiếng Anh, tiếng Nhật, tiếng Hàn, tiếng Đức, tiếng Tây Ban Nha, tiếng Pháp, tiếng Nga, tiếng Bồ Đào Nha, tiếng Việt.
 
 ## Giao thức được hỗ trợ

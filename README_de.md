@@ -49,8 +49,7 @@
 
 Remote-Terminal, lokale und serielle Terminals, Dateiübertragung, Remote-Desktop, Datenbanken, Container und Serverüberwachung — deckt sämtliche Anforderungen an den Remote-Zugriff ab.
 
-- **Remote-Terminal** — SSH / Telnet / Mosh / Raw TCP mit Passwort- oder Schlüsselauthentifizierung; inklusive SSH-Tunnel-Portweiterleitung, sodass jede Verbindung über einen SSH-Jump-Host geroutet werden kann.
-- **Lokale und serielle Terminals** — PowerShell / CMD / Git Bash / WSL sowie serielle Verbindungen mit konfigurierbarer Baudrate, Datenbits, Stoppbits, Parität und lokalem Echo.
+- **Terminal** — SSH / Telnet / Mosh / Raw TCP / Seriell, plus lokale Shells (PowerShell / CMD / Git Bash / WSL).
 - **Dateiübertragung** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem mit Zweifenster-Browsing und `rz`/`sz`-Unterstützung in SSH-Terminals.
 - **Remote-Desktop** — RDP (Windows-Remote-Desktop), VNC (Fernsteuerung von Linux), SPICE (KVM/QEMU-VMs), X11 (X-Window-Weiterleitung)
 - **Datenbank-Client** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, mit KI-gestützten Abfragen in natürlicher Sprache und Bearbeitung von Datenzeilen.
@@ -72,10 +71,10 @@ Autonomer KI-Agent, der selbstständig Shell-Befehle über mehrere Runden hinweg
 
 Verbindungsverwaltung, geteilte Bereiche, Cloud-Sync, Themes & Internationalisierung — Ihr Terminal, Ihre Art.
 
-- **Verbindungsmanager** — Serververbindungen gruppieren, schnell durchsuchen, erstellen und im Stapel bearbeiten.
+- **Verbindungsmanager** — Serververbindungen gruppieren, durchsuchen und im Stapel verwalten; verschlüsselter Import/Export sowie Import aus anderen Terminal-Apps (MobaXterm, Xshell usw.).
 - **Workspace** — Terminal-Tabs per Drag & Drop in den Inhaltsbereich ziehen, um sie frei zu teilen und zu einem Workspace zu kombinieren; Panelränder ziehen, um Größe und Anordnung anzupassen.
+- **Netzwerk-Toolbox** — Netzwerkscan, SSH-Port-Weiterleitungs-Tunnel und lokale Dienste zum Betreiben temporärer Server für andere Geräte.
 - **Cloud-Sync** — Verschlüsselte Cloud-Synchronisierung in fünf Modi: Git-Repository, WebDAV, SFTP, S3 und SMB — keine Sorge um Datenverlust oder Datenlecks, und nahtloses Weiterarbeiten über Geräte hinweg.
-- **Eigene Tastenkombinationen** — Tastenkürzel für jede Aktion frei zuweisen für eine vollständig tastaturgesteuerte Bedienung, die Hände bleiben auf der Tastatur.
 - **Themes & Internationalisierung** — 28 Terminal-Themes sowie 3 UI-Themes (Dark / Deep Blue / Light) und ein anpassbares Hintergrundbild; UI in 11 Sprachen: Englisch, Deutsch, Spanisch, Französisch, Russisch, Portugiesisch, Japanisch, Koreanisch, vereinfachtes Chinesisch, traditionelles Chinesisch, Vietnamesisch.
 
 ## Unterstützte Protokolle

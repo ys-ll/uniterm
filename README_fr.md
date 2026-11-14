@@ -49,8 +49,7 @@
 
 Terminal distant, terminal local et série, transfert de fichiers, bureau à distance, bases de données, conteneurs et supervision de serveurs — tout ce dont vous avez besoin pour l'accès distant.
 
-- **Terminal distant** — SSH / Telnet / Mosh / TCP brut avec authentification par mot de passe ou par clé ; inclut le transfert de port par tunnel SSH afin que toute connexion puisse passer par un hôte de rebond SSH.
-- **Terminal local et série** — PowerShell / CMD / Git Bash / WSL, plus des connexions série avec vitesse (baud rate), bits de données, bits d'arrêt, parité et écho local configurables.
+- **Terminal** — SSH / Telnet / Mosh / TCP brut / Série, plus des shells locaux (PowerShell / CMD / Git Bash / WSL).
 - **Transfert de fichiers** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem avec navigation à double volet et prise en charge de `rz`/`sz` dans les terminaux SSH.
 - **Bureau à distance** — RDP (bureau à distance Windows), VNC (contrôle à distance Linux), SPICE (machines virtuelles KVM/QEMU), X11 (redirection X Window)
 - **Client de bases de données** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, avec requêtes en langage naturel assistées par IA et édition des lignes de données.
@@ -72,10 +71,10 @@ Agent IA autonome qui planifie et exécute indépendamment des commandes shell e
 
 Gestion des connexions, volets divisés, synchronisation cloud, thèmes et i18n — votre terminal, à votre façon.
 
-- **Gestionnaire de connexions** — Regroupement, recherche rapide, création et opérations par lot des connexions serveur.
+- **Gestionnaire de connexions** — Regroupement, recherche et gestion par lot des connexions serveur ; import/export chiffré, et import depuis d'autres applications de terminal (MobaXterm, Xshell, etc.).
 - **Espace de travail** — Faites glisser les onglets de terminal dans la zone de contenu pour les diviser librement et les combiner en un espace de travail ; faites glisser les bords des panneaux pour redimensionner et réorganiser.
+- **Boîte à outils réseau** — Scan réseau, tunnels de redirection de ports SSH et services locaux pour exécuter des serveurs temporaires pour d'autres appareils.
 - **Synchronisation cloud** — Synchronisation cloud chiffrée en cinq modes : dépôt Git, WebDAV, SFTP, S3 et SMB — sans craindre la perte ni la fuite de données, et reprenez votre travail en toute transparence entre les appareils.
-- **Raccourcis clavier personnalisés** — Associez librement des raccourcis clavier à chaque action pour une utilisation entièrement au clavier, sans jamais quitter le clavier.
 - **Thèmes et internationalisation** — 28 thèmes de terminal plus 3 thèmes d'interface (Sombre / Bleu profond / Clair) et une image de fond personnalisable ; interface en 11 langues : chinois simplifié, chinois traditionnel, anglais, japonais, coréen, allemand, espagnol, français, russe, portugais, vietnamien.
 
 ## Protocoles pris en charge

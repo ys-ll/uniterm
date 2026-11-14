@@ -49,8 +49,7 @@
 
 Terminal remoto, terminal local e serial, transferência de arquivos, área de trabalho remota, banco de dados, containers e monitoramento de servidores — cobrindo todas as necessidades de acesso remoto.
 
-- **Terminal Remoto** — SSH / Telnet / Mosh / Raw TCP com autenticação por senha ou chave; inclui encaminhamento de portas via túnel SSH, permitindo que qualquer conexão passe por um host de salto (jump host) SSH.
-- **Terminal Local e Serial** — PowerShell / CMD / Git Bash / WSL, além de conexões seriais com baud rate, bits de dados, bits de parada, paridade e eco local configuráveis.
+- **Terminal** — SSH / Telnet / Mosh / Raw TCP / Serial, além de shells locais (PowerShell / CMD / Git Bash / WSL).
 - **Transferência de Arquivos** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, com navegação em painéis duplos e suporte a `rz`/`sz` em terminais SSH.
 - **Área de Trabalho Remota** — RDP (área de trabalho remota do Windows), VNC (controle remoto de Linux), SPICE (máquinas virtuais KVM/QEMU), X11 (encaminhamento do X Window)
 - **Cliente de Banco de Dados** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, com consultas em linguagem natural assistidas por IA e edição de linhas de dados.
@@ -72,10 +71,10 @@ Agente de IA autônomo que planeja e executa, de forma independente, comandos de
 
 Gerenciamento de conexões, painéis divididos, sincronização em nuvem, temas e i18n — seu terminal, do seu jeito.
 
-- **Gerenciador de Conexões** — Agrupe, pesquise rapidamente, crie e realize operações em lote em conexões de servidores.
+- **Gerenciador de Conexões** — Agrupe, pesquise e gerencie em lote conexões de servidores; importação/exportação criptografada e importação de outros apps de terminal (MobaXterm, Xshell etc.).
 - **Workspace** — Arraste abas de terminal para a área de conteúdo para dividir livremente e combiná-las em um workspace; arraste as bordas dos painéis para redimensionar e reorganizar.
+- **Caixa de Ferramentas de Rede** — Varredura de rede, túneis de encaminhamento de porta SSH e serviços locais para executar servidores temporários para outros dispositivos.
 - **Sincronização em Nuvem** — Sincronização em nuvem criptografada em cinco modos: repositório Git, WebDAV, SFTP, S3 e SMB — sem se preocupar com perda ou vazamento de dados, e retome seu trabalho perfeitamente entre dispositivos.
-- **Atalhos de Teclado Personalizados** — Vincule livremente atalhos de teclado para cada ação, para uma operação totalmente orientada ao teclado, sem tirar as mãos do teclado.
 - **Temas e Internacionalização** — 28 temas de terminal, além de 3 temas de UI (Escuro / Azul Profundo / Claro) e uma imagem de fundo personalizável; UI em 11 idiomas: chinês simplificado, chinês tradicional, inglês, japonês, coreano, alemão, espanhol, francês, russo, português, vietnamita.
 
 ## Protocolos Suportados
