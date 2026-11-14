@@ -69,5 +69,5 @@ X11 Desktop launches a complete Linux desktop environment (GNOME, KDE, XFCE, MAT
 | Desktop Environment | Select GNOME, KDE, XFCE, MATE, Cinnamon, Openbox, or a custom command |
 
 ::: tip Related
-- [Remote Terminal](/en/connections/remote-terminal) -- SSH tunnels can be used to secure RDP/VNC connections
+- [Terminal](/en/connections/terminal) -- SSH tunnels can be used to secure RDP/VNC connections
 :::

@@ -1,23 +1,18 @@
 # Supported Protocols
 
-uniTerm supports 30+ connection protocols, covering remote terminals, remote desktops, file transfers, databases, and containers.
+uniTerm supports 30+ connection protocols, covering terminals, remote desktops, file transfers, databases, and containers.
 
-## Remote Terminal
+## Terminal
 
-| Protocol | Default Port | Description |
+| Protocol / Type | Default Port | Description |
 |------|----------|------|
 | SSH | 22 | Encrypted remote shell with password/key authentication and tunnel forwarding |
 | Telnet | 23 | Plaintext remote terminal, suitable for embedded devices and legacy systems |
 | Mosh | 22 (SSH) | UDP-based mobile shell, ideal for high-latency networks |
 | Raw TCP | Custom | Raw TCP console that connects directly to a host port and transceives raw bytes |
-
-## Local Connections
-
-| Type | Description |
-|------|------|
-| Local Shell | PowerShell, CMD, Clink, Cygwin, MSYS2, Nushell, elevated (administrator) terminal (Windows), bash, zsh, and more |
-| WSL | Windows Subsystem for Linux, opens installed Linux distributions |
-| Serial | Serial port connection, configurable baud rate, data bits, stop bits, and parity |
+| Local Shell | Local | PowerShell, CMD, Clink, Cygwin, MSYS2, Nushell, elevated (administrator) terminal (Windows), bash, zsh, and more |
+| WSL | Local | Windows Subsystem for Linux, opens installed Linux distributions |
+| Serial | Local | Serial port connection, configurable baud rate, data bits, stop bits, and parity |
 
 ## Remote Desktop
 

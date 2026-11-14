@@ -9,7 +9,7 @@ The top of the sidebar is a tab bar containing the following tabs:
 - **Connection List** — The main view, showing saved connections and groups (always visible, cannot be hidden)
 - **Files** — The file management panel for the current terminal connection. See [File Sidebar](#file-sidebar) below
 - **Monitor** — Real-time resource monitoring of the host of the current connection. See [Monitor Sidebar](#monitor-sidebar)
-- **Tunnels** — The SSH tunnel manager. See [SSH Tunnel](/en/features/ssh-tunnel)
+- **Tunnels** — The SSH tunnel manager. See [SSH Tunnel](/en/features/network-toolbox)
 - **Quick Commands** — Save frequently used command snippets and send them to the current terminal with a click. See [Quick Commands and History](#quick-commands-and-history)
 - **History** — View and reuse commands entered in the terminal. See [Quick Commands and History](#quick-commands-and-history)
 - **Personalization** — A quick settings panel for theme, language, font, and font size
@@ -160,8 +160,8 @@ The **Open Full Monitor** button at the bottom opens the full monitor tab with [
 ---
 
 ::: tip Related
-- [SSH Tunnel](/en/features/ssh-tunnel) — Full description of the Tunnels tab
+- [SSH Tunnel](/en/features/network-toolbox) — Full description of the Tunnels tab
 - [Server Monitor](/en/connections/server-monitor) — The full monitor tab
 - [Workspace](/en/connections/workspace) — Tab and panel management
-- [Remote Terminal](/en/connections/remote-terminal) — Completion suggestions for terminal input
+- [Terminal](/en/connections/terminal) — Completion suggestions for terminal input
 :::

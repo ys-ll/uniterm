@@ -85,6 +85,25 @@ AI 助理与终端深度集成，命令直接在终端标签页中执行，无�
 - **导出为 Markdown** — 右键消息气泡，可将整个会话导出为 Markdown 文件
 - **删除消息** — 右键消息气泡可仅删除该条消息，或删除它及其后所有消息（上下文回滚）
 
+## MCP Servers
+
+AI 助理可以通过 MCP（Model Context Protocol）连接外部 MCP 服务器，把第三方工具——文件系统访问、数据库查询、浏览器操作等——加入 AI 的能力圈。方向上与 [uniTerm MCP](/zh/features/uniterm-mcp) 相反：MCP Servers 让 uniTerm 的 AI 消费外部工具，uniTerm MCP 则把 uniTerm 反向提供给外部 AI Agent。
+
+在「设置 → MCP 服务器」中管理：
+
+- **添加服务器** — 支持三种传输方式：
+  - **本地进程（stdio）** — 在本机启动 MCP 程序，填写启动命令，如 `npx -y @modelcontextprotocol/server-filesystem /tmp`
+  - **HTTP 服务** — 通过 URL 连接 MCP 服务（Streamable HTTP），可配置静态请求头（如 `Authorization`）
+  - **事件流服务（SSE）** — 连接使用旧版 SSE 协议的 MCP 服务
+- **测试** — 验证连通性，成功后显示该服务器提供的工具数量
+- **状态** — 卡片上实时显示「已连接 · N 个工具」或「未连接」
+
+连接成功后，外部服务器提供的工具会自动加入 AI 的可用工具集，AI 在执行任务时可自主调用。
+
+::: warning 安全提示
+stdio 服务器以你的本机用户权限运行，HTTP/SSE 服务器可访问你的网络——请只添加来源可信的服务器；删除服务器后其工具立即对 AI 不可用。
+:::
+
 ## 技能与命令
 
 技能（Skills）和命令（Commands）用于沉淀可复用的工作流与提示词。在 AI 输入框中输入 `/`，即可从下拉列表中选择并插入，二者均以 `/名称` 形式出现。
@@ -121,5 +140,5 @@ AI 助理与终端深度集成，命令直接在终端标签页中执行，无�
 - **管理** — 与技能一致，支持新建、编辑、删除、启用、锁定
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— 终端输入的智能补全
+- [终端](/zh/connections/terminal) —— 终端输入的智能补全
 :::

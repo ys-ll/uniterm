@@ -155,6 +155,6 @@ SFTP / SCP 会话带 SSH 保活，空闲的传输连接不再被服务端或防�
 ---
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— SSH 连接（SFTP / SCP 基于 SSH）
+- [终端](/zh/connections/terminal) —— SSH 连接（SFTP / SCP 基于 SSH）
 - [边栏](/zh/features/sidebar) —— 文件边栏与「跟随终端路径」
 :::

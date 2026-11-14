@@ -59,14 +59,9 @@ AI 模型提供商配置中同样有「代理」下拉，三种选择：
 
 获取模型列表、连接测试与对话请求均走所选代理。
 
-## 与隧道的关系
-
-[SSH 隧道](/zh/features/ssh-tunnel)的入口 SSH 连接若配置了代理，则隧道第一跳通过该代理拨号——代理作用于隧道的出口连接，无需在隧道上单独配置。注意隧道「动态转发」模式在本机启动的 SOCKS5 端口属于隧道功能，与这里的出站代理是两回事。
-
 ---
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— SSH 连接配置
-- [SSH 隧道](/zh/features/ssh-tunnel) —— 隧道与代理链
+- [终端](/zh/connections/terminal) —— SSH 连接配置
 - [AI 助理](/zh/features/ai-assistant) —— 模型提供商配置
 :::

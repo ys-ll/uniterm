@@ -83,6 +83,6 @@ uniTerm 通过标签页管理多个连接，通过工作区将多个终端分栏
 
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— SSH 标签页右键菜单
+- [终端](/zh/connections/terminal) —— SSH 标签页右键菜单
 - [个性化](/zh/features/personalization) —— 调整界面主题
 :::

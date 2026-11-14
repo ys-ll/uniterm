@@ -11,15 +11,11 @@ uniTerm 是一款轻量级全能终端模拟器，支持 **30+** 种连接协议
 
 覆盖您所有的远程访问需求，在一个应用中完成所有工作。
 
-#### 远程终端
+#### 终端
 
-连接 **SSH** 服务器，认证方式覆盖 密钥库、密码、密钥、Kerberos（GSSAPI）、SSH Agent，支持 Agent 转发，任何连接都能通过 SSH 跳板机路由。同时支持 **Telnet** 和 **Mosh**（适合高延迟、间歇性网络环境）。
+SSH / Telnet / Mosh / Raw TCP / 串口，外加本地 Shell（PowerShell / CMD / Git Bash / WSL）。
 
 ![新建连接](/imgs/new_connection_light.webp)
-
-#### 本地与串口终端
-
-支持 **PowerShell / CMD / Git Bash / Cygwin / MSYS2 / Nushell / WSL** 本地终端与**管理员权限终端**，**Raw TCP** 原始控制台，以及可配置波特率、数据位、停止位、校验位的**串口**连接。
 
 #### 文件传输
 
@@ -64,8 +60,8 @@ uniTerm 内置自主 AI Agent，可在终端中独立规划并执行多轮 Shell
 - **大模型集成** — 侧边栏对话，兼容 Anthropic / OpenAI 协议，支持 Claude、GPT 及其他兼容模型。
 - **灵活的执行模式** — 提供免确认、仅高危确认、写操作确认、全部确认四种模式，自主权由你掌控。
 - **终端智能协作** — AI 命令直接在当前终端标签页中执行，支持固定到指定标签页或跟随当前激活终端。分屏中人与 AI 各司其职，同屏协作互不干扰。
-- **MCP Server** — 内置 MCP 服务器，Claude Code、Codex、Gemini CLI 等外部 AI Agent 可安全地在已保存的连接上执行命令、传输文件，凭据不出应用。
-- **技能与命令** — 可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可挂载触发，AI 也可自行沉淀新技能。
+- **uniTerm MCP** — 内置 MCP 服务器，Claude Code、Codex、Gemini CLI 等外部 AI Agent 可安全地在已保存的连接上执行命令、传输文件，凭据不出应用。
+- **技能与命令** — 可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可挂载触发，AI 也可自行沉淀新技能；也可接入外部 MCP 服务器，扩展 AI 的工具能力。
 
 ![AI 助理](/imgs/ai_assistant_light.webp)
 
@@ -86,6 +82,12 @@ uniTerm 内置自主 AI Agent，可在终端中独立规划并执行多轮 Shell
 
 ![工作区](/imgs/workspace_light.webp)
 
+#### 网络工具箱
+
+内置**网络扫描**（发现子网内存活主机与开放端口）、**SSH 隧道**（本地 / 远程 / 动态端口转发）与**本地网络服务**（TFTP / FTP / HTTP / SSH/SFTP / Telnet / NFS / S3），一站式网络工具入口。
+
+![SSH 隧道](/imgs/ssh_tunnel_light.webp)
+
 #### 云同步
 
 支持 **Git / WebDAV 云同步双模式**：通过您自己的 GitHub / GitLab / Gitee 私有仓库或 WebDAV 服务加密同步连接、收藏与 AI 配置，无需担心数据丢失或泄露，跨设备无缝衔接。
@@ -96,12 +98,6 @@ uniTerm 内置自主 AI Agent，可在终端中独立规划并执行多轮 Shell
 
 GitHub / Gitee 双源自动切换，应用内下载、校验并一键安装。
 
-#### 自定义快捷键
-
-为几乎所有操作自由绑定快捷键，双手无需离开键盘。
-
-![快捷键设置](/imgs/shortcuts_light.webp)
-
 #### 主题
 
 多款终端主题与界面主题，界面字号、字体与配色均可定制。
@@ -110,11 +106,11 @@ GitHub / Gitee 双源自动切换，应用内下载、校验并一键安装。
 
 #### 多语言
 
-9 种界面语言：简体中文、繁体中文、English、日本語、한국어、Deutsch、Español、Français、Русский。
+11 种界面语言：简体中文、繁体中文、English、日本語、한국어、Deutsch、Español、Français、Русский、Português、Tiếng Việt。
 
 
 ## 下一步
 
 - [快速开始](/zh/getting-started) — 下载安装，建立首次连接
-- [连接协议](/zh/connections/remote-terminal) — 了解各协议的使用方法
+- [连接协议](/zh/connections/terminal) — 了解各协议的使用方法
 - [功能指南](/zh/features/ai-assistant) — 深入探索各项功能

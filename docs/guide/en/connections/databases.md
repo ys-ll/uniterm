@@ -176,5 +176,5 @@ Elasticsearch provides browsing and management of clusters, indexes, and documen
 - **Mapping / Settings** -- View the index structure and configuration
 
 ::: tip Related
-- [Remote Terminal](/en/connections/remote-terminal) -- SSH tunnel configuration
+- [Terminal](/en/connections/terminal) -- SSH tunnel configuration
 :::

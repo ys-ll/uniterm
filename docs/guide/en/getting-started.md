@@ -32,6 +32,23 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 
 - Download `uniterm-android-arm64-<version>.apk` and install it directly on your phone
 
+### Docker (Web, multi-user mode)
+
+Besides the desktop clients, uniTerm also ships as a Docker-deployed, browser-accessible Web service with multi-user isolation: every user gets an isolated workspace (their own connections, sessions, keys, and data).
+
+```bash
+# Pull the image
+docker pull uniterm/uniterm:latest
+
+# Or use docker compose (recommended; compose file in the repo's deploy/docker/ directory)
+export UNITERM_ADMIN_PASSWORD='YourStrongPassword_2026!'
+docker compose up -d
+```
+
+- Open `http://<server-ip>:8080` in a browser and sign in with the admin account
+- If `UNITERM_ADMIN_PASSWORD` is not set on first start, a random password is generated and printed in the container logs
+- See the [Docker deployment guide](https://github.com/ys-ll/uniterm/blob/main/deploy/docker/README.md) for offline image import, building the image yourself, and more
+
 ### Runtime Dependencies
 
 - **Windows**: WebView2 Runtime (built into Windows 10+; older systems need to install it)
@@ -51,7 +68,7 @@ Download the installer for your platform from [GitHub Releases](https://github.c
    - **Host**: Server IP address or domain name
    - **Port**: The protocol's default port is filled in automatically
    - **Username**: Login username
-   - **Password**: Login password; for other authentication methods, see [Remote Terminal](/en/connections/remote-terminal)
+   - **Password**: Login password; for other authentication methods, see [Terminal](/en/connections/terminal)
 
 3. Click **Connect Only** (opens without saving) or **Save & Connect** — saved connections appear in the left-hand list.
 
@@ -71,7 +88,7 @@ uniTerm's main interface consists of the following areas:
 
 - See [Start Page](/en/start-page) to learn how to use the start page
 - See [Supported Protocols](/en/protocols) for all connection types
-- See [Remote Terminal](/en/connections/remote-terminal) for detailed usage of SSH/Telnet/Mosh
+- See [Terminal](/en/connections/terminal) for detailed usage of SSH/Telnet/Mosh
 - See [AI Assistant](/en/features/ai-assistant) to configure the AI Agent
 - See [Personalization](/en/features/personalization) to adjust themes, interface font size, shortcuts, and language
 - See [FAQ](/en/faq) to troubleshoot installation and connection issues

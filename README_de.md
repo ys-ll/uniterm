@@ -64,7 +64,7 @@ Autonomer KI-Agent, der selbstständig Shell-Befehle über mehrere Runden hinweg
 - **Flexible Ausführungsmodi** — Umgehung, nur gefährliche, gefährliche + schreibende oder alle Befehle bestätigen — Sie bestimmen, wie viel Kontrolle der KI-Agent benötigt.
 - **Terminal-Integration** — KI-Befehle werden direkt im aktiven Terminal-Tab ausgeführt, optional an einen bestimmten Tab angeheftet oder dem aktiven Tab folgend. Zusammenarbeit Seite an Seite in geteilten Bereichen, jeder mit seinem eigenen Terminal-Kontext.
 - **MCP-Server** — Integrierter MCP-Server, mit dem externe KI-Agenten (Claude Code, Codex, Gemini CLI, ...) Befehle ausführen und Dateien auf gespeicherten Verbindungen übertragen können — Zugangsdaten verlassen die App nie.
-- **Skills & Befehle** — Wiederverwendbare Skill-Workflows und Befehle auf Prompt-Vorlagenbasis, angehängt mit `/` in der KI-Eingabe; die KI kann auch selbst neue Skills speichern.
+- **Skills & Befehle** — Wiederverwendbare Skill-Workflows und Befehle auf Prompt-Vorlagenbasis, angehängt mit `/` in der KI-Eingabe; die KI kann auch selbst neue Skills speichern; externe MCP-Server können angebunden werden, um den Werkzeugkasten der KI zu erweitern.
 - **Intelligente Vervollständigung** — Vervollständigung in Echtzeit während der Eingabe, basierend auf dem Befehlsverlauf und KI-Fähigkeiten.
 
 ### Personalisierung

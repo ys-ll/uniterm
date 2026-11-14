@@ -32,6 +32,23 @@
 
 - 下载 `uniterm-android-arm64-<版本>.apk`，在手机上直接安装
 
+### Docker（Web 多用户模式）
+
+除桌面客户端外，uniTerm 还提供 Docker 部署的 Web 多用户模式：部署为浏览器可访问的服务，每位用户拥有隔离的工作区（各自的连接、会话、密钥与数据）。
+
+```bash
+# 拉取镜像
+docker pull uniterm/uniterm:latest
+
+# 或使用 docker compose（推荐，compose 文件见仓库 deploy/docker/ 目录）
+export UNITERM_ADMIN_PASSWORD='你的管理员密码'
+docker compose up -d
+```
+
+- 启动后浏览器打开 `http://<服务器IP>:8080`，使用管理员账号登录
+- 首次启动若未设置 `UNITERM_ADMIN_PASSWORD`，会自动生成随机密码并打印在容器日志中
+- 离线导入镜像、自建镜像等更多部署方式见 [Docker 部署指南](https://github.com/ys-ll/uniterm/blob/main/deploy/docker/README_zh-CN.md)
+
 ### 运行依赖
 
 - **Windows**：WebView2 运行时（Windows 10+ 已内置，更老的系统需安装）
@@ -51,7 +68,7 @@
    - **主机**：服务器 IP 或域名
    - **端口**：协议默认端口会自动填充
    - **用户名**：登录用户名
-   - **密码**：登录密码，其他认证方式详见[远程终端](/zh/connections/remote-terminal)
+   - **密码**：登录密码，其他认证方式详见[终端](/zh/connections/terminal)
 
 3. 点击 **仅连接**（打开但不保存）或 **保存并连接**，保存后连接将出现在左侧列表中。
 
@@ -71,7 +88,7 @@ uniTerm 的主界面主要分为以下区域：
 
 - 查看 [开始页](/zh/start-page) 了解开始页的使用方法
 - 查看 [支持协议](/zh/protocols) 了解全部连接类型
-- 查看 [远程终端](/zh/connections/remote-terminal) 了解 SSH/Telnet/Mosh 的详细用法
+- 查看 [终端](/zh/connections/terminal) 了解 SSH/Telnet/Mosh 的详细用法
 - 查看 [AI 助理](/zh/features/ai-assistant) 配置 AI Agent
 - 查看 [个性化](/zh/features/personalization) 调整主题、界面字号、快捷键和语言
 - 查看 [常见问题](/zh/faq) 排查安装与连接问题

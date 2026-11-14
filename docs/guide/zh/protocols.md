@@ -1,23 +1,18 @@
 # 支持协议
 
-uniTerm 支持 30+ 种连接协议，覆盖远程终端、远程桌面、文件传输、数据库和容器。
+uniTerm 支持 30+ 种连接协议，覆盖终端、远程桌面、文件传输、数据库和容器。
 
-## 远程终端
+## 终端
 
-| 协议 | 默认端口 | 说明 |
+| 协议 / 类型 | 默认端口 | 说明 |
 |------|----------|------|
 | SSH | 22 | 加密远程 Shell，支持密码/密钥认证、隧道转发 |
 | Telnet | 23 | 明文远程终端，适用于嵌入式设备和遗留系统 |
 | Mosh | 22 (SSH) | 基于 UDP 的移动 Shell，适合高延迟网络 |
 | Raw TCP | 自定义 | 原始 TCP 控制台，直连主机端口收发原始字节流 |
-
-## 本地连接
-
-| 类型 | 说明 |
-|------|------|
-| Local Shell | PowerShell、CMD、Clink、Cygwin、MSYS2、Nushell、管理员终端（Windows）、bash、zsh 等 |
-| WSL | Windows Subsystem for Linux，打开已安装的 Linux 发行版 |
-| Serial | 串口连接，可配置波特率、数据位、停止位、校验位 |
+| Local Shell | 本地 | PowerShell、CMD、Clink、Cygwin、MSYS2、Nushell、管理员终端（Windows）、bash、zsh 等 |
+| WSL | 本地 | Windows Subsystem for Linux，打开已安装的 Linux 发行版 |
+| Serial | 本地 | 串口连接，可配置波特率、数据位、停止位、校验位 |
 
 ## 远程桌面
 

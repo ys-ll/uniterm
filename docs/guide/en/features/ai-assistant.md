@@ -85,6 +85,25 @@ Drag the AI conversation panel to the right area to form a left-right split with
 - **Export as Markdown** — Right-click a message bubble to export the entire conversation as a Markdown file
 - **Delete messages** — Right-click a message bubble to delete just that message, or to delete it and everything after it (context rollback)
 
+## MCP Servers
+
+The AI assistant can connect to external MCP (Model Context Protocol) servers, bringing third-party tools — filesystem access, database queries, browser automation, and more — into the AI's toolbox. This is the opposite direction of [uniTerm MCP](/en/features/uniterm-mcp): MCP Servers let uniTerm's AI consume external tools, while uniTerm MCP exposes uniTerm itself to external AI agents.
+
+Manage them in **Settings → MCP Servers**:
+
+- **Add server** — three transports:
+  - **Local process (stdio)** — launches an MCP program on this machine; enter its command, e.g. `npx -y @modelcontextprotocol/server-filesystem /tmp`
+  - **HTTP service** — connect over a URL (Streamable HTTP), with optional static headers (e.g. `Authorization`)
+  - **SSE service** — connect to MCP services using the legacy SSE protocol
+- **Test** — verify connectivity; success reports how many tools the server provides
+- **Status** — each card shows "Connected · N tools" or "Offline" live
+
+Once connected, the tools exposed by the external server become available to the AI assistant, which can call them autonomously while working on tasks.
+
+::: warning Security note
+stdio servers run with your local user's permissions, and HTTP/SSE servers can reach your network — only add servers you trust. Removing a server immediately revokes its tools from the AI.
+:::
+
 ## Skills and Commands
 
 Skills and commands let you capture reusable workflows and prompts. Type `/` in the AI input box to pick one from the dropdown and insert it — both appear as `/name`.
@@ -121,5 +140,5 @@ A command is a reusable prompt template with argument placeholders, invoked quic
 - **Management** — Same as skills: create, edit, delete, enable, and lock
 
 ::: tip Related
-- [Remote Terminal](/en/connections/remote-terminal) — Intelligent completion for terminal input
+- [Terminal](/en/connections/terminal) — Intelligent completion for terminal input
 :::

@@ -1,4 +1,4 @@
-# MCP Server(外部 AI Agent)
+# uniTerm MCP（外部 AI Agent）
 
 uniTerm 可以作为 MCP(Model Context Protocol)服务器运行,让 Claude Code、Codex、ZCode、Kimi、Gemini CLI、Trae、WorkBuddy、DeepSeek 等外部 AI Agent **直接在 uniTerm 管理的远程主机上执行命令、读取输出、传输文件**。
 
@@ -24,16 +24,16 @@ uniTerm(127.0.0.1:61207/mcp)
 
 ### 1. 打开 MCP 服务器
 
-设置(`⌘,`)→ **MCP 服务器**:
+设置(`⌘,`)→ **uniTerm MCP**:
 
-1. 打开「启用 MCP 服务器」开关,状态行显示 `运行中 · 127.0.0.1:61207`
+1. 打开「启用 uniTerm MCP」开关,状态行显示 `运行中 · 127.0.0.1:61207`
 2. 按需调整:
    - **监听端口**(默认 61207,改后需重新生成接入配置)
    - **命令审批策略**(见下文)
 
 所有工具默认全部可用,副作用完全由审批策略约束。
 
-![MCP 服务器设置](/imgs/mcp_server_light.webp)
+![uniTerm MCP 设置](/imgs/mcp_server_light.webp)
 
 ### 2. 生成令牌并接入客户端
 
@@ -144,7 +144,7 @@ kimi mcp add --transport http uniterm http://127.0.0.1:61207/mcp \
 
 直接远程访问仅适用于可信网络。MCP 端点使用明文 HTTP，不加密流量或令牌。
 
-1. 在「设置 → MCP 服务器」中开启「允许远程访问」。监听地址变为 `0.0.0.0:<端口>`；服务重启会断开现有 MCP 连接。
+1. 在「设置 → uniTerm MCP」中开启「允许远程访问」。监听地址变为 `0.0.0.0:<端口>`；服务重启会断开现有 MCP 连接。
 2. 将远程客户端的 URL 配置为 `http://<本机IP>:61207/mcp`，并提供 Bearer 令牌。使用客户端可访问的本机 IPv4 地址或主机名，不要使用 `0.0.0.0`。按需在本机防火墙中放行监听端口。
 3. 在令牌接入向导中填写服务器地址，再复制客户端配置。如果端口转发使用了其他端口，还需调整复制配置中的端口。
 

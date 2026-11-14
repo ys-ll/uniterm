@@ -64,7 +64,7 @@ Agente de IA autônomo que planeja e executa, de forma independente, comandos de
 - **Modos de Execução Flexíveis** — Bypass, apenas operações perigosas, perigosas + escrita, ou confirmar tudo — você controla o nível de supervisão que o Agente de IA precisa.
 - **Integração com o Terminal** — Os comandos da IA são executados diretamente na aba de terminal ativa, com opção de fixar em uma aba específica ou seguir a aba ativa. Colabore lado a lado em painéis divididos, cada um com seu próprio contexto de terminal.
 - **Servidor MCP** — Servidor MCP integrado que permite a agentes de IA externos (Claude Code, Codex, Gemini CLI, ...) executar comandos e transferir arquivos nas conexões salvas — as credenciais nunca saem do aplicativo.
-- **Skills e Comandos** — Fluxos de trabalho de skills reutilizáveis e comandos baseados em templates de prompt, anexados com `/` na entrada da IA; a IA também pode salvar novas skills por conta própria.
+- **Skills e Comandos** — Fluxos de trabalho de skills reutilizáveis e comandos baseados em templates de prompt, anexados com `/` na entrada da IA; a IA também pode salvar novas skills por conta própria; também é possível conectar servidores MCP externos para ampliar as ferramentas da IA.
 - **Preenchimento Inteligente** — Preenchimento em tempo real enquanto você digita, baseado no histórico de comandos e nas capacidades da IA.
 
 ### Personalização

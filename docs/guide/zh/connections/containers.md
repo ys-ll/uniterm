@@ -108,6 +108,6 @@ uniTerm 内置容器管理界面，支持 **Kubernetes** 集群管理，以及 *
 - **删除** — 确认后移除镜像
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— SSH 连接与跳板机配置
+- [终端](/zh/connections/terminal) —— SSH 连接与跳板机配置
 - [支持协议](/zh/protocols) —— 完整协议与端口列表
 :::

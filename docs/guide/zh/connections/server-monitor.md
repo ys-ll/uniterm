@@ -158,7 +158,7 @@
 
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— SSH 连接配置与使用
+- [终端](/zh/connections/terminal) —— SSH 连接配置与使用
 - [文件传输](/zh/connections/file-transfer) —— SFTP 文件浏览器
 - [边栏](/zh/features/sidebar) —— 监控边栏
 :::

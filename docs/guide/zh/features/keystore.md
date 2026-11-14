@@ -36,10 +36,10 @@
 
 连接表单（SSH / SCP / SFTP / Mosh / X11 等类型）的认证方式中，选择 **「密钥库」** 后从下拉框选择身份即可，连接的用户名与凭据完全由身份提供。
 
-Kerberos、SSH Agent 等其他认证方式与密钥库无关，详见[远程终端](/zh/connections/remote-terminal)。
+Kerberos、SSH Agent 等其他认证方式与密钥库无关，详见[终端](/zh/connections/terminal)。
 
 ---
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— SSH 连接与认证配置
+- [终端](/zh/connections/terminal) —— SSH 连接与认证配置
 :::

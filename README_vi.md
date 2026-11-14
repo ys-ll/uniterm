@@ -64,7 +64,7 @@ AI Agent tự động lập kế hoạch và thực thi các chuỗi lệnh shel
 - **Chế độ thực thi linh hoạt** — Bỏ qua xác nhận, chỉ với lệnh nguy hiểm, lệnh nguy hiểm + ghi, hoặc xác nhận tất cả — bạn quyết định mức giám sát mà AI Agent cần.
 - **Tích hợp terminal** — Lệnh của AI được thực thi trực tiếp trong tab terminal đang hoạt động, có thể ghim vào một tab cụ thể hoặc đi theo tab đang hoạt động. Phối hợp song song trong các khung chia đôi, mỗi khung có ngữ cảnh terminal riêng.
 - **Máy chủ MCP** — Máy chủ MCP tích hợp cho phép các AI Agent bên ngoài (Claude Code, Codex, Gemini CLI, ...) chạy lệnh và truyền tệp trên các kết nối đã lưu — thông tin xác thực không bao giờ rời khỏi ứng dụng.
-- **Kỹ năng & Lệnh** — Các quy trình kỹ năng (skill) và lệnh mẫu prompt có thể tái sử dụng, đính kèm bằng `/` trong ô nhập của AI; AI cũng có thể tự lưu kỹ năng mới.
+- **Kỹ năng & Lệnh** — Các quy trình kỹ năng (skill) và lệnh mẫu prompt có thể tái sử dụng, đính kèm bằng `/` trong ô nhập của AI; AI cũng có thể tự lưu kỹ năng mới; cũng có thể kết nối MCP server bên ngoài để mở rộng công cụ cho AI.
 - **Hoàn thành thông minh** — Gợi ý hoàn thành theo thời gian thực khi đang gõ, dựa trên lịch sử lệnh và khả năng của AI.
 
 ### Cá nhân hóa

@@ -82,6 +82,6 @@ Each terminal panel provides action buttons on its title bar; right-clicking the
 When broadcast input is enabled, content typed in any broadcast target terminal is sent simultaneously to all broadcast targets. Targets are not limited to the current workspace — right-click any terminal tab or workspace panel to join or leave the broadcast, freely combining tabs across tabs and workspaces. This is useful for executing the same command on multiple servers at once.
 
 ::: tip Related
-- [Remote Terminal](/en/connections/remote-terminal) — SSH tab right-click menu
+- [Terminal](/en/connections/terminal) — SSH tab right-click menu
 - [Personalization](/en/features/personalization) — Adjust the interface theme
 :::

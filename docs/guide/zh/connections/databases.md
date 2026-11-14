@@ -176,5 +176,5 @@ Elasticsearch 提供集群、索引与文档的浏览和管理功能。
 - **Mapping / Settings** — 查看索引结构与配置
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— SSH 隧道配置
+- [终端](/zh/connections/terminal) —— SSH 隧道配置
 :::

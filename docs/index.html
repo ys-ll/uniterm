@@ -1190,13 +1190,13 @@ var _hmt = _hmt || [];
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="9" y1="7" x2="15" y2="7"/></svg></div>
         <div>
           <h4><span data-i18n="feat2.skills">技能与命令</span></h4>
-          <p><span data-i18n="feat2.skillsDesc">可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可触发，AI 也可自行沉淀新技能</span></p>
+          <p><span data-i18n="feat2.skillsDesc">可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可触发，AI 也可自行沉淀新技能；支持接入外部 MCP 服务器扩展 AI 工具能力</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/mcp_server.webp" data-light="imgs/mcp_server_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
         <div>
-          <h4><span data-i18n="feat2.mcp">MCP Server</span></h4>
+          <h4><span data-i18n="feat2.mcp">uniTerm MCP</span></h4>
           <p><span data-i18n="feat2.mcpDesc">外部 AI Agent 经 MCP 安全执行命令、传输文件，凭据不出应用</span></p>
         </div>
       </li>
@@ -1430,8 +1430,8 @@ var I18N = {
     "feat2.desc": "自主执行的 AI Agent，独立规划并执行多轮 Shell 命令，直接在终端中完成复杂任务。",
     "feat2.agentDesc": "AI Agent 自主规划并多轮执行命令，直接在终端完成复杂任务；兼容 Anthropic / OpenAI 协议，支持 Claude、GPT 等模型，四种执行模式自主权由你掌控",
     "feat2.skills": "技能与命令",
-    "feat2.skillsDesc": "可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可触发，AI 也可自行沉淀新技能",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "可复用的 Skill 工作流与 Prompt 命令模板，输入 `/` 即可触发，AI 也可自行沉淀新技能；支持接入外部 MCP 服务器扩展 AI 工具能力",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "外部 AI Agent 经 MCP 安全执行命令、传输文件，凭据不出应用",
     "feat2.sql": "AI 生成 SQL",
     "feat2.sqlDesc": "用自然语言描述查询需求，AI 结合表结构自动生成 SQL 并直接执行",
@@ -1489,8 +1489,8 @@ var I18N = {
     "feat2.desc": "自主執行的 AI Agent，獨立規劃並執行多輪 Shell 指令，直接在終端機中完成複雜任務。",
     "feat2.agentDesc": "AI Agent 自主規劃並多輪執行指令，直接在終端機完成複雜任務；相容 Anthropic / OpenAI 協定，支援 Claude、GPT 等模型，四種執行模式自主權由你掌控",
     "feat2.skills": "技能與指令",
-    "feat2.skillsDesc": "可複用的 Skill 工作流與 Prompt 指令範本，輸入 `/` 即可觸發，AI 也可自行沉澱新技能",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "可複用的 Skill 工作流與 Prompt 指令範本，輸入 `/` 即可觸發，AI 也可自行沉澱新技能；可接入外部 MCP 伺服器擴充 AI 工具能力",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "外部 AI Agent 經 MCP 安全執行指令、傳輸檔案，憑證不出應用",
     "feat2.sql": "AI 產生 SQL",
     "feat2.sqlDesc": "用自然語言描述查詢需求，AI 結合資料表結構自動產生 SQL 並直接執行",
@@ -1548,8 +1548,8 @@ var I18N = {
     "feat2.desc": "Autonomous AI Agent that independently plans and executes multi-turn shell commands directly in your terminal.",
     "feat2.agentDesc": "The AI Agent plans and executes multi-turn commands right in your terminal; Anthropic / OpenAI-compatible with Claude, GPT and more, plus four execution modes under your control",
     "feat2.skills": "Skills &amp; Commands",
-    "feat2.skillsDesc": "Reusable skill workflows and prompt-template commands triggered with `/`; the AI can also save new skills itself",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "Reusable skill workflows and prompt-template commands triggered with `/`; the AI can also save new skills itself; external MCP servers can be connected to extend the AI's toolbox",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "External AI agents run commands and transfer files via MCP — credentials never leave the app",
     "feat2.sql": "AI SQL Generation",
     "feat2.sqlDesc": "Describe your query in natural language and the AI generates SQL from your schema, ready to run",
@@ -1607,8 +1607,8 @@ var I18N = {
     "feat2.desc": "自律的に動作する AI エージェント。多ターンのシェルコマンドを独立して計画・実行し、ターミナル上で複雑なタスクを完遂します。",
     "feat2.agentDesc": "AI エージェントが自律的に計画し、複数ターンでコマンドを実行。Anthropic / OpenAI 互換で Claude、GPT 等に対応、4 つの実行モードで権限を制御",
     "feat2.skills": "スキルとコマンド",
-    "feat2.skillsDesc": "再利用可能な Skill ワークフローとプロンプトコマンドテンプレート。`/` 入力で呼び出し、AI 自らも新しいスキルを保存できます",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "再利用可能な Skill ワークフローとプロンプトコマンドテンプレート。`/` 入力で呼び出し、AI 自らも新しいスキルを保存できます。外部の MCP サーバーに接続してツールを拡張することもできます",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "外部 AI エージェントが MCP 経由で安全にコマンド実行・ファイル転送。資格情報はアプリ外に出ません",
     "feat2.sql": "AI SQL 生成",
     "feat2.sqlDesc": "自然言語でクエリを説明すると、AI がテーブル構造から SQL を自動生成して実行",
@@ -1666,8 +1666,8 @@ var I18N = {
     "feat2.desc": "자율적으로 동작하는 AI 에이전트. 여러 턴의 셸 명령을 독자적으로 계획·실행하여 터미널에서 복잡한 작업을 완수합니다.",
     "feat2.agentDesc": "AI 에이전트가 자율적으로 계획하고 여러 턴에 걸쳐 명령을 실행합니다. Anthropic / OpenAI 호환, Claude·GPT 등 지원, 4가지 실행 모드로 권한 제어",
     "feat2.skills": "스킬 및 명령",
-    "feat2.skillsDesc": "재사용 가능한 스킬 워크플로와 프롬프트 명령 템플릿, `/` 입력으로 호출, AI 스스로 새 스킬을 저장할 수도 있습니다",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "재사용 가능한 스킬 워크플로와 프롬프트 명령 템플릿, `/` 입력으로 호출, AI 스스로 새 스킬을 저장할 수도 있습니다. 외부 MCP 서버에 연결해 AI의 도구를 확장할 수도 있습니다",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "외부 AI 에이전트가 MCP를 통해 안전하게 명령을 실행하고 파일을 전송합니다 — 자격 증명은 앱 밖으로 나가지 않습니다",
     "feat2.sql": "AI SQL 생성",
     "feat2.sqlDesc": "자연어로 조회를 설명하면 AI가 테이블 구조를 반영해 SQL을 자동 생성하고 바로 실행합니다",
@@ -1725,8 +1725,8 @@ var I18N = {
     "feat2.desc": "Autonomer KI-Agent, der mehrstufige Shell-Befehle selbstständig plant und direkt im Terminal ausführt.",
     "feat2.agentDesc": "Der KI-Agent plant und führt Befehle über mehrere Runden direkt im Terminal aus; Anthropic-/OpenAI-kompatibel mit Claude, GPT und mehr, vier Ausführungsmodi unter Ihrer Kontrolle",
     "feat2.skills": "Skills &amp; Befehle",
-    "feat2.skillsDesc": "Wiederverwendbare Skill-Workflows und Prompt-Befehlsvorlagen, ausgelöst mit `/`; die KI kann auch selbst neue Skills speichern",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "Wiederverwendbare Skill-Workflows und Prompt-Befehlsvorlagen, ausgelöst mit `/`; die KI kann auch selbst neue Skills speichern; externe MCP-Server können zur Erweiterung der KI-Werkzeuge angebunden werden",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "Externe KI-Agenten führen Befehle aus und übertragen Dateien sicher über MCP — Zugangsdaten verlassen die App nie",
     "feat2.sql": "KI-SQL-Generierung",
     "feat2.sqlDesc": "Abfrage in natürlicher Sprache beschreiben, und die KI generiert aus dem Schema SQL, das direkt ausgeführt werden kann",
@@ -1784,8 +1784,8 @@ var I18N = {
     "feat2.desc": "Agente de IA autónomo que planifica y ejecuta comandos de shell en múltiples turnos directamente en tu terminal.",
     "feat2.agentDesc": "El Agente de IA planifica y ejecuta comandos en múltiples turnos directamente en tu terminal; compatible con Anthropic / OpenAI (Claude, GPT y más), con cuatro modos de ejecución bajo tu control",
     "feat2.skills": "Habilidades y comandos",
-    "feat2.skillsDesc": "Flujos de trabajo reutilizables y plantillas de comandos con prompts, activados con `/`; la IA también puede guardar nuevas habilidades por sí misma",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "Flujos de trabajo reutilizables y plantillas de comandos con prompts, activados con `/`; la IA también puede guardar nuevas habilidades por sí misma; también pueden conectarse servidores MCP externos para ampliar las herramientas de la IA",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "Agentes de IA externos ejecutan comandos y transfieren archivos de forma segura vía MCP — las credenciales nunca salen de la app",
     "feat2.sql": "Generación de SQL con IA",
     "feat2.sqlDesc": "Describe tu consulta en lenguaje natural y la IA genera el SQL a partir del esquema, listo para ejecutar",
@@ -1843,8 +1843,8 @@ var I18N = {
     "feat2.desc": "Agent IA autonome qui planifie et exécute des commandes shell en plusieurs tours directement dans votre terminal.",
     "feat2.agentDesc": "L'agent IA planifie et exécute des commandes sur plusieurs tours directement dans votre terminal ; compatible Anthropic / OpenAI (Claude, GPT et plus), quatre modes d'exécution sous votre contrôle",
     "feat2.skills": "Compétences et commandes",
-    "feat2.skillsDesc": "Workflows de compétences réutilisables et modèles de commandes prompt, déclenchés avec `/` ; l'IA peut aussi sauvegarder elle-même de nouvelles compétences",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "Workflows de compétences réutilisables et modèles de commandes prompt, déclenchés avec `/` ; l'IA peut aussi sauvegarder elle-même de nouvelles compétences ; des serveurs MCP externes peuvent être connectés pour enrichir les outils de l'IA",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "Des agents IA externes exécutent des commandes et transfèrent des fichiers via MCP — les identifiants ne quittent jamais l'application",
     "feat2.sql": "Génération de SQL par IA",
     "feat2.sqlDesc": "Décrivez votre requête en langage naturel et l'IA génère le SQL à partir de votre schéma, prêt à exécuter",
@@ -1902,8 +1902,8 @@ var I18N = {
     "feat2.desc": "Автономный AI-агент, который самостоятельно планирует и выполняет многошаговые команды shell прямо в вашем терминале.",
     "feat2.agentDesc": "AI-агент планирует и выполняет команды за несколько шагов прямо в терминале; совместим с Anthropic / OpenAI (Claude, GPT и др.), четыре режима выполнения под вашим контролем",
     "feat2.skills": "Навыки и команды",
-    "feat2.skillsDesc": "Многоразовые сценарии навыков и шаблоны prompt-команд, вызываемые через `/`; ИИ также может сохранять новые навыки сам",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "Многоразовые сценарии навыков и шаблоны prompt-команд, вызываемые через `/`; ИИ также может сохранять новые навыки сам; также можно подключать внешние MCP-серверы для расширения инструментов ИИ",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "Внешние AI-агенты безопасно выполняют команды и передают файлы через MCP — учётные данные не покидают приложение",
     "feat2.sql": "Генерация SQL с помощью ИИ",
     "feat2.sqlDesc": "Опишите запрос на естественном языке — ИИ сгенерирует SQL по структуре таблиц, готовый к запуску",
@@ -1961,8 +1961,8 @@ var I18N = {
     "feat2.desc": "Agente de IA autônomo que planeja e executa comandos de shell em múltiplas rodadas diretamente no seu terminal.",
     "feat2.agentDesc": "O Agente de IA planeja e executa comandos em múltiplas rodadas direto no seu terminal; compatível com Anthropic / OpenAI (Claude, GPT e mais), com quatro modos de execução sob seu controle",
     "feat2.skills": "Habilidades e comandos",
-    "feat2.skillsDesc": "Fluxos de trabalho reutilizáveis e modelos de comandos com prompts, acionados com `/`; a IA também pode salvar novas habilidades por conta própria",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "Fluxos de trabalho reutilizáveis e modelos de comandos com prompts, acionados com `/`; a IA também pode salvar novas habilidades por conta própria; também é possível conectar servidores MCP externos para ampliar as ferramentas da IA",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "Agentes de IA externos executam comandos e transferem arquivos com segurança via MCP — as credenciais nunca saem do app",
     "feat2.sql": "Geração de SQL com IA",
     "feat2.sqlDesc": "Descreva sua consulta em linguagem natural e a IA gera o SQL a partir do esquema, pronto para executar",
@@ -2020,8 +2020,8 @@ var I18N = {
     "feat2.desc": "AI Agent tự chủ, tự lập kế hoạch và thực thi các chuỗi lệnh shell nhiều lượt ngay trong terminal của bạn.",
     "feat2.agentDesc": "AI Agent lập kế hoạch và thực thi lệnh qua nhiều lượt ngay trong terminal; tương thích Anthropic / OpenAI với Claude, GPT..., bốn chế độ thực thi do bạn kiểm soát",
     "feat2.skills": "Kỹ năng &amp; lệnh",
-    "feat2.skillsDesc": "Quy trình kỹ năng tái sử dụng và mẫu lệnh prompt, kích hoạt bằng `/`; AI cũng có thể tự lưu kỹ năng mới",
-    "feat2.mcp": "MCP Server",
+    "feat2.skillsDesc": "Quy trình kỹ năng tái sử dụng và mẫu lệnh prompt, kích hoạt bằng `/`; AI cũng có thể tự lưu kỹ năng mới; có thể kết nối MCP server bên ngoài để mở rộng công cụ cho AI",
+    "feat2.mcp": "uniTerm MCP",
     "feat2.mcpDesc": "AI Agent bên ngoài chạy lệnh và chuyển tệp an toàn qua MCP — thông tin xác thực không bao giờ rời khỏi ứng dụng",
     "feat2.sql": "Tạo SQL bằng AI",
     "feat2.sqlDesc": "Mô tả truy vấn bằng ngôn ngữ tự nhiên, AI sẽ tạo SQL từ cấu trúc bảng, sẵn sàng để chạy",

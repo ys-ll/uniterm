@@ -59,14 +59,9 @@ The AI model provider configuration has the same Proxy dropdown with three choic
 
 Fetching the model list, connection tests, and chat requests all go through the selected proxy.
 
-## Relationship with Tunnels
-
-If the entry SSH connection of an [SSH tunnel](/en/features/ssh-tunnel) has a proxy configured, the tunnel's first hop dials through that proxy — the proxy applies to the tunnel's outbound connection, with no separate configuration on the tunnel. Note that the local SOCKS5 port started by the tunnel's "Dynamic forwarding" mode is a tunnel feature and is a different thing from the outbound proxies described here.
-
 ---
 
 ::: tip Related
-- [Remote Terminal](/en/connections/remote-terminal) — SSH connection configuration
-- [SSH Tunnel](/en/features/ssh-tunnel) — tunnel management
+- [Terminal](/en/connections/terminal) — SSH connection configuration
 - [AI Assistant](/en/features/ai-assistant) — model provider configuration
 :::

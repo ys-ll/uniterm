@@ -22,8 +22,7 @@ const sidebarZh = [
   {
     text: '连接协议',
     items: [
-      { text: '远程终端', link: '/zh/connections/remote-terminal' },
-      { text: '本地和串口连接', link: '/zh/connections/local' },
+      { text: '终端', link: '/zh/connections/terminal' },
       { text: '文件传输', link: '/zh/connections/file-transfer' },
       { text: '远程桌面', link: '/zh/connections/remote-desktop' },
       { text: '数据库', link: '/zh/connections/databases' },
@@ -36,9 +35,9 @@ const sidebarZh = [
     text: '功能指南',
     items: [
       { text: 'AI 助理', link: '/zh/features/ai-assistant' },
-      { text: 'MCP 服务器', link: '/zh/features/mcp-server' },
+      { text: 'uniTerm MCP', link: '/zh/features/uniterm-mcp' },
       { text: '边栏', link: '/zh/features/sidebar' },
-      { text: 'SSH 隧道', link: '/zh/features/ssh-tunnel' },
+      { text: '网络工具箱', link: '/zh/features/network-toolbox' },
       { text: '密钥库', link: '/zh/features/keystore' },
       { text: '代理', link: '/zh/features/proxy' },
       { text: '云同步', link: '/zh/features/sync' },
@@ -65,14 +64,14 @@ const sidebarEn = [
   {
     text: 'Getting Started',
     items: [
-      { text: 'Installation & First Connection', link: '/en/getting-started' }
+      { text: 'Installation & First Connection', link: '/en/getting-started' },
+      { text: 'Start Page', link: '/en/start-page' }
     ]
   },
   {
     text: 'Connections',
     items: [
-      { text: 'Remote Terminal', link: '/en/connections/remote-terminal' },
-      { text: 'Local', link: '/en/connections/local' },
+      { text: 'Terminal', link: '/en/connections/terminal' },
       { text: 'File Transfer', link: '/en/connections/file-transfer' },
       { text: 'Remote Desktop', link: '/en/connections/remote-desktop' },
       { text: 'Databases', link: '/en/connections/databases' },
@@ -85,9 +84,9 @@ const sidebarEn = [
     text: 'Features',
     items: [
       { text: 'AI Assistant', link: '/en/features/ai-assistant' },
-      { text: 'MCP Server', link: '/en/features/mcp-server' },
+      { text: 'uniTerm MCP', link: '/en/features/uniterm-mcp' },
       { text: 'Sidebar', link: '/en/features/sidebar' },
-      { text: 'SSH Tunnel', link: '/en/features/ssh-tunnel' },
+      { text: 'Network Toolbox', link: '/en/features/network-toolbox' },
       { text: 'Keystore', link: '/en/features/keystore' },
       { text: 'Proxy', link: '/en/features/proxy' },
       { text: 'Cloud Sync', link: '/en/features/sync' },

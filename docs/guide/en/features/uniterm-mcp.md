@@ -1,4 +1,4 @@
-# MCP Server (External AI Agents)
+# uniTerm MCP (External AI Agents)
 
 uniTerm can run as an MCP (Model Context Protocol) server, letting external AI agents — Claude Code, Codex, ZCode, Kimi, Gemini CLI, Trae, WorkBuddy, DeepSeek — **run commands, read output, and transfer files on the remote hosts uniTerm manages**.
 
@@ -24,16 +24,16 @@ Saved SSH connections (credentials stay in the app)
 
 ### 1. Enable the MCP server
 
-Settings (`⌘,`) → **MCP Server**:
+Settings (`⌘,`) → **uniTerm MCP**:
 
-1. Turn on the "Enable MCP server" switch; the status line shows `Running · 127.0.0.1:61207`
+1. Turn on the "Enable uniTerm MCP" switch; the status line shows `Running · 127.0.0.1:61207`
 2. Adjust as needed:
    - **Listen port** (default 61207; client configs must be regenerated after changing it)
    - **Command approval policy** (see below)
 
 All tools are available by default; side effects are governed entirely by the approval policy.
 
-![MCP Server Settings](/imgs/mcp_server_light.webp)
+![uniTerm MCP Settings](/imgs/mcp_server_light.webp)
 
 ### 2. Generate a token and connect a client
 
@@ -144,7 +144,7 @@ kimi mcp add --transport http uniterm http://127.0.0.1:61207/mcp \
 
 For direct access, use a trusted network: MCP uses plain HTTP, so traffic and tokens are not encrypted by this endpoint.
 
-1. In **Settings → MCP Server**, turn on **Allow Remote Access**. The listener changes to `0.0.0.0:<port>`; existing MCP connections are closed during the restart.
+1. In **Settings → uniTerm MCP**, turn on **Allow Remote Access**. The listener changes to `0.0.0.0:<port>`; existing MCP connections are closed during the restart.
 2. Configure the remote client with `http://<desktop-ip>:61207/mcp` and its Bearer token. Use the desktop’s reachable IPv4 address or hostname, not `0.0.0.0`. Allow the listening port through the desktop firewall if needed.
 3. In the token setup wizard, enter that address before copying the client configuration. If a forwarding rule uses a different port, update the port in the copied configuration too.
 

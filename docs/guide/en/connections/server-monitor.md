@@ -158,7 +158,7 @@ A notice is shown when `ipmitool` is not installed on the host.
 
 
 ::: tip Related
-- [Remote Terminal](/en/connections/remote-terminal) — SSH connection configuration and usage
+- [Terminal](/en/connections/terminal) — SSH connection configuration and usage
 - [File Transfer](/en/connections/file-transfer) — SFTP file browser
 - [Sidebar](/en/features/sidebar) — The monitor sidebar
 :::

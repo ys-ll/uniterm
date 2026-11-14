@@ -11,15 +11,11 @@ Supported platforms: **Windows / macOS / Linux / Android**.
 
 Cover all your remote access needs and get everything done in a single application.
 
-#### Remote Terminal
+#### Terminal
 
-Connect to **SSH** servers with authentication via Keystore, password, key, Kerberos (GSSAPI), or SSH Agent, with agent forwarding support. Any connection can be routed through an SSH jump host. Also supports **Telnet** and **Mosh** (ideal for high-latency, intermittent network environments).
+SSH / Telnet / Mosh / Raw TCP / Serial, plus local shells (PowerShell / CMD / Git Bash / WSL).
 
 ![New Connection](/imgs/new_connection_light.webp)
-
-#### Local and Serial Terminal
-
-Supports **PowerShell / CMD / Git Bash / Cygwin / MSYS2 / Nushell / WSL** local terminals and **elevated (administrator) terminals**, a **Raw TCP** console, and **serial** connections with configurable baud rate, data bits, stop bits, and parity.
 
 #### File Transfer
 
@@ -64,8 +60,8 @@ uniTerm ships with a built-in autonomous AI Agent that can independently plan an
 - **LLM Integration** — Sidebar chat with Anthropic/OpenAI-compatible API, supporting Claude, GPT and other compliant models.
 - **Flexible Execution Modes** — Bypass, dangerous only, dangerous + write, or confirm all — you control how much oversight the AI Agent needs.
 - **Terminal Integration** — AI commands execute directly in the active terminal tab, with optional pinning to a specific tab or following your active one. Collaborate side-by-side in split panes, each with its own terminal context.
-- **MCP Server** — Built-in MCP server that lets external AI agents (Claude Code, Codex, Gemini CLI, ...) run commands and transfer files on saved connections — credentials never leave the app.
-- **Skills & Commands** — Reusable skill workflows and prompt-template commands, attached with `/` in the AI input; the AI can also save new skills itself.
+- **uniTerm MCP** — Built-in MCP server that lets external AI agents (Claude Code, Codex, Gemini CLI, ...) run commands and transfer files on saved connections — credentials never leave the app.
+- **Skills & Commands** — Reusable skill workflows and prompt-template commands, attached with `/` in the AI input; the AI can also save new skills itself, and connect external MCP servers to extend the AI's toolbox.
 
 ![AI Assistant](/imgs/ai_assistant_light.webp)
 
@@ -86,6 +82,12 @@ Drag and drop terminal tabs into the content area to freely split panes and comb
 
 ![Workspace](/imgs/workspace_light.webp)
 
+#### Network Toolbox
+
+Built-in **network scanning** (discover reachable hosts and open ports on a subnet), **SSH tunnels** (local / remote / dynamic port forwarding), and **local network services** (TFTP / FTP / HTTP / SSH/SFTP / Telnet / NFS / S3) — a one-stop entry for network tools.
+
+![SSH Tunnel](/imgs/ssh_tunnel_light.webp)
+
 #### Cloud Sync
 
 Dual-mode cloud sync over **Git or WebDAV**: encrypted sync of connections, favorites, and AI settings via your own GitHub / GitLab / Gitee private repository or a WebDAV service — no worries about data loss or leaks, seamlessly transition across devices.
@@ -96,12 +98,6 @@ Dual-mode cloud sync over **Git or WebDAV**: encrypted sync of connections, favo
 
 Automatic failover between GitHub and Gitee sources — download, verify, and install updates in one click within the app.
 
-#### Custom Keyboard Shortcuts
-
-Freely bind keyboard shortcuts for nearly every operation, so your hands never need to leave the keyboard.
-
-![Keyboard Shortcuts](/imgs/shortcuts_light.webp)
-
 #### Themes
 
 A variety of terminal themes and UI themes, with customizable interface font size, font family, and colors.
@@ -110,11 +106,11 @@ A variety of terminal themes and UI themes, with customizable interface font siz
 
 #### Multi-Language
 
-9 interface languages: Simplified Chinese, Traditional Chinese, English, 日本語, 한국어, Deutsch, Español, Français, Русский.
+11 interface languages: Simplified Chinese, Traditional Chinese, English, 日本語, 한국어, Deutsch, Español, Français, Русский, Português, Tiếng Việt.
 
 
 ## Next Steps
 
 - [Getting Started](/en/getting-started) — Download, install, and establish your first connection
-- [Connection Protocols](/en/connections/remote-terminal) — Learn how to use each protocol
+- [Connection Protocols](/en/connections/terminal) — Learn how to use each protocol
 - [Feature Guide](/en/features/ai-assistant) — Explore features in depth

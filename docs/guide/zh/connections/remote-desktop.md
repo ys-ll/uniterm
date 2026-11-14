@@ -69,5 +69,5 @@ X11 Desktop 通过 SSH 连接启动完整的 Linux 桌面环境（GNOME、KDE、
 | 桌面环境 | 可选 GNOME、KDE、XFCE、MATE、Cinnamon、Openbox 或自定义命令 |
 
 ::: tip 相关内容
-- [远程终端](/zh/connections/remote-terminal) —— SSH 隧道可用于保护 RDP/VNC 连接
+- [终端](/zh/connections/terminal) —— SSH 隧道可用于保护 RDP/VNC 连接
 :::

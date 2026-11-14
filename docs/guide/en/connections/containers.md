@@ -108,6 +108,6 @@ The **image list** shows repository, tag, ID, and size, and supports:
 - **Remove** — Remove the image after confirmation
 
 ::: tip Related
-- [Remote Terminal](/en/connections/remote-terminal) — SSH connection and jump host configuration
+- [Terminal](/en/connections/terminal) — SSH connection and jump host configuration
 - [Supported Protocols](/en/protocols) — Full protocol and port list
 :::

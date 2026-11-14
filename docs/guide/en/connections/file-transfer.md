@@ -155,6 +155,6 @@ SFTP / SCP sessions use SSH keepalive, so idle transfer connections are no longe
 ---
 
 ::: tip Related
-- [Remote Terminal](/en/connections/remote-terminal) -- SSH connections (SFTP / SCP are based on SSH)
+- [Terminal](/en/connections/terminal) -- SSH connections (SFTP / SCP are based on SSH)
 - [Sidebar](/en/features/sidebar) -- Files sidebar and "Follow terminal path"
 :::
