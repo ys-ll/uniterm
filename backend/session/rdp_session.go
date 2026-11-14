@@ -75,7 +75,7 @@ func (s *RDPSession) Connect(config ConnectionConfig) error {
 	}
 
 	proxy := NewRDPProxy(target, config.Proxy, hex.EncodeToString(token), RDPOptions{
-		EnableCredSSP: config.RdpEnableNLA,
+		EnableCredSSP: config.SecurityOffersCredSSP(),
 		AdminSession:  config.RdpAdminSession,
 		Destination:   destination,
 	})

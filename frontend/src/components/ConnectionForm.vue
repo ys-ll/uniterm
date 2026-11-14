@@ -463,8 +463,13 @@
                       <el-option value="low" :label="t('conn.rdpQualityLow')" />
                     </el-select>
                   </el-form-item>
-                  <el-form-item :label="t('conn.rdpEnableNLA')">
-                    <el-switch v-model="form.rdpEnableNLA" />
+                  <el-form-item :label="t('conn.rdpSecurityMode')">
+                    <el-select v-model="form.rdpSecurityMode" style="width: 100%">
+                      <el-option value="nla-prefer" :label="t('conn.rdpSecurityNlaPrefer')" />
+                      <el-option value="nla" :label="t('conn.rdpSecurityNla')" />
+                      <el-option value="tls" :label="t('conn.rdpSecurityTls')" />
+                      <el-option value="unencrypted" :label="t('conn.rdpSecurityUnencrypted')" />
+                    </el-select>
                   </el-form-item>
                 </template>
                 <div class="inline-pair-row">
@@ -1121,6 +1126,7 @@ const form = reactive<ConnectionConfig>({
   rdpFixedHeight: -2,
   rdpDomain: '',
   rdpEnableNLA: true,
+  rdpSecurityMode: 'nla-prefer',
   rdpAdminSession: false,
   rdpQuality: 'balanced',
   dbType: '',
@@ -1401,7 +1407,10 @@ watch(() => props.editConfig, (config) => {
     // stored config predates the field: otherwise editing an old connection
     // and switching its type to RDP silently turns NLA off, and NLA-only
     // servers then reject the SSL-only negotiation.
-    form.rdpEnableNLA = config.rdpEnableNLA ?? true
+    // The mode field wins; connections saved before it existed map the
+    // legacy NLA boolean (false = TLS only, per the old retry-free behavior).
+    // The missing-field default stays true so old connections keep NLA.
+    form.rdpSecurityMode = config.rdpSecurityMode ?? (config.rdpEnableNLA === false ? 'tls' : 'nla-prefer')
     form.rdpAdminSession = config.rdpAdminSession ?? false
     // Older connections predate the tier field; they get the default tier.
     form.rdpQuality = config.rdpQuality ?? 'balanced'
@@ -1561,6 +1570,7 @@ function resetForm() {
   form.rdpFixedHeight = -2
   form.rdpDomain = ''
   form.rdpEnableNLA = true
+  form.rdpSecurityMode = 'nla-prefer'
   form.rdpAdminSession = false
   form.rdpQuality = 'balanced'
   form.kerberosRealm = ''

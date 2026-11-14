@@ -54,6 +54,13 @@ export interface ConnectionConfig {
   rdpFixedWidth?: number
   rdpFixedHeight?: number
   rdpEnableNLA?: boolean
+  // RDP security-protocol preference. 'nla-prefer' offers TLS + CredSSP and
+  // falls back to TLS when the server's CredSSP handshake breaks (legacy
+  // default); 'nla' and 'tls' pin one protocol with no fallback; and
+  // 'unencrypted' forces Standard RDP Security with ENCRYPTION_LEVEL_NONE
+  // (plaintext traffic — never for confidential targets). Older connections
+  // carry only rdpEnableNLA and resolve to nla-prefer/tls from it.
+  rdpSecurityMode?: 'nla-prefer' | 'nla' | 'tls' | 'unencrypted'
   // Windows domain (or computer name for local accounts). When empty, a
   // "DOMAIN\user" prefix in user is used as a fallback.
   rdpDomain?: string
