@@ -34,6 +34,10 @@ export function confirmMultilinePaste(text: string): Promise<string | null> {
   state.text = text
   state.dontAskAgain = false
   state.visible = true
+  // Mutual exclusion with context menus (issue #1481): whatever paste path
+  // opened this dialog, any open menu closes via the shared broadcast that
+  // Menu.vue listens for.
+  window.dispatchEvent(new Event('global:close-context-menus'))
   return new Promise(resolve => { resolver = resolve })
 }
 

@@ -206,6 +206,33 @@ describe('useTerminalMenu.writeClipboard', () => {
     expect(onSelectAll).toHaveBeenCalledOnce()
     expect(m.menuVisible.value).toBe(false)
   })
+
+  // Issue #1481: onPaste can open the multi-line paste dialog and await it.
+  // The menu must close synchronously when the paste starts, not after the
+  // dialog resolves — otherwise it floats over the paste dialog.
+  it('pasteFromClipboard closes the menu while the paste is still pending', async () => {
+    const paste = vi.fn(() => new Promise<void>(() => {})) // dialog never resolves
+    const m = useTerminalMenu({ getSelection: () => '', onPaste: paste })
+    m.menuVisible.value = true
+    vi.mocked(Clipboard.Text).mockResolvedValueOnce('multi\nline')
+    m.pasteFromClipboard()
+    await flushAsync()
+    await new Promise(resolve => setTimeout(resolve, 0)) // writeClipboard needs one macrotask (web-mode probe)
+    expect(paste).toHaveBeenCalledWith('multi\nline')
+    expect(m.menuVisible.value).toBe(false)
+  })
+
+  it('copyAndPaste closes the menu while the paste is still pending', async () => {
+    const paste = vi.fn(() => new Promise<void>(() => {})) // dialog never resolves
+    const m = useTerminalMenu({ getSelection: () => 'selected-text', onPaste: paste })
+    m.menuVisible.value = true
+    mockClipboardSetText.mockResolvedValue(true)
+    m.copyAndPaste()
+    await flushAsync()
+    await new Promise(resolve => setTimeout(resolve, 0)) // writeClipboard needs one macrotask (web-mode probe)
+    expect(paste).toHaveBeenCalledWith('selected-text')
+    expect(m.menuVisible.value).toBe(false)
+  })
 })
 
 // Windows Terminal style (issue #1329): right-click on a selection copies it

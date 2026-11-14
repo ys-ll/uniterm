@@ -28,7 +28,7 @@
         </el-checkbox>
         <div class="multiline-paste-footer-buttons">
           <el-button @click="onCancel">{{ t('common.cancel') }}</el-button>
-          <el-button type="warning" @click="onConfirm">{{ t('terminal.multilinePasteConfirm') }}</el-button>
+          <el-button type="primary" @click="onConfirm">{{ t('terminal.multilinePasteConfirm') }}</el-button>
         </div>
       </div>
     </template>
