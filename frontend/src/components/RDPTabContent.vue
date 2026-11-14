@@ -451,9 +451,10 @@ async function startClient(proxyUrl: string, desktopSizeOverride?: RdpDesktopSiz
       .renderCanvas(canvasEl.value)
     if (domain) builder.serverDomain(domain)
     builder.extension(new mod.Extension('enable_credssp', activeSecurityMode === 'nla-prefer' || activeSecurityMode === 'nla'))
-    // Standard RDP Security (ENCRYPTION_LEVEL_NONE) for legacy servers that
-    // reject TLS and NLA outright. The engine disables TLS/CredSSP when this
-    // is set, so it wins over the credssp extension above.
+    // Standard RDP Security (legacy RC4 or no encryption, level dictated by
+    // the server's SC_SECURITY block) for legacy servers that reject TLS and
+    // NLA outright. The engine disables TLS/CredSSP when this is set, so it
+    // wins over the credssp extension above.
     builder.extension(new mod.Extension('enable_standard_rdp_security', activeSecurityMode === 'unencrypted'))
     // Auto-logon with the saved credentials (mstsc saved-creds equivalent) —
     // requires the autologon extension patch in the WASM build.
