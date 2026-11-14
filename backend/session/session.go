@@ -122,10 +122,12 @@ type ConnectionConfig struct {
 	// RdpSecurityMode selects the security-protocol preference:
 	// "nla-prefer" offers TLS + CredSSP and falls back to TLS when the
 	// server's CredSSP handshake breaks, "nla" offers both without any
-	// fallback, "tls" offers TLS only, and "unencrypted" forces Standard
-	// RDP Security with ENCRYPTION_LEVEL_NONE (plaintext traffic — never
-	// for confidential targets). Connections saved before the field
-	// existed resolve from RdpEnableNLA instead.
+	// fallback, "tls" offers TLS only, and "unencrypted" (displayed as
+	// "Standard RDP Security (legacy)") speaks the legacy standard RDP
+	// security protocol — the encryption level (RC4 40/56/128-bit or none)
+	// is dictated by the server, so it is plaintext against servers that
+	// choose none. Connections saved before the field existed resolve from
+	// RdpEnableNLA instead.
 	RdpSecurityMode string `json:"rdpSecurityMode,omitempty"`
 	// RdpDomain is the Windows domain (or computer name for local accounts)
 	// sent to the RDP ActiveX control's Domain property. When empty, a
