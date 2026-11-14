@@ -1019,6 +1019,9 @@ onMounted(async () => {
 })
 
 function onResizeStart(e: MouseEvent) {
+  // Same as AISidebar.onResizeStart: block the mousedown default action so a
+  // resize drag can never promote into a text selection / native drag.
+  e.preventDefault()
   isResizing.value = true
   const el = sidebarEl.value
   if (!el) return
@@ -1871,6 +1874,8 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   bottom: 0;
   width: 0.375rem;
   cursor: col-resize;
+  user-select: none;
+  -webkit-user-drag: none;
   z-index: 10;
   background: transparent;
 }

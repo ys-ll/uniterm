@@ -1068,6 +1068,9 @@ let resizeStartY = 0
 let resizeStartHeight = 0
 
 function onResizeStart(e: MouseEvent) {
+  // Block the mousedown default action so the drag cannot promote into a text
+  // selection / native drag (see AISidebar.onResizeStart for the full story).
+  e.preventDefault()
   resizeStartY = e.clientY
   resizeStartHeight = topHeight.value
   document.addEventListener('mousemove', onResizeMove)
