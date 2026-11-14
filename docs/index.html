@@ -1124,7 +1124,7 @@ var _hmt = _hmt || [];
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg></div>
         <div>
           <h4><span data-i18n="feat1.terminal">终端</span></h4>
-          <p><span data-i18n="feat1.terminalDesc">SSH / Telnet / Mosh 远程终端，PowerShell / Git Bash / WSL 本地终端与串口连接，SSH 隧道转发与服务器实时监控</span></p>
+          <p><span data-i18n="feat1.terminalDesc">SSH / Telnet / Mosh 远程终端，PowerShell / Git Bash / WSL 本地终端与串口连接，服务器实时监控</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/sftp.webp" data-light="imgs/sftp_light.webp" role="button" tabindex="0">
@@ -1242,7 +1242,7 @@ var _hmt = _hmt || [];
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
         <div>
           <h4><span data-i18n="feat3.conn">连接管理器</span></h4>
-          <p><span data-i18n="feat3.connDesc">快速搜索、新建连接、分组排序、批量操作</span></p>
+          <p><span data-i18n="feat3.connDesc">分组、搜索和批量管理服务器连接；加密导入/导出，支持从 MobaXterm、Xshell 等导入</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/workspace.webp" data-light="imgs/workspace_light.webp" role="button" tabindex="0">
@@ -1252,18 +1252,18 @@ var _hmt = _hmt || [];
           <p><span data-i18n="feat3.workspaceDesc">将终端标签拖到内容区即可自由分屏，任意组合成工作区</span></p>
         </div>
       </li>
+      <li class="fs-item" data-dark="imgs/ssh_tunnel.webp" data-light="imgs/ssh_tunnel_light.webp" role="button" tabindex="0">
+        <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></div>
+        <div>
+          <h4><span data-i18n="feat3.toolbox">网络工具箱</span></h4>
+          <p><span data-i18n="feat3.toolboxDesc">网络扫描、SSH 端口转发隧道，以及为其他设备运行临时服务器的本地服务</span></p>
+        </div>
+      </li>
       <li class="fs-item" data-dark="imgs/cloud_sync.webp" data-light="imgs/cloud_sync_light.webp" role="button" tabindex="0">
         <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 116.71-9h1.79a4.5 4.5 0 110 9z"/></svg></div>
         <div>
           <h4><span data-i18n="feat3.sync">云端配置同步</span></h4>
           <p><span data-i18n="feat3.syncDesc">Git / WebDAV / SFTP / S3 / SMB 加密云同步，多设备无缝接续，无惧丢失泄露</span></p>
-        </div>
-      </li>
-      <li class="fs-item" data-dark="imgs/shortcuts.webp" data-light="imgs/shortcuts_light.webp" role="button" tabindex="0">
-        <div class="fi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M10 14h4M18 14h.01"/></svg></div>
-        <div>
-          <h4><span data-i18n="feat3.keys">自定义快捷键</span></h4>
-          <p><span data-i18n="feat3.keysDesc">自由绑定各项操作的快捷键，实现全键盘操作</span></p>
         </div>
       </li>
       <li class="fs-item" data-dark="imgs/background_image.webp" data-light="imgs/background_image.webp" role="button" tabindex="0">
@@ -1417,7 +1417,7 @@ var I18N = {
     "feat1.title": "全功能终端",
     "feat1.desc": "终端、文件传输、远程桌面、数据库、容器 —— 覆盖全部远程访问场景。",
     "feat1.terminal": "终端",
-    "feat1.terminalDesc": "SSH / Telnet / Mosh 远程终端，PowerShell / Git Bash / WSL 本地终端与串口连接，SSH 隧道转发与服务器实时监控",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh 远程终端，PowerShell / Git Bash / WSL 本地终端与串口连接，服务器实时监控",
     "feat1.file": "文件传输",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，双栏浏览、鼠标拖拽上传下载，SSH 内 `rz`/`sz`",
     "feat1.rdp": "远程桌面",
@@ -1440,13 +1440,13 @@ var I18N = {
     "feat3.title": "个性化能力",
     "feat3.desc": "连接管理、自由分屏、云端同步、主题与国际化 —— 你的终端由你掌控。",
     "feat3.conn": "连接管理器",
-    "feat3.connDesc": "快速搜索、新建连接、分组排序、批量操作",
+    "feat3.connDesc": "分组、搜索和批量管理服务器连接；加密导入/导出，支持从 MobaXterm、Xshell 等导入",
     "feat3.workspace": "工作区",
     "feat3.workspaceDesc": "将终端标签拖到内容区即可自由分屏，任意组合成工作区",
     "feat3.sync": "云端配置同步",
     "feat3.syncDesc": "Git / WebDAV / SFTP / S3 / SMB 加密云同步，多设备无缝接续，无惧丢失泄露",
-    "feat3.keys": "自定义快捷键",
-    "feat3.keysDesc": "自由绑定各项操作的快捷键，实现全键盘操作",
+    "feat3.toolbox": "网络工具箱",
+    "feat3.toolboxDesc": "网络扫描、SSH 端口转发隧道，以及为其他设备运行临时服务器的本地服务",
     "feat3.themes": "主题与国际化",
     "feat3.themesDesc": "28 款终端主题、3 款界面主题、自定义背景图片，支持简中、英、日、韩等 11 种语言界面",
     "install.windows": "EXE 安装版 / ZIP 便携版<br>amd64 / arm64",
@@ -1476,7 +1476,7 @@ var I18N = {
     "feat1.title": "全功能終端機",
     "feat1.desc": "終端機、檔案傳輸、遠端桌面、資料庫、容器 —— 涵蓋全部遠端存取場景。",
     "feat1.terminal": "終端機",
-    "feat1.terminalDesc": "SSH / Telnet / Mosh 遠端終端機，PowerShell / Git Bash / WSL 本地終端機與串列埠連接，SSH 隧道轉發與伺服器即時監控",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh 遠端終端機，PowerShell / Git Bash / WSL 本地終端機與串列埠連接，伺服器即時監控",
     "feat1.file": "檔案傳輸",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，雙欄瀏覽、滑鼠拖曳上傳下載，SSH 內 `rz`/`sz`",
     "feat1.rdp": "遠端桌面",
@@ -1504,8 +1504,8 @@ var I18N = {
     "feat3.workspaceDesc": "將終端機標籤拖到內容區即可自由分屏，任意組合成工作區",
     "feat3.sync": "雲端配置同步",
     "feat3.syncDesc": "Git / WebDAV / SFTP / S3 / SMB 加密雲端同步，多裝置無縫接續，無懼遺失洩露",
-    "feat3.keys": "自訂快捷鍵",
-    "feat3.keysDesc": "自由綁定各項操作的快捷鍵，實現全鍵盤操作",
+    "feat3.toolbox": "網路工具箱",
+    "feat3.toolboxDesc": "網路掃描、SSH 連接埠轉發隧道，以及為其他裝置執行臨時伺服器的本地服務",
     "feat3.themes": "主題與國際化",
     "feat3.themesDesc": "28 種終端機主題、3 種介面主題、自訂背景圖片，支援繁中、簡中、英、日、韓等 11 種語言介面",
     "install.windows": "EXE 安裝版 / ZIP 攜帶版<br>amd64 / arm64",
@@ -1535,7 +1535,7 @@ var I18N = {
     "feat1.title": "Full-Featured Terminal",
     "feat1.desc": "Terminal, file transfer, remote desktop, database, and containers — covering all remote access needs.",
     "feat1.terminal": "Terminal",
-    "feat1.terminalDesc": "Remote SSH / Telnet / Mosh, local PowerShell / Git Bash / WSL and serial terminals, with SSH tunnel forwarding and live server monitoring",
+    "feat1.terminalDesc": "Remote SSH / Telnet / Mosh, local PowerShell / Git Bash / WSL and serial terminals, with live server monitoring",
     "feat1.file": "File Transfer",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, dual-pane browse, drag-and-drop transfer, `rz`/`sz` in SSH",
     "feat1.rdp": "Remote Desktop",
@@ -1558,13 +1558,13 @@ var I18N = {
     "feat3.title": "Personalization",
     "feat3.desc": "Connection management, split panes, cloud sync, themes &amp; languages — your terminal, your way.",
     "feat3.conn": "Connection Manager",
-    "feat3.connDesc": "Quick search, new connection, grouping, sorting, batch ops",
+    "feat3.connDesc": "Group, search, and batch-manage server connections; encrypted import/export, import from MobaXterm, Xshell, and more",
     "feat3.workspace": "Workspace",
     "feat3.workspaceDesc": "Drag terminal tabs into the content area to split freely and combine into a workspace",
     "feat3.sync": "Cloud Sync",
     "feat3.syncDesc": "Encrypted cloud sync via Git, WebDAV, SFTP, S3 or SMB — seamless across devices",
-    "feat3.keys": "Custom Keybindings",
-    "feat3.keysDesc": "Freely bind shortcuts for every action for full keyboard-driven operation",
+    "feat3.toolbox": "Network Toolbox",
+    "feat3.toolboxDesc": "Network scanning, SSH port forwarding tunnels, and local services to run temporary servers for other devices",
     "feat3.themes": "Themes &amp; Languages",
     "feat3.themesDesc": "28 terminal themes, 3 UI themes and a custom background image, with an 11-language UI including Chinese, English, Japanese and Korean",
     "install.windows": "EXE Installer / ZIP Portable<br>amd64 / arm64",
@@ -1594,7 +1594,7 @@ var I18N = {
     "feat1.title": "フル機能ターミナル",
     "feat1.desc": "ターミナル、ファイル転送、リモートデスクトップ、データベース、コンテナ —— あらゆるリモートアクセスに対応。",
     "feat1.terminal": "ターミナル",
-    "feat1.terminalDesc": "SSH / Telnet / Mosh リモートターミナル、PowerShell / Git Bash / WSL ローカルターミナルとシリアル接続、SSH トンネル転送とサーバー監視",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh リモートターミナル、PowerShell / Git Bash / WSL ローカルターミナルとシリアル接続、サーバー監視",
     "feat1.file": "ファイル転送",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem、2 ペイン表示、ドラッグ＆ドロップ転送、SSH 内 `rz`/`sz`",
     "feat1.rdp": "リモートデスクトップ",
@@ -1617,13 +1617,13 @@ var I18N = {
     "feat3.title": "パーソナライズ",
     "feat3.desc": "接続管理、自由な画面分割、クラウド同期、テーマと国際化 —— あなたのターミナルはあなた流に。",
     "feat3.conn": "接続マネージャー",
-    "feat3.connDesc": "検索、新規接続、グループ化、並べ替え、一括操作",
+    "feat3.connDesc": "サーバーへの接続をグループ化・検索・一括管理。暗号化インポート/エクスポート、MobaXterm や Xshell などからのインポートに対応",
     "feat3.workspace": "ワークスペース",
     "feat3.workspaceDesc": "ターミナルタブをコンテンツ領域へドラッグして自由に分割し、ワークスペースを組み合わせられます",
     "feat3.sync": "クラウド同期",
     "feat3.syncDesc": "Git / WebDAV / SFTP / S3 / SMB による暗号化クラウド同期。複数デバイスでシームレスに接続、喪失・漏えいの心配なし",
-    "feat3.keys": "カスタムキーバインド",
-    "feat3.keysDesc": "すべての操作にショートカットを自由に割り当て、フルキーボード操作を実現",
+    "feat3.toolbox": "ネットワークツールボックス",
+    "feat3.toolboxDesc": "ネットワークスキャン、SSH ポート転送トンネル、他のデバイス向けに一時サーバーを立てるローカルサービス",
     "feat3.themes": "テーマと言語",
     "feat3.themesDesc": "28 種類のターミナルテーマ、3 種類の UI テーマ、カスタム背景画像。日本語を含む 11 言語の UI に対応",
     "install.windows": "EXE インストーラー / ZIP ポータブル<br>amd64 / arm64",
@@ -1653,7 +1653,7 @@ var I18N = {
     "feat1.title": "풀 기능 터미널",
     "feat1.desc": "터미널, 파일 전송, 원격 데스크톱, 데이터베이스, 컨테이너 — 모든 원격 접속 시나리오를 지원합니다.",
     "feat1.terminal": "터미널",
-    "feat1.terminalDesc": "SSH / Telnet / Mosh 원격 터미널, PowerShell / Git Bash / WSL 로컬 터미널과 시리얼 연결, SSH 터널 포워딩과 서버 실시간 모니터링",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh 원격 터미널, PowerShell / Git Bash / WSL 로컬 터미널과 시리얼 연결, 서버 실시간 모니터링",
     "feat1.file": "파일 전송",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, 2분할 탐색, 드래그 앤 드롭 전송, SSH 내 `rz`/`sz`",
     "feat1.rdp": "원격 데스크톱",
@@ -1676,13 +1676,13 @@ var I18N = {
     "feat3.title": "개인화",
     "feat3.desc": "연결 관리, 자유로운 분할 화면, 클라우드 동기화, 테마와 다국어 — 터미널은 내 방식대로.",
     "feat3.conn": "연결 관리자",
-    "feat3.connDesc": "빠른 검색, 새 연결, 그룹화·정렬, 일괄 작업",
+    "feat3.connDesc": "서버 연결을 그룹화, 검색, 일괄 관리합니다. 암호화된 가져오기/내보내기와 MobaXterm, Xshell 등에서 가져오기를 지원합니다",
     "feat3.workspace": "워크스페이스",
     "feat3.workspaceDesc": "터미널 탭을 콘텐츠 영역으로 드래그해 자유롭게 분할하고 워크스페이스로 조합",
     "feat3.sync": "클라우드 동기화",
     "feat3.syncDesc": "Git / WebDAV / SFTP / S3 / SMB 암호화 클라우드 동기화, 여러 기기에서 끊김 없이 이어서 작업",
-    "feat3.keys": "사용자 지정 단축키",
-    "feat3.keysDesc": "모든 작업에 단축키를 자유롭게 할당하여 완전한 키보드 조작 구현",
+    "feat3.toolbox": "네트워크 도구 상자",
+    "feat3.toolboxDesc": "네트워크 스캔, SSH 포트 포워딩 터널, 다른 기기를 위한 임시 서버를 실행하는 로컬 서비스",
     "feat3.themes": "테마 및 언어",
     "feat3.themesDesc": "28가지 터미널 테마, 3가지 UI 테마, 사용자 지정 배경 이미지, 한국어 등 11개 언어 UI 지원",
     "install.windows": "EXE 설치판 / ZIP 포터블<br>amd64 / arm64",
@@ -1712,7 +1712,7 @@ var I18N = {
     "feat1.title": "Terminal mit vollem Funktionsumfang",
     "feat1.desc": "Terminal, Dateiübertragung, Remote Desktop, Datenbanken und Container — für alle Remote-Access-Szenarien.",
     "feat1.terminal": "Terminal",
-    "feat1.terminalDesc": "Remote SSH / Telnet / Mosh, lokale PowerShell-/Git-Bash-/WSL-Terminals und serielle Verbindungen, mit SSH-Tunnel-Forwarding und Server-Monitoring in Echtzeit",
+    "feat1.terminalDesc": "Remote SSH / Telnet / Mosh, lokale PowerShell-/Git-Bash-/WSL-Terminals und serielle Verbindungen, mit Server-Monitoring in Echtzeit",
     "feat1.file": "Dateiübertragung",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, Zwei-Fenster-Ansicht, Drag-and-Drop-Übertragung, `rz`/`sz` in SSH",
     "feat1.rdp": "Remote Desktop",
@@ -1735,13 +1735,13 @@ var I18N = {
     "feat3.title": "Personalisierung",
     "feat3.desc": "Verbindungsverwaltung, freie Fensteranordnung, Cloud-Sync, Designs &amp; Sprachen — Ihr Terminal, Ihre Regeln.",
     "feat3.conn": "Verbindungsmanager",
-    "feat3.connDesc": "Schnellsuche, neue Verbindungen, Gruppierung, Sortierung, Sammelaktionen",
+    "feat3.connDesc": "Serververbindungen gruppieren, durchsuchen und im Stapel verwalten; verschlüsselter Import/Export, Import aus MobaXterm, Xshell u. a.",
     "feat3.workspace": "Arbeitsbereich",
     "feat3.workspaceDesc": "Terminal-Tabs in den Inhaltsbereich ziehen, um frei zu teilen und zu Arbeitsbereichen zu kombinieren",
     "feat3.sync": "Cloud-Sync",
     "feat3.syncDesc": "Verschlüsselte Cloud-Sync über Git, WebDAV, SFTP, S3 oder SMB — nahtlos auf allen Geräten",
-    "feat3.keys": "Eigene Tastenkürzel",
-    "feat3.keysDesc": "Tastenkürzel für jede Aktion frei belegen — komplett per Tastatur bedienbar",
+    "feat3.toolbox": "Netzwerk-Toolbox",
+    "feat3.toolboxDesc": "Netzwerkscan, SSH-Port-Weiterleitungs-Tunnel und lokale Dienste zum Betreiben temporärer Server für andere Geräte",
     "feat3.themes": "Designs &amp; Sprachen",
     "feat3.themesDesc": "28 Terminal-Designs, 3 UI-Designs und ein anpassbares Hintergrundbild, mit Benutzeroberfläche in 11 Sprachen",
     "install.windows": "EXE-Installer / ZIP-Portable<br>amd64 / arm64",
@@ -1771,7 +1771,7 @@ var I18N = {
     "feat1.title": "Terminal con todas las funciones",
     "feat1.desc": "Terminal, transferencia de archivos, escritorio remoto, bases de datos y contenedores — cubre todas las necesidades de acceso remoto.",
     "feat1.terminal": "Terminal",
-    "feat1.terminalDesc": "SSH / Telnet / Mosh remotos, terminales locales PowerShell / Git Bash / WSL y conexiones serie, con túneles SSH y monitorización de servidores en tiempo real",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh remotos, terminales locales PowerShell / Git Bash / WSL y conexiones serie, con monitorización de servidores en tiempo real",
     "feat1.file": "Transferencia de archivos",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, vista de doble panel, transferencia por arrastrar y soltar, `rz`/`sz` en SSH",
     "feat1.rdp": "Escritorio remoto",
@@ -1794,13 +1794,13 @@ var I18N = {
     "feat3.title": "Personalización",
     "feat3.desc": "Gestión de conexiones, paneles divididos, sincronización en la nube, temas e idiomas — tu terminal, a tu manera.",
     "feat3.conn": "Gestor de conexiones",
-    "feat3.connDesc": "Búsqueda rápida, nuevas conexiones, agrupación, ordenación y operaciones por lotes",
+    "feat3.connDesc": "Agrupa, busca y gestiona en lote conexiones de servidores; importación/exportación cifrada, importación desde MobaXterm, Xshell, etc.",
     "feat3.workspace": "Espacio de trabajo",
     "feat3.workspaceDesc": "Arrastra pestañas de terminal al área de contenido para dividir libremente y combinar en un espacio de trabajo",
     "feat3.sync": "Sincronización en la nube",
     "feat3.syncDesc": "Sincronización cifrada en la nube vía Git, WebDAV, SFTP, S3 o SMB — sin problemas entre dispositivos",
-    "feat3.keys": "Atajos personalizados",
-    "feat3.keysDesc": "Asigna libremente atajos a cada acción para un manejo totalmente por teclado",
+    "feat3.toolbox": "Caja de herramientas de red",
+    "feat3.toolboxDesc": "Escaneo de red, túneles de reenvío de puertos SSH y servicios locales para ejecutar servidores temporales para otros dispositivos",
     "feat3.themes": "Temas e idiomas",
     "feat3.themesDesc": "28 temas de terminal, 3 temas de interfaz e imagen de fondo personalizable, con interfaz en 11 idiomas",
     "install.windows": "Instalador EXE / Portátil ZIP<br>amd64 / arm64",
@@ -1830,7 +1830,7 @@ var I18N = {
     "feat1.title": "Terminal complet",
     "feat1.desc": "Terminal, transfert de fichiers, bureau à distance, bases de données et conteneurs — pour tous les besoins d'accès distant.",
     "feat1.terminal": "Terminal",
-    "feat1.terminalDesc": "SSH / Telnet / Mosh distants, terminaux locaux PowerShell / Git Bash / WSL et connexions série, avec transfert de tunnel SSH et supervision serveur en temps réel",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh distants, terminaux locaux PowerShell / Git Bash / WSL et connexions série, avec supervision serveur en temps réel",
     "feat1.file": "Transfert de fichiers",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, double panneau, glisser-déposer, `rz`/`sz` dans SSH",
     "feat1.rdp": "Bureau à distance",
@@ -1853,13 +1853,13 @@ var I18N = {
     "feat3.title": "Personnalisation",
     "feat3.desc": "Gestion des connexions, panneaux divisibles, synchronisation cloud, thèmes et langues — votre terminal, à votre façon.",
     "feat3.conn": "Gestionnaire de connexions",
-    "feat3.connDesc": "Recherche rapide, nouvelle connexion, groupement, tri, opérations par lot",
+    "feat3.connDesc": "Regroupement, recherche et gestion par lot des connexions serveur ; import/export chiffré, import depuis MobaXterm, Xshell, etc.",
     "feat3.workspace": "Espace de travail",
     "feat3.workspaceDesc": "Faites glisser des onglets de terminal dans la zone de contenu pour diviser librement et composer un espace de travail",
     "feat3.sync": "Synchronisation cloud",
     "feat3.syncDesc": "Synchronisation cloud chiffrée via Git, WebDAV, SFTP, S3 ou SMB — transparente sur tous vos appareils",
-    "feat3.keys": "Raccourcis personnalisés",
-    "feat3.keysDesc": "Attribuez librement des raccourcis à chaque action pour une utilisation entièrement au clavier",
+    "feat3.toolbox": "Boîte à outils réseau",
+    "feat3.toolboxDesc": "Scan réseau, tunnels de redirection de ports SSH et services locaux pour exécuter des serveurs temporaires pour d'autres appareils",
     "feat3.themes": "Thèmes et langues",
     "feat3.themesDesc": "28 thèmes de terminal, 3 thèmes d'interface et image d'arrière-plan personnalisable, avec une interface en 11 langues",
     "install.windows": "Installateur EXE / Portable ZIP<br>amd64 / arm64",
@@ -1889,7 +1889,7 @@ var I18N = {
     "feat1.title": "Терминал с полным набором функций",
     "feat1.desc": "Терминал, передача файлов, удалённый рабочий стол, базы данных и контейнеры — все сценарии удалённого доступа.",
     "feat1.terminal": "Терминал",
-    "feat1.terminalDesc": "Удалённые SSH / Telnet / Mosh, локальные терминалы PowerShell / Git Bash / WSL и последовательные порты, туннели SSH и мониторинг серверов в реальном времени",
+    "feat1.terminalDesc": "Удалённые SSH / Telnet / Mosh, локальные терминалы PowerShell / Git Bash / WSL и последовательные порты, мониторинг серверов в реальном времени",
     "feat1.file": "Передача файлов",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, двухпанельный режим, передача перетаскиванием, `rz`/`sz` в SSH",
     "feat1.rdp": "Удалённый рабочий стол",
@@ -1912,13 +1912,13 @@ var I18N = {
     "feat3.title": "Персонализация",
     "feat3.desc": "Управление подключениями, свободная разбивка панелей, облачная синхронизация, темы и языки — ваш терминал — ваши правила.",
     "feat3.conn": "Менеджер подключений",
-    "feat3.connDesc": "Быстрый поиск, создание подключений, группы, сортировка, массовые операции",
+    "feat3.connDesc": "Группировка, поиск и массовое управление серверными подключениями; шифрованный импорт/экспорт, импорт из MobaXterm, Xshell и др.",
     "feat3.workspace": "Рабочая область",
     "feat3.workspaceDesc": "Перетащите вкладки терминала в область содержимого, чтобы свободно разбивать экран и собирать рабочие области",
     "feat3.sync": "Облачная синхронизация",
     "feat3.syncDesc": "Шифрованная облачная синхронизация через Git, WebDAV, SFTP, S3 или SMB — бесшовно между устройствами",
-    "feat3.keys": "Свои сочетания клавиш",
-    "feat3.keysDesc": "Свободно назначайте сочетания клавиш для любых действий — полное управление с клавиатуры",
+    "feat3.toolbox": "Сетевой инструментарий",
+    "feat3.toolboxDesc": "Сканирование сети, туннели переадресации портов SSH и локальные сервисы для запуска временных серверов для других устройств",
     "feat3.themes": "Темы и языки",
     "feat3.themesDesc": "28 тем терминала, 3 темы интерфейса и своё фоновое изображение, интерфейс на 11 языках",
     "install.windows": "EXE-установщик / портативная ZIP<br>amd64 / arm64",
@@ -1948,7 +1948,7 @@ var I18N = {
     "feat1.title": "Terminal completo",
     "feat1.desc": "Terminal, transferência de arquivos, área de trabalho remota, bancos de dados e contêineres — cobre todas as necessidades de acesso remoto.",
     "feat1.terminal": "Terminal",
-    "feat1.terminalDesc": "SSH / Telnet / Mosh remotos, terminais locais PowerShell / Git Bash / WSL e conexões seriais, com encaminhamento por túnel SSH e monitoramento de servidores em tempo real",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh remotos, terminais locais PowerShell / Git Bash / WSL e conexões seriais, com monitoramento de servidores em tempo real",
     "feat1.file": "Transferência de arquivos",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, navegação em dois painéis, transferência por arrastar e soltar, `rz`/`sz` no SSH",
     "feat1.rdp": "Área de trabalho remota",
@@ -1971,13 +1971,13 @@ var I18N = {
     "feat3.title": "Personalização",
     "feat3.desc": "Gerenciamento de conexões, painéis divididos, sincronização na nuvem, temas e idiomas — seu terminal, do seu jeito.",
     "feat3.conn": "Gerenciador de conexões",
-    "feat3.connDesc": "Busca rápida, nova conexão, agrupamento, ordenação, operações em lote",
+    "feat3.connDesc": "Agrupe, pesquise e gerencie em lote conexões de servidores; importação/exportação criptografada, importação de MobaXterm, Xshell etc.",
     "feat3.workspace": "Área de trabalho",
     "feat3.workspaceDesc": "Arraste abas de terminal para a área de conteúdo para dividir livremente e combinar em uma área de trabalho",
     "feat3.sync": "Sincronização na nuvem",
     "feat3.syncDesc": "Sincronização criptografada na nuvem via Git, WebDAV, SFTP, S3 ou SMB — perfeita entre dispositivos",
-    "feat3.keys": "Atalhos personalizados",
-    "feat3.keysDesc": "Atribua livremente atalhos a cada ação para operação totalmente por teclado",
+    "feat3.toolbox": "Caixa de Ferramentas de Rede",
+    "feat3.toolboxDesc": "Varredura de rede, túneis de encaminhamento de porta SSH e serviços locais para executar servidores temporários para outros dispositivos",
     "feat3.themes": "Temas e idiomas",
     "feat3.themesDesc": "28 temas de terminal, 3 temas de interface e imagem de fundo personalizável, com interface em 11 idiomas",
     "install.windows": "Instalador EXE / Portátil ZIP<br>amd64 / arm64",
@@ -2007,7 +2007,7 @@ var I18N = {
     "feat1.title": "Terminal đầy đủ tính năng",
     "feat1.desc": "Terminal, chuyển tệp, điều khiển từ xa, cơ sở dữ liệu và container — đáp ứng mọi nhu cầu truy cập từ xa.",
     "feat1.terminal": "Terminal",
-    "feat1.terminalDesc": "SSH / Telnet / Mosh từ xa, terminal cục bộ PowerShell / Git Bash / WSL và kết nối serial, với chuyển tiếp tunnel SSH và giám sát máy chủ thời gian thực",
+    "feat1.terminalDesc": "SSH / Telnet / Mosh từ xa, terminal cục bộ PowerShell / Git Bash / WSL và kết nối serial, với giám sát máy chủ thời gian thực",
     "feat1.file": "Chuyển tệp",
     "feat1.fileDesc": "SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, duyệt hai khung, kéo thả tệp, `rz`/`sz` trong SSH",
     "feat1.rdp": "Điều khiển từ xa",
@@ -2030,13 +2030,13 @@ var I18N = {
     "feat3.title": "Cá nhân hóa",
     "feat3.desc": "Quản lý kết nối, chia sẻ màn hình linh hoạt, đồng bộ đám mây, chủ đề &amp; ngôn ngữ — terminal của bạn, theo cách của bạn.",
     "feat3.conn": "Trình quản lý kết nối",
-    "feat3.connDesc": "Tìm kiếm nhanh, tạo kết nối mới, nhóm, sắp xếp, thao tác hàng loạt",
+    "feat3.connDesc": "Nhóm, tìm kiếm và quản lý hàng loạt các kết nối máy chủ; nhập/xuất mã hóa, nhập từ MobaXterm, Xshell, v.v.",
     "feat3.workspace": "Không gian làm việc",
     "feat3.workspaceDesc": "Kéo thẻ terminal vào vùng nội dung để chia màn hình tự do và kết hợp thành không gian làm việc",
     "feat3.sync": "Đồng bộ đám mây",
     "feat3.syncDesc": "Đồng bộ đám mây mã hóa qua Git, WebDAV, SFTP, S3 hoặc SMB — liền mạch giữa các thiết bị",
-    "feat3.keys": "Phím tắt tùy chỉnh",
-    "feat3.keysDesc": "Gán phím tắt tự do cho mọi thao tác để thao tác hoàn toàn bằng bàn phím",
+    "feat3.toolbox": "Bộ công cụ mạng",
+    "feat3.toolboxDesc": "Quét mạng, đường hầm chuyển tiếp cổng SSH và dịch vụ cục bộ để chạy máy chủ tạm thời cho các thiết bị khác",
     "feat3.themes": "Chủ đề &amp; ngôn ngữ",
     "feat3.themesDesc": "28 chủ đề terminal, 3 chủ đề giao diện và ảnh nền tùy chỉnh, giao diện hỗ trợ 11 ngôn ngữ",
     "install.windows": "Trình cài EXE / bản di động ZIP<br>amd64 / arm64",
