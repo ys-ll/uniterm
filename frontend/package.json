@@ -52,7 +52,8 @@
     "pinia": "^2.1.7",
     "spice-html5-bower": "1.7.3",
     "vue": "^3.4.0",
-    "zmodem.js": "^0.1.10"
+    "zmodem.js": "^0.1.10",
+    "@ys-ll/ironrdp-wasm": "https://github.com/ys-ll/ironrdp-wasm/releases/download/v0.5.2/ys-ll-ironrdp-wasm-0.5.2.tgz"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
@@ -61,8 +62,5 @@
     "vite": "^8.2.2",
     "vitest": "^4.1.8",
     "vue-tsc": "^2.2.12"
-  },
-  "optionalDependencies": {
-    "@ys-ll/ironrdp-wasm": "https://github.com/ys-ll/ironrdp-wasm/releases/download/v0.5.2/ys-ll-ironrdp-wasm-0.5.2.tgz"
   }
 }
