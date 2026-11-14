@@ -9,6 +9,7 @@
       @open-settings="openSettings"
       @open-netscan="openNetscan"
       @open-local-services="openLocalServices"
+      @open-new-connection="onNewConnectionFromStart"
       @close-tab="closeTab"
       @close-tab-batch="closeTabBatch"
       @toggle-ai-lock="onToggleAiLock"
