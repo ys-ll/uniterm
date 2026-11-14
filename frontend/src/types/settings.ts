@@ -161,6 +161,10 @@ export interface AISettings {
   autoCompact?: boolean
   contextTokenBudget?: number
   summaryModelId?: string
+  // How user messages render in the AI panel: 'plain' (default) keeps the
+  // shared left-aligned full-width layout; 'bubble' right-aligns a
+  // content-sized chat bubble (issue #1478). Undefined behaves as 'plain'.
+  userMessageStyle?: 'plain' | 'bubble'
   models: AIModelConfig[]
 }
 
@@ -506,6 +510,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     autoCompact: true,
     contextTokenBudget: DEFAULT_CONTEXT_TOKEN_BUDGET,
     summaryModelId: '',
+    userMessageStyle: 'plain',
     models: [
       {
         id: 'model-default',

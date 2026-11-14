@@ -651,6 +651,14 @@
   "settings.browse": "찾아보기…",
   "settings.maxTurns": "AI 자율 상호작용 최대 라운드",
   "settings.maxTurnsDesc": "AI 요청당 자율 상호작용 라운드의 최대 횟수. 0은 무제한. 기본값: 20.",
+
+  "settings.userMessageStyle": "AI 채팅 표시 모드",
+
+  "settings.userMessageStyleDesc": "AI 대화에서 사용자 메시지 표시 방식",
+
+  "settings.userMessageStylePlain": "왼쪽 정렬",
+
+  "settings.userMessageStyleBubble": "오른쪽 정렬",
   "settings.modelList": "모델 목록",
   "settings.modelListDesc": "AI 모델 구성 및 관리",
   "settings.addModel": "모델 추가",

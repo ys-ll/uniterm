@@ -651,6 +651,14 @@
   "settings.browse": "参照…",
   "settings.maxTurns": "AI自律対話の最大ラウンド数",
   "settings.maxTurnsDesc": "AIリクエストあたりの自律的な対話ラウンドの上限。0は無制限。デフォルト：20。",
+
+  "settings.userMessageStyle": "AIチャットの表示モード",
+
+  "settings.userMessageStyleDesc": "AIチャットでのユーザーメッセージの表示形式",
+
+  "settings.userMessageStylePlain": "左揃え",
+
+  "settings.userMessageStyleBubble": "右揃え",
   "settings.modelList": "モデル一覧",
   "settings.modelListDesc": "AI モデルの設定と管理",
   "settings.addModel": "モデルを追加",

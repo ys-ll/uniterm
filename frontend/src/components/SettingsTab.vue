@@ -1321,6 +1321,21 @@
               />
             </div>
           </div>
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.userMessageStyle') }}</div>
+              <div class="setting-desc">{{ t('settings.userMessageStyleDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-radio-group
+                v-model="settingsStore.settings.ai.userMessageStyle"
+                @change="settingsStore.save()"
+              >
+                <el-radio-button value="plain">{{ t('settings.userMessageStylePlain') }}</el-radio-button>
+                <el-radio-button value="bubble">{{ t('settings.userMessageStyleBubble') }}</el-radio-button>
+              </el-radio-group>
+            </div>
+          </div>
 
           <div class="setting-card">
             <div class="setting-info">

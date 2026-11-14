@@ -149,7 +149,11 @@ type AISettings struct {
 	AutoCompact        *bool           `json:"autoCompact,omitempty"`
 	ContextTokenBudget int             `json:"contextTokenBudget,omitempty"`
 	SummaryModelID     string          `json:"summaryModelId,omitempty"`
-	Models             []AIModelConfig `json:"models"`
+	// UserMessageStyle controls how user messages render in the AI panel:
+	// "" (plain, default) keeps the shared left-aligned full-width layout,
+	// "bubble" right-aligns a content-sized chat bubble (issue #1478).
+	UserMessageStyle string          `json:"userMessageStyle,omitempty"`
+	Models           []AIModelConfig `json:"models"`
 	// Read only for migration to local_state.json. New clients omit this field.
 	ActiveModelID string `json:"activeModelId,omitempty"`
 }

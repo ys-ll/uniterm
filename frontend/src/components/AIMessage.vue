@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-message" :class="[message.role, { interrupted: isInterrupted || isTimeout }]">
+  <div class="ai-message" :class="[message.role, { interrupted: isInterrupted || isTimeout, 'bubble-mode': userBubbleStyle }]">
     <!-- Skill card: 仅显示用了哪个 skill，正文已隐藏进 _contextHeader -->
     <div v-if="message.skillName" class="skill-card">
       <BookOpen :size="'0.8125rem'" class="skill-card-icon" />
@@ -252,6 +252,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { writeClipboard } from '../composables/useClipboardWrite'
 import { Copy, Check, BookOpen, Terminal, FileText, Trash2 } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
 import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
 import { formatClock, formatMessageTime, formatDuration } from '../utils/timeFormat'
@@ -426,7 +427,11 @@ function handleReject() {
 }
 
 const aiStore = useAIStore()
+const settingsStore = useSettingsStore()
 const { t, locale } = useI18n()
+// 'bubble' right-aligns user messages as chat bubbles (issue #1478);
+// 'plain' / undefined keeps the shared left-aligned layout.
+const userBubbleStyle = computed(() => settingsStore.settings.ai.userMessageStyle === 'bubble')
 const inExpanded = ref(false)
 const outExpanded = ref(false)
 const thinkingShown = ref(false)
@@ -979,6 +984,34 @@ function escapeHtml(text: string): string {
 .ai-message {
   display: flex;
   padding: 0.875rem 1.125rem;
+}
+/* Bubble style (settings.ai.userMessageStyle = 'bubble', issue #1478): user
+   messages right-align as content-sized chat bubbles so a question stands
+   out from the answers when scrolling back. Attachments and the meta row
+   follow the right edge; undefined/'plain' keeps the shared left layout. */
+.ai-message.bubble-mode.user {
+  justify-content: flex-end;
+}
+.ai-message.bubble-mode.user .content {
+  align-items: flex-end;
+  flex: 0 1 auto;
+  max-width: 85%;
+}
+.ai-message.bubble-mode.user .text {
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 0.875rem;
+  border-bottom-right-radius: 0;
+}
+.ai-message.bubble-mode.user .msg-attachments {
+  justify-content: flex-end;
+}
+.ai-message.bubble-mode.user .msg-attachment {
+  border-radius: 0.875rem;
+  border-bottom-right-radius: 0;
+}
+.ai-message.bubble-mode.user .msg-meta-row {
+  justify-content: flex-end;
 }
 .ai-message.user .content {
   display: flex;

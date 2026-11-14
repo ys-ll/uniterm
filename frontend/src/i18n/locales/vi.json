@@ -647,6 +647,14 @@
   "settings.browse": "Duyệt…",
   "settings.maxTurns": "Số vòng tự chủ tối đa",
   "settings.maxTurnsDesc": "Số vòng tương tác tự chủ tối đa cho mỗi yêu cầu AI. Đặt 0 để không giới hạn. Mặc định 20.",
+
+  "settings.userMessageStyle": "Chế độ hiển thị hội thoại",
+
+  "settings.userMessageStyleDesc": "Cách hiển thị tin nhắn người dùng trong bảng AI.",
+
+  "settings.userMessageStylePlain": "Căn trái",
+
+  "settings.userMessageStyleBubble": "Căn phải",
   "settings.modelList": "Danh sách mô hình",
   "settings.modelListDesc": "Cấu hình và quản lý các mô hình AI",
   "settings.addModel": "Thêm mô hình",

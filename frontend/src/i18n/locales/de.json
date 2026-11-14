@@ -651,6 +651,14 @@
   "settings.browse": "Durchsuchen…",
   "settings.maxTurns": "Max. autonome Runden",
   "settings.maxTurnsDesc": "Maximale Anzahl autonomer Interaktionsrunden pro KI-Anfrage. 0 = unbegrenzt. Standard: 20.",
+
+  "settings.userMessageStyle": "AI-Chat-Layout",
+
+  "settings.userMessageStyleDesc": "Anzeige der eigenen Nachrichten im KI-Panel.",
+
+  "settings.userMessageStylePlain": "Linksbündig",
+
+  "settings.userMessageStyleBubble": "Rechtsbündig",
   "settings.modelList": "Modellliste",
   "settings.modelListDesc": "KI-Modelle konfigurieren und verwalten",
   "settings.addModel": "Modell hinzufügen",
