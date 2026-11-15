@@ -25,6 +25,11 @@ import (
 // button is a no-op.
 const ftpDataIdleTimeout = 60 * time.Second
 
+// ftpShutTimeout bounds the wait for the "closing data connection" status
+// reply after each data operation (issue #1453). A var so tests can shorten
+// it.
+var ftpShutTimeout = 30 * time.Second
+
 type FTPSession struct {
 	baseSession
 	localFSOps
@@ -82,7 +87,7 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 	dialOpts := []ftp.DialOption{ftp.DialWithTimeout(30 * time.Second)}
 	// Bound the wait for the "closing data connection" status after each
 	// data transfer; some servers never send it (library default is infinite).
-	dialOpts = append(dialOpts, ftp.DialWithShutTimeout(30*time.Second))
+	dialOpts = append(dialOpts, ftp.DialWithShutTimeout(ftpShutTimeout))
 	if enc != nil {
 		dialOpts = append(dialOpts, ftp.DialWithDisabledUTF8(true))
 	}
