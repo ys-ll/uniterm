@@ -62,7 +62,7 @@
                   @dragend="clearDragState"
                   @drop.prevent="onDocDrop($event, index)"
                 >
-                  <Table2 v-if="doc.kind === 'table' && !doc.isView" :size="'0.75rem'" class="doc-tab-icon" />
+                  <Table v-if="doc.kind === 'table' && !doc.isView" :size="'0.75rem'" class="doc-tab-icon" />
                   <Eye v-else-if="doc.kind === 'table'" :size="'0.75rem'" class="doc-tab-icon" />
                   <Database v-else-if="doc.kind === 'db-objects'" :size="'0.75rem'" class="doc-tab-icon" />
                   <Code2 v-else :size="'0.75rem'" class="doc-tab-icon" />
@@ -196,6 +196,7 @@
                 <DBObjectList
                   :session-id="sessionId"
                   :db-name="doc.dbName"
+                  :db-type="dbType"
                   @open="onSelectTable"
                   @changed="onObjectsChanged"
                   @object-removed="onObjectRemoved"
@@ -211,7 +212,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { Table2, Eye, Code2, Database, MoreHorizontal, PanelLeft } from '@lucide/vue'
+import { Table, Eye, Code2, Database, MoreHorizontal, PanelLeft } from '@lucide/vue'
 import { isNarrowScreen } from '../utils/platform'
 import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'

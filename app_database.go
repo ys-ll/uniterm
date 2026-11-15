@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"sort"
 	"time"
@@ -56,6 +57,20 @@ func (a *App) GetDatabases(sessionID string) ([]string, error) {
 		log.Writef("[GetDatabases] failed: %v", err)
 	}
 	return dbs, err
+}
+
+// GetSchemas lists the inner schemas of a database for dialects that have
+// them (SQL Server, PostgreSQL); empty for schema-less dialects.
+func (a *App) GetSchemas(sessionID string, dbName string) ([]string, error) {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := p.GetSchemas(ds.DB(), dbName)
+	if err != nil {
+		log.Writef("[GetSchemas] db=%s failed: %v", dbName, err)
+	}
+	return schemas, err
 }
 
 func (a *App) GetTables(sessionID string, dbName string) ([]database.TableInfo, error) {
@@ -123,6 +138,26 @@ func (a *App) DropDatabase(sessionID string, dbName string) error {
 		return err
 	}
 	return p.DropDatabase(ds.DB(), dbName)
+}
+
+// schemaDropper is implemented by providers that manage schemas inside a
+// database (SQL Server's composite "db.schema" tree nodes).
+type schemaDropper interface {
+	DropSchema(db *sql.DB, dbName string) error
+}
+
+// DropSchema drops the schema part of a composite node name. Providers
+// without a schema concept report unsupported.
+func (a *App) DropSchema(sessionID string, dbName string) error {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return err
+	}
+	sp, ok := p.(schemaDropper)
+	if !ok {
+		return fmt.Errorf("schema management not supported for %s", ds.DBType())
+	}
+	return sp.DropSchema(ds.DB(), dbName)
 }
 
 func (a *App) CreateTable(sessionID string, dbName string, tableName string) error {

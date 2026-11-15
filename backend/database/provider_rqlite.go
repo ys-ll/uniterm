@@ -567,3 +567,16 @@ func dumpRqliteValue(v any) string {
 		return scanToString(v)
 	}
 }
+
+// QualifyTable matches Quote: tables never arrive schema-qualified in this
+// dialect (the schema-grouped tree encoding is SQL Server-specific).
+
+func (p *rqliteProvider) QualifyTable(tableName string) string {
+	return p.Quote(tableName)
+}
+
+// GetSchemas: this dialect has no inner-schema concept (or, for Oracle,
+// the tree node itself is the schema), so the tree stays single-level.
+func (p *rqliteProvider) GetSchemas(db *sql.DB, dbName string) ([]string, error) {
+	return nil, nil
+}
