@@ -939,7 +939,6 @@ watch(() => props.sessionId, async (newId) => {
 .db-name {
   font-family: var(--font-ui);
   font-size: 0.8125rem;
-  font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;

@@ -59,6 +59,20 @@ func (a *App) GetDatabases(sessionID string) ([]string, error) {
 	return dbs, err
 }
 
+// GetSchemas lists the inner schemas of a database for dialects that have
+// them (SQL Server, PostgreSQL); empty for schema-less dialects.
+func (a *App) GetSchemas(sessionID string, dbName string) ([]string, error) {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	schemas, err := p.GetSchemas(ds.DB(), dbName)
+	if err != nil {
+		log.Writef("[GetSchemas] db=%s failed: %v", dbName, err)
+	}
+	return schemas, err
+}
+
 func (a *App) GetTables(sessionID string, dbName string) ([]database.TableInfo, error) {
 	ds, p, err := a.dbProvider(sessionID)
 	if err != nil {
@@ -127,7 +141,7 @@ func (a *App) DropDatabase(sessionID string, dbName string) error {
 }
 
 // schemaDropper is implemented by providers that manage schemas inside a
-// database (SQL Server's composite "db.schema" tree nodes, issue #1484).
+// database (SQL Server's composite "db.schema" tree nodes).
 type schemaDropper interface {
 	DropSchema(db *sql.DB, dbName string) error
 }

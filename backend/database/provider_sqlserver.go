@@ -65,7 +65,7 @@ func (p *sqlserverProvider) Quote(name string) string {
 // ("", "employees"). The last-dot rule keeps database names that legally
 // contain a dot intact ("my.db.sales" → ("my.db", "sales")). Identifiers
 // whose base part contains a dot are out of scope for the tree encoding
-// (issue #1484).
+//.
 func splitQualifiedName(name string) (qualifier, base string) {
 	if i := strings.LastIndexByte(name, '.'); i >= 0 {
 		return name[:i], name[i+1:]
@@ -118,7 +118,7 @@ func (p *sqlserverProvider) PrepareExec(db execer, dbName string) error {
 		return nil
 	}
 	// Composite "db.schema" node names carry a schema qualifier that a USE
-	// statement cannot express; switch the database part only (issue #1484).
+	// statement cannot express; switch the database part only.
 	useDb, _ := splitDbNode(dbName)
 	_, err := db.ExecContext(context.Background(), fmt.Sprintf("USE %s", p.Quote(useDb)))
 	return err
@@ -230,19 +230,20 @@ func (p *sqlserverProvider) GetCapabilities() DBCapabilities {
 		"autoIncrementForcesNotNull": true,
 		"columnTypes":                sqlserverTypes,
 		"intTypes":                   sqlserverIntTypes,
+		// inner-schema dialect flags consumed by the frontend
+		// (no dbType checks there). undroppableSchemas drives hiding the
+		// schema-delete menu item for schemas the server refuses to drop.
+		"supportsSchemas":    true,
+		"defaultSchema":      "dbo",
+		"undroppableSchemas": []string{"dbo"},
 	}
 }
 
 // ── Schema discovery ──
 
-// GetDatabases returns composite "db.schema" tree nodes (issue #1484): one
-// node per user schema in each user database, e.g. "shop.sales", "shop.dbo",
-// including schemas that do not own any table or view yet. Empty databases
-// still emit the login's default schema ( dbo always exists, so this is a
-// defensive fallback only) so the node name is always composite — a bare
-// node like "cc.a" would be misparsed as db "cc", schema "a" and break
-// every expand or drop on it. Only databases the login cannot browse
-// (permissions) degrade to a bare database node.
+// GetDatabases returns the bare user-database names; the tree fetches each
+// database's schemas via GetSchemas and renders the second level.
+
 func (p *sqlserverProvider) GetDatabases(db *sql.DB) ([]string, error) {
 	results, err := queryStrings(db, `
 		SELECT name FROM sys.databases
@@ -251,50 +252,40 @@ func (p *sqlserverProvider) GetDatabases(db *sql.DB) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	// List every user schema, not only those owning objects — a schema the
-	// user just created must appear in the tree before it holds a table
-	// (issue #1484 feedback). Fixed database roles (db_*) and system schemas
-	// are filtered out; dbo stays, matching SSMS expectations.
+	names := make([]string, 0, len(results))
+	for _, row := range results {
+		names = append(names, row["name"])
+	}
+	return names, nil
+}
+
+// GetSchemas lists every user schema of a database, including schemas that
+// do not own any table or view yet — a schema the user just created must
+// appear in the tree before it holds a table . Fixed
+// database roles (db_*) and system schemas are filtered out; dbo stays,
+// matching SSMS expectations. dbName is a REAL database name (possibly
+// containing dots) from GetDatabases, so it must not go through withUse —
+// that splits composite NODE names from the tree.
+func (p *sqlserverProvider) GetSchemas(db *sql.DB, dbName string) ([]string, error) {
 	schemaSQL := `
 		SELECT s.name AS schema_name
 		FROM sys.schemas s
 		WHERE s.name NOT IN ('sys', 'guest', 'INFORMATION_SCHEMA')
 		  AND s.name NOT LIKE 'db[_]%'
 		ORDER BY s.name`
+	results, err := queryStrings(db, fmt.Sprintf("USE %s;\n%s", p.Quote(dbName), schemaSQL))
+	if err != nil {
+		return nil, err
+	}
 	names := make([]string, 0, len(results))
 	for _, row := range results {
-		dbName := row["name"]
-		// dbName is a REAL database name from sys.databases and may
-		// legitimately contain dots ("cc.a"), so it must not go through
-		// withUse — that splits composite NODE names from the tree.
-		use := func(query string) string {
-			return fmt.Sprintf("USE %s;\n%s", p.Quote(dbName), query)
-		}
-		schemas, serr := queryStrings(db, use(schemaSQL))
-		if serr != nil {
-			names = append(names, dbName) // cannot browse: legacy bare node
-			continue
-		}
-		if len(schemas) == 0 {
-			// Empty database: emit the login's default schema to keep the
-			// node name composite and unambiguous (see doc comment).
-			ds, derr := queryStrings(db, use(`SELECT SCHEMA_NAME() AS schema_name`))
-			if derr == nil && len(ds) > 0 && ds[0]["schema_name"] != "" {
-				names = append(names, dbName+"."+ds[0]["schema_name"])
-				continue
-			}
-			names = append(names, dbName)
-			continue
-		}
-		for _, sr := range schemas {
-			names = append(names, dbName+"."+sr["schema_name"])
-		}
+		names = append(names, row["schema_name"])
 	}
 	return names, nil
 }
 
 func (p *sqlserverProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, error) {
-	// Issue #1484: a composite "db.schema" node lists only its own schema's
+	// A composite "db.schema" node lists only its own schema's
 	// objects, and object names come back schema-qualified ("sales.orders")
 	// so every downstream binding keeps working without signature changes.
 	// A bare dbName (degraded node) keeps the legacy flat listing.
@@ -322,7 +313,7 @@ func (p *sqlserverProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, e
 
 // tableListBase builds the tables-UNION-views listing body shared by
 // GetTables and GetTablePage. When dbName carries a schema qualifier
-// ("db.schema", issue #1484), only that schema's objects are listed and
+// ("db.schema"), only that schema's objects are listed and
 // table_name comes back schema-qualified; a bare dbName keeps the legacy
 // flat listing with unqualified names (degraded/permission-fallback nodes).
 func (p *sqlserverProvider) tableListBase(dbName string) (string, []any, int) {
@@ -510,7 +501,7 @@ func (p *sqlserverProvider) GetTableSchema(db *sql.DB, dbName, tableName string)
 // ── DDL: Database ──
 
 // CreateDatabase accepts a composite "db.schema" name from the new-database
-// dialog (issue #1484): the schema part is optional and created inside the
+// dialog: the schema part is optional and created inside the
 // new database; empty means "use the login's default schema" (usually dbo),
 // which the tree resolves via SCHEMA_NAME() on the next refresh. The dialog
 // always sends "name.schema" — a trailing dot when the schema is empty — so
@@ -574,7 +565,7 @@ func (p *sqlserverProvider) DropDatabase(db *sql.DB, dbName string) error {
 
 func (p *sqlserverProvider) CreateTable(db *sql.DB, dbName, tableName string) error {
 	// A new table created inside a "db.schema" node must land in that
-	// schema, not the login's default schema (issue #1484).
+	// schema, not the login's default schema.
 	name := p.qualifyWithNodeSchema(dbName, tableName)
 	_, err := db.Exec(p.withUse(dbName, fmt.Sprintf("CREATE TABLE %s (id INT IDENTITY(1,1) PRIMARY KEY)", p.QualifyTable(name))))
 	return err
@@ -717,7 +708,7 @@ func (p *sqlserverProvider) withUse(dbName, query string) string {
 	if dbName == "" {
 		return query
 	}
-	// Composite "db.schema" node names (issue #1484) carry a schema
+	// Composite "db.schema" node names carry a schema
 	// qualifier a USE statement cannot express — switch the database part only.
 	useDb, _ := splitDbNode(dbName)
 	return fmt.Sprintf("USE %s;\n%s", p.Quote(useDb), query)
@@ -798,7 +789,7 @@ func (p *sqlserverProvider) DumpTable(db *sql.DB, dbName, tableName string, opts
 	quotedTable := p.QualifyTable(tableName)
 	// INFORMATION_SCHEMA.TABLE_SCHEMA is the schema, not the database. The
 	// old code passed dbName here, which never matched and silently produced
-	// an empty CREATE TABLE / zero-column INSERT dump (fixed with #1484).
+	// An empty CREATE TABLE / zero-column INSERT dump.
 	dumpSchema, dumpTable := splitQualifiedName(tableName)
 
 	if opts.Structure {

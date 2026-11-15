@@ -1,6 +1,14 @@
 <template>
   <div class="db-object-list">
     <div class="object-toolbar">
+      <el-select
+        v-if="schemas.length > 0"
+        v-model="selectedSchema"
+        size="small"
+        style="width: 10rem; flex-shrink: 0"
+      >
+        <el-option v-for="s in schemas" :key="s" :label="s" :value="s" />
+      </el-select>
       <input
         v-model="search"
         class="object-search"
@@ -26,8 +34,8 @@
         >
           <span class="oc-name" :title="row.name">
             <span class="object-name" @click="onRowClick(row)">
-              <component :is="row.type === 'view' ? Eye : Table2" :size="'0.875rem'" class="object-icon" />
-              <span class="object-name-text">{{ row.name }}</span>
+              <component :is="row.type === 'view' ? Eye : Table" :size="'0.875rem'" class="object-icon" />
+              <span class="object-name-text">{{ shortName(row.name) }}</span>
             </span>
           </span>
           <span class="oc-type">{{ row.type === 'view' ? t('db.typeView') : t('db.typeTable') }}</span>
@@ -100,10 +108,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { Table2, Eye, Eraser, Trash2, Plus, ChevronLeft, ChevronRight } from '@lucide/vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { Table, Eye, Eraser, Trash2, Plus, ChevronLeft, ChevronRight } from '@lucide/vue'
 import { useI18n } from '../i18n'
-import { GetTables, GetTablePage, CreateTable, DropTable, DropView, TruncateTable } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetTables, GetTablePage, GetSchemas, GetDBCapabilities, CreateTable, DropTable, DropView, TruncateTable } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
 import type { TableInfo } from '../types/database'
 
@@ -121,6 +129,41 @@ const emit = defineEmits<{
   changed: [dbName: string]
   objectRemoved: [payload: { dbName: string; tableName?: string; kind: 'table' | 'view' | 'database' }]
 }>()
+
+// ── Schema filter  ──
+// Schema capability comes from backend capabilities (never dbType checks):
+// dialects with inner schemas get a schema dropdown; picking one re-queries
+// through the composite "db.schema" name, which the backend already filters.
+const caps = ref<Record<string, any> | null>(null)
+
+// Capabilities load once per mount; schemaCapable flips when they arrive and
+// the dbName watcher re-runs its schema init (see the watcher source array).
+onMounted(async () => {
+  try {
+    caps.value = await GetDBCapabilities(props.sessionId)
+  } catch {
+    caps.value = null
+  }
+})
+const schemas = ref<string[]>([])
+const selectedSchema = ref('')
+
+const schemaCapable = computed(() => !!caps.value?.['supportsSchemas'])
+
+const dbPart = computed(() => {
+  if (!schemaCapable.value) return props.dbName
+  const i = props.dbName.lastIndexOf('.')
+  return i >= 0 ? props.dbName.slice(0, i) : props.dbName
+})
+
+// The name handed to GetTablePage/GetTables/CRUD: composite when a schema
+// filter is active, the bare db name otherwise.
+const effectiveDbName = computed(() => {
+  if (schemaCapable.value && selectedSchema.value) {
+    return `${dbPart.value}.${selectedSchema.value}`
+  }
+  return dbPart.value
+})
 
 // ── 轻量分页：全量就绪后为内存分页（秒开）；未就绪时首屏只有第一页 ──
 const PAGE_SIZE = 200
@@ -150,11 +193,11 @@ async function load() {
   allLoaded.value = false
   objects.value = []
   try {
-    const [first] = await GetTablePage(props.sessionId, props.dbName, '', 0, PAGE_SIZE)
+    const [first] = await GetTablePage(props.sessionId, effectiveDbName.value, '', 0, PAGE_SIZE)
     if (seq !== loadSeq) return
     objects.value = first
     loading.value = false // 首屏就绪，立即显示第一页
-    const all = await GetTables(props.sessionId, props.dbName)
+    const all = await GetTables(props.sessionId, effectiveDbName.value)
     if (seq !== loadSeq) return
     objects.value = all
     allLoaded.value = true
@@ -171,17 +214,52 @@ const filtered = computed(() => {
   return objects.value.filter(o => o.name.toLowerCase().includes(q))
 })
 
-watch(() => [props.sessionId, props.dbName], () => {
+watch(() => [props.sessionId, props.dbName, schemaCapable.value], async () => {
+  currentPage.value = 1
+  if (schemaCapable.value && props.dbName) {
+    let s: string[] = []
+    try {
+      s = (await GetSchemas(props.sessionId, dbPart.value)) || []
+    } catch {
+      s = []
+    }
+    schemas.value = s
+    // Opened from a schema node ("db.schema") → preselect that schema;
+    // otherwise default to the first schema (dbo/public).
+    const i = props.dbName.lastIndexOf('.')
+    const pre = i >= 0 ? props.dbName.slice(i + 1) : ''
+    const next = s.length === 0 ? '' : (pre && s.includes(pre) ? pre : s[0])
+    if (next === selectedSchema.value) {
+      load()
+    } else {
+      selectedSchema.value = next // selection watcher loads
+    }
+  } else {
+    schemas.value = []
+    selectedSchema.value = ''
+    load()
+  }
+}, { immediate: true })
+
+watch(selectedSchema, () => {
   currentPage.value = 1
   load()
-}, { immediate: true })
+})
 
 watch([search, filtered], () => {
   currentPage.value = 1
 })
 
+// Tree parity: names arrive schema-qualified ("sales.orders")
+// but the schema dropdown already scopes the list, so display the bare name
+// and keep the qualified one for tooltips and operations.
+function shortName(name: string): string {
+  const i = name.lastIndexOf('.')
+  return i >= 0 ? name.slice(i + 1) : name
+}
+
 function onRowClick(row: TableInfo) {
-  emit('open', props.dbName, row.name, row.type === 'view')
+  emit('open', effectiveDbName.value, row.name, row.type === 'view')
 }
 
 // ── Confirm dialog (type-to-confirm) ──
@@ -219,8 +297,8 @@ function askTruncate(row: TableInfo) {
     t('db.truncateTableConfirm', { name: row.name }),
     row.name,
     async () => {
-      await TruncateTable(props.sessionId, props.dbName, row.name)
-      emit('changed', props.dbName)
+      await TruncateTable(props.sessionId, effectiveDbName.value, row.name)
+      emit('changed', effectiveDbName.value)
     }
   )
 }
@@ -231,10 +309,10 @@ function askDrop(row: TableInfo) {
     t('db.dropTableConfirm', { name: row.name }),
     row.name,
     async () => {
-      await DropTable(props.sessionId, props.dbName, row.name)
+      await DropTable(props.sessionId, effectiveDbName.value, row.name)
       await load()
-      emit('changed', props.dbName)
-      emit('objectRemoved', { dbName: props.dbName, tableName: row.name, kind: 'table' })
+      emit('changed', effectiveDbName.value)
+      emit('objectRemoved', { dbName: effectiveDbName.value, tableName: row.name, kind: 'table' })
     }
   )
 }
@@ -245,10 +323,10 @@ function askDropView(row: TableInfo) {
     t('db.dropViewConfirm', { name: row.name }),
     row.name,
     async () => {
-      await DropView(props.sessionId, props.dbName, row.name)
+      await DropView(props.sessionId, effectiveDbName.value, row.name)
       await load()
-      emit('changed', props.dbName)
-      emit('objectRemoved', { dbName: props.dbName, tableName: row.name, kind: 'view' })
+      emit('changed', effectiveDbName.value)
+      emit('objectRemoved', { dbName: effectiveDbName.value, tableName: row.name, kind: 'view' })
     }
   )
 }
@@ -266,10 +344,10 @@ function openNewTable() {
 async function onCreateTable() {
   if (!newTableName.value.trim()) return
   try {
-    await CreateTable(props.sessionId, props.dbName, newTableName.value.trim())
+    await CreateTable(props.sessionId, effectiveDbName.value, newTableName.value.trim())
     newTableVisible.value = false
     await load()
-    emit('changed', props.dbName)
+    emit('changed', effectiveDbName.value)
   } catch (e: any) {
     msg.error(e?.message || String(e))
   }

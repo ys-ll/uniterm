@@ -88,11 +88,11 @@ func TestSqlserverDSN(t *testing.T) {
 	}
 }
 
-// Issue #1484: schemas must group tables. The tree passes composite
+// Schemas must group tables. The tree passes composite
 // "db.schema" node names as dbName and schema-qualified "schema.table"
 // strings as tableName; these helpers carry that encoding.
 
-// Regression (#1484 follow-up): tableListBase's views half must reference
+// Regression tableListBase's views half must reference
 // the sys.views alias only. The first cut reused the tables-half name
 // expression (t.name) in the UNION's second SELECT, so every schema-filtered
 // listing failed with "multi-part identifier t.name could not be bound".

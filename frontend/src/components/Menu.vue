@@ -388,6 +388,15 @@ watch(() => props.visible, (v) => {
   color: var(--accent);
   font-weight: 500;
 }
+/* Danger rows inside a submenu flyout mirror the main menu's
+   (.conn-context-menu .menu-item.danger) look. */
+.menu-submenu .menu-item.danger {
+  color: var(--error);
+}
+.menu-submenu .menu-item.danger:hover {
+  background: var(--error-subtle);
+  color: var(--error);
+}
 /* Iconic rows inside a submenu flyout need the same flex+gap as the main
    menu's (.conn-context-menu .menu-item.iconic) — without it the leading
    icon hugs the label with baseline misalignment. */

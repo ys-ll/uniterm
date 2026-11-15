@@ -873,3 +873,9 @@ func dumpOracleValue(v any, typeToken string) string {
 func (p *oracleProvider) QualifyTable(tableName string) string {
 	return p.Quote(tableName)
 }
+
+// GetSchemas: this dialect has no inner-schema concept (or, for Oracle,
+// the tree node itself is the schema), so the tree stays single-level.
+func (p *oracleProvider) GetSchemas(db *sql.DB, dbName string) ([]string, error) {
+	return nil, nil
+}

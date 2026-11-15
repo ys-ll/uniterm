@@ -47,12 +47,16 @@ type Provider interface {
 	Quote(name string) string
 
 	// QualifyTable quotes a table identifier that may arrive
-	// schema-qualified ("schema.table" — issue #1484, the schema-grouped
+	// schema-qualified ("schema.table", the schema-grouped
 	// tree). Dialects without schema-qualified tree names return Quote(name).
 	QualifyTable(tableName string) string
 
 	// Schema discovery
 	GetDatabases(db *sql.DB) ([]string, error)
+	// GetSchemas lists the inner schemas of a database for dialects that
+	// have them (SQL Server, PostgreSQL). A nil/empty result means the tree
+	// renders a single level (db → tables, or schema-as-db like Oracle).
+	GetSchemas(db *sql.DB, dbName string) ([]string, error)
 	GetTables(db *sql.DB, dbName string) ([]TableInfo, error)
 	// GetTablePage returns one ordered page of tables [offset, offset+limit)
 	// plus the total table count. A non-empty query filters by table name
