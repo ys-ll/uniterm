@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.12.3-alpha
+## v1.12.3
 
 ### What's Changed
 
@@ -8,50 +8,61 @@
 
 - SSH: per-host automatic TOTP authentication — attach a TOTP secret to a connection and the 2FA code is filled automatically at login. (@surenwuyuwuqiu)
 - Terminal: multi-line paste confirmation — pasting multi-line clipboard content shows an editable preview first (line numbers, word-wrap toggle); what you confirm is exactly what gets pasted, with a "don't ask again" switch.
-- Terminal: command send panel — a dockable multi-line editor (default in the bottom panel) that sends to the current terminal (expanding to the broadcast panels when broadcast is on), the whole workspace or every tab; each line can be executed via Enter (cmd / PowerShell compatible) or delivered as bracketed-paste without executing; drafts survive restarts.
-- Android: remote desktop (RDP / VNC / SPICE) gains touch input (tap = left click, long-press = right click / drag, two-finger drag = wheel scroll, native fullscreen) plus soft keyboard input and an on-screen key bar; CJK characters without a scancode are sent via the protocol's Unicode input path.
-- Credentials: keystore identity auth now covers password-based connection types beyond the SSH family (RDP, VNC, telnet, FTP, databases and more); editing the password once in the keystore updates every connection that references it.
+- Terminal: command send panel — a dockable multi-line editor that sends to the current terminal (broadcast-aware), the whole workspace or every tab; execute line-by-line or as a whole, with drafts surviving restarts.
 
 **Improvements**
 
 - AI: compaction reworked — history is sent in one pass on the chat request shape (chunking only beyond 100k tokens) with a raised summary budget, so thinking models no longer fail compaction; compaction records anchor at the cut point with live elapsed timers, and answered ask_user interactions stay in the transcript as read-only records.
 - AI: streaming renders are throttled — long responses no longer lag typing and scrolling across the whole app while an answer streams in.
-- SFTP: a failed SFTP connection now hints that the host may not have the SFTP subsystem enabled and that the protocol can be switched to SCP in the connection settings.
-- Remote desktop: the RDP / VNC / SPICE status bars are simplified — host:port and select titles are dropped, selects are narrower, and resolution presets show the full size.
-- Serial: high-speed baud presets (1M / 1.5M / 2M / 3M / 4M) for common SoC debug UARTs.
-- RDP: on scaled displays the remote session now renders at the local DPI scale — remote UI no longer appears physically smaller than local apps.
+- AI: user messages in a conversation can be copied or deleted — delete removes the message together with the whole reply of that turn, after confirmation; user messages render as right-aligned bubbles by default (switchable to plain left-aligned in the AI settings), and message timestamps show a clock for today, a relative word for yesterday and the date for older ones, locale-aware. (@etanman)
+- Database: schema-aware two-level tree for SQL Server and PostgreSQL — database → schema → tables, with per-schema pagination / lazy loading / search, a schema dropdown in the object-list tab, and reorganized context menus (destructive items in a Danger submenu, exports in an Export submenu).
 - MCP: a "Maximum concurrent commands" setting (default 8, range 1–64) is added; commands that time out or stall no longer keep holding their concurrency slot, and long-running commands return a pollable ID promptly. (@surenwuyuwuqiu)
 - MCP: file transfers (upload_file / download_file) accept any local path — the SFTP-bookmark allowlist is dropped, and both transfers raise the approval dialog showing the full source and destination paths (download is now treated as a write).
-- AI: user messages in a conversation can be copied or deleted — delete removes the message together with the whole reply of that turn, after confirmation; user bubbles are right-aligned and content-sized, and message timestamps show a clock for today, a relative word for yesterday and the date for older ones, locale-aware. (@etanman)
+- Remote desktop: the RDP / VNC / SPICE status bars are simplified — host:port and select titles are dropped, selects are narrower, and resolution presets show the full size.
+- Android: remote desktop (RDP / VNC / SPICE) gains touch input (tap = left click, long-press = right click / drag, two-finger drag = wheel scroll, native fullscreen) plus soft keyboard input and an on-screen key bar; CJK characters without a scancode are sent via the protocol's Unicode input path.
+- RDP: on scaled displays the remote session now renders at the local DPI scale — remote UI no longer appears physically smaller than local apps.
+- RDP: legacy protocol support — servers that only offer the old standard RDP security (e.g. Windows Server 2003) are now reachable, covering its four classic encryption levels (40-bit / 56-bit / 128-bit RC4 and FIPS).
+- RDP: NLA support for Windows Server 2008-era servers — the TLS handshake matches the system's built-in RDP client, so these servers connect instead of failing during authentication.
+- SFTP: a failed SFTP connection now hints that the host may not have the SFTP subsystem enabled and that the protocol can be switched to SCP in the connection settings.
+- Serial: high-speed baud presets (1M / 1.5M / 2M / 3M / 4M) for common SoC debug UARTs.
+- UI: header menu entries are grouped into Connection / Network / AI submenus.
+- Local Network Services: the built-in Telnet service is reworked — negotiation bytes no longer leak into input, the password is no longer echoed, and output uses real CRLFs with a native-style PowerShell prompt. (@etanman)
+- Credentials: keystore identity auth now covers password-based connection types beyond the SSH family (RDP, VNC, telnet, FTP, databases and more); editing the password once in the keystore updates every connection that references it.
 
 **Bug Fixes**
 
 - AI: a foreground execution that never completes (command typed into a non-shell prompt or a TUI program, or killed by Ctrl+C) no longer wedges the session with "session is busy" until the TTL — a newer command takes over the wedged holder, and manual keyboard input finishes the active job.
 - FTP: transfers stalled at 0% on single-threaded servers are unblocked; cancel / pause now take effect immediately, and truncated downloads no longer report success.
+- FTP: a deadline leaked onto the control connection made every command fail with i/o timeout ~30 s after the first data operation; the deadline is now cleared.
 - Windows: Alt+F4, taskbar close and taskkill now run the full shutdown path — window state is saved and sessions / tunnels are torn down; the process no longer lingers and blocks relaunching.
 - Windows: the IME candidate window keeps caret anchoring after switching between apps — it no longer jumps to a corner of the screen, in text fields as well as inside the terminal.
+- Windows: when the app is launched by double-click (no stderr handle), panic and fatal-error output is captured to `panic-stderr.log` next to the main log instead of being lost, so crash reports carry the stack trace.
+- Windows: heavy focus toggling on remote-desktop sessions no longer aborts with "fatal error: too many callback functions" (syscall callback leak in the main-window HWND lookup).
 - RDP: connections no longer intermittently fail with "unexpected server message" while the remote is mid-logon.
 - RDP: legacy connections keep NLA enabled by default.
 - Telnet: an IAC sequence spanning a read boundary no longer leaks protocol bytes into the output, and CR NUL padding no longer reaches the terminal or session logs.
 - Telnet: auto-login waits for the real username / password prompts, so credentials are no longer echoed; the post-login script waits for the shell prompt; the configured proxy is no longer ignored.
+- Telnet: a large burst of output (e.g. listing a big directory) no longer freezes for ~3 s between the front half and the rest of the output. (@etanman)
+- Telnet: active negotiation no longer offers BINARY (Cisco IOS echoed passwords in cleartext), and 0xFF is escaped in the window-size sub-negotiation.
 - SFTP / editor: the file size cap is raised from 1MB to 10MB with a confirmation before opening large files, and typing in multi-MB files no longer lags.
+- SFTP: the bookmark control in the path breadcrumb stays visible and clickable when a long path overflows the side panel. (@dajiaohuang)
 - Containers: on hosts where docker is installed outside the default PATH (e.g. under /usr/local/bin), non-interactive SSH commands find the binary again.
 - Docker web mode: copy / paste works via the browser clipboard, and all export / save flows hand files to the browser download manager instead of a native dialog.
 - Docker web mode: identity / proxy / AI / MCP saves no longer fail closed, and browser-created identities survive a reload.
+- Docker web mode: the headless server binary is fully statically linked again — on linux/arm64 the user worker no longer fails to start right after login.
 - Tunnels: the upstream proxy password in tunnels.json is no longer stored unprotected.
 - Database: exporting a PostgreSQL table's structure no longer fails with "column a.adbin does not exist" — the default-value expression is read from the right catalog table, and columns without a default export as NULL.
-- Telnet: a large burst of output (e.g. listing a big directory) no longer freezes for ~3 s between the front half and the rest of the output. (@etanman)
-- SFTP: the bookmark control in the path breadcrumb stays visible and clickable when a long path overflows the side panel. (@dajiaohuang)
-- Windows: when the app is launched by double-click (no stderr handle), panic and fatal-error output is captured to `panic-stderr.log` next to the main log instead of being lost, so crash reports carry the stack trace.
+- Terminal: the context menu now closes when the multi-line paste dialog opens instead of lingering underneath.
 - Terminal theme: the mobaxterm-default palette matches the theme it replicates, and bold text in the scrollback screen preview uses brighter colors instead of washing out. (@etanman)
-- Docker web mode: the headless server binary is fully statically linked again — on linux/arm64 the user worker no longer fails to start right after login.
+- UI: splitter drags no longer promote into native drags that stall the UI or crash the WebView2 renderer, and right-clicks inside our own menus are ignored.
+- Update: .deb / .rpm package installs are now updated through the package manager instead of failing to overwrite the root-owned binary. (@rsipka)
 
 **Notes**
 
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 - Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
 
-Thanks to @surenwuyuwuqiu, @etanman and @dajiaohuang for their contributions to this release.
+Thanks to @surenwuyuwuqiu, @etanman, @dajiaohuang and @rsipka for their contributions to this release.
 
 ### 更新内容
 
@@ -59,50 +70,61 @@ Thanks to @surenwuyuwuqiu, @etanman and @dajiaohuang for their contributions to 
 
 - SSH：支持按主机配置自动 TOTP 认证——为连接绑定 TOTP 密钥后，登录时自动填写动态验证码。(@surenwuyuwuqiu)
 - 终端：多行粘贴确认——粘贴多行剪贴板内容时先弹出可编辑预览（行号、自动换行开关），确认的内容就是实际粘贴的内容，支持"不再询问"开关。
-- 终端：命令发送面板——可停靠的多行编辑器（默认停靠在底部面板），可发送到当前终端（开启广播时扩展到所有广播面板）、当前工作区或所有标签页；可逐行转回车执行（兼容 cmd / PowerShell），或以 bracketed-paste 包裹不执行；草稿重启后保留。
-- Android：远程桌面（RDP / VNC / SPICE）支持触控输入（单击=左键、长按=右键 / 拖拽、双指拖动=滚轮、原生全屏）与软键盘输入、屏幕按键栏；无扫描码的中日韩字符走协议的 Unicode 输入路径。
-- 凭据：密钥库身份认证扩展到 SSH 系列之外的用户名 + 密码类连接（RDP、VNC、telnet、FTP、数据库等）；在密钥库中改一次密码，所有引用该身份的连接同步生效。
+- 终端：命令发送面板——可停靠的多行编辑器，可发送到当前终端（支持广播）、当前工作区或所有标签页，逐行或整段执行，草稿重启后保留。
 
 **改进**
 
 - AI：上下文压缩重构——历史以单次请求发送（超过 100k token 才分块），摘要输出预算上调，思考型模型不再压缩失败；压缩记录锚定在对话截断位置并显示实时耗时；已回答的 ask_user 交互以只读记录保留在对话中。
 - AI：流式渲染节流——长回答输出期间不再拖慢全应用的输入与滚动。
-- SFTP：SFTP 连接失败时提示主机可能未开启 SFTP 子系统，可在连接设置中把传输协议切换为 SCP。
-- 远程桌面：RDP / VNC / SPICE 状态栏精简——去掉 host:port 与下拉框标题，分辨率预设完整显示尺寸。
-- 串口：新增高速波特率预设（1M / 1.5M / 2M / 3M / 4M），常见 SoC 调试串口可直接选择。
-- RDP：缩放屏下远程会话按本地 DPI 缩放渲染，远程界面不再比本地应用"小一圈"。
+- AI：会话中的用户消息支持复制与删除——删除会连同该轮的完整回复一起移除，删除前确认；用户消息默认以右对齐气泡展示（可在 AI 设置中切回左对齐布局），消息时间按"今天显示时刻、昨天显示相对词、更早显示日期"降级展示，多语言自适应。(@etanman)
+- 数据库：按 schema 分组的两级树，支持 SQL Server 和 PostgreSQL——数据库 → schema → 表，每个 schema 独立分页 / 懒加载 / 搜索，对象列表新增 schema 下拉框，右键菜单重组（危险操作、导出归入子菜单）。
 - MCP：新增「最大并发命令数」设置（默认 8，范围 1–64）；超时或卡住的命令不再一直占用并发额度，长时间命令立即返回可轮询的 ID。(@surenwuyuwuqiu)
 - MCP：文件传输（upload_file / download_file）接受任意本地路径——取消 SFTP 书签目录白名单，两种传输都会弹出展示源 / 目标完整路径的确认对话框（下载现在也按写操作确认）。
-- AI：会话中的用户消息支持复制与删除——删除会连同该轮的完整回复一起移除，删除前确认；用户气泡右对齐且随内容自适应宽度，消息时间按"今天显示时刻、昨天显示相对词、更早显示日期"降级展示，多语言自适应。(@etanman)
+- 远程桌面：RDP / VNC / SPICE 状态栏精简——去掉 host:port 与下拉框标题，分辨率预设完整显示尺寸。
+- Android：远程桌面（RDP / VNC / SPICE）支持触控输入（单击=左键、长按=右键 / 拖拽、双指拖动=滚轮、原生全屏）与软键盘输入、屏幕按键栏；无扫描码的中日韩字符走协议的 Unicode 输入路径。
+- RDP：缩放屏下远程会话按本地 DPI 缩放渲染，远程界面不再比本地应用"小一圈"。
+- RDP：适配旧版 RDP 协议——仅提供旧式标准 RDP 安全层的服务器（如 Windows Server 2003）现在可以连接，覆盖其四种加密级别（40 / 56 / 128 位 RC4 与 FIPS）。
+- RDP：支持 Windows Server 2008 等开启 NLA 的旧服务器——TLS 握手与系统自带 RDP 客户端一致，认证阶段不再失败。
+- SFTP：SFTP 连接失败时提示主机可能未开启 SFTP 子系统，可在连接设置中把传输协议切换为 SCP。
+- 串口：新增高速波特率预设（1M / 1.5M / 2M / 3M / 4M），常见 SoC 调试串口可直接选择。
+- 界面：顶部菜单按「连接 / 网络 / AI」子菜单分组。
+- 本地网络服务：内置 Telnet 服务重做——协商字节不再混入输入，密码不再回显，输出使用真实 CRLF 并按原生布局展示 PowerShell 提示符。(@etanman)
+- 凭据：密钥库身份认证扩展到 SSH 系列之外的用户名 + 密码类连接（RDP、VNC、telnet、FTP、数据库等）；在密钥库中改一次密码，所有引用该身份的连接同步生效。
 
 **问题修复**
 
 - AI：前台执行等不到完成标记时（命令被键入非 shell 提示符、TUI 程序，或被 Ctrl+C 终止），不再让会话一直报 "session is busy" 直到超时——新命令会接管卡住的持有者，手动键入也会结束当前任务。
 - FTP：单线程服务器上传输卡在 0% 的问题已解决；取消 / 暂停立即生效；被截断的下载不再误报成功。
+- FTP：控制连接上残留的绝对超时导致首次数据操作约 30 秒后所有命令报 i/o timeout；该超时现在读取回复后立即清除。
 - Windows：Alt+F4、任务栏关闭与 taskkill 现在走完整退出流程——保存窗口状态、清理会话与隧道；进程不再残留占用单实例锁导致无法再次启动。
 - Windows：应用前后台切换后输入法候选框保持光标锚定，不再跑到屏幕角落（普通输入框与终端内均适用）。
+- Windows：双击启动（无 stderr 句柄）时，panic 与致命错误输出会捕获到主日志旁的 `panic-stderr.log`，不再丢失，崩溃报告因此带上堆栈。
+- Windows：远程桌面中频繁切换焦点不再以 "fatal error: too many callback functions" 崩溃（主窗口 HWND 查找的 syscall 回调泄漏）。
 - RDP：远端登录过程中不再间歇性报 "unexpected server message"。
 - RDP：旧连接默认优先开启 NLA。
 - Telnet：跨读取边界的 IAC 序列不再把协议字节漏进输出，CR NUL 填充不再进入终端与会话日志。
 - Telnet：自动登录等待真实的用户名 / 密码提示符，凭据不再被回显；登录后脚本等提示符稳定后再执行；连接遵循已配置的代理。
+- Telnet：大量输出瞬间到达时（如列大目录），前后两段输出之间不再出现约 3 秒的卡顿。(@etanman)
+- Telnet：主动协商不再提供 BINARY（Cisco IOS 曾因此明文回显密码）；窗口大小子协商转义 0xFF。
 - SFTP / 编辑器：可编辑文件上限从 1MB 提升到 10MB，打开较大文件前先确认；在数 MB 的文件中输入不再卡顿。
+- SFTP：路径过长撑出侧栏时，面包屑中的书签按钮保持可见、可点击。(@dajiaohuang)
 - 容器：docker 安装在默认 PATH 之外（如 /usr/local/bin）的主机上，非交互 SSH 命令现在能找到可执行文件，容器功能恢复正常。
 - Docker Web 模式：复制 / 粘贴走浏览器剪贴板，所有导出 / 保存流程改为交给浏览器下载。
 - Docker Web 模式：身份 / 代理 / AI / MCP 的保存不再失败，浏览器里创建的身份刷新后仍在。
+- Docker Web 模式：headless server 二进制恢复完全静态链接——linux/arm64 下登录后用户 worker 不再启动失败。
 - 隧道：tunnels.json 中的上游代理密码不再以不受保护的方式存储。
 - 数据库：导出 PostgreSQL 表结构不再报 "column a.adbin does not exist"——默认值表达式改从正确的系统表读取，无默认值的列按 NULL 导出。
-- Telnet：大量输出瞬间到达时（如列大目录），前后两段输出之间不再出现约 3 秒的卡顿。(@etanman)
-- SFTP：路径过长撑出侧栏时，面包屑中的书签按钮保持可见、可点击。(@dajiaohuang)
-- Windows：双击启动（无 stderr 句柄）时，panic 与致命错误输出会捕获到主日志旁的 `panic-stderr.log`，不再丢失，崩溃报告因此带上堆栈。
+- 终端：多行粘贴对话框弹出时同步关闭右键菜单，不再残留。
 - 终端主题：mobaXterm-default 配色与其复刻的主题一致，回滚区屏幕预览中的加粗文字使用更亮的颜色，不再发灰。(@etanman)
-- Docker Web 模式：headless server 二进制恢复完全静态链接——linux/arm64 下登录后用户 worker 不再启动失败。
+- 界面：分隔条拖拽不再被提升为原生拖拽（UI 卡死、WebView2 渲染进程崩溃）；自家菜单内右键不再弹原生菜单。
+- 更新：.deb / .rpm 包安装的版本改为通过包管理器升级，不再因覆盖 root 属主的二进制而报权限错误。(@rsipka)
 
 **说明**
 
 - 本软件未购买代码签名证书，未签名的可执行文件可能被部分杀毒引擎（如 Windows Defender）误报。这是 Go/Wails 应用的已知问题（见 [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)）。可在杀毒软件中添加排除规则放行；请务必从官方开源渠道——GitHub 和 Gitee——下载。如仍有顾虑，可自行下载源码本地构建运行。
 - Android：自 1.11.0 起，Android 应用改用基于 uniterm 域名的新 application ID（`net.uniterm.app`）——如果安装过 1.11.0 之前的版本，请先卸载旧版再安装新版。
 
-感谢 @surenwuyuwuqiu、@etanman、@dajiaohuang 对本版本发布的贡献。
+感谢 @surenwuyuwuqiu、@etanman、@dajiaohuang、@rsipka 对本版本发布的贡献。
 
 ## v1.12.2
 
