@@ -75,12 +75,22 @@ type App struct {
 	// syncSecrets is the server-build encrypted-file backing store for the
 	// sync keychain (server_secrets.go); nil on desktop, which uses the OS
 	// keychain. Kept on the App so a master-password change rekeys it.
-	syncSecrets     secretRekeyer
-	tunnelService   *session.TunnelService
-	tunnelStartsMu  stdsync.Mutex
-	tunnelStarts    map[string]*tunnelStartRequest
-	tunnelsClosed   bool
-	mainHwnd        uintptr
+	syncSecrets    secretRekeyer
+	tunnelService  *session.TunnelService
+	tunnelStartsMu stdsync.Mutex
+	tunnelStarts   map[string]*tunnelStartRequest
+	tunnelsClosed  bool
+	mainHwnd       uintptr
+	// hwndMu serializes lazy mainHwnd resolution (ensureMainWindowHwnd) and
+	// the one-time WndProc subclass install that follows it.
+	hwndMu stdsync.Mutex
+	// enumMu serializes the shared EnumWindows callback below. syscall
+	// callback slots are a fixed-size runtime table (cb_max = 2000, entries
+	// never freed), so the callback is registered exactly once — registering
+	// per call aborts the process with "too many callback functions" (#1426).
+	enumMu          stdsync.Mutex
+	enumWindowsCb   uintptr
+	enumResult      uintptr
 	rdpKeyboardMu   stdsync.Mutex
 	rdpKeyboard     *platform.RDPKeyboardCapture
 	originalWndProc uintptr
@@ -246,6 +256,31 @@ func (a *App) win() *application.WebviewWindow {
 	return a.window
 }
 
+// ensureMainWindowHwnd returns the main window HWND, resolving it on first
+// use and caching the result. Resolution must stay lazy: wails starts the
+// services before it runs the pending windows, so the native window does not
+// exist yet when ServiceStartup runs — the original eager lookup at startup
+// always failed, left mainHwnd at zero forever, and silently disabled the
+// WndProc subclass (native window:resize-end, #656), while every
+// remote-desktop keyboard capture fell back to an un-cached EnumWindows
+// sweep that leaked one syscall callback per focus toggle until the process
+// aborted with "too many callback functions" (#1426). A successful
+// resolution installs the subclass as well, reviving the resize-end events.
+func (a *App) ensureMainWindowHwnd() uintptr {
+	a.hwndMu.Lock()
+	defer a.hwndMu.Unlock()
+	if a.mainHwnd != 0 {
+		return a.mainHwnd
+	}
+	hwnd := a.findMainWindow()
+	if hwnd == 0 {
+		return 0
+	}
+	a.mainHwnd = hwnd
+	a.subclassMainWindow()
+	return hwnd
+}
+
 func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	a.ctx = ctx
 
@@ -305,9 +340,11 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 		}
 	}()
 
-	// Discover the main HWND for native keyboard capture and window state tracking
-	a.mainHwnd = a.findMainWindow()
-	a.subclassMainWindow()
+	// The main HWND is NOT resolved here: wails runs the pending windows only
+	// after services start, so the native window does not exist yet and the
+	// old eager lookup always failed (leaving mainHwnd at zero for the whole
+	// process lifetime). Resolution moved to ensureMainWindowHwnd, called on
+	// first need — see there for the full history (#1426, #656).
 
 	// Resolve data directory. First run (no bootstrap, no existing config)
 	// defers all store init until the frontend calls SetDataDir. The headless
