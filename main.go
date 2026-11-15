@@ -14,6 +14,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 	"github.com/ys-ll/uniterm/backend/log"
+	"github.com/ys-ll/uniterm/backend/packetcap"
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/store"
 )
@@ -113,6 +114,16 @@ func main() {
 	// runs before the single-instance lock, which keeps the broker process
 	// exempt — only GUI instances compete for the lock.
 	if session.RunLocalPtyBroker(os.Args) {
+		return
+	}
+
+	// Elevated packet-capture worker mode: when a capture starts from a normal
+	// (unelevated) uniTerm, the app re-launches itself via "runas" with the
+	// --packetcap-worker flag and this worker streams raw packets back over a
+	// user-only named pipe. Like the broker it must run before anything else so
+	// it never builds a window/webview, and before the single-instance lock so
+	// it does not compete with GUI instances.
+	if packetcap.ServeWorker(os.Args) {
 		return
 	}
 

@@ -19,6 +19,7 @@ import (
 	"github.com/ys-ll/uniterm/backend/mcp"
 	"github.com/ys-ll/uniterm/backend/mcpclient"
 	"github.com/ys-ll/uniterm/backend/netscan"
+	"github.com/ys-ll/uniterm/backend/packetcap"
 	"github.com/ys-ll/uniterm/backend/platform"
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/store"
@@ -51,6 +52,7 @@ type App struct {
 	sessionManager   *session.SessionManager
 	k8sManager       *k8s.Manager
 	netscanManager   *netscan.Manager
+	packetcapManager *packetcap.Manager
 	localsrvManager  *localsrv.Manager
 	containerManager *container.Manager
 	// quitting marks that the full shutdown sequence (App.shutdown) has begun.
@@ -209,6 +211,7 @@ func NewApp(webviewDataPath string) *App {
 		mcpTransferWaiters: make(map[string]chan mcpTransferOutcome),
 		k8sManager:         k8s.NewManager(),
 		netscanManager:     netscan.NewManager(),
+		packetcapManager:   packetcap.NewManager(),
 		localsrvManager:    localsrv.NewManager(),
 		containerManager:   container.NewManager(),
 		errCh:              make(chan error, 16),
@@ -288,6 +291,9 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 		a.emit(name, payload)
 	})
 	a.netscanManager.SetEventEmitter(func(name string, payload any) {
+		a.emit(name, payload)
+	})
+	a.packetcapManager.SetEventEmitter(func(name string, payload any) {
 		a.emit(name, payload)
 	})
 	a.localsrvManager.SetEventEmitter(func(name string, payload any) {
@@ -997,6 +1003,9 @@ func (a *App) shutdown() {
 		a.sessionManager.CloseAll()
 	}
 	a.netscanManager.StopAll()
+	if a.packetcapManager != nil {
+		a.packetcapManager.StopAll()
+	}
 	// Stop the built-in local file servers (HTTP/TFTP/SSH/FTP). This runs on a
 	// background goroutine so it can never block the main/UI thread that
 	// shutdown() executes on — that would otherwise freeze the window (the
@@ -3096,4 +3105,113 @@ func (a *App) StartPortScan(host string, commonOnly bool, startPort, endPort, wo
 // StopPortScan cancels a running port scan. A no-op for unknown/finished ids.
 func (a *App) StopPortScan(scanId string) {
 	a.netscanManager.Stop(scanId)
+}
+
+// ListCaptureInterfaces returns the interfaces that can be captured on,
+// ordered with the most likely-to-work (real, non-loopback, has an IP) first.
+// On Windows this is available without elevation; starting a capture is where
+// an elevated worker may be spawned.
+func (a *App) ListCaptureInterfaces() []packetcap.Interface {
+	return packetcap.ListInterfaces()
+}
+
+// StartCapture begins a live packet capture on the selected interface with the
+// given filter. When uniTerm runs unelevated it transparently spawns an
+// elevated worker (runas) that does the raw-socket capture and streams packets
+// back; an admin-rights prompt may appear unless the system suppresses UAC
+// prompts. Returns the capture id.
+func (a *App) StartCapture(cfg packetcap.CaptureConfig) (string, error) {
+	return a.packetcapManager.Start(cfg)
+}
+
+// StopCapture stops the capture with the given id. A no-op for unknown or
+// already-finished ids.
+func (a *App) StopCapture(captureId string) {
+	log.Writef("pktcap StopCapture called id=%q", captureId)
+	a.packetcapManager.Stop(captureId)
+}
+
+// ListRemoteInterfaces enumerates the network interfaces of a remote Linux /
+// macOS host over SSH (tcpdump host). user/password are inline credentials
+// resolved by the frontend's credential dialog for a connection with nothing
+// saved; they only fill empty fields (same semantics as tunnels).
+func (a *App) ListRemoteInterfaces(connID, user, password string) ([]packetcap.Interface, error) {
+	r, err := a.resolveRemoteSSH(connID, user, password)
+	if err != nil {
+		return nil, err
+	}
+	return packetcap.ListRemoteInterfaces(r)
+}
+
+// StartRemoteCapture begins a remote packet capture: it connects to the SSH
+// host referenced by cfg.RemoteConnID, runs tcpdump there and streams the
+// resulting frames back through the same capture pipeline as local captures.
+// user/password are inline credentials resolved by the frontend for a
+// connection with nothing saved (fill empty fields only). Returns the capture
+// id.
+func (a *App) StartRemoteCapture(cfg packetcap.CaptureConfig, user, password string) (string, error) {
+	// Remote captures must carry the resolved SSH target before the manager
+	// will accept them; resolve from the saved connection now.
+	r, err := a.resolveRemoteSSH(cfg.RemoteConnID, user, password)
+	if err != nil {
+		return "", err
+	}
+	cfg.Remote = true
+	cfg.SSHConfig = r
+	return a.packetcapManager.Start(cfg)
+}
+
+// resolveRemoteSSH resolves a saved connection id into a ResolvedSSH dial
+// target, applying the same "inline credentials only fill empty fields" rule as
+// tunnels (withExitCredOverride) so a connection without saved credentials can
+// still be used with a one-time password from the UI.
+func (a *App) resolveRemoteSSH(connID, user, password string) (*packetcap.ResolvedSSH, error) {
+	resolve, err := a.connResolver()
+	if err != nil {
+		return nil, fmt.Errorf("connections unavailable: %w", err)
+	}
+	// 远程抓包必须优先采用前端本次输入的账密（用户显式重新输入，往往是为了
+	// 纠正连接里已存的旧/错误密码）。若沿用隧道“只填空缺”的 withExitCredOverride，
+	// 连接里已存的密码会一直压过新输入值，导致输对也登录失败。
+	resolve = withRemoteCredOverride(resolve, connID, user, password)
+	cfg, ok := resolve(connID)
+	if !ok {
+		return nil, fmt.Errorf("remote connection %q not found", connID)
+	}
+	if cfg.Host == "" || cfg.User == "" {
+		return nil, fmt.Errorf("remote connection %q has no host/user", connID)
+	}
+	return &packetcap.ResolvedSSH{
+		Host:       cfg.Host,
+		Port:       cfg.Port,
+		User:       cfg.User,
+		Password:   cfg.Password,
+		AuthType:   cfg.AuthType,
+		KeyPath:    cfg.KeyPath,
+		KeyContent: cfg.KeyContent,
+		IdentityID: cfg.IdentityId,
+	}, nil
+}
+
+// withRemoteCredOverride prioritises the user/password supplied inline by the
+// frontend over whatever the connection config already holds. This is the
+// correct semantic for remote packet capture: the user dialogs in fresh
+// credentials precisely to correct a stale/wrong password, so the new values
+// must win. For key-based auth (password is not used) we never overwrite the
+// password, only the user field.
+func withRemoteCredOverride(resolve session.ConnResolver, exitID, user, password string) session.ConnResolver {
+	return func(id string) (session.ConnectionConfig, bool) {
+		cfg, ok := resolve(id)
+		if !ok || id != exitID {
+			return cfg, ok
+		}
+		if user != "" {
+			cfg.User = user
+		}
+		isKey := cfg.AuthType == "key" || cfg.AuthType == "keyText"
+		if password != "" && !isKey {
+			cfg.Password = password
+		}
+		return cfg, true
+	}
 }

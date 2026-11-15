@@ -32,9 +32,19 @@ func TestNormalizeEditingKeys(t *testing.T) {
 			want: []byte{'d', 'i', 'r', 0x7F, 0x7F},
 		},
 		{
-			name: "left arrow ESC[D passes through",
+			name: "left arrow ESC[D is dropped to avoid cursor desync",
 			in:   []byte{0x1B, '[', 'D'},
-			want: []byte{0x1B, '[', 'D'},
+			want: []byte{},
+		},
+		{
+			name: "all arrow keys are dropped",
+			in:   []byte{0x1B, '[', 'A', 0x1B, '[', 'B', 0x1B, '[', 'C', 0x1B, '[', 'D'},
+			want: []byte{},
+		},
+		{
+			name: "typed text with embedded arrow is kept as text only",
+			in:   []byte{'a', 0x1B, '[', 'C', 'b'},
+			want: []byte{'a', 'b'},
 		},
 		{
 			name: "literal ESC not part of del key passes through",
