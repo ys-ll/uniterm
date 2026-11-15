@@ -274,10 +274,7 @@ func (a *App) setDesktopKeyboardCapture(sessionID, captureID string, enabled boo
 	}
 	capture := a.rdpKeyboard
 	a.rdpKeyboardMu.Unlock()
-	hwnd := a.mainHwnd
-	if hwnd == 0 {
-		hwnd = a.findMainWindow()
-	}
+	hwnd := a.ensureMainWindowHwnd()
 	if sessionType == "vnc" || sessionType == "spice" {
 		return capture.SetShortcutCapture(captureID, hwnd, fullscreen), nil
 	}

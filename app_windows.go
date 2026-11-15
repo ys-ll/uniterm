@@ -349,32 +349,42 @@ const (
 	WM_SIZE          = 0x0005
 )
 
+// findMainWindow locates the top-level "uniTerm" window of this process.
+// The EnumWindows callback is registered once and reused: syscall callback
+// slots live in a fixed-size runtime table (cb_max = 2000, entries never
+// freed), so registering one per call eventually aborts the whole process
+// with "fatal error: too many callback functions" (issue #1426). Callers
+// should prefer ensureMainWindowHwnd, which also caches the lookup result.
 func (a *App) findMainWindow() uintptr {
-	pid := windows.GetCurrentProcessId()
-	var result uintptr
+	a.enumMu.Lock()
+	defer a.enumMu.Unlock()
 
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	procEnumWindows := user32.NewProc("EnumWindows")
 	procGetWindowThreadProcessId := user32.NewProc("GetWindowThreadProcessId")
 	procGetWindowTextW := user32.NewProc("GetWindowTextW")
 
-	cb := windows.NewCallback(func(hwnd windows.HWND, lParam uintptr) uintptr {
-		var wndPid uint32
-		procGetWindowThreadProcessId.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&wndPid)))
-		if wndPid != pid {
+	if a.enumWindowsCb == 0 {
+		pid := windows.GetCurrentProcessId()
+		a.enumWindowsCb = windows.NewCallback(func(hwnd windows.HWND, lParam uintptr) uintptr {
+			var wndPid uint32
+			procGetWindowThreadProcessId.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&wndPid)))
+			if wndPid != pid {
+				return 1 // continue
+			}
+			// Verify it has our window title so we don't pick up invisible helper windows.
+			buf := make([]uint16, 256)
+			procGetWindowTextW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&buf[0])), 255)
+			if windows.UTF16ToString(buf) == "uniTerm" {
+				a.enumResult = uintptr(hwnd)
+				return 0 // stop
+			}
 			return 1 // continue
-		}
-		// Verify it has our window title so we don't pick up invisible helper windows.
-		buf := make([]uint16, 256)
-		procGetWindowTextW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&buf[0])), 255)
-		if windows.UTF16ToString(buf) == "uniTerm" {
-			result = uintptr(hwnd)
-			return 0 // stop
-		}
-		return 1 // continue
-	})
-	procEnumWindows.Call(cb, 0)
-	return result
+		})
+	}
+	a.enumResult = 0
+	procEnumWindows.Call(a.enumWindowsCb, 0)
+	return a.enumResult
 }
 
 // bringMainWindowToFront raises the main window to the foreground once. After a
@@ -384,10 +394,7 @@ func (a *App) findMainWindow() uintptr {
 // raise works while the old instance (the foreground process) is still alive.
 // No-op when no main window has been created yet.
 func (a *App) bringMainWindowToFront() {
-	hwnd := a.mainHwnd
-	if hwnd == 0 {
-		hwnd = a.findMainWindow()
-	}
+	hwnd := a.ensureMainWindowHwnd()
 	if hwnd == 0 {
 		return
 	}
@@ -502,7 +509,7 @@ func (a *App) openWithSystem(p string) error {
 	}
 	info := openAsInfo{file: uintptr(unsafe.Pointer(p16)), flags: oaifAllowRegistration | oaifExec}
 	shell32 := windows.NewLazySystemDLL("shell32.dll")
-	r1, _, callErr := shell32.NewProc("SHOpenWithDialog").Call(a.findMainWindow(), uintptr(unsafe.Pointer(&info)))
+	r1, _, callErr := shell32.NewProc("SHOpenWithDialog").Call(a.ensureMainWindowHwnd(), uintptr(unsafe.Pointer(&info)))
 	if r1 != 0 {
 		return nil
 	}
@@ -848,9 +855,10 @@ func (a *App) setClipboardFiles(paths []string) error {
 	}
 	copy(unsafe.Slice((*byte)(unsafe.Pointer(ptr)), len(data)), data)
 	kernel32.NewProc("GlobalUnlock").Call(handle)
+	hwnd := a.ensureMainWindowHwnd()
 	deadline := time.Now().Add(time.Second)
 	for {
-		opened, _, err := user32.NewProc("OpenClipboard").Call(a.mainHwnd)
+		opened, _, err := user32.NewProc("OpenClipboard").Call(hwnd)
 		if opened != 0 {
 			break
 		}

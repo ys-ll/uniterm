@@ -5,10 +5,15 @@ package main
 
 import (
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 // detectThirdPartyShells must offer well-known third-party shell installs
@@ -136,3 +141,136 @@ func TestClipboardGetFilesLive(t *testing.T) {
 		}
 	}
 }
+
+// Regression test for issue #1426. findMainWindow used to register a fresh
+// syscall callback on every call. Go's Windows runtime stores those in a
+// fixed-size table (cb_max = 2000, entries never freed), so once the
+// remote-desktop keyboard capture path fell back to an un-cached
+// findMainWindow, every desktop-focus toggle leaked one entry until the
+// process aborted with "fatal error: too many callback functions". 2100
+// findMainWindow calls must stay well inside that budget: with the fix the
+// callback is registered once and reused.
+//
+// Opt-in because the pre-fix failure mode is a fatal runtime throw that
+// kills the whole test binary — exactly the crash users saw. Run with
+// UNITERM_CALLBACK_STRESS=1 to reproduce the leak on old code.
+func TestFindMainWindowReusesCallback(t *testing.T) {
+	if os.Getenv("UNITERM_CALLBACK_STRESS") != "1" {
+		t.Skip("fatal-throw stress test; set UNITERM_CALLBACK_STRESS=1 to run")
+	}
+	a := &App{}
+	for i := 0; i < 2100; i++ {
+		a.findMainWindow()
+	}
+}
+
+// ensureMainWindowHwnd must hand back an already-resolved HWND without
+// enumerating again: callers (remote-desktop keyboard capture, clipboard,
+// open-with dialog) rely on repeated calls being stable and cheap.
+func TestEnsureMainWindowHwndReturnsCachedValue(t *testing.T) {
+	a := &App{mainHwnd: 4242}
+	if got := a.ensureMainWindowHwnd(); got != 4242 {
+		t.Fatalf("ensureMainWindowHwnd = %d, want cached 4242", got)
+	}
+	if got := a.ensureMainWindowHwnd(); got != 4242 {
+		t.Fatalf("second ensureMainWindowHwnd = %d, want 4242", got)
+	}
+}
+
+// The lazy resolution path must find a real "uniTerm" window of this
+// process, cache it into mainHwnd, and install the WndProc subclass — the
+// subclass drives the native window:resize-end events the terminal re-fit
+// fix (#656) listens for. Before the fix this resolution ran eagerly at
+// ServiceStartup, before the wails window existed, so it always failed and
+// the subclass was silently never installed.
+func TestEnsureMainWindowHwndResolvesAndSubclasses(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	hwnd, err := createTestMainWindow()
+	if err != nil {
+		t.Fatalf("create test window: %v", err)
+	}
+	defer destroyTestMainWindow(hwnd)
+
+	a := &App{}
+	got := a.ensureMainWindowHwnd()
+	if got == 0 {
+		t.Fatal("ensureMainWindowHwnd = 0, want the test window HWND")
+	}
+	if a.mainHwnd != got {
+		t.Fatalf("resolved HWND %d not cached in mainHwnd (%d)", got, a.mainHwnd)
+	}
+	if a.originalWndProc == 0 || a.wndProcCb == 0 {
+		t.Fatal("WndProc subclass not installed after successful resolution")
+	}
+	if again := a.ensureMainWindowHwnd(); again != got {
+		t.Fatalf("second ensureMainWindowHwnd = %d, want stable %d", again, got)
+	}
+}
+
+// createTestMainWindow registers a window class and creates a real top-level
+// window titled "uniTerm" so findMainWindow's EnumWindows sweep can discover
+// it. Hidden windows are enumerated too, so it never needs to be shown.
+func createTestMainWindow() (uintptr, error) {
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	procDefWindowProcW := user32.NewProc("DefWindowProcW")
+	wndProc := windows.NewCallback(func(hwnd windows.HWND, msg uint32, wparam, lparam uintptr) uintptr {
+		r1, _, _ := procDefWindowProcW.Call(uintptr(hwnd), uintptr(msg), wparam, lparam)
+		return r1
+	})
+
+	className, err := windows.UTF16PtrFromString("uniterm-test-window")
+	if err != nil {
+		return 0, err
+	}
+	var wc wndClassExW
+	wc.cbSize = uint32(unsafe.Sizeof(wc))
+	wc.lpfnWndProc = wndProc
+	wc.lpszClassName = className
+	procRegisterClassExW := user32.NewProc("RegisterClassExW")
+	if atom, _, callErr := procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc))); atom == 0 {
+		return 0, fmt.Errorf("RegisterClassExW: %w", callErr)
+	}
+
+	title, err := windows.UTF16PtrFromString("uniTerm")
+	if err != nil {
+		return 0, err
+	}
+	hwnd, _, callErr := user32.NewProc("CreateWindowExW").Call(
+		0,                                  // exStyle
+		uintptr(unsafe.Pointer(className)), // class
+		uintptr(unsafe.Pointer(title)),     // title
+		wsOverlappedWindow,                 // style
+		0, 0, 0, 0,                         // x, y, w, h (never shown)
+		0, 0, 0, 0) // parent, menu, instance, param
+	if hwnd == 0 {
+		return 0, fmt.Errorf("CreateWindowExW: %w", callErr)
+	}
+	return hwnd, nil
+}
+
+func destroyTestMainWindow(hwnd uintptr) {
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	user32.NewProc("DestroyWindow").Call(hwnd)
+	className, _ := windows.UTF16PtrFromString("uniterm-test-window")
+	user32.NewProc("UnregisterClassW").Call(uintptr(unsafe.Pointer(className)), 0)
+}
+
+// wndClassExW mirrors the user32 WNDCLASSEXW layout.
+type wndClassExW struct {
+	cbSize        uint32
+	style         uint32
+	lpfnWndProc   uintptr
+	cbClsExtra    int32
+	cbWndExtra    int32
+	hInstance     uintptr
+	hIcon         uintptr
+	hCursor       uintptr
+	hbrBackground uintptr
+	lpszMenuName  *uint16
+	lpszClassName *uint16
+	hIconSm       uintptr
+}
+
+const wsOverlappedWindow = 0x00CF0000
