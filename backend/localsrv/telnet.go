@@ -494,10 +494,26 @@ func processTelnetInput(in []byte) (data, resp []byte) {
 //     canonical "08 20 08" erase echo instead of a burst of CRLFs.
 //   - ESC[3~ (the Delete key on most clients) -> 0x7F, since a telnet client
 //     cannot reproduce ConPTY's forward-delete redraw without CSI.
+//   - CSI cursor-navigation sequences (arrow keys ESC[A/B/C/D) are dropped.
+//     If passed through, cmd.exe moves its internal editing cursor off the end
+//     of the line and repaints by emitting CSI cursor-positioning redraws that
+//     telnet clients do not understand; stripControls removes those, so the
+//     client's visible cursor stays at the end while cmd's logical cursor has
+//     moved. Del then erases a character invisible to the client, which is
+//     reported as "pressing the arrow keys makes Del go wrong". Dropping the
+//     arrows keeps the visible and logical cursors pinned together at the end.
 func normalizeEditingKeys(in []byte) []byte {
 	norm := make([]byte, 0, len(in))
 	for i := 0; i < len(in); i++ {
 		c := in[i]
+		if c == 0x1B && i+2 < len(in) && in[i+1] == '[' {
+			tail := in[i+2]
+			// Drop arrow keys (A up, B down, C right, D left).
+			if tail == 'A' || tail == 'B' || tail == 'C' || tail == 'D' {
+				i += 2
+				continue
+			}
+		}
 		if c == 0x1B && i+3 < len(in) &&
 			in[i+1] == '[' && in[i+2] == '3' && in[i+3] == '~' {
 			norm = append(norm, 0x7F) // Delete -> delete previous char
