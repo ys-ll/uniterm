@@ -125,6 +125,10 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
+// ys-ll/ftp is jlaffaye/ftp@v0.2.1 plus the fix for the control-connection
+// deadline leaking past the bounded 226-reply wait (upstream issue pending).
+replace github.com/jlaffaye/ftp => github.com/ys-ll/ftp v0.2.1-uniterm.1
+
 replace github.com/unixshells/mosh-go v0.5.2 => github.com/ys-ll/mosh-go v0.0.0-20260702130124-e17b92cd9dab
 
 replace github.com/rhnvrm/simples3 => github.com/ys-ll/simples3 v0.0.0-20260930081831-3357c14e91bd
