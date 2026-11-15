@@ -75,7 +75,7 @@ export const useSettingsStore = defineStore('settings', () => {
     aiCfg.autoCompact = settings.value.ai.autoCompact ?? true
     aiCfg.contextTokenBudget = normalizeContextTokenBudget(settings.value.ai.contextTokenBudget)
     aiCfg.summaryModelId = settings.value.ai.summaryModelId || ''
-    aiCfg.userMessageStyle = settings.value.ai.userMessageStyle === 'bubble' ? 'bubble' : 'plain'
+    aiCfg.userMessageStyle = settings.value.ai.userMessageStyle === 'plain' ? 'plain' : 'bubble'
     aiCfg.models = settings.value.ai.models
     aiCfg.save()
   }
