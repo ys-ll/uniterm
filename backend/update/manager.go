@@ -14,7 +14,7 @@ type Manager struct {
 // PendingUpdate is a downloaded, verified, staged update ready to apply.
 type PendingUpdate struct {
 	Asset     UpdateAsset
-	Kind      string // classifyAsset(name): "installer" | "portable" | "binary-tar.gz"
+	Kind      string // classifyAsset(name): "installer" | "portable" | "binary-tar.gz" | "deb" | "rpm"
 	StageDir  string // staging directory holding the downloaded artifact + extracted payload
 	FilePath  string // the downloaded artifact itself
 	NewBinary string // extracted replacement executable (empty for "installer")
