@@ -172,8 +172,9 @@ document.addEventListener('select', (e) => {
 
 document.addEventListener('contextmenu', (e) => {
   const target = e.target as HTMLElement
-  // Read-only log-path toast: offer copy/select-all on its plain text.
-  const copyable = target.closest('.msg-copyable') as HTMLElement | null
+  // Read-only log-path toast and selectable plain-text hints (.copyable-text,
+  // e.g. the delete-confirm name): offer the in-app copy/select-all menu.
+  const copyable = target.closest('.msg-copyable, .copyable-text') as HTMLElement | null
   if (copyable) {
     e.preventDefault()
     const content = (copyable.querySelector('.el-message__content') as HTMLElement) || copyable

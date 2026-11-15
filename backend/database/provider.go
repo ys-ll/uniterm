@@ -46,6 +46,11 @@ type Provider interface {
 	// Quote returns an identifier quoted for this database.
 	Quote(name string) string
 
+	// QualifyTable quotes a table identifier that may arrive
+	// schema-qualified ("schema.table" — issue #1484, the schema-grouped
+	// tree). Dialects without schema-qualified tree names return Quote(name).
+	QualifyTable(tableName string) string
+
 	// Schema discovery
 	GetDatabases(db *sql.DB) ([]string, error)
 	GetTables(db *sql.DB, dbName string) ([]TableInfo, error)

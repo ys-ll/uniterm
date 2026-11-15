@@ -148,7 +148,7 @@ func buildBrowseSQL(p Provider, tableName string, cols map[string]bool, opts Bro
 		}
 		order = append(order, p.Quote(s.Column)+direction)
 	}
-	query := "SELECT * FROM " + p.Quote(tableName)
+	query := "SELECT * FROM " + p.QualifyTable(tableName)
 	if len(predicates) > 0 {
 		query += " WHERE " + strings.Join(predicates, " AND ")
 	}
@@ -259,7 +259,7 @@ func buildUpdateSQL(p Provider, tableName string, cols map[string]bool, update R
 			predicates = append(predicates, p.Quote(col)+" = "+placeholder(p.DriverName(), len(args)))
 		}
 	}
-	return "UPDATE " + p.Quote(tableName) + " SET " + strings.Join(assignments, ", ") + " WHERE " + strings.Join(predicates, " AND "), args, nil
+	return "UPDATE " + p.QualifyTable(tableName) + " SET " + strings.Join(assignments, ", ") + " WHERE " + strings.Join(predicates, " AND "), args, nil
 }
 
 func UpdateRowsAtomic(p Provider, db *sql.DB, dbName, tableName string, updates []RowUpdate) error {
@@ -373,7 +373,7 @@ func ImportCSV(p Provider, db *sql.DB, dbName, tableName, path string, mapping [
 		quoted[i] = p.Quote(m.Target)
 		placeholders[i] = placeholder(p.DriverName(), i+1)
 	}
-	query := "INSERT INTO " + p.Quote(tableName) + " (" + strings.Join(quoted, ", ") + ") VALUES (" + strings.Join(placeholders, ", ") + ")"
+	query := "INSERT INTO " + p.QualifyTable(tableName) + " (" + strings.Join(quoted, ", ") + ") VALUES (" + strings.Join(placeholders, ", ") + ")"
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	conn, err := db.Conn(ctx)

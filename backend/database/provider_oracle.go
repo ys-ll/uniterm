@@ -866,3 +866,10 @@ func dumpOracleValue(v any, typeToken string) string {
 		return scanToString(v)
 	}
 }
+
+// QualifyTable matches Quote: tables never arrive schema-qualified in this
+// dialect (the schema-grouped tree encoding is SQL Server-specific).
+
+func (p *oracleProvider) QualifyTable(tableName string) string {
+	return p.Quote(tableName)
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"sort"
 	"time"
@@ -123,6 +124,26 @@ func (a *App) DropDatabase(sessionID string, dbName string) error {
 		return err
 	}
 	return p.DropDatabase(ds.DB(), dbName)
+}
+
+// schemaDropper is implemented by providers that manage schemas inside a
+// database (SQL Server's composite "db.schema" tree nodes, issue #1484).
+type schemaDropper interface {
+	DropSchema(db *sql.DB, dbName string) error
+}
+
+// DropSchema drops the schema part of a composite node name. Providers
+// without a schema concept report unsupported.
+func (a *App) DropSchema(sessionID string, dbName string) error {
+	ds, p, err := a.dbProvider(sessionID)
+	if err != nil {
+		return err
+	}
+	sp, ok := p.(schemaDropper)
+	if !ok {
+		return fmt.Errorf("schema management not supported for %s", ds.DBType())
+	}
+	return sp.DropSchema(ds.DB(), dbName)
 }
 
 func (a *App) CreateTable(sessionID string, dbName string, tableName string) error {

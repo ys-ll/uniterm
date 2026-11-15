@@ -51,7 +51,7 @@
         >
           <span class="table-icon-spacer" />
           <component :is="row.table.type === 'view' ? Eye : Table2" class="table-icon" :size="'0.875rem'" />
-          <span class="table-name" @mouseenter="onTableNameHover($event, row.table.name)">{{ row.table.name }}</span>
+          <span class="table-name" @mouseenter="onTableNameHover($event, row.table.name)">{{ shortTable(row.table.name) }}</span>
         </div>
         <div v-else-if="row.kind === 'empty'" class="empty-hint">
           {{ t('db.noTables') }}
@@ -79,6 +79,7 @@
         <MenuDivider />
         <MenuItem v-if="canCreateDatabase" @click="onCtxNewDatabase">{{ t('db.newDatabase') }}</MenuItem>
         <MenuItem @click="onCtxNewTable">{{ t('db.newTable') }}</MenuItem>
+        <MenuItem v-if="isSchemaNode && !isDboNode" class="danger" @click="onCtxDropSchema">{{ t('db.dropSchema') }}</MenuItem>
         <MenuItem class="danger" @click="onCtxDropDatabase">{{ t('db.dropDatabase') }}</MenuItem>
         <MenuDivider />
         <MenuItem @click="onCtxRefresh">{{ t('db.refreshTables') }}</MenuItem>
@@ -117,12 +118,12 @@
     >
       <div class="confirm-body">
         <p class="confirm-text">{{ confirmText }}</p>
-        <p class="confirm-hint">{{ t('db.typeToConfirm', { name: confirmName }) }}</p>
+        <p class="confirm-hint copyable-text">{{ t('db.typeToConfirm', { name: confirmName }) }}</p>
         <el-input v-model="confirmInput" :placeholder="confirmName" />
       </div>
       <template #footer>
         <el-button @click="confirmVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="danger" :disabled="confirmInput !== confirmName" @click="onConfirm">
+        <el-button type="danger" :disabled="confirmInput !== confirmName || confirmBusy" @click="onConfirm">
           {{ t('common.confirm') }}
         </el-button>
       </template>
@@ -133,6 +134,9 @@
       <el-form label-width="5rem">
         <el-form-item :label="t('db.dbName')">
           <el-input v-model="newDbName" />
+        </el-form-item>
+        <el-form-item :label="t('db.schemaName')">
+          <el-input v-model="newDbSchema" placeholder="dbo" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -188,7 +192,7 @@ import { ref, watch, computed, nextTick, h } from 'vue'
 import { Database, Table2, Eye, ChevronRight, ChevronDown, RefreshCw, MoreHorizontal } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { ElMessageBox } from 'element-plus'
-import { GetDatabases, GetTablePage, CreateDatabase, DropDatabase, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { GetDatabases, GetTablePage, CreateDatabase, DropDatabase, DropSchema, CreateTable, DropTable, DropView, TruncateTable, CopyTable, GetDBCapabilities, DumpTable, SaveFileDialogFiltered, WriteFileBase64, OpenFileDialogFiltered, ReadFileBase64, ExecuteSQLScript } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
 import { isWebServerMode, pickBrowserFiles, readBrowserFileAsText, saveBase64InWebServerMode } from '../services/webSftpBridge'
 import Menu from './Menu.vue'
@@ -572,6 +576,15 @@ function onTableNameHover(e: MouseEvent, name: string) {
   }
 }
 
+// Issue #1484: table names arrive schema-qualified ("sales.orders") so the
+// backend can resolve non-default schemas; display strips the prefix inside
+// a schema node, while the qualified name stays in data-* attrs, tooltips
+// and copy-name.
+function shortTable(name: string): string {
+  const i = name.lastIndexOf('.')
+  return i >= 0 ? name.slice(i + 1) : name
+}
+
 // Searching runs a full-schema, server-side name filter (LIKE) across every
 // database, paged just like the normal list, so it finds tables no matter how
 // far down the 100k-row list they live. Debounced while the user types.
@@ -601,6 +614,15 @@ interface DbMenuCtx {
 const ctxMenuVisible = ref(false)
 const ctxMenuRef = ref<InstanceType<typeof Menu> | null>(null)
 const ctxDbName = ref('')
+// Issue #1484: SQL Server tree nodes are composite "db.schema" names. A node
+// carrying a schema qualifier offers 删除模式 (never shown for dbo — it cannot
+// be dropped), and its 删除数据库 confirmation must be answered with the real
+// database name, not the node name.
+const isSchemaNode = computed(() => props.dbType === 'sqlserver' && ctxDbName.value.includes('.'))
+const isDboNode = computed(() => {
+  const i = ctxDbName.value.lastIndexOf('.')
+  return props.dbType === 'sqlserver' && i >= 0 && ctxDbName.value.slice(i + 1).toLowerCase() === 'dbo'
+})
 const ctxTableName = ref('')
 const ctxTableType = ref('')
 
@@ -837,28 +859,66 @@ function showConfirm(title: string, text: string, name: string, action: () => Pr
   ctxMenuVisible.value = false
 }
 
+const confirmBusy = ref(false)
+
 async function onConfirm() {
-  if (confirmAction) {
-    try {
-      await confirmAction()
-      await loadTree()
-    } catch (e: any) {
-      console.error(e)
-      msg.error(e?.message || String(e))
-    }
+  // Guard against double-firing (double-click on 确认 ran destructive
+  // actions twice — the second attempt then failed with "does not exist").
+  if (!confirmAction || confirmBusy.value) return
+  confirmBusy.value = true
+  try {
+    await confirmAction()
+    await loadTree()
+  } catch (e: any) {
+    console.error(e)
+    msg.error(e?.message || String(e))
+  } finally {
+    confirmBusy.value = false
+    confirmVisible.value = false
   }
-  confirmVisible.value = false
 }
 
 function onCtxDropDatabase() {
-  const dbName = ctxDbName.value
+  const nodeName = ctxDbName.value
+  const i = nodeName.lastIndexOf('.')
+  // On a composite schema node the node name is NOT what gets dropped — the
+  // whole database is. The confirmation must be answered with the real
+  // database name so intent and effect stay aligned.
+  if (props.dbType === 'sqlserver' && i >= 0) {
+    const db = nodeName.slice(0, i)
+    showConfirm(
+      t('db.dropDatabase'),
+      t('db.dropDatabaseWhole', { name: nodeName, db }),
+      db,
+      async () => {
+        await DropDatabase(props.sessionId, nodeName)
+        emit('objectRemoved', { dbName: nodeName, kind: 'database' })
+      }
+    )
+    return
+  }
   showConfirm(
     t('db.dropDatabase'),
-    t('db.dropDatabaseConfirm', { name: dbName }),
-    dbName,
+    t('db.dropDatabaseConfirm', { name: nodeName }),
+    nodeName,
     async () => {
-      await DropDatabase(props.sessionId, dbName)
-      emit('objectRemoved', { dbName, kind: 'database' })
+      await DropDatabase(props.sessionId, nodeName)
+      emit('objectRemoved', { dbName: nodeName, kind: 'database' })
+    }
+  )
+}
+
+function onCtxDropSchema() {
+  const nodeName = ctxDbName.value
+  const i = nodeName.lastIndexOf('.')
+  const schema = i >= 0 ? nodeName.slice(i + 1) : nodeName
+  showConfirm(
+    t('db.dropSchema'),
+    t('db.dropSchemaConfirm', { name: schema }),
+    schema,
+    async () => {
+      await DropSchema(props.sessionId, nodeName)
+      emit('objectRemoved', { dbName: nodeName, kind: 'database' })
     }
   )
 }
@@ -943,6 +1003,7 @@ function refreshAll() {
 function onMoreNewDatabase() {
   moreMenuVisible.value = false
   newDbName.value = ''
+  newDbSchema.value = ''
   newDbVisible.value = true
 }
 
@@ -962,17 +1023,31 @@ function onMoreRefresh() {
 
 const newDbVisible = ref(false)
 const newDbName = ref('')
+// Optional schema created together with the database (issue #1484). Empty
+// means the login's default schema (usually dbo); the backend receives the
+// composite "db.schema" encoding and splits it.
+const newDbSchema = ref('')
 
 function onCtxNewDatabase() {
   ctxMenuVisible.value = false
   newDbName.value = ''
+  newDbSchema.value = ''
   newDbVisible.value = true
 }
 
 async function onCreateDatabase() {
-  if (!newDbName.value.trim()) return
+  const name = newDbName.value.trim()
+  if (!name) return
+  const schema = newDbSchema.value.trim()
+  // Only the schema field may not contain dots: the wire format is always
+  // "name.schema" with a trailing dot when empty, so the last segment is
+  // unambiguously the schema and dot-named databases ("my.db") stay legal.
+  if (schema.includes('.')) {
+    msg.error(t('db.nameNoDot'))
+    return
+  }
   try {
-    await CreateDatabase(props.sessionId, newDbName.value.trim())
+    await CreateDatabase(props.sessionId, `${name}.${schema}`)
     newDbVisible.value = false
     await loadTree()
   } catch (e: any) {
@@ -1183,6 +1258,12 @@ async function onCreateTable() {
   font-size: 0.875rem;
   color: var(--text-primary);
   margin: 0;
+}
+.confirm-text,
+.confirm-hint {
+  /* global tree styles set user-select: none; the confirm hint must stay
+     selectable so the name can be selected and copied manually */
+  user-select: text;
 }
 .confirm-hint {
   font-family: var(--font-ui);
