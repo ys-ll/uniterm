@@ -351,6 +351,9 @@ Gracias a las siguientes personas por contribuir con código y mejoras, y a todo
     <td align="center"><a href="https://github.com/eltociear">@eltociear</a></td>
     <td align="center"><a href="https://github.com/dajiaohuang">@dajiaohuang</a></td>
   </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
+  </tr>
 </table>
 
 ## Licencia

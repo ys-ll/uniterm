@@ -351,6 +351,9 @@ Issue、提案、フィードバックは [GitHub Issues](https://github.com/ys-
     <td align="center"><a href="https://github.com/eltociear">@eltociear</a></td>
     <td align="center"><a href="https://github.com/dajiaohuang">@dajiaohuang</a></td>
   </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
+  </tr>
 </table>
 
 ## ライセンス
