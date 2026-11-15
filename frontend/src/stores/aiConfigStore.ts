@@ -12,7 +12,7 @@ export const useAIConfigStore = defineStore('aiConfig', () => {
   const autoCompact = ref(true)
   const contextTokenBudget = ref(DEFAULT_SETTINGS.ai.contextTokenBudget)
   const summaryModelId = ref('')
-  const userMessageStyle = ref<'plain' | 'bubble'>('plain')
+  const userMessageStyle = ref<'plain' | 'bubble'>('bubble')
   const models = ref<AIModelConfig[]>([...DEFAULT_SETTINGS.ai.models])
   const loaded = ref(false)
 
@@ -24,7 +24,7 @@ export const useAIConfigStore = defineStore('aiConfig', () => {
         autoCompact.value = cfg.autoCompact ?? true
         contextTokenBudget.value = normalizeContextTokenBudget(cfg.contextTokenBudget)
         summaryModelId.value = cfg.summaryModelId || ''
-        userMessageStyle.value = cfg.userMessageStyle === 'bubble' ? 'bubble' : 'plain'
+        userMessageStyle.value = cfg.userMessageStyle === 'plain' ? 'plain' : 'bubble'
         models.value = cfg.models?.length ? cfg.models : [...DEFAULT_SETTINGS.ai.models]
       }
     } catch {

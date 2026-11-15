@@ -988,7 +988,7 @@ function escapeHtml(text: string): string {
 /* Bubble style (settings.ai.userMessageStyle = 'bubble', issue #1478): user
    messages right-align as content-sized chat bubbles so a question stands
    out from the answers when scrolling back. Attachments and the meta row
-   follow the right edge; undefined/'plain' keeps the shared left layout. */
+   follow the right edge; 'plain' keeps the shared left layout. */
 .ai-message.bubble-mode.user {
   justify-content: flex-end;
 }
