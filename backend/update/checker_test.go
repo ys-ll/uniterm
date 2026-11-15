@@ -67,8 +67,8 @@ func TestClassifyAsset(t *testing.T) {
 		{"uniterm-darwin-arm64-v1.9.2.zip", "portable"},
 		{"uniterm-linux-amd64-v1.9.2.tar.gz", "binary-tar.gz"},
 		{"uniterm-darwin-arm64-v1.9.2.dmg", "other"},
-		{"uniterm-linux-amd64-v1.9.2.deb", "other"},
-		{"uniterm-linux-amd64-v1.9.2.rpm", "other"},
+		{"uniterm-linux-amd64-v1.9.2.deb", "deb"},
+		{"uniterm-linux-amd64-v1.9.2.rpm", "rpm"},
 	}
 	for _, c := range cases {
 		if got := classifyAsset(c.name); got != c.want {
@@ -149,13 +149,24 @@ func TestCandidatesForOrdering(t *testing.T) {
 	if len(got) != 1 || got[0].Name != "uniterm-darwin-amd64-v1.9.2.zip" {
 		t.Errorf("darwin portable should match only the .zip asset, got %+v", got)
 	}
-	// linux: the bare-binary tar.gz is the update payload (deb/rpm are "other").
+	// linux portable: the bare-binary tar.gz is the update payload.
 	rels["github"].Assets = append(rels["github"].Assets,
 		releaseAsset{Name: "uniterm-linux-amd64-v1.9.2.tar.gz", BrowserDownloadURL: "https://github.com/linux.tar.gz"},
 		releaseAsset{Name: "uniterm-linux-amd64-v1.9.2.deb", BrowserDownloadURL: "https://github.com/linux.deb"})
 	got = candidatesFor("linux", "amd64", ChannelPortable, "github", rels, sums)
 	if len(got) != 1 || got[0].Name != "uniterm-linux-amd64-v1.9.2.tar.gz" {
 		t.Errorf("linux portable should match only the .tar.gz asset, got %+v", got)
+	}
+	// linux deb/rpm installs: only the matching package is offered.
+	rels["github"].Assets = append(rels["github"].Assets,
+		releaseAsset{Name: "uniterm-linux-amd64-v1.9.2.rpm", BrowserDownloadURL: "https://github.com/linux.rpm"})
+	got = candidatesFor("linux", "amd64", ChannelDeb, "github", rels, sums)
+	if len(got) != 1 || got[0].Name != "uniterm-linux-amd64-v1.9.2.deb" {
+		t.Errorf("linux deb channel should match only the .deb asset, got %+v", got)
+	}
+	got = candidatesFor("linux", "amd64", ChannelRPM, "github", rels, sums)
+	if len(got) != 1 || got[0].Name != "uniterm-linux-amd64-v1.9.2.rpm" {
+		t.Errorf("linux rpm channel should match only the .rpm asset, got %+v", got)
 	}
 }
 

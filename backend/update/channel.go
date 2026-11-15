@@ -10,6 +10,12 @@ const (
 	// ChannelInstaller means a Windows NSIS install: updates run the new
 	// installer silently after the app exits.
 	ChannelInstaller Channel = "installer"
+	// ChannelDeb means a Linux install owned by dpkg (/usr/bin/uniterm from
+	// the .deb): updates install the new .deb through the package manager
+	// with pkexec, since the binary is root-owned.
+	ChannelDeb Channel = "deb"
+	// ChannelRPM is the rpm-owned counterpart of ChannelDeb.
+	ChannelRPM Channel = "rpm"
 )
 
 // DetectChannel reports how the running install should be updated. The
