@@ -22,14 +22,15 @@ import (
 
 type SFTPSession struct {
 	baseSession
-	localFSOps // Windows-local pane, shared with FTP/SMB/WebDAV/S3/WSL
-	sshClient  *ssh.Client
-	sftpClient *sftp.Client
-	cwd        string
-	mu         sync.RWMutex
-	transfers  map[string]*TransferTask
-	taskSeq    int64
-	sem        chan struct{} // concurrency limiter, nil = unlimited
+	localFSOps      // Windows-local pane, shared with FTP/SMB/WebDAV/S3/WSL
+	sshClient       *ssh.Client
+	sharedClientRef *sshClientRef
+	sftpClient      *sftp.Client
+	cwd             string
+	mu              sync.RWMutex
+	transfers       map[string]*TransferTask
+	taskSeq         int64
+	sem             chan struct{} // concurrency limiter, nil = unlimited
 
 	// UID/GID -> name cache read from the remote /etc/passwd and /etc/group
 	// (issue #702). Loaded once on Connect; a missing/unreadable entry falls
@@ -106,6 +107,22 @@ func (s *SFTPSession) Connect(config ConnectionConfig) error {
 		return fmt.Errorf("ssh dial: %w", err)
 	}
 
+	return s.connectClient(client, nil)
+}
+
+// ConnectSSH opens SFTP on an existing authenticated SSH transport. Closing
+// this session releases only its reference and its SFTP channel.
+func (s *SFTPSession) ConnectSSH(source *SSHSession) error {
+	s.setStatus(StatusConnecting)
+	ref, err := source.acquireFileClient()
+	if err != nil {
+		s.setStatus(StatusError)
+		return err
+	}
+	return s.connectClient(ref.client, ref)
+}
+
+func (s *SFTPSession) connectClient(client *ssh.Client, shared *sshClientRef) error {
 	sc, err := sftp.NewClient(client, sftpClientOptions()...)
 	if err != nil {
 		// subsystem 启动失败：若是协议流被污染(登录脚本打印)，像 MobaXterm 那样
@@ -114,18 +131,20 @@ func (s *SFTPSession) Connect(config ConnectionConfig) error {
 		if ferr == nil {
 			sc = sc2
 		} else {
-			client.Close()
+			if shared != nil {
+				shared.release()
+			} else {
+				client.Close()
+			}
 			s.setStatus(StatusError)
 			return fmt.Errorf("sftp client: %w", hintSFTPStartupError(err, ferr))
 		}
 	}
 
-	go func() {
-		_ = client.Wait()
-		s.Disconnect()
-	}()
-
+	s.mu.Lock()
 	s.sshClient = client
+	s.sharedClientRef = shared
+	s.mu.Unlock()
 	go startFileSessionKeepAlive(client, s.Status)
 	s.sftpClient = sc
 	// Preload remote user/group name maps so list owners show names, not numbers.
@@ -134,6 +153,10 @@ func (s *SFTPSession) Connect(config ConnectionConfig) error {
 		s.cwd = wd
 	}
 	s.setStatus(StatusConnected)
+	go func() {
+		_ = sc.Wait()
+		s.Disconnect()
+	}()
 
 	return nil
 }
@@ -263,11 +286,17 @@ func (s *SFTPSession) Resize(cols, rows int) error {
 }
 
 func (s *SFTPSession) Disconnect() error {
+	s.mu.Lock()
+	client, shared := s.sshClient, s.sharedClientRef
+	s.sshClient, s.sharedClientRef = nil, nil
+	s.mu.Unlock()
 	if s.sftpClient != nil {
 		s.sftpClient.Close()
 	}
-	if s.sshClient != nil {
-		s.sshClient.Close()
+	if shared != nil {
+		shared.release()
+	} else if client != nil {
+		client.Close()
 	}
 	s.setStatus(StatusDisconnected)
 	return nil
@@ -275,6 +304,12 @@ func (s *SFTPSession) Disconnect() error {
 
 func (s *SFTPSession) IsConnected() bool {
 	return s.Status() == StatusConnected
+}
+
+func (s *SFTPSession) getSSHClient() *ssh.Client {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sshClient
 }
 
 // FileItem represents a file entry returned to the frontend.
@@ -674,8 +709,8 @@ func (s *SFTPSession) Remove(p string, recursive bool) error {
 	if p == "/" || p == "." || p == "" {
 		return fmt.Errorf("refusing to delete path: %s", p)
 	}
-	if s.sshClient != nil {
-		session, err := s.sshClient.NewSession()
+	if client := s.getSSHClient(); client != nil {
+		session, err := client.NewSession()
 		if err != nil {
 			// Fall back to SFTP remove.
 			return s.rmRecursive(p)
@@ -937,7 +972,11 @@ func (s *SFTPSession) Copy(oldPath, newPath string) error {
 		n = path.Join(s.cwd, n)
 	}
 	// Try shell cp -r first (server-side copy, zero data transfer)
-	session, err := s.sshClient.NewSession()
+	client := s.getSSHClient()
+	if client == nil {
+		return s.sftpCopy(old, n)
+	}
+	session, err := client.NewSession()
 	if err != nil {
 		return err
 	}
@@ -1028,7 +1067,11 @@ func (s *SFTPSession) Move(oldPath, newPath string) error {
 		return nil
 	}
 	// Fallback: shell mv handles cross-filesystem moves
-	session, err := s.sshClient.NewSession()
+	client := s.getSSHClient()
+	if client == nil {
+		return fmt.Errorf("SSH session not connected")
+	}
+	session, err := client.NewSession()
 	if err != nil {
 		return err
 	}

@@ -31,12 +31,13 @@ import (
 type SCPSession struct {
 	baseSession
 	localFSOps
-	sshClient *ssh.Client
-	cwd       string
-	mu        sync.RWMutex
-	transfers map[string]*TransferTask
-	taskSeq   int64
-	sem       chan struct{} // concurrency limiter, nil = unlimited
+	sshClient       *ssh.Client
+	sharedClientRef *sshClientRef
+	cwd             string
+	mu              sync.RWMutex
+	transfers       map[string]*TransferTask
+	taskSeq         int64
+	sem             chan struct{} // concurrency limiter, nil = unlimited
 }
 
 func NewSCPSession(id string) *SCPSession {
@@ -90,13 +91,24 @@ func (s *SCPSession) Connect(config ConnectionConfig) error {
 		return fmt.Errorf("ssh dial: %w", err)
 	}
 
-	go func() {
-		_ = client.Wait()
-		s.Disconnect()
-	}()
+	return s.connectClient(client, nil)
+}
 
+// ConnectSSH opens SCP exec channels on an authenticated SSH transport.
+func (s *SCPSession) ConnectSSH(source *SSHSession) error {
+	s.setStatus(StatusConnecting)
+	ref, err := source.acquireFileClient()
+	if err != nil {
+		s.setStatus(StatusError)
+		return err
+	}
+	return s.connectClient(ref.client, ref)
+}
+
+func (s *SCPSession) connectClient(client *ssh.Client, shared *sshClientRef) error {
 	s.mu.Lock()
 	s.sshClient = client
+	s.sharedClientRef = shared
 	s.mu.Unlock()
 	go startFileSessionKeepAlive(client, s.Status)
 
@@ -110,6 +122,10 @@ func (s *SCPSession) Connect(config ConnectionConfig) error {
 		}
 	}
 	s.setStatus(StatusConnected)
+	go func() {
+		_ = client.Wait()
+		s.Disconnect()
+	}()
 	return nil
 }
 
@@ -119,11 +135,14 @@ func (s *SCPSession) Resize(cols, rows int) error { return nil }
 
 func (s *SCPSession) Disconnect() error {
 	s.mu.Lock()
-	if s.sshClient != nil {
-		s.sshClient.Close()
-		s.sshClient = nil
-	}
+	client, shared := s.sshClient, s.sharedClientRef
+	s.sshClient, s.sharedClientRef = nil, nil
 	s.mu.Unlock()
+	if shared != nil {
+		shared.release()
+	} else if client != nil {
+		client.Close()
+	}
 	s.setStatus(StatusDisconnected)
 	return nil
 }
