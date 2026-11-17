@@ -556,9 +556,22 @@ jobs:
           # First published tag (dev-<sha>, or the version tag without v).
           FIRST_TAG="${IMAGE_TAGS%%,*}"
           FIRST_TAG="${FIRST_TAG#uniterm/uniterm:}"
+          # Export each platform as a standalone docker archive through the
+          # docker-container builder created above, so the per-arch builds hit
+          # the buildx cache instead of rebuilding from scratch. docker pull +
+          # docker save is not usable here: with the containerd image store
+          # both platforms end up cached under the same tag and
+          # `docker save <tag>` exports all of them, which is how an arm64
+          # archive once shipped an amd64 image.
+          BUILDER=$(docker buildx ls --format json | jq -r '[.[] | select(.Driver == "docker-container") | .Name][0] // ""')
           for arch in amd64 arm64; do
-            docker pull --platform="linux/$arch" "uniterm/uniterm:${FIRST_TAG}"
-            docker save "uniterm/uniterm:${FIRST_TAG}" | gzip > "uniterm-docker-${arch}-${VERSION}.tar.gz"
+            BUILDER_FLAG=""
+            [ -n "$BUILDER" ] && BUILDER_FLAG="--builder ${BUILDER}"
+            docker buildx build ${BUILDER_FLAG} --platform "linux/$arch" \
+              --build-arg VERSION="${VERSION}" \
+              -t "uniterm/uniterm:${FIRST_TAG}" \
+              --output "type=docker,dest=uniterm-docker-${arch}-${VERSION}.tar" .
+            gzip -f "uniterm-docker-${arch}-${VERSION}.tar"
           done
           ls -la uniterm-docker-*.tar.gz
 
