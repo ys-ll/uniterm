@@ -195,21 +195,6 @@
             </div>
           </div>
 
-          <!-- Touch has no hover: 'rightclick' style would leave host rows
-               with no visible menu affordance (long-press still works) -->
-          <div v-if="!isMobile" class="setting-card">
-            <div class="setting-info">
-              <div class="setting-title">{{ t('settings.hostListMenuStyle') }}</div>
-              <div class="setting-desc">{{ t('settings.hostListMenuStyleDesc') }}</div>
-            </div>
-            <div class="setting-control">
-              <el-select v-model="settingsStore.settings.hostListMenuStyle" @change="settingsStore.save()">
-                <el-option :label="t('settings.hostListMenuStyleButton')" value="button" />
-                <el-option :label="t('settings.hostListMenuStyleRightClick')" value="rightclick" />
-              </el-select>
-            </div>
-          </div>
-
           <!-- Tab bar "+" default action (issue #1043): start page or local
                terminal. Also applies to the new-tab keyboard shortcut. -->
           <div class="setting-card">
@@ -2537,7 +2522,7 @@ const shortcutCategories: { key: string; label: string; actions: ShortcutAction[
   {
     key: 'sidebar',
     label: 'shortcut.catSidebar',
-    actions: ['toggleSidebar', 'openQuickCommands', 'toggleNotes', 'focusAI', 'toggleFilePanel', 'toggleMonitor', 'openSettings'],
+    actions: ['toggleSidebar', 'openQuickCommands', 'toggleNotes', 'focusAI', 'toggleFilePanel', 'toggleMonitor', 'toggleTunnels', 'toggleHistory', 'togglePersonalization', 'toggleCommandSend', 'openSettings'],
   },
   {
     key: 'terminal',

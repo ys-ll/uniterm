@@ -244,21 +244,22 @@
         />
         <div class="input-actions">
           <div class="input-actions-left">
+            <!-- Attach / terminal-reference / skill actions collapsed behind a
+                 single "+" button; the items dispatch to the same handlers the
+                 removed standalone buttons used. -->
             <button
-              v-if="!isMobile"
-              class="ghost-btn hash-btn attach-btn"
-              :title="t('ai.attachFile')"
+              class="ghost-btn hash-btn add-btn"
+              :title="t('ai.addMenu')"
               :disabled="lockedPanels.length === 0 && !currentIsTerminal"
-              @click="onAttachClick"
+              @click.stop="addMenuRef?.toggle($event.currentTarget)"
             >
-              <Paperclip :size="14" />
+              <Plus :size="14" />
             </button>
-            <button class="ghost-btn hash-btn" title="引用终端" :disabled="lockedPanels.length === 0 && !currentIsTerminal" @click="onHashButtonClick">
-              <span class="hash-btn-icon">#</span>
-            </button>
-            <button class="ghost-btn hash-btn" title="Skill / 命令" :disabled="lockedPanels.length === 0 && !currentIsTerminal" @click="onSlashButtonClick">
-              <span class="hash-btn-icon">/</span>
-            </button>
+            <Menu ref="addMenuRef" v-model:visible="addMenuVisible">
+              <MenuItem v-if="!isMobile" iconic :icon="Paperclip" @click="runAddAction(onAttachClick)">{{ t('ai.attachFile') }}</MenuItem>
+              <MenuItem iconic :icon="Hash" @click="runAddAction(onHashButtonClick)">{{ t('ai.quoteTerminal') }}</MenuItem>
+              <MenuItem iconic :icon="SquareSlash" @click="runAddAction(onSlashButtonClick)">{{ t('ai.skillCommand') }}</MenuItem>
+            </Menu>
             <template v-if="settingsStore.settings.ai.models.length > 0">
               <button class="ghost-btn model-btn" :title="currentModelName" @click.stop="modelMenuRef?.toggle($event.currentTarget)">
                 <span>{{ currentModelName }}</span>
@@ -332,7 +333,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, computed, watch, onMounted, onUnmounted } from 'vue'
-import { X, Trash2, Expand, Shrink, History, MessageSquarePlus, Search, ChevronDown, ChevronUp, ArrowUp, Square, Plus, BookOpen, Terminal, Pencil, Paperclip, FileText } from '@lucide/vue'
+import { X, Trash2, Expand, Shrink, History, MessageSquarePlus, Search, ChevronDown, ChevronUp, ArrowUp, Square, Plus, BookOpen, Terminal, Pencil, Paperclip, FileText, Hash, SquareSlash } from '@lucide/vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAIStore } from '../stores/aiStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -1091,11 +1092,20 @@ const sessionMenuVisible = ref(false)
 const addTagMenuVisible = ref(false)
 const modelMenuVisible = ref(false)
 const modeMenuVisible = ref(false)
+const addMenuVisible = ref(false)
 
 const sessionMenuRef = ref<InstanceType<typeof Menu> | null>(null)
 const addTagMenuRef = ref<InstanceType<typeof Menu> | null>(null)
 const modelMenuRef = ref<InstanceType<typeof Menu> | null>(null)
 const modeMenuRef = ref<InstanceType<typeof Menu> | null>(null)
+const addMenuRef = ref<InstanceType<typeof Menu> | null>(null)
+
+// "+" menu items: close the menu first, then dispatch to the same handlers
+// the removed standalone buttons used (they re-focus the editor themselves).
+function runAddAction(action: () => void) {
+  addMenuVisible.value = false
+  action()
+}
 
 function onSessionSelect(id: string) { closeMenus(); onSessionCommand(id) }
 function onAddPanelTagSelect(id: string) { closeMenus(); onAddPanelTag(id) }
@@ -1764,6 +1774,7 @@ function closeMenus() {
   addTagMenuVisible.value = false
   modelMenuVisible.value = false
   modeMenuVisible.value = false
+  addMenuVisible.value = false
 }
 
 function onAIContextMenu(e: MouseEvent) {
@@ -2614,6 +2625,13 @@ defineExpose({ focusInput })
   cursor: not-allowed;
   opacity: 0.4;
 }
+/* The "+" button holds an SVG icon (baseline-aligned inline element), so it
+   needs flex centering instead of the ghost button's text line-height. */
+.add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .model-btn {
   display: inline-flex;
   align-items: center;
@@ -2807,18 +2825,6 @@ defineExpose({ focusInput })
   border-radius: var(--radius-sm);
   margin-left: 0.25rem;
   flex-shrink: 0;
-}
-.hash-btn-icon {
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-/* 附件按钮内是 SVG 图标（基线对齐），改用 flex 垂直居中以与 # / 按钮对齐 */
-.attach-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* Skill dropdown (紧凑单行，仿 TRAE) */

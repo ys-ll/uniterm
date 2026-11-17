@@ -499,5 +499,7 @@ function mergeStartPage(loaded: AppSettings['startPage']): AppSettings['startPag
   const known = DEFAULT_SETTINGS.startPage.order
   const persisted = (loaded?.order || []).filter(b => known.includes(b))
   const order = [...persisted, ...known.filter(b => !persisted.includes(b))]
-  return { visible, order }
+  // Brand line defaults to visible; only an explicit false hides it.
+  const showLogo = loaded?.showLogo !== false
+  return { visible, order, showLogo }
 }

@@ -764,8 +764,11 @@ function escapeHtml(text: string): string {
   border-radius: 0.875rem;
   border-bottom-right-radius: 0;
 }
+/* Bubble mode: the DOM order is time-then-actions (left layout); reversing
+   the main axis puts the actions left of the timestamp, hugging the bubble's
+   right edge. */
 .ai-message.bubble-mode.user .msg-meta-row {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
 }
 .ai-message.user .content {
   display: flex;

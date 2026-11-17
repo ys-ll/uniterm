@@ -312,6 +312,10 @@ type SFTPBookmarks struct {
 type StartPageSettings struct {
 	Visible map[string]bool `json:"visible,omitempty"`
 	Order   []string        `json:"order,omitempty"`
+	// ShowLogo toggles the brand line above the start page's search box.
+	// Pointer + omitempty so settings.json written by older builds (which
+	// lack this field) still loads; nil means "show" (the frontend default).
+	ShowLogo *bool `json:"showLogo,omitempty"`
 }
 
 type SettingsStore struct {

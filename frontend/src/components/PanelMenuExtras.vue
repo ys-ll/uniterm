@@ -17,6 +17,13 @@
         @click="settingsStore.settings.connectionsDisplayMode = 'compact'; settingsStore.save()"
       >{{ t('sidebar.displayModeCompact') }}</MenuItem>
     </MenuSubmenu>
+    <!-- Host rows show the hover star/⋯ buttons unless the menu style is
+         'rightclick' (same rule as Sidebar.vue / GroupTreeItem.vue). -->
+    <MenuItem
+      iconic
+      :icon="settingsStore.settings.hostListMenuStyle !== 'rightclick' ? Check : undefined"
+      @click="settingsStore.settings.hostListMenuStyle = settingsStore.settings.hostListMenuStyle === 'rightclick' ? 'button' : 'rightclick'; settingsStore.save()"
+    >{{ t('sidebar.showFloatingButtons') }}</MenuItem>
     <MenuDivider />
   </template>
 
@@ -43,9 +50,10 @@
     <MenuDivider />
     <MenuSubmenu :label="t('monitor.sectionConfig')">
       <template v-for="sec in MONITOR_SECTIONS" :key="sec.key">
-        <!-- 全部网卡 is a sub-item of 网络: hidden while 网络 is hidden. -->
+        <!-- Sub-sections (per-core / per-disk / per-NIC) stay listed even when
+             their parent section is off — the check reflects the effective
+             state via monitorSectionEnabled (parent off ⇒ unchecked). -->
         <MenuItem
-          v-if="sec.key !== 'allNet' || sectionEnabled('network')"
           iconic
           :icon="sectionEnabled(sec.key) ? Check : undefined"
           @click="toggleSection(sec.key)"
