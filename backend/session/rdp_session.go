@@ -461,6 +461,9 @@ func (p *RDPProxy) handleWebSocket(ws *websocket.Conn) {
 			}
 			n, err := upstreamConn.Read(buf)
 			if n > 0 {
+				if stage := tsRequestStage(buf[:n]); stage != "" {
+					log.Writef("[RDPProxy] CredSSP server -> client: %s (%dB)", stage, n)
+				}
 				if writeErr := ws.WriteMessage(websocket.BinaryMessage, buf[:n]); writeErr != nil {
 					log.Writef("[RDPProxy] WebSocket write error: %v", writeErr)
 					return
@@ -703,7 +706,10 @@ func targetHostOf(target string) string {
 }
 
 // handshakeTLSLeg runs one TLS strategy against conn and returns the ready
-// connection plus the server certificate chain as raw DER.
+// connection plus the server certificate chain as raw DER. Successes are
+// logged with the negotiated version and cipher — the version is the server's
+// choice, and a CredSSP leg landing on TLS 1.0/1.1 is the first thing to
+// check when a hardened server tears the session down mid-authentication.
 func handshakeTLSLeg(strategy string, conn net.Conn, host string) (net.Conn, [][]byte, error) {
 	switch strategy {
 	case tlsStrategyUtls12:
@@ -718,6 +724,8 @@ func handshakeTLSLeg(strategy string, conn net.Conn, host string) (net.Conn, [][
 			return nil, nil, err
 		}
 		state := u.ConnectionState()
+		log.Writef("[RDPProxy] TLS leg OK: strategy=%s version=%s cipher=0x%04x",
+			strategy, tlsVersionName(state.Version), state.CipherSuite)
 		chain := make([][]byte, 0, len(state.PeerCertificates))
 		for _, c := range state.PeerCertificates {
 			chain = append(chain, c.Raw)
@@ -737,6 +745,8 @@ func handshakeTLSLeg(strategy string, conn net.Conn, host string) (net.Conn, [][
 			return nil, nil, err
 		}
 		state := tlsConn.ConnectionState()
+		log.Writef("[RDPProxy] TLS leg OK: strategy=%s version=%s cipher=0x%04x",
+			strategy, tlsVersionName(state.Version), state.CipherSuite)
 		chain := make([][]byte, 0, len(state.PeerCertificates))
 		for _, c := range state.PeerCertificates {
 			chain = append(chain, c.Raw)
@@ -744,6 +754,23 @@ func handshakeTLSLeg(strategy string, conn net.Conn, host string) (net.Conn, [][
 		return tlsConn, chain, nil
 	}
 	return nil, nil, fmt.Errorf("unknown TLS strategy %q", strategy)
+}
+
+// tlsVersionName renders a TLS version constant as a compact name.
+func tlsVersionName(v uint16) string {
+	switch v {
+	case tls.VersionSSL30:
+		return "SSL3.0"
+	case tls.VersionTLS10:
+		return "TLS1.0"
+	case tls.VersionTLS11:
+		return "TLS1.1"
+	case tls.VersionTLS12:
+		return "TLS1.2"
+	case tls.VersionTLS13:
+		return "TLS1.3"
+	}
+	return fmt.Sprintf("0x%04x", v)
 }
 
 // mstscClientHelloSpec builds a ClientHello that mirrors what mstsc sends:
@@ -992,6 +1019,53 @@ func derIntegerBytes(v uint64) []byte {
 	return b
 }
 
+// tsRequestStage names the CredSSP stage a TSRequest record represents, from
+// the optional fields it carries: negoTokens [1] (NEGOTIATE / server
+// CHALLENGE), pubKeyAuth [3] (AUTHENTICATE), authInfo [2] (credentials) or
+// errorCode [4] (in-band error). Non-TSRequest or truncated input returns "".
+func tsRequestStage(rec []byte) string {
+	if len(rec) < 2 || rec[0] != 0x30 {
+		return ""
+	}
+	if _, n, err := derTLV(rec, 0); err != nil || n != len(rec) {
+		return ""
+	}
+	body := derTLVBody(rec, 0)
+	if len(body) == 0 || body[0] != 0xA0 {
+		// version [0] is mandatory; without it this is not a TSRequest
+		return ""
+	}
+	var nego, authInfo, pubKey, errCode bool
+	for off := 0; off < len(body); {
+		tag, n, err := derTLV(body, off)
+		if err != nil {
+			return ""
+		}
+		switch tag {
+		case 0xA1:
+			nego = true
+		case 0xA2:
+			authInfo = true
+		case 0xA3:
+			pubKey = true
+		case 0xA4:
+			errCode = true
+		}
+		off += n
+	}
+	switch {
+	case errCode:
+		return "ERROR_CODE"
+	case authInfo:
+		return "AUTH_INFO"
+	case pubKey:
+		return "AUTHENTICATE"
+	case nego:
+		return "NEGOTIATE"
+	}
+	return ""
+}
+
 // decodeRDCleanPathRequest parses a DER RDCleanPathPdu and returns the
 // Request fields the proxy consumes.
 func decodeRDCleanPathRequest(der []byte) (destination, proxyAuth string, x224 []byte, err error) {
@@ -1065,16 +1139,15 @@ func encodeRDCleanPathErr(code uint16) []byte {
 	return pdu
 }
 
-// encodeRDCleanPathNegotiationErr mirrors the client's NegotiationErr branch:
-// a negotiation-error PDU carrying the raw X.224 confirm (a NEG_FAILURE)
-// without the TPKT header. The error field is mandatory — the client's
-// decode falls into the Error branch (no destination/server_addr present)
-// and fails with "RDCleanPath is missing error field" when it is absent,
-// hiding the server's actual failure code.
+// encodeRDCleanPathNegotiationErr builds a negotiation-error PDU carrying the
+// server's raw X.224 confirm (a NEG_FAILURE), TPKT header included. The wasm
+// client decodes it with X224::decode, which reads the TPKT framing first, so
+// stripping it makes the client fail into the generic "RDCleanPath
+// negotiation error" branch and lose the server's failure code (code=2 then
+// no longer matches the frontend's standard-RDP-security fallback). The
+// mandatory error field keeps the client in the NegotiationErr branch instead
+// of "RDCleanPath is missing error field".
 func encodeRDCleanPathNegotiationErr(x224Resp []byte) []byte {
-	if len(x224Resp) > 4 {
-		x224Resp = x224Resp[4:]
-	}
 	errSeq := derExplicit(0, 0x02, derIntegerBytes(uint64(rdcleanErrCodeNegotiation)))
 	pdu := derEncodeTLV(0x30, append(append(
 		derExplicit(0, 0x02, derIntegerBytes(rdcleanPathVersion)),
@@ -1320,7 +1393,11 @@ func (h *rdpClientHandshake) rewrite(data []byte) ([]byte, error) {
 		if len(h.pending) < header+length {
 			return output, nil
 		}
-		output = append(output, h.pending[:header+length]...)
+		record := h.pending[:header+length]
+		if stage := tsRequestStage(record); stage != "" {
+			log.Writef("[RDPProxy] CredSSP client -> server: %s (%dB)", stage, header+length)
+		}
+		output = append(output, record...)
 		h.pending = h.pending[header+length:]
 	}
 	if len(h.pending) == 0 {
