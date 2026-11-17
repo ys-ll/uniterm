@@ -16,6 +16,12 @@ interface LocalState {
   // Persisted sidebar widths in px (0 = old config, keep component default).
   sidebarWidth: number
   aiSidebarWidth: number
+  // Notes panel list-column width in px (0 = keep the component default).
+  notesListWidth: number
+  // Notes editor starts in markdown-preview mode instead of editing.
+  notesPreviewMode: boolean
+  // Notes category chip row collapsed to a single line.
+  notesCategoriesCollapsed: boolean
   collapsedGroupIds: string[]
   collapsedQuickCommandGroupIds: string[]
   windowX: number
@@ -59,6 +65,9 @@ const DEFAULT: LocalState = {
   aiSidebarVisible: true,
   sidebarWidth: 240,
   aiSidebarWidth: 360,
+  notesListWidth: 0,
+  notesPreviewMode: false,
+  notesCategoriesCollapsed: false,
   collapsedGroupIds: [],
   collapsedQuickCommandGroupIds: [],
   windowX: 0,

@@ -254,7 +254,7 @@ import { Copy, Check, BookOpen, Terminal, FileText, Trash2 } from '@lucide/vue'
 import { useAIStore } from '../stores/aiStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useI18n } from '../i18n'
-import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase } from '../utils/markdown'
+import { sanitizeRenderedHtml, escapeHtml as escapeHtmlBase, renderMarkdownHtml, codeCopyTarget, COPY_ICON, CHECK_ICON } from '../utils/markdown'
 import { formatClock, formatMessageTime, formatDuration } from '../utils/timeFormat'
 import { attachmentPreviewUrl, formatBytes } from '../services/attachments'
 import type { AIMessage } from '../types/ai'
@@ -487,8 +487,8 @@ const thinkingDurationLabel = computed(() => {
 
 watch(thinkingLive, (on) => ensureLiveTimer(on), { immediate: true })
 onUnmounted(() => ensureLiveTimer(false))
-const COPY_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="0.75rem" height="0.75rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
-const CHECK_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="0.75rem" height="0.75rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+// COPY_ICON / CHECK_ICON live in utils/markdown.ts (the renderer embeds the
+// copy button itself); they are imported above for the click-feedback swap.
 
 // Copy the assistant reply (markdown source) from the shared meta row.
 const replyCopied = ref(false)
@@ -549,17 +549,14 @@ async function copyToolText(text: string, key: string) {
 }
 
 async function onTextClick(event: MouseEvent) {
+  const code = codeCopyTarget(event)
+  if (!code) return
   const btn = (event.target as HTMLElement).closest('.code-copy-btn') as HTMLElement | null
-  if (!btn) return
-  const wrapper = btn.closest('.code-block-wrapper')
-  const code = wrapper?.querySelector('code')?.textContent
-  if (code) {
-    if (await writeClipboard(code)) {
-      btn.innerHTML = CHECK_ICON
-      setTimeout(() => { btn.innerHTML = COPY_ICON }, 2000)
-    } else {
-      ElMessage.error(t('ai.copyFailed'))
-    }
+  if (btn && await writeClipboard(code)) {
+    btn.innerHTML = CHECK_ICON
+    setTimeout(() => { btn.innerHTML = COPY_ICON }, 2000)
+  } else {
+    ElMessage.error(t('ai.copyFailed'))
   }
 }
 
@@ -632,235 +629,9 @@ function getToolResult(toolCallId: string): AIMessage | undefined {
   )
 }
 
-function renderMarkdown(text: string): string {
-  // escapeHtmlBase escapes & < > and quotes — the quote escape matters here:
-  // without it a markdown link like [x](x"/onerror="alert(1)) breaks out of
-  // href="..." via the slash attribute separator, and sanitizeRenderedHtml
-  // only strips on*= handlers preceded by whitespace (FE-01 follow-up).
-  let html = escapeHtmlBase(text)
-
-  // Protect fenced code blocks and inline code from further markdown processing
-  const protectedBlocks: string[] = []
-  html = html.replace(/```(\w*)[\t ]*[\r\n]*([\s\S]*?)```/g, (_, lang, code) => {
-    const idx = protectedBlocks.length
-    const langTag = lang ? `<span class="code-lang-tag">${lang}</span>` : ''
-    const header = `<div class="code-block-header">${langTag}<button class="tool-copy-btn code-copy-btn" title="${t('ai.copy')}">${COPY_ICON}</button></div>`
-    const codeHtml = code.replace(/^[\r\n]+|\s+$/g, '').replace(/\r?\n/g, '&#10;')
-    protectedBlocks.push(`<div class="code-block-wrapper">${header}<pre><code>${codeHtml}</code></pre></div>`)
-    return `\x00CODEBLOCK${idx}\x00`
-  })
-  html = html.replace(/`([^`]+)`/g, (_, code) => {
-    const idx = protectedBlocks.length
-    protectedBlocks.push(`<code>${code}</code>`)
-    return `\x00CODEBLOCK${idx}\x00`
-  })
-
-  // Headings
-  html = html.replace(/^###### (.*$)/gim, '<h6>$1</h6>')
-  html = html.replace(/^##### (.*$)/gim, '<h5>$1</h5>')
-  html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>')
-  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>')
-  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>')
-  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>')
-
-  // Horizontal rules
-  html = html.replace(/^(-{3,})$/gm, '<hr>')
-
-  // Footnotes: collect definitions, render inline at their position
-  const footnotes: { id: string; content: string }[] = []
-  const fnIdMap: Record<string, number> = {}
-  // First pass: collect footnote definitions and assign numbers
-  html = html.replace(/^\[\^([^\]]+)\]:\s*(.+)$/gm, (_, id, content) => {
-    footnotes.push({ id, content })
-    fnIdMap[id] = footnotes.length
-    return `\x00FN${footnotes.length - 1}\x00` // Placeholder to be rendered inline later
-  })
-  // Second pass: replace footnote references [^id] with superscript numbers
-  html = html.replace(/\[\^([^\]]+)\]/g, (_, id) => {
-    const num = fnIdMap[id]
-    if (num) {
-      return `<sup class="footnote-ref">[${num}]</sup>`
-    }
-    return `[^${id}]`
-  })
-  // Third pass: render footnote definitions as footnotes section at placeholder positions
-  html = html.replace(/\x00FN(\d+)\x00/g, (_, idx) => {
-    const fn = footnotes[parseInt(idx)]
-    return `<div class="footnote-item"><sup>[${idx + 1}]</sup> ${fn.content}</div>`
-  })
-
-  // Remove the append logic later — footnotes are now inline
-
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
-  html = html.replace(/~~(.+?)~~/g, '<del>$1</del>')
-  // Images (must be before links so ![ doesn't get partially matched)
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
-  // Markdown links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-  // Auto-link raw URLs (after markdown links/images, only in text outside HTML tags)
-  html = autoLinkUrls(html)
-
-  // Blockquotes (with nesting support)
-  html = html.replace(/(?:^(&gt; ?)+.*(?:\n|$))+/gm, (block) => buildNestedBlockquote(block))
-
-  // Nested unordered lists
-  html = html.replace(/(?:^ {0,4}- .*(?:\n|$))+/gm, (block) => buildNestedList(block, false))
-  // Nested ordered lists
-  html = html.replace(/(?:^ {0,4}\d+\. .*(?:\n|$))+/gm, (block) => buildNestedList(block, true))
-
-  // Task list checkboxes (Lucide-style SVGs)
-  const TASK_CHECKED = '<svg xmlns="http://www.w3.org/2000/svg" width="0.875rem" height="0.875rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="m9 12 2 2 4-4"></path></svg>'
-  const TASK_UNCHECKED = '<svg xmlns="http://www.w3.org/2000/svg" width="0.875rem" height="0.875rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>'
-  html = html.replace(/(<li>)\[x\] /gi, '$1<span class="task-check checked">' + TASK_CHECKED + '</span>')
-  html = html.replace(/(<li>)\[ \] /gi, '$1<span class="task-check">' + TASK_UNCHECKED + '</span>')
-
-  // Tables
-  const tableBlocks = html.match(/(?:^\|.*\|.*\n?)+/gm)
-  if (tableBlocks) {
-    for (const block of tableBlocks) {
-      const lines = block.trim().split('\n').filter(line => line.trim())
-      if (lines.length < 2) continue
-      const dataLines = lines.filter((line, idx) => idx !== 1 || !/^\s*[|:\-|\s]+\|\s*$/.test(line))
-      let tableHtml = '<table>'
-      dataLines.forEach((line, rowIdx) => {
-        const cells = line.split('|').map(c => c.trim()).filter(c => c)
-        const tag = rowIdx === 0 ? 'th' : 'td'
-        tableHtml += '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>'
-      })
-      tableHtml += '</table>'
-      html = html.replace(block, tableHtml)
-    }
-  }
-
-  // Restore protected code blocks
-  html = html.replace(/\x00CODEBLOCK(\d+)\x00/g, (_, idx) => protectedBlocks[parseInt(idx)])
-
-  // Ensure blank lines after block-level elements for paragraph separation
-  html = html.replace(/(<\/(table|ul|ol|blockquote|pre|div)>)\s*/gi, '$1\n\n')
-  html = html.replace(/(<hr\s*\/?>)\s*/gi, '$1\n\n')
-
-  // Wrap paragraphs: split by blank lines, wrap each segment in <p>
-  const parts = html.split(/\n{2,}/)
-  html = parts.map(part => {
-    const trimmed = part.trim()
-    if (!trimmed) return ''
-    // Don't wrap if already a block-level element (opening or closing)
-    if (/^<\/?(h[1-6]|pre|table|ul|ol|hr|div|p|blockquote|li|hr\s*\/?>)/i.test(trimmed)) {
-      return trimmed
-    }
-    // Convert single newlines to <br> within paragraph
-    return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>'
-  }).join('')
-  // Clean up empty <p> tags
-  html = html.replace(/<p>\s*<\/p>/g, '')
-  html = html.replace(/<p>\s*<br>\s*<\/p>/g, '')
-  // Remove <br> after block-level closing tags
-  html = html.replace(/(<\/(h[1-6]|pre|table|ul|ol|hr|li|div|p|blockquote)>|<hr\s*\/?>)(\s*<br>)+/gi, '$1')
-  html = html.replace(/<br>\s*(<(h[1-6]|pre|table|ul|ol|hr|div|p|blockquote)[\s>])/gi, '$1')
-  html = html.replace(/<br>\s*<div class="code-block-wrapper">/gi, '<div class="code-block-wrapper">')
-  html = html.replace(/(<\/blockquote>)\s*<br>/gi, '$1')
-  html = html.replace(/<br>\s*(<blockquote>)/gi, '$1')
-  // Remove leading/trailing <br>
-  html = html.replace(/^(\s*<br>)+/i, '')
-  html = html.replace(/(<br>\s*)+$/i, '')
-
-  return html
-}
-
-function buildNestedList(block: string, isOrdered: boolean): string {
-  const tag = isOrdered ? 'ol' : 'ul'
-  const marker = isOrdered ? /^ *\d+\. / : /^ *- /
-  const lines = block.split('\n').filter(l => l.trim() !== '')
-
-  function process(startIdx: number, baseIndent: number): { html: string; endIdx: number } {
-    let result = ''
-    let i = startIdx
-
-    while (i < lines.length) {
-      const line = lines[i]
-      const indent = (line.match(/^ */) || [''])[0].length
-
-      if (indent < baseIndent) break
-
-      if (indent === baseIndent) {
-        const content = line.replace(marker, '').trim()
-        // Check for child items (more indented lines)
-        let childrenHtml = ''
-        const peek = i + 1
-        if (peek < lines.length) {
-          const peekIndent = (lines[peek].match(/^ */) || [''])[0].length
-          if (peekIndent > baseIndent) {
-            const child = process(peek, peekIndent)
-            childrenHtml = `<${tag}>${child.html}</${tag}>`
-            i = child.endIdx
-          } else {
-            i++
-          }
-        } else {
-          i++
-        }
-        result += `<li>${content}${childrenHtml}</li>`
-      } else {
-        i++
-      }
-    }
-
-    return { html: result, endIdx: i }
-  }
-
-  const { html } = process(0, 0)
-  return `<${tag}>${html}</${tag}>`
-}
-
-function buildNestedBlockquote(block: string): string {
-  const lines = block.split('\n').filter(l => l.trim() !== '')
-
-  function process(startIdx: number, depth: number): { html: string; endIdx: number } {
-    let content = ''
-    let i = startIdx
-
-    while (i < lines.length) {
-      const line = lines[i]
-      const match = line.match(/^(&gt; ?)+/)
-      const lineDepth = match ? match[0].split('&gt;').length - 1 : 0
-
-      if (lineDepth < depth) break
-
-      if (lineDepth === depth) {
-        const text = line.replace(/^(&gt; ?)+/, '')
-        // Check for deeper children
-        let childHtml = ''
-        const peek = i + 1
-        if (peek < lines.length) {
-          const peekMatch = lines[peek].match(/^(&gt; ?)+/)
-          const peekDepth = peekMatch ? peekMatch[0].split('&gt;').length - 1 : 0
-          if (peekDepth > depth) {
-            const child = process(peek, peekDepth)
-            childHtml = child.html
-            i = child.endIdx
-          } else {
-            i++
-          }
-        } else {
-          i++
-        }
-        content += (content ? '\n' : '') + text
-        if (childHtml) content += '\n' + childHtml
-      } else {
-        i++
-      }
-    }
-
-    return { html: `<blockquote>${content.trim()}</blockquote>`, endIdx: i }
-  }
-
-  const firstDepth = lines.length > 0
-    ? (lines[0].match(/^(&gt; ?)+/) || [''])[0].split('&gt;').length - 1
-    : 0
-  const { html } = process(0, firstDepth || 1)
-  return html
-}
+// renderMarkdown and its helpers (nested lists/blockquotes, auto-linking)
+// live in utils/markdown.ts as the shared renderMarkdownHtml — AI messages,
+// the notes panel and the update dialog all render through it.
 
 function highlightText(html: string, query: string): string {
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -880,23 +651,6 @@ function highlightText(html: string, query: string): string {
       const tag = parts[i].slice(0, gt + 1)
       const text = parts[i].slice(gt + 1)
       result += '<' + tag + text.replace(regex, '<mark class="ai-search-highlight">$&</mark>')
-    }
-  }
-  return result
-}
-
-function autoLinkUrls(html: string): string {
-  const regex = /(https?:\/\/[^\s<>\[\]()"']+)/g
-  const parts = html.split('<')
-  let result = parts[0].replace(regex, '<a href="$1" target="_blank">$1</a>')
-  for (let i = 1; i < parts.length; i++) {
-    const gt = parts[i].indexOf('>')
-    if (gt === -1) {
-      result += '<' + parts[i].replace(regex, '<a href="$1" target="_blank">$1</a>')
-    } else {
-      const tag = parts[i].slice(0, gt + 1)
-      const text = parts[i].slice(gt + 1)
-      result += '<' + tag + text.replace(regex, '<a href="$1" target="_blank">$1</a>')
     }
   }
   return result
@@ -947,7 +701,7 @@ const renderedContent = computed(() => {
   } else if (props.message.role === 'user') {
     html = escapeHtml(contentForRender.value)
   } else {
-    html = renderMarkdown(contentForRender.value)
+    html = renderMarkdownHtml(contentForRender.value, { copyButtonTitle: t('ai.copy') })
     // Sanitize the markdown output before assigning to v-html. Model
     // output can include `javascript:` / `data:` URLs in `[link](url)`
     // markdown and `![alt](x" onerror="...)` payloads that escape the

@@ -237,6 +237,7 @@ import { useAIStore } from './stores/aiStore'
 import { useCompanionStore } from './stores/companionStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useQuickCommandStore } from './stores/quickCommandStore'
+import { useNotesStore } from './stores/notesStore'
 import { useSkillStore } from './stores/skillStore'
 import { useCommandStore } from './stores/commandStore'
 import { useTunnelStore } from './stores/tunnelStore'
@@ -459,6 +460,7 @@ function onDataDirDone(restart: boolean) {
   connectionStore.load()
   settingsStore.reload()
   useQuickCommandStore().load()
+  useNotesStore().reload()
   useSkillStore().reload()
   useCommandStore().reload()
   tunnelStore.load()
@@ -872,6 +874,8 @@ onMounted(async () => {
     : (localStateStore.state.sidebarVisible ?? false)
   // Pre-load quick commands so suggestions can read them immediately
   useQuickCommandStore().load()
+  // Pre-load notes so the panel opens instantly
+  useNotesStore().load()
   // Pre-load tunnels so auto-start state and the panel are ready
   useTunnelStore().load()
   // Auto-open start tab if no tabs are open
@@ -1118,6 +1122,7 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   toggleFilePanel: () => sidebarViewShortcut('files'),
   toggleMonitor: () => sidebarViewShortcut('monitor'),
   openQuickCommands: () => sidebarViewShortcut('quickCommands', true),
+  toggleNotes: () => sidebarViewShortcut('notes'),
   focusTerminal: () => {
     const pid = tabStore.getActivePanelId()
     if (pid) focusPanelTerminal(pid)
