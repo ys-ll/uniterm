@@ -807,10 +807,50 @@ function onWheel(e: WheelEvent) {
 // hide. Panel maximizing moved to the configurable keyboard settings
 // (maximizePanel action).
 let isMac = false
+
+// Toggle the AI sidebar, restoring terminal focus on hide and focusing the
+// chat input on show. Shared by the keyboard-settings action and the
+// double-Ctrl gesture.
+function toggleAISidebar() {
+  if (aiStore.visible) {
+    aiStore.visible = false
+    const pid = tabStore.getActivePanelId()
+    if (pid) nextTick(() => focusPanelTerminal(pid))
+  } else {
+    aiStore.visible = true
+    nextTick(() => aiSidebarRef.value?.focusInput())
+  }
+}
+
+// Double-Ctrl opens/closes the AI sidebar: two plain Control keydowns within
+// the window, with no other key pressed in between (a chord like Ctrl+1
+// breaks the pair) and no auto-repeat (holding Ctrl must not trigger it).
+const DOUBLE_CTRL_WINDOW_MS = 400
+let lastCtrlDownAt = 0
+let ctrlPairBroken = false
+
 function onPlatformSystemShortcut(e: KeyboardEvent) {
   // Stand down while the settings page captures a rebind — otherwise
   // recording e.g. Ctrl+1 would switch tabs (and Cmd+Q would quit on mac).
   if (e.defaultPrevented || isRebinding() || remoteDesktopOwnsKey(e)) return
+  if (e.key === 'Control') {
+    if (e.repeat) return
+    const now = Date.now()
+    if (!ctrlPairBroken && now - lastCtrlDownAt <= DOUBLE_CTRL_WINDOW_MS) {
+      lastCtrlDownAt = 0
+      ctrlPairBroken = false
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      toggleAISidebar()
+      return
+    }
+    lastCtrlDownAt = now
+    ctrlPairBroken = false
+    return
+  }
+  // Any other key (chords included — their Ctrl keydown already ran above)
+  // breaks a forming double-Ctrl pair.
+  ctrlPairBroken = true
   // F2 opens the active tab's rename box (issue #1336 补充说明). Renaming
   // start/settings/netscan tabs is meaningless but harmless, same as dblclick.
   if (isTabRenameShortcut(e)) {
@@ -1145,16 +1185,7 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
     }
     if (panelId) onToggleAiLock(panelId)
   },
-  focusAI: () => {
-    if (aiStore.visible) {
-      aiStore.visible = false
-      const pid = tabStore.getActivePanelId()
-      if (pid) nextTick(() => focusPanelTerminal(pid))
-    } else {
-      aiStore.visible = true
-      nextTick(() => aiSidebarRef.value?.focusInput())
-    }
-  },
+  focusAI: () => toggleAISidebar(),
   closePanel: () => {
     const t = tabStore.activeTab
     if (!t) return
