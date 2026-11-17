@@ -822,35 +822,39 @@ function toggleAISidebar() {
   }
 }
 
-// Double-Ctrl opens/closes the AI sidebar: two plain Control keydowns within
-// the window, with no other key pressed in between (a chord like Ctrl+1
-// breaks the pair) and no auto-repeat (holding Ctrl must not trigger it).
+// Double-Ctrl (double-Cmd on macOS, both bound there) opens/closes the AI
+// sidebar: two plain keydowns of the SAME modifier within the window, with no
+// other key pressed in between (a chord like Ctrl+1 breaks the pair) and no
+// auto-repeat (holding the key must not trigger it).
 const DOUBLE_CTRL_WINDOW_MS = 400
-let lastCtrlDownAt = 0
-let ctrlPairBroken = false
+let lastModKey = ''
+let lastModDownAt = 0
+let modPairBroken = false
 
 function onPlatformSystemShortcut(e: KeyboardEvent) {
   // Stand down while the settings page captures a rebind — otherwise
   // recording e.g. Ctrl+1 would switch tabs (and Cmd+Q would quit on mac).
   if (e.defaultPrevented || isRebinding() || remoteDesktopOwnsKey(e)) return
-  if (e.key === 'Control') {
+  if (e.key === 'Control' || e.key === 'Meta') {
     if (e.repeat) return
     const now = Date.now()
-    if (!ctrlPairBroken && now - lastCtrlDownAt <= DOUBLE_CTRL_WINDOW_MS) {
-      lastCtrlDownAt = 0
-      ctrlPairBroken = false
+    if (!modPairBroken && e.key === lastModKey && now - lastModDownAt <= DOUBLE_CTRL_WINDOW_MS) {
+      lastModKey = ''
+      lastModDownAt = 0
+      modPairBroken = false
       e.preventDefault()
       e.stopImmediatePropagation()
       toggleAISidebar()
       return
     }
-    lastCtrlDownAt = now
-    ctrlPairBroken = false
+    lastModKey = e.key
+    lastModDownAt = now
+    modPairBroken = false
     return
   }
-  // Any other key (chords included — their Ctrl keydown already ran above)
-  // breaks a forming double-Ctrl pair.
-  ctrlPairBroken = true
+  // Any other key (chords included — their modifier keydown already ran above)
+  // breaks a forming double-modifier pair.
+  modPairBroken = true
   // F2 opens the active tab's rename box (issue #1336 补充说明). Renaming
   // start/settings/netscan tabs is meaningless but harmless, same as dblclick.
   if (isTabRenameShortcut(e)) {
