@@ -586,14 +586,59 @@ func (s *SFTPSession) ListRemote(dir string) (FileListResult, error) {
 	}
 }
 
+// isWindowsStylePath reports whether p uses Windows drive-letter ("C:/...")
+// or UNC ("\\host\share") form. SFTP servers on Windows hosts report and
+// accept such paths, and the POSIX path package would treat them as relative.
+func isWindowsStylePath(p string) bool {
+	if strings.HasPrefix(p, `\\`) {
+		return true
+	}
+	return len(p) >= 2 && p[1] == ':' && ((p[0] >= 'a' && p[0] <= 'z') || (p[0] >= 'A' && p[0] <= 'Z'))
+}
+
+// remoteAbs reports whether p is an absolute remote path: POSIX-style
+// (leading slash) or Windows-style (drive letter / backslash-rooted UNC).
+// path.IsAbs only recognizes the POSIX form, so a Windows absolute path
+// would wrongly be joined onto the session cwd ("cwd\C:\Users\...").
+func remoteAbs(p string) bool {
+	return path.IsAbs(p) || strings.HasPrefix(p, `\`) || isWindowsStylePath(p)
+}
+
+// joinRemotePath joins a remote directory with an entry name, keeping the
+// backslash separator for Windows-style base paths (path.Join would emit
+// mixed "C:\dir/name").
+func joinRemotePath(base, name string) string {
+	if isWindowsStylePath(base) {
+		trimmed := strings.TrimSuffix(strings.TrimSuffix(base, `\`), `/`)
+		return trimmed + `\` + name
+	}
+	return path.Join(base, name)
+}
+
+// dirRemotePath returns the parent directory of a remote path, handling
+// Windows-style drive paths (path.Dir returns "." for "C:\dir\file").
+func dirRemotePath(p string) string {
+	if isWindowsStylePath(p) {
+		if i := strings.LastIndexAny(p, `\/`); i > 0 {
+			// The parent of a drive-root child ("C:\x") is the drive root itself.
+			if p[1] == ':' && i <= 2 {
+				return p[:3]
+			}
+			return p[:i]
+		}
+		return p
+	}
+	return path.Dir(p)
+}
+
 func (s *SFTPSession) listRemoteUnlocked(dir string) (FileListResult, error) {
 	if err := s.requireClient(); err != nil {
 		return FileListResult{}, err
 	}
 	if dir == "" {
 		dir = s.cwd
-	} else if !path.IsAbs(dir) {
-		dir = path.Join(s.cwd, dir)
+	} else if !remoteAbs(dir) {
+		dir = joinRemotePath(s.cwd, dir)
 	}
 	infos, err := s.sftpClient.ReadDir(dir)
 	if err != nil {
@@ -608,7 +653,7 @@ func (s *SFTPSession) listRemoteUnlocked(dir string) (FileListResult, error) {
 		owner, group := s.resolveOwnerGroup(fi)
 		isDir := fi.IsDir()
 		if fi.Mode()&os.ModeSymlink != 0 {
-			if target, err := s.sftpClient.Stat(path.Join(dir, fi.Name())); err == nil {
+			if target, err := s.sftpClient.Stat(joinRemotePath(dir, fi.Name())); err == nil {
 				isDir = target.IsDir()
 			}
 		}
@@ -641,8 +686,8 @@ func (s *SFTPSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 		return FileListResult{}, err
 	}
 	target := dir
-	if !path.IsAbs(dir) {
-		target = path.Join(s.cwd, dir)
+	if !remoteAbs(dir) {
+		target = joinRemotePath(s.cwd, dir)
 	}
 	fi, err := s.sftpClient.Stat(target)
 	if err != nil {
@@ -664,8 +709,8 @@ func (s *SFTPSession) Stat(p string) (os.FileInfo, error) {
 	if err := s.requireClient(); err != nil {
 		return nil, err
 	}
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
+	if !remoteAbs(p) {
+		p = joinRemotePath(s.cwd, p)
 	}
 	return s.sftpClient.Stat(p)
 }
@@ -675,8 +720,8 @@ func (s *SFTPSession) MakeDir(dir string) error {
 		return err
 	}
 	p := dir
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
+	if !remoteAbs(p) {
+		p = joinRemotePath(s.cwd, p)
 	}
 	return s.sftpClient.Mkdir(p)
 }
@@ -688,8 +733,8 @@ func (s *SFTPSession) Symlink(target, linkPath string) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	if !path.IsAbs(linkPath) {
-		linkPath = path.Join(s.cwd, linkPath)
+	if !remoteAbs(linkPath) {
+		linkPath = joinRemotePath(s.cwd, linkPath)
 	}
 	return s.sftpClient.Symlink(target, linkPath)
 }
@@ -702,11 +747,17 @@ func (s *SFTPSession) Remove(p string, recursive bool) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
+	if !remoteAbs(p) {
+		p = joinRemotePath(s.cwd, p)
 	}
 	p = path.Clean(p)
-	if p == "/" || p == "." || p == "" {
+	// Refuse filesystem roots of both flavors: POSIX "/" and Windows drives
+	// ("C:\") / bare UNC shares now that Windows-style absolute paths reach
+	// this function unchanged.
+	if p == "/" || p == "." || p == "" || p == `\` {
+		return fmt.Errorf("refusing to delete path: %s", p)
+	}
+	if len(p) == 3 && p[1] == ':' && p[2] == '\\' {
 		return fmt.Errorf("refusing to delete path: %s", p)
 	}
 	if client := s.getSSHClient(); client != nil {
@@ -733,12 +784,12 @@ func (s *SFTPSession) Rename(oldName, newName string) error {
 		return err
 	}
 	old := oldName
-	if !path.IsAbs(old) {
-		old = path.Join(s.cwd, old)
+	if !remoteAbs(old) {
+		old = joinRemotePath(s.cwd, old)
 	}
 	newPath := newName
-	if !path.IsAbs(newPath) {
-		newPath = path.Join(s.cwd, newPath)
+	if !remoteAbs(newPath) {
+		newPath = joinRemotePath(s.cwd, newPath)
 	}
 	return s.sftpClient.Rename(old, newPath)
 }
@@ -747,8 +798,8 @@ func (s *SFTPSession) Chmod(p string, mode os.FileMode) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
+	if !remoteAbs(p) {
+		p = joinRemotePath(s.cwd, p)
 	}
 	return s.sftpClient.Chmod(p, mode)
 }
@@ -758,8 +809,8 @@ func (s *SFTPSession) Get(remotePath, localPath string, recursive bool) (string,
 		return "", err
 	}
 	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
+	if !remoteAbs(rp) {
+		rp = joinRemotePath(s.cwd, rp)
 	}
 	lp := localPath
 	if !filepath.IsAbs(lp) {
@@ -788,8 +839,8 @@ func (s *SFTPSession) Put(localPath, remotePath string, recursive bool) (string,
 		lp = filepath.Join(s.localCwd, lp)
 	}
 	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
+	if !remoteAbs(rp) {
+		rp = joinRemotePath(s.cwd, rp)
 	}
 	if recursive {
 		return s.startDirTransfer("upload", lp, rp, nil)
@@ -896,11 +947,11 @@ func (s *SFTPSession) putContentUnlocked(remotePath string, content []byte) erro
 		return err
 	}
 	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
+	if !remoteAbs(rp) {
+		rp = joinRemotePath(s.cwd, rp)
 	}
 	// Ensure parent directory exists
-	parentDir := path.Dir(rp)
+	parentDir := dirRemotePath(rp)
 	if err := s.sftpClient.MkdirAll(parentDir); err != nil {
 		return err
 	}
@@ -940,8 +991,8 @@ func (s *SFTPSession) getContentUnlocked(remotePath string) ([]byte, error) {
 		return nil, err
 	}
 	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
+	if !remoteAbs(rp) {
+		rp = joinRemotePath(s.cwd, rp)
 	}
 	f, err := s.sftpClient.Open(rp)
 	if err != nil {
@@ -964,12 +1015,12 @@ func (s *SFTPSession) Copy(oldPath, newPath string) error {
 		return err
 	}
 	old := oldPath
-	if !path.IsAbs(old) {
-		old = path.Join(s.cwd, old)
+	if !remoteAbs(old) {
+		old = joinRemotePath(s.cwd, old)
 	}
 	n := newPath
-	if !path.IsAbs(n) {
-		n = path.Join(s.cwd, n)
+	if !remoteAbs(n) {
+		n = joinRemotePath(s.cwd, n)
 	}
 	// Try shell cp -r first (server-side copy, zero data transfer)
 	client := s.getSSHClient()
@@ -1009,7 +1060,7 @@ func (s *SFTPSession) sftpCopyFile(oldPath, newPath string) error {
 	}
 	defer src.Close()
 
-	parentDir := path.Dir(newPath)
+	parentDir := dirRemotePath(newPath)
 	if err := s.sftpClient.MkdirAll(parentDir); err != nil {
 		return err
 	}
@@ -1033,8 +1084,8 @@ func (s *SFTPSession) sftpCopyDir(oldPath, newPath string) error {
 		return err
 	}
 	for _, entry := range entries {
-		oldEntry := path.Join(oldPath, entry.Name())
-		newEntry := path.Join(newPath, entry.Name())
+		oldEntry := joinRemotePath(oldPath, entry.Name())
+		newEntry := joinRemotePath(newPath, entry.Name())
 		if entry.IsDir() {
 			if err := s.sftpCopyDir(oldEntry, newEntry); err != nil {
 				return err
@@ -1055,12 +1106,12 @@ func (s *SFTPSession) Move(oldPath, newPath string) error {
 		return err
 	}
 	old := oldPath
-	if !path.IsAbs(old) {
-		old = path.Join(s.cwd, old)
+	if !remoteAbs(old) {
+		old = joinRemotePath(s.cwd, old)
 	}
 	n := newPath
-	if !path.IsAbs(n) {
-		n = path.Join(s.cwd, n)
+	if !remoteAbs(n) {
+		n = joinRemotePath(s.cwd, n)
 	}
 	// Try SFTP native rename first (same filesystem, zero data transfer)
 	if err := s.sftpClient.Rename(old, n); err == nil {
@@ -1203,7 +1254,7 @@ func (s *SFTPSession) rmRecursive(p string) error {
 			return err
 		}
 		for _, info := range infos {
-			childPath := path.Join(p, info.Name())
+			childPath := joinRemotePath(p, info.Name())
 			if err := s.rmRecursive(childPath); err != nil {
 				return err
 			}
@@ -1221,7 +1272,7 @@ func (s *SFTPSession) dirSizeRemote(dir string) (int64, error) {
 	var total int64
 	for _, fi := range infos {
 		if fi.IsDir() {
-			sz, err := s.dirSizeRemote(path.Join(dir, fi.Name()))
+			sz, err := s.dirSizeRemote(joinRemotePath(dir, fi.Name()))
 			if err != nil {
 				return 0, err
 			}
@@ -1355,10 +1406,14 @@ func (s *SFTPSession) startTransfer(task *TransferTask) {
 // dirEntry2 is one file scheduled for transfer inside a directory task.
 type dirEntry2 struct{ lp, rp, rel string }
 
-// relPath returns p relative to root with '/' separators; "" if equal.
+// relPath returns p relative to root with '/' separators (backslashes from
+// Windows-style remote paths are normalized so skip lists and per-file names
+// stay consistent across server flavors); "" if equal.
 func relPath(p, root string) string {
 	r := strings.TrimPrefix(p, root)
-	return strings.TrimPrefix(r, "/")
+	r = strings.TrimPrefix(r, "/")
+	r = strings.TrimPrefix(r, `\`)
+	return strings.ReplaceAll(r, `\`, "/")
 }
 
 func (s *SFTPSession) walkRemoteForDownload(remoteDir, localDir string, task *TransferTask, out *[]dirEntry2) error {
@@ -1375,7 +1430,7 @@ func (s *SFTPSession) walkRemoteForDownload(remoteDir, localDir string, task *Tr
 		return err
 	}
 	for _, fi := range infos {
-		rp := path.Join(remoteDir, fi.Name())
+		rp := joinRemotePath(remoteDir, fi.Name())
 		lp := filepath.Join(localDir, fi.Name())
 		if fi.IsDir() {
 			if err := s.walkRemoteForDownload(rp, lp, task, out); err != nil {
@@ -1403,7 +1458,7 @@ func (s *SFTPSession) walkLocalForUpload(localDir, remoteDir string, task *Trans
 	}
 	for _, entry := range entries {
 		lp := filepath.Join(localDir, entry.Name())
-		rp := path.Join(remoteDir, entry.Name())
+		rp := joinRemotePath(remoteDir, entry.Name())
 		if entry.IsDir() {
 			if err := s.walkLocalForUpload(lp, rp, task, out); err != nil {
 				return err
