@@ -2425,5 +2425,9 @@
   "notes.renameCategory": "Переименовать категорию",
   "notes.deleteCategory": "Удалить категорию",
   "notes.deleteCategoryConfirm": "Заметки этой категории станут без категории. Продолжить?",
-  "shortcut.toggleNotes": "Открыть заметки"
+  "shortcut.toggleNotes": "Переключить боковую панель заметок",
+  "shortcut.toggleTunnels": "Переключить боковую панель туннелей",
+  "shortcut.toggleHistory": "Переключить боковую панель истории",
+  "shortcut.togglePersonalization": "Переключить боковую панель персонализации",
+  "shortcut.toggleCommandSend": "Переключить панель отправки команд"
 }

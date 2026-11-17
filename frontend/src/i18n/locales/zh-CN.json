@@ -2473,5 +2473,9 @@
   "notes.renameCategory": "重命名分类",
   "notes.deleteCategory": "删除分类",
   "notes.deleteCategoryConfirm": "该分类下的笔记将变为未分类，是否继续？",
-  "shortcut.toggleNotes": "打开笔记"
+  "shortcut.toggleNotes": "开/关笔记边栏",
+  "shortcut.toggleTunnels": "开/关隧道边栏",
+  "shortcut.toggleHistory": "开/关历史命令边栏",
+  "shortcut.togglePersonalization": "开/关个性化边栏",
+  "shortcut.toggleCommandSend": "开/关命令发送面板"
 }

@@ -2425,5 +2425,9 @@
   "notes.renameCategory": "Kategorie umbenennen",
   "notes.deleteCategory": "Kategorie löschen",
   "notes.deleteCategoryConfirm": "Notizen in dieser Kategorie werden unkategorisiert. Fortfahren?",
-  "shortcut.toggleNotes": "Notizen öffnen"
+  "shortcut.toggleNotes": "Notizen-Seitenleiste ein/aus",
+  "shortcut.toggleTunnels": "Tunnel-Seitenleiste ein/aus",
+  "shortcut.toggleHistory": "Verlauf-Seitenleiste ein/aus",
+  "shortcut.togglePersonalization": "Personalisierung-Seitenleiste ein/aus",
+  "shortcut.toggleCommandSend": "Befehlsversand-Panel ein/aus"
 }

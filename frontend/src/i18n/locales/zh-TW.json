@@ -2446,5 +2446,9 @@
   "notes.renameCategory": "重新命名分類",
   "notes.deleteCategory": "刪除分類",
   "notes.deleteCategoryConfirm": "該分類下的筆記將變為未分類，是否繼續？",
-  "shortcut.toggleNotes": "開啟筆記"
+  "shortcut.toggleNotes": "開/關筆記邊欄",
+  "shortcut.toggleTunnels": "開/關隧道邊欄",
+  "shortcut.toggleHistory": "開/關歷史命令邊欄",
+  "shortcut.togglePersonalization": "開/關個人化邊欄",
+  "shortcut.toggleCommandSend": "開/關命令傳送面板"
 }

@@ -2473,5 +2473,9 @@
   "notes.renameCategory": "Rename Category",
   "notes.deleteCategory": "Delete Category",
   "notes.deleteCategoryConfirm": "Notes in this category will become uncategorized. Continue?",
-  "shortcut.toggleNotes": "Open Notes"
+  "shortcut.toggleNotes": "Toggle Notes Sidebar",
+  "shortcut.toggleTunnels": "Toggle Tunnels Sidebar",
+  "shortcut.toggleHistory": "Toggle History Sidebar",
+  "shortcut.togglePersonalization": "Toggle Personalization Sidebar",
+  "shortcut.toggleCommandSend": "Toggle Command Send Panel"
 }

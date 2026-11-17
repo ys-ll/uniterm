@@ -2425,5 +2425,9 @@
   "notes.renameCategory": "분류 이름 변경",
   "notes.deleteCategory": "분류 삭제",
   "notes.deleteCategoryConfirm": "이 분류의 노트는 미분류됩니다. 계속하시겠습니까?",
-  "shortcut.toggleNotes": "노트 열기"
+  "shortcut.toggleNotes": "노트 사이드바 전환",
+  "shortcut.toggleTunnels": "터널 사이드바 전환",
+  "shortcut.toggleHistory": "기록 사이드바 전환",
+  "shortcut.togglePersonalization": "개인화 사이드바 전환",
+  "shortcut.toggleCommandSend": "명령 전송 패널 전환"
 }

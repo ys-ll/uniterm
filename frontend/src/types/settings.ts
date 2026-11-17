@@ -198,6 +198,10 @@ export type ShortcutAction =
   | 'toggleFilePanel'    // 切换文件边栏
   | 'toggleMonitor'      // 切换资源监控边栏
   | 'toggleNotes'        // 切换笔记面板（no default binding — opt-in）
+  | 'toggleTunnels'      // 切换隧道边栏（no default binding — opt-in）
+  | 'toggleHistory'      // 切换历史命令边栏（no default binding — opt-in）
+  | 'togglePersonalization' // 切换个性化边栏（no default binding — opt-in）
+  | 'toggleCommandSend'  // 切换命令发送面板（no default binding — opt-in）
 
 // User-facing bindings only use ctrl/shift/alt. On macOS the runtime mirrors
 // every ctrl combo to Cmd (per-action shortcuts register both; the digit
@@ -252,6 +256,10 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   toggleFilePanel: 'shortcut.toggleFilePanel',
   toggleMonitor: 'shortcut.toggleMonitor',
   toggleNotes: 'shortcut.toggleNotes',
+  toggleTunnels: 'shortcut.toggleTunnels',
+  toggleHistory: 'shortcut.toggleHistory',
+  togglePersonalization: 'shortcut.togglePersonalization',
+  toggleCommandSend: 'shortcut.toggleCommandSend',
 }
 
 export const DEFAULT_KEYBOARD: KeyboardSettings = {

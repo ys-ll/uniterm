@@ -1167,6 +1167,10 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   toggleMonitor: () => sidebarViewShortcut('monitor'),
   openQuickCommands: () => sidebarViewShortcut('quickCommands', true),
   toggleNotes: () => sidebarViewShortcut('notes'),
+  toggleTunnels: () => sidebarViewShortcut('tunnels'),
+  toggleHistory: () => sidebarViewShortcut('history'),
+  togglePersonalization: () => sidebarViewShortcut('personalization'),
+  toggleCommandSend: () => sidebarViewShortcut('commandSend'),
   focusTerminal: () => {
     const pid = tabStore.getActivePanelId()
     if (pid) focusPanelTerminal(pid)

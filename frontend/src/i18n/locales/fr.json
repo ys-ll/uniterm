@@ -2425,5 +2425,9 @@
   "notes.renameCategory": "Renommer la catégorie",
   "notes.deleteCategory": "Supprimer la catégorie",
   "notes.deleteCategoryConfirm": "Les notes de cette catégorie deviendront non classées. Continuer ?",
-  "shortcut.toggleNotes": "Ouvrir les notes"
+  "shortcut.toggleNotes": "Afficher/masquer la barre latérale de notes",
+  "shortcut.toggleTunnels": "Afficher/masquer la barre latérale de tunnels",
+  "shortcut.toggleHistory": "Afficher/masquer la barre latérale d'historique",
+  "shortcut.togglePersonalization": "Afficher/masquer la barre latérale de personnalisation",
+  "shortcut.toggleCommandSend": "Afficher/masquer le panneau d'envoi de commandes"
 }

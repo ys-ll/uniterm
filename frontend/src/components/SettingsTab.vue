@@ -2522,7 +2522,7 @@ const shortcutCategories: { key: string; label: string; actions: ShortcutAction[
   {
     key: 'sidebar',
     label: 'shortcut.catSidebar',
-    actions: ['toggleSidebar', 'openQuickCommands', 'toggleNotes', 'focusAI', 'toggleFilePanel', 'toggleMonitor', 'openSettings'],
+    actions: ['toggleSidebar', 'openQuickCommands', 'toggleNotes', 'focusAI', 'toggleFilePanel', 'toggleMonitor', 'toggleTunnels', 'toggleHistory', 'togglePersonalization', 'toggleCommandSend', 'openSettings'],
   },
   {
     key: 'terminal',

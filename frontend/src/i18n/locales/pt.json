@@ -2421,5 +2421,9 @@
   "notes.renameCategory": "Renomear categoria",
   "notes.deleteCategory": "Excluir categoria",
   "notes.deleteCategoryConfirm": "As notas desta categoria ficarão sem categoria. Continuar?",
-  "shortcut.toggleNotes": "Abrir notas"
+  "shortcut.toggleNotes": "Alternar barra lateral de notas",
+  "shortcut.toggleTunnels": "Alternar barra lateral de túneis",
+  "shortcut.toggleHistory": "Alternar barra lateral de histórico",
+  "shortcut.togglePersonalization": "Alternar barra lateral de personalização",
+  "shortcut.toggleCommandSend": "Alternar painel de envio de comandos"
 }

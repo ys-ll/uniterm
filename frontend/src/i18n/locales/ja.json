@@ -2425,5 +2425,9 @@
   "notes.renameCategory": "カテゴリ名を変更",
   "notes.deleteCategory": "カテゴリを削除",
   "notes.deleteCategoryConfirm": "このカテゴリのノートは未分類になります。続行しますか？",
-  "shortcut.toggleNotes": "ノートを開く"
+  "shortcut.toggleNotes": "ノートサイドバーの切り替え",
+  "shortcut.toggleTunnels": "トンネルサイドバーの切り替え",
+  "shortcut.toggleHistory": "履歴サイドバーの切り替え",
+  "shortcut.togglePersonalization": "パーソナライズサイドバーの切り替え",
+  "shortcut.toggleCommandSend": "コマンド送信パネルの切り替え"
 }

@@ -2421,5 +2421,9 @@
   "notes.renameCategory": "Đổi tên danh mục",
   "notes.deleteCategory": "Xóa danh mục",
   "notes.deleteCategoryConfirm": "Các ghi chú trong danh mục này sẽ không còn phân loại. Tiếp tục?",
-  "shortcut.toggleNotes": "Mở ghi chú"
+  "shortcut.toggleNotes": "Bật/tắt thanh bên ghi chú",
+  "shortcut.toggleTunnels": "Bật/tắt thanh bên đường hầm",
+  "shortcut.toggleHistory": "Bật/tắt thanh bên lịch sử",
+  "shortcut.togglePersonalization": "Bật/tắt thanh bên cá nhân hóa",
+  "shortcut.toggleCommandSend": "Bật/tắt bảng gửi lệnh"
 }
