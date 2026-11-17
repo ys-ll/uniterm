@@ -18,7 +18,17 @@ type LocalState struct {
 	// older config without the key and keeps the component default.
 	SidebarWidth      int      `json:"sidebarWidth"`
 	AISidebarWidth    int      `json:"aiSidebarWidth"`
-	CollapsedGroupIds []string `json:"collapsedGroupIds"`
+	// NotesListWidth is the notes panel's list-column width in px (wide /
+	// bottom-panel layout). Local-only UI state, never synced; 0 means an
+	// older config and keeps the component default.
+	NotesListWidth int `json:"notesListWidth"`
+	// NotesPreviewMode starts the notes editor in markdown-preview mode
+	// instead of editing. Local-only UI preference, never synced.
+	NotesPreviewMode bool `json:"notesPreviewMode"`
+	// NotesCategoriesCollapsed collapses the notes panel's category chip row
+	// to a single line. Local-only UI preference, never synced.
+	NotesCategoriesCollapsed bool     `json:"notesCategoriesCollapsed"`
+	CollapsedGroupIds        []string `json:"collapsedGroupIds"`
 	// Collapsed quick-command group ids (plus "__ungrouped__"). Local-only
 	// UI state, never synced; groups absent from the list stay expanded.
 	CollapsedQuickCommandGroupIds []string `json:"collapsedQuickCommandGroupIds"`
