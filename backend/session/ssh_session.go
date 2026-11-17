@@ -102,9 +102,8 @@ type SSHSession struct {
 
 	// connConfig is the fully materialized config this session connected
 	// with (identity/proxy resolved by the App layer, tunnel rewrite
-	// applied). MCP file tools reuse it to lazily open the companion
-	// file-transfer session (SFTP/SCP per FileTransferProto) the same way
-	// the frontend file sidebar does.
+	// applied). MCP file tools use its protocol and concurrency preferences
+	// when opening companion channels on this session's authenticated client.
 	connConfig ConnectionConfig
 }
 
@@ -114,6 +113,22 @@ func (s *SSHSession) ConnectionConfig() ConnectionConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.connConfig
+}
+
+// acquireFileClient shares the authenticated transport, including interactive
+// and multi-factor authentication, without retaining or replaying credentials.
+func (s *SSHSession) acquireFileClient() (*sshClientRef, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.status != StatusConnected || s.clientRef == nil {
+		return nil, fmt.Errorf("source SSH session is not connected")
+	}
+	for refs := s.clientRef.refs.Load(); refs > 0; refs = s.clientRef.refs.Load() {
+		if s.clientRef.refs.CompareAndSwap(refs, refs+1) {
+			return s.clientRef, nil
+		}
+	}
+	return nil, fmt.Errorf("source SSH connection is closed")
 }
 
 // sshClientRef owns one authenticated SSH transport. The last release closes
