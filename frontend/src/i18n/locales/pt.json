@@ -1605,6 +1605,7 @@
   "startTab.connectionsCount": "{count} conexão(ões)",
   "startTab.connections": "Conexões",
   "startTab.layoutSettings": "Configurações de layout",
+  "startTab.showLogo": "Mostrar logo",
   "startTab.moveUp": "Mover para cima",
   "startTab.moveDown": "Mover para baixo",
   "theme.editTitle": "Editar tema",

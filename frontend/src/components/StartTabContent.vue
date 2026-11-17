@@ -12,7 +12,7 @@
 
     <div class="start-content" :style="contentStyle">
       <!-- Branding -->
-      <div class="start-brand" v-show="!searchQuery.trim()">uniTerm</div>
+      <div class="start-brand" v-show="!searchQuery.trim() && startPage.showLogo !== false">uniTerm</div>
 
       <!-- Search row -->
     <div class="start-search-row">
@@ -330,6 +330,13 @@
 
     <!-- Start-page layout menu: visibility + order of the home sections -->
     <Menu ref="layoutMenuRef" v-model:visible="layoutMenuVisible" align="end" root-class="start-layout-menu">
+      <!-- Brand line toggle (logo show/hide, distinct from the content blocks) -->
+      <MenuItem iconic>
+        <span class="start-layout-label">{{ t('startTab.showLogo') }}</span>
+        <span class="start-layout-controls">
+          <el-switch size="small" :model-value="startPage.showLogo !== false" @change="toggleShowLogo($event as boolean)" />
+        </span>
+      </MenuItem>
       <MenuItem v-for="(b, idx) in layoutRows" :key="b.key" iconic>
         <span class="start-layout-label">{{ t(START_PAGE_BLOCK_LABEL_KEYS[b.key]) }}</span>
         <span class="start-layout-controls">
@@ -534,6 +541,11 @@ function moveBlock(key: StartPageBlock, dir: -1 | 1) {
 
 function toggleBlock(key: StartPageBlock, visible: boolean) {
   startPage.value.visible[key] = visible
+  settingsStore.save()
+}
+
+function toggleShowLogo(visible: boolean) {
+  startPage.value.showLogo = visible
   settingsStore.save()
 }
 

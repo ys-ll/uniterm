@@ -1609,6 +1609,7 @@
   "startTab.connectionsCount": "연결 {count}개",
   "startTab.connections": "연결",
   "startTab.layoutSettings": "레이아웃 설정",
+  "startTab.showLogo": "로고 표시",
   "startTab.moveUp": "위로 이동",
   "startTab.moveDown": "아래로 이동",
   "theme.editTitle": "테마 편집",

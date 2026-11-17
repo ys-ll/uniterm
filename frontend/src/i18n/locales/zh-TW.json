@@ -1633,6 +1633,7 @@
   "startTab.connectionsCount": "{count} 個連線",
   "startTab.connections": "連線",
   "startTab.layoutSettings": "佈局設定",
+  "startTab.showLogo": "顯示 Logo",
   "startTab.moveUp": "上移",
   "startTab.moveDown": "下移",
   "theme.editTitle": "編輯主題",

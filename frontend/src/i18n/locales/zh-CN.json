@@ -1634,6 +1634,7 @@
   "startTab.connectionsCount": "{count} 个连接",
   "startTab.connections": "连接",
   "startTab.layoutSettings": "布局设置",
+  "startTab.showLogo": "显示 Logo",
   "startTab.moveUp": "上移",
   "startTab.moveDown": "下移",
   "theme.editTitle": "编辑主题",

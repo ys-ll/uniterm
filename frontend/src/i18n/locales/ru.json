@@ -1609,6 +1609,7 @@
   "startTab.connectionsCount": "{count} подключений(я)",
   "startTab.connections": "Подключения",
   "startTab.layoutSettings": "Настройки макета",
+  "startTab.showLogo": "Показать логотип",
   "startTab.moveUp": "Вверх",
   "startTab.moveDown": "Вниз",
   "theme.editTitle": "Редактировать тему",

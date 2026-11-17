@@ -1609,6 +1609,7 @@
   "startTab.connectionsCount": "{count} Verbindung(en)",
   "startTab.connections": "Verbindungen",
   "startTab.layoutSettings": "Layout-Einstellungen",
+  "startTab.showLogo": "Logo anzeigen",
   "startTab.moveUp": "Nach oben",
   "startTab.moveDown": "Nach unten",
   "theme.editTitle": "Theme bearbeiten",

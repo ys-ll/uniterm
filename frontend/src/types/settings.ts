@@ -313,6 +313,8 @@ export interface StartPageSettings {
   visible: Record<StartPageBlock, boolean>
   // Render order of the content sections.
   order: StartPageBlock[]
+  // Brand line above the search box; false hides it.
+  showLogo: boolean
 }
 
 export const START_PAGE_BLOCK_LABEL_KEYS: Record<StartPageBlock, string> = {
@@ -324,6 +326,7 @@ export const START_PAGE_BLOCK_LABEL_KEYS: Record<StartPageBlock, string> = {
 export const START_PAGE_DEFAULTS: StartPageSettings = {
   visible: { favorites: true, recent: true, groups: true },
   order: ['favorites', 'recent', 'groups'],
+  showLogo: true,
 }
 
 export interface AppSettings {
@@ -551,7 +554,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   panelOrder: [],
   startPage: {
     visible: { ...START_PAGE_DEFAULTS.visible },
-    order: [...START_PAGE_DEFAULTS.order]
+    order: [...START_PAGE_DEFAULTS.order],
+    showLogo: START_PAGE_DEFAULTS.showLogo
   }
 }
 
