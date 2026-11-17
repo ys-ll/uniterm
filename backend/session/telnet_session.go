@@ -73,6 +73,14 @@ type TelnetSession struct {
 	iacPending   []byte
 	lastWasCR    bool
 	serverBinary bool
+	// nawsAgreed gates every NAWS sub-negotiation we send: window size is
+	// only transmitted after the server answered IAC WILL NAWS with
+	// only transmitted after the server answered IAC WILL NAWS with
+	// IAC DO NAWS (RFC 1073). Servers that never agreed — IRIS/Caché
+	// ctelnetd, legacy consoles — would otherwise take the four payload
+	// bytes of the sub-negotiation as user keystrokes ("s)" garbage in the
+	// login line) and eventually drop the connection.
+	nawsAgreed bool
 
 	// Login-phase state for auto-login and the post-login script (issue
 	// #527): loginOutput keeps recent decoded output so credentials are sent
@@ -122,6 +130,7 @@ func (s *TelnetSession) Connect(config ConnectionConfig) error {
 	s.iacPending = nil
 	s.lastWasCR = false
 	s.serverBinary = false
+	s.nawsAgreed = false
 	s.loginOutput = newPostLoginOutputBuffer()
 	s.setStatus(StatusConnected)
 
@@ -317,15 +326,37 @@ func (s *TelnetSession) handleNegotiation(cmd byte, opt byte) {
 		if opt == telnetOptBinary {
 			s.serverBinary = false
 		}
+		if opt == telnetOptNAWS {
+			// Server refused our WILL NAWS offer: never send window size.
+			s.nawsAgreed = false
+		}
 	case telnetDO:
 		// Server asks us to do something.
 		switch opt {
-		case telnetOptBinary, telnetOptSuppressGoAhead, telnetOptNAWS, telnetOptTerminalType:
+		case telnetOptBinary, telnetOptSuppressGoAhead, telnetOptTerminalType:
 			s.reply(telnetWILL, opt) // Accept
+		case telnetOptNAWS:
+			// RFC 1073: the DO NAWS handshake is what authorizes us to send
+			// window-size sub-negotiations; do it right away with the current
+			// size so late-agreeing servers (passive mode, slow shells) still
+			// learn the real dimensions.
+			s.nawsAgreed = true
+			s.reply(telnetWILL, opt)
+			if cols, rows := s.GetPendingSize(); cols > 0 && rows > 0 {
+				s.sendNAWS(cols, rows)
+			} else {
+				s.sendNAWS(80, 24)
+			}
 		case telnetOptEcho:
 			s.reply(telnetWONT, opt) // We don't echo locally
 		default:
 			s.reply(telnetWONT, opt)
+		}
+	case telnetDONT:
+		if opt == telnetOptNAWS {
+			// Server withdrew its agreement: stop sending window size until
+			// a fresh DO NAWS arrives.
+			s.nawsAgreed = false
 		}
 	}
 }
@@ -338,25 +369,22 @@ func (s *TelnetSession) reply(cmd byte, opt byte) {
 }
 
 // sendActiveNegotiation proactively offers the options the client drives in
-// active mode: character-at-a-time (suppress Go Ahead) and terminal type,
-// plus an initial window size. BINARY is deliberately not offered (issue
-// #1486): Cisco's telnet server switches to its binary path, where the login
-// code skips the echo-off before the password prompt, so passwords come back
-// echoed in cleartext. Servers that need binary negotiate it themselves —
-// handleNegotiation answers DO BINARY with WILL BINARY as before.
+// active mode: character-at-a-time (suppress Go Ahead) and terminal type, and
+// offers NAWS (window size) without sending the sub-negotiation itself — that
+// is only sent once the server answers DO NAWS. BINARY is deliberately not
+// offered: Cisco's telnet server switches to its binary path,
+// where the login code skips the echo-off before the password prompt, so
+// passwords come back echoed in cleartext. Servers that need binary negotiate
+// it themselves — handleNegotiation answers DO BINARY with WILL BINARY as
+// before.
 func (s *TelnetSession) sendActiveNegotiation() {
 	s.conn.Write([]byte{telnetIAC, telnetDO, telnetOptSuppressGoAhead})
 	s.conn.Write([]byte{telnetIAC, telnetWILL, telnetOptTerminalType})
-
-	if cols, rows := s.GetPendingSize(); cols > 0 && rows > 0 {
-		s.sendNAWS(cols, rows)
-	} else {
-		s.sendNAWS(80, 24)
-	}
+	s.conn.Write([]byte{telnetIAC, telnetWILL, telnetOptNAWS})
 }
 
 func (s *TelnetSession) sendNAWS(cols, rows int) {
-	if s.conn == nil {
+	if s.conn == nil || !s.nawsAgreed {
 		return
 	}
 	// RFC 1073: any 0xFF byte inside the sub-negotiation must be doubled
