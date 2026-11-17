@@ -2070,6 +2070,10 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
 .connection-list.compact :deep(.connection-item) {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
+  /* The 1.5rem hover buttons would inflate a single-line row when shown
+     and shrink it when the "显示浮动按钮" toggle hides them — pin compact
+     rows to the with-buttons height so both states keep equal heights. */
+  min-height: 2rem;
 }
 
 /* ── Group header ── */

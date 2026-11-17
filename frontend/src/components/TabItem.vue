@@ -86,18 +86,22 @@
         {{ t('tab.duplicateChannel') }}
       </MenuItem>
       <MenuItem v-if="canReconnect" @click="onReconnect">{{ t('tab.reconnect') }}</MenuItem>
-      <MenuItem v-if="hasServerHost" @click="copyHostAddress">{{ t('tab.copyHostAddress') }}</MenuItem>
-      <MenuItem v-if="tab.type === 'terminal'" :shortcut="menuShortcut('lockAI')" @click="toggleAiLock">
-        {{ isAILocked ? t('terminal.aiLocked') : t('terminal.lockAI') }}
-      </MenuItem>
-      <MenuItem v-if="tab.type !== 'start' && tab.type !== 'settings' && tab.type !== 'netscan'" @click="startEdit">{{ t('tab.rename') }}</MenuItem>
-      <MenuItem v-if="hasLocatableConnection" @click="locateHost">{{ t('tab.locate') }}</MenuItem>
-      <MenuItem v-if="tab.type !== 'start' && tab.type !== 'settings' && tab.type !== 'netscan'" @click="toggleLock">
-        {{ tab.locked ? t('tab.unlock') : t('tab.lock') }}
-      </MenuItem>
       <MenuItem v-if="canBroadcast" @click="toggleBroadcastTarget">
         {{ isBroadcastTarget ? t('tab.unbroadcast') : t('tab.broadcast') }}
       </MenuItem>
+      <!-- Tab-management items collapsed into a "标签" submenu to keep the
+           top-level menu short; hidden entirely when every child is hidden. -->
+      <MenuSubmenu v-if="hasTabMenu" :label="t('tab.tabMenu')">
+        <MenuItem v-if="hasServerHost" @click="copyHostAddress">{{ t('tab.copyHostAddress') }}</MenuItem>
+        <MenuItem v-if="tab.type === 'terminal'" :shortcut="menuShortcut('lockAI')" @click="toggleAiLock">
+          {{ isAILocked ? t('terminal.aiLocked') : t('terminal.lockAI') }}
+        </MenuItem>
+        <MenuItem v-if="tab.type !== 'start' && tab.type !== 'settings' && tab.type !== 'netscan'" @click="startEdit">{{ t('tab.rename') }}</MenuItem>
+        <MenuItem v-if="hasLocatableConnection" @click="locateHost">{{ t('tab.locate') }}</MenuItem>
+        <MenuItem v-if="tab.type !== 'start' && tab.type !== 'settings' && tab.type !== 'netscan'" @click="toggleLock">
+          {{ tab.locked ? t('tab.unlock') : t('tab.lock') }}
+        </MenuItem>
+      </MenuSubmenu>
 
       <!-- ② 会话文本操作 -->
       <MenuDivider />
@@ -445,6 +449,16 @@ const serverHost = computed(() => {
   return panelStore.getPanel(props.tab.panelId)?.config?.host || ''
 })
 const hasServerHost = computed(() => !!serverHost.value)
+
+// "标签" submenu visibility: true when at least one of its children (copy
+// host, lock AI, rename, locate, lock) is shown. The rename/lock pair covers
+// every tab except the fixed start/settings/netscan pages, so those are
+// exactly the tabs where the submenu disappears (broadcast stays top-level
+// and is not counted here).
+const hasTabMenu = computed(() => {
+  if (props.tab.type !== 'start' && props.tab.type !== 'settings' && props.tab.type !== 'netscan') return true
+  return props.tab.type === 'terminal' || hasLocatableConnection.value || hasServerHost.value
+})
 
 function onDragStart(e: DragEvent) {
   e.dataTransfer?.setData('application/tab-id', props.tab.id)
