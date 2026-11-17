@@ -44,6 +44,8 @@ func Parse(format, srcPath string, opts ParseOptions) (*ImportResult, error) {
 		return parseNavicat(srcPath, ParseOptions{})
 	case FormatVirtViewer:
 		return parseVirtViewer(data, srcPath)
+	case FormatRDM:
+		return parseRDM(data)
 	default:
 		return nil, fmt.Errorf("unknown import format %q", format)
 	}

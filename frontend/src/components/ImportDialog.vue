@@ -12,6 +12,7 @@
           <el-option label="MobaXterm (.mxtsessions)" value="mobaxterm" />
           <el-option label="mRemoteNG (confCons.xml)" value="mremoteng" />
           <el-option label="OpenSSH config (~/.ssh/config)" value="openssh" />
+          <el-option label="Remote Desktop Manager (.rdm)" value="rdm" />
           <el-option label="SecureCRT (.xml)" value="securecrt" />
           <el-option label="WindTerm (.sessions)" value="windterm" />
           <el-option label="Xshell (.xts)" value="xshell" />
@@ -64,6 +65,7 @@ const FILTERS: Record<string, { display: string; pattern: string }> = {
   xshell: { display: 'Xshell (*.xts)', pattern: '*.xts' },
   mobaxterm: { display: 'MobaXterm (*.mxtsessions)', pattern: '*.mxtsessions' },
   mremoteng: { display: 'mRemoteNG (confCons.xml)', pattern: '*.xml' },
+  rdm: { display: 'Remote Desktop Manager (*.rdm)', pattern: '*.rdm' },
   windterm: { display: 'WindTerm (*.sessions)', pattern: '*.sessions' },
   securecrt: { display: 'SecureCRT (*.xml)', pattern: '*.xml' },
   navicat: { display: 'Navicat (*.ncx)', pattern: '*.ncx' },

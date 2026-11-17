@@ -70,7 +70,7 @@ uniTerm 内置自主 AI Agent，可在终端中独立规划并执行多轮 Shell
 
 #### 连接管理
 
-分组、搜索、创建、批量管理服务器连接，常用连接可**收藏**置顶，支持从 Xshell、MobaXterm、DBeaver、Navicat、virt-viewer（.vv）等一键导入，一切触手可及。
+分组、搜索、创建、批量管理服务器连接，常用连接可**收藏**置顶，支持从 Xshell、MobaXterm、Remote Desktop Manager（.rdm）、DBeaver、Navicat、virt-viewer（.vv）等一键导入，一切触手可及。
 
 #### 密钥库与代理
 
