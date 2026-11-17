@@ -12,6 +12,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 	"github.com/ys-ll/uniterm/backend/container"
 	"github.com/ys-ll/uniterm/backend/credentials"
+	"github.com/ys-ll/uniterm/backend/firewall"
 	"github.com/ys-ll/uniterm/backend/importer"
 	"github.com/ys-ll/uniterm/backend/k8s"
 	"github.com/ys-ll/uniterm/backend/localsrv"
@@ -53,6 +54,7 @@ type App struct {
 	k8sManager       *k8s.Manager
 	netscanManager   *netscan.Manager
 	packetcapManager *packetcap.Manager
+	firewallManager  *firewall.Manager
 	localsrvManager  *localsrv.Manager
 	containerManager *container.Manager
 	// quitting marks that the full shutdown sequence (App.shutdown) has begun.
@@ -212,6 +214,7 @@ func NewApp(webviewDataPath string) *App {
 		k8sManager:         k8s.NewManager(),
 		netscanManager:     netscan.NewManager(),
 		packetcapManager:   packetcap.NewManager(),
+		firewallManager:    firewall.NewManager(),
 		localsrvManager:    localsrv.NewManager(),
 		containerManager:   container.NewManager(),
 		errCh:              make(chan error, 16),
@@ -294,6 +297,9 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 		a.emit(name, payload)
 	})
 	a.packetcapManager.SetEventEmitter(func(name string, payload any) {
+		a.emit(name, payload)
+	})
+	a.firewallManager.SetEventEmitter(func(name string, payload any) {
 		a.emit(name, payload)
 	})
 	a.localsrvManager.SetEventEmitter(func(name string, payload any) {
@@ -3214,4 +3220,114 @@ func withRemoteCredOverride(resolve session.ConnResolver, exitID, user, password
 		}
 		return cfg, true
 	}
+}
+
+// firewallResolve resolves a saved connection id into a firewall.ResolvedSSH
+// dial target, applying the same "inline credentials only fill empty fields"
+// rule as remote captures. Called by every firewall bound method.
+func (a *App) firewallResolve(connID, user, password string) (*firewall.ResolvedSSH, error) {
+	resolve, err := a.connResolver()
+	if err != nil {
+		return nil, fmt.Errorf("connections unavailable: %w", err)
+	}
+	resolve = withRemoteCredOverride(resolve, connID, user, password)
+	cfg, ok := resolve(connID)
+	if !ok {
+		return nil, fmt.Errorf("remote connection %q not found", connID)
+	}
+	if cfg.Host == "" || cfg.User == "" {
+		return nil, fmt.Errorf("remote connection %q has no host/user", connID)
+	}
+	return &firewall.ResolvedSSH{
+		Host:       cfg.Host,
+		Port:       cfg.Port,
+		User:       cfg.User,
+		Password:   cfg.Password,
+		AuthType:   cfg.AuthType,
+		KeyPath:    cfg.KeyPath,
+		KeyContent: cfg.KeyContent,
+		IdentityID: cfg.IdentityId,
+	}, nil
+}
+
+// FirewallProbe detects which firewall backend the remote host has and whether
+// it is active. Returns an error wrapping firewall.ErrNotInstalled when neither
+// firewalld nor ufw is present. user/password are inline credentials resolved
+// by the frontend for a connection with nothing saved.
+func (a *App) FirewallProbe(connID, user, password string) (*firewall.Status, error) {
+	r, err := a.firewallResolve(connID, user, password)
+	if err != nil {
+		return nil, err
+	}
+	ev := map[string]any{"host": r.Host}
+	status, err := a.firewallManager.Probe(r)
+	ev["status"] = status
+	if err != nil {
+		if errors.Is(err, firewall.ErrNotInstalled) {
+			a.emit(firewall.EventError, map[string]any{"host": r.Host, "message": err.Error()})
+		}
+		return status, err
+	}
+	a.emit(firewall.EventStatus, ev)
+	return status, nil
+}
+
+// FirewallSetEnabled turns the detected firewall on (enable) or off (disable).
+func (a *App) FirewallSetEnabled(connID, user, password string, enable bool) error {
+	r, err := a.firewallResolve(connID, user, password)
+	if err != nil {
+		return err
+	}
+	if err := a.firewallManager.SetEnabled(r, enable); err != nil {
+		return err
+	}
+	// Refresh status so the UI reflects the new active state.
+	_, _ = a.FirewallProbe(connID, user, password)
+	return nil
+}
+
+// FirewallSetAutoStart toggles whether the detected firewall starts on boot
+// (systemctl enable/disable). It does not change the current runtime state or
+// rules, so a lockout check is not needed.
+func (a *App) FirewallSetAutoStart(connID, user, password string, enable bool) error {
+	r, err := a.firewallResolve(connID, user, password)
+	if err != nil {
+		return err
+	}
+	if err := a.firewallManager.SetAutoStart(r, enable); err != nil {
+		return err
+	}
+	// Refresh status so the UI reflects the new auto-start state.
+	_, _ = a.FirewallProbe(connID, user, password)
+	return nil
+}
+
+// FirewallSaveConfig writes the desired port rules to the server's persistent
+// configuration. For firewalld this deliberately does not reload the runtime
+// configuration; FirewallApplyConfig performs that separate step.
+func (a *App) FirewallSaveConfig(connID, user, password string, rules []firewall.PortRule) error {
+	r, err := a.firewallResolve(connID, user, password)
+	if err != nil {
+		return err
+	}
+	return a.firewallManager.SaveConfig(r, rules)
+}
+
+// FirewallApplyConfig reloads the persistent configuration into the running
+// firewall after verifying that SSH cannot be locked out.
+func (a *App) FirewallApplyConfig(connID, user, password string) error {
+	r, err := a.firewallResolve(connID, user, password)
+	if err != nil {
+		return err
+	}
+	return a.firewallManager.ApplyConfig(r)
+}
+
+// FirewallListRules returns the current port rules for display.
+func (a *App) FirewallListRules(connID, user, password string) ([]firewall.PortRule, error) {
+	r, err := a.firewallResolve(connID, user, password)
+	if err != nil {
+		return nil, err
+	}
+	return a.firewallManager.ListRules(r)
 }

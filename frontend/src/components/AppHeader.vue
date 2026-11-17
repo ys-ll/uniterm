@@ -134,6 +134,7 @@
           <MenuItem @click="openNetscan">{{ t('netscan.title') }}</MenuItem>
           <MenuItem v-if="!webServerMode" @click="openLocalServices">{{ t('localsrv.title') }}</MenuItem>
           <MenuItem v-if="!webServerMode" @click="openPacketcap">{{ t('packetcap.title') }}</MenuItem>
+          <MenuItem v-if="!webServerMode" @click="openFirewall">{{ t('firewall.title') }}</MenuItem>
           <MenuItem @click="openCategory('tunnels')">{{ t('settings.tunnels') }}</MenuItem>
         </MenuSubmenu>
 
@@ -310,6 +311,11 @@ function openPacketcap() {
   closeSettingsMenu()
 }
 
+function openFirewall() {
+  emit('open-firewall')
+  closeSettingsMenu()
+}
+
 function openLocalServices() {
   emit('open-local-services')
   closeSettingsMenu()
@@ -380,6 +386,7 @@ const emit = defineEmits<{
   'open-settings': [category?: string]
   'open-netscan': []
   'open-packetcap': []
+  'open-firewall': []
   'open-local-services': []
   'open-new-connection': []
   'close-tab': [id: string]
