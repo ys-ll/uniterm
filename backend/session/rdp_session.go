@@ -564,20 +564,24 @@ func rewriteX224SslOnly(pdu []byte) {
 	binary.LittleEndian.PutUint32(pdu[off+4:], proto)
 }
 
-// TLS leg strategies, tried in order on a fresh connection each. The first
-// (utls12) mimics mstsc's ClientHello — see mstscClientHelloSpec — because
+// TLS leg strategies, tried in order on a fresh connection each. The utls
+// strategies mimic mstsc's ClientHello — see mstscClientHelloSpec — because
 // Windows Server 2008-era Schannel both (a) requires TLS 1.2 for CredSSP and
 // (b) RSTs Go's standard TLS 1.2 ClientHello (its signature_algorithms carry
 // ed25519 and it offers encrypt-then-MAC, neither of which mstsc sends). The
-// Go strategies remain as fallbacks for stacks the mstsc-shaped hello cannot
-// reach.
+// TLS 1.0-only variant is for middleboxes that RST a TLS 1.2 hello outright
+// but accept a 1.0-only one; TLS 1.0-only servers need no separate strategy
+// here, they simply pick TLS 1.0 from the full hello. The Go strategy stays
+// as a last-ditch fallback for stacks that reject even the mstsc-shaped
+// hello; a stack that did would also refuse real mstsc, so it is expected to
+// stay unused.
 const (
 	tlsStrategyUtls12 = "utls-mstsc-tls12"
-	tlsStrategyGo12   = "go-tls12"
+	tlsStrategyUtls10 = "utls-mstsc-tls10"
 	tlsStrategyGo10   = "go-tls10"
 )
 
-var tlsStrategyOrder = []string{tlsStrategyUtls12, tlsStrategyGo12, tlsStrategyGo10}
+var tlsStrategyOrder = []string{tlsStrategyUtls12, tlsStrategyUtls10, tlsStrategyGo10}
 
 // tlsStrategyCache remembers, per real RDP target (host:port before any
 // tunnel rewrite), the TLS strategy that last completed a handshake.
@@ -712,12 +716,16 @@ func targetHostOf(target string) string {
 // check when a hardened server tears the session down mid-authentication.
 func handshakeTLSLeg(strategy string, conn net.Conn, host string) (net.Conn, [][]byte, error) {
 	switch strategy {
-	case tlsStrategyUtls12:
+	case tlsStrategyUtls12, tlsStrategyUtls10:
+		maxVersion := uint16(tls.VersionTLS12)
+		if strategy == tlsStrategyUtls10 {
+			maxVersion = uint16(tls.VersionTLS10)
+		}
 		u := utls.UClient(conn, &utls.Config{
 			InsecureSkipVerify: true, //nolint:gosec // the proxy is local-only; the WASM client validates nothing here, CredSSP binds to the delivered public key
 			ServerName:         host,
 		}, utls.HelloCustom)
-		if err := u.ApplyPreset(mstscClientHelloSpec(host)); err != nil {
+		if err := u.ApplyPreset(mstscClientHelloSpec(host, maxVersion)); err != nil {
 			return nil, nil, err
 		}
 		if err := u.Handshake(); err != nil {
@@ -730,7 +738,7 @@ func handshakeTLSLeg(strategy string, conn net.Conn, host string) (net.Conn, [][
 		}
 		logTLSLegOK(strategy, state.Version, state.CipherSuite, chain)
 		return u, chain, nil
-	case tlsStrategyGo12, tlsStrategyGo10:
+	case tlsStrategyGo10:
 		maxVersion := uint16(tls.VersionTLS12)
 		if strategy == tlsStrategyGo10 {
 			maxVersion = uint16(tls.VersionTLS10)
@@ -788,9 +796,16 @@ func tlsVersionName(v uint16) string {
 
 // mstscClientHelloSpec builds a ClientHello that mirrors what mstsc sends:
 // Schannel's TLS 1.2 cipher list (minus the SHA-384 suites, which utls
-// cannot negotiate), supported_versions 1.2/1.1/1.0, and no ed25519 or
+// cannot negotiate), supported_versions capped at maxVersion (1.2 normally,
+// 1.0 for the TLS 1.0-only middlebox strategy), and no ed25519 or
 // encrypt-then-MAC — the two things old Schannel servers RST on.
-func mstscClientHelloSpec(host string) *utls.ClientHelloSpec {
+func mstscClientHelloSpec(host string, maxVersion uint16) *utls.ClientHelloSpec {
+	var versions []uint16
+	for _, v := range []uint16{utls.VersionTLS12, utls.VersionTLS11, utls.VersionTLS10} {
+		if v <= maxVersion {
+			versions = append(versions, v)
+		}
+	}
 	suites := []uint16{
 		0xC02C, 0xC02B, 0xC030, 0xC02F, 0xC023,
 		0xC027, 0xC00A, 0xC009, 0xC014, 0xC013,
@@ -807,9 +822,7 @@ func mstscClientHelloSpec(host string) *utls.ClientHelloSpec {
 		Extensions: []utls.TLSExtension{
 			&utls.GenericExtension{Id: 0x0000, Data: sniRaw},
 			&utls.StatusRequestExtension{},
-			&utls.SupportedVersionsExtension{Versions: []uint16{
-				utls.VersionTLS12, utls.VersionTLS11, utls.VersionTLS10,
-			}},
+			&utls.SupportedVersionsExtension{Versions: versions},
 			&utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
 				0x0804, 0x0805, 0x0806, 0x0401, 0x0501, 0x0201,
 				0x0403, 0x0503, 0x0203, 0x0202, 0x0601, 0x0603,

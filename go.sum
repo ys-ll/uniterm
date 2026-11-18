@@ -199,8 +199,6 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/redis/go-redis/v9 v9.21.0 h1:FPBE4hhbAke+TLmcY3WkpbDffJEomdqPn3HYiqAtL9E=
 github.com/redis/go-redis/v9 v9.21.0/go.mod h1:v/M13XI1PVCDcm01VtPFOADfZtHf8YW3baQf57KlIkA=
-github.com/refraction-networking/utls v1.8.2 h1:j4Q1gJj0xngdeH+Ox/qND11aEfhpgoEvV+S9iJ2IdQo=
-github.com/refraction-networking/utls v1.8.2/go.mod h1:jkSOEkLqn+S/jtpEHPOsVv/4V4EVnelwbMQl4vCWXAM=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=
@@ -262,6 +260,8 @@ github.com/ys-ll/mosh-go v0.0.0-20260702130124-e17b92cd9dab h1:Ru8ctnV5xIDpn1ooz
 github.com/ys-ll/mosh-go v0.0.0-20260702130124-e17b92cd9dab/go.mod h1:HZno4DV/XO+yAZ6lC3EmzMk0whPxrfgY5uix7jcUFps=
 github.com/ys-ll/simples3 v0.0.0-20260930081831-3357c14e91bd h1:mQdfvq8qbgcTt6e3cTa/wWZ4sUTHpdYXOeOraV/VtK0=
 github.com/ys-ll/simples3 v0.0.0-20260930081831-3357c14e91bd/go.mod h1:c2xW30bukipkBlWNnXG1wDjq3gykQ6ww2AB/9NHMLMY=
+github.com/ys-ll/utls v1.8.3-0.20261118030304-dc4119e680f1 h1:Q2RZPdf4dxuxKCfx2QltGBadTJ5/Mv13CeiSHsRkp/A=
+github.com/ys-ll/utls v1.8.3-0.20261118030304-dc4119e680f1/go.mod h1:jkSOEkLqn+S/jtpEHPOsVv/4V4EVnelwbMQl4vCWXAM=
 github.com/ys-ll/wails/v3 v3.0.0-20261112023043-1143f7a41423 h1:j9ePe/q6HERNaqCRY+bxoMmbTA4EKS/THNZ4o2ebxgA=
 github.com/ys-ll/wails/v3 v3.0.0-20261112023043-1143f7a41423/go.mod h1:tzDY3W1jzN3ksSqfGalTt7K3PwnGfIqtl+IgIXlXz0I=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
