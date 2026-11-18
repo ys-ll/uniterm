@@ -441,16 +441,13 @@ func TestNegotiationErrStructure(t *testing.T) {
 			}
 			errCode = derTLVBody(derTLVBody(errBody, 0), 0)
 			seen[1] = true
-		case 6: // x224, TPKT stripped
+		case 6: // x224, TPKT header included (the client's X224::decode reads it)
 			if wrapped[0] != 0x04 {
 				t.Fatalf("x224 inner tag %x", wrapped[0])
 			}
 			got := derTLVBody(wrapped, 0)
-			if bytes.Equal(got, x224) {
-				t.Fatal("x224 still carries the TPKT header")
-			}
-			if !bytes.Equal(got, x224[4:]) {
-				t.Fatalf("x224 mismatch: % x", got)
+			if !bytes.Equal(got, x224) {
+				t.Fatalf("x224 mismatch (TPKT must be included verbatim): % x", got)
 			}
 			seen[6] = true
 		}
@@ -467,6 +464,46 @@ func TestNegotiationErrStructure(t *testing.T) {
 
 	if code, ok := parseX224FailureCode(x224); !ok || code != 5 {
 		t.Fatalf("parseX224FailureCode = %d, %v; want 5", code, ok)
+	}
+}
+
+func TestTsRequestStage(t *testing.T) {
+	nego := concatBytes(
+		derExplicit(0, 0x02, derIntegerBytes(6)),
+		derExplicit(1, 0x04, []byte{1, 2, 3}),
+	)
+	auth := concatBytes(
+		derExplicit(0, 0x02, derIntegerBytes(6)),
+		derExplicit(1, 0x04, []byte{1, 2, 3}),
+		derExplicit(3, 0x04, make([]byte, 16)),
+	)
+	authInfo := concatBytes(
+		derExplicit(0, 0x02, derIntegerBytes(6)),
+		derExplicit(2, 0x04, []byte{9, 9}),
+	)
+	errCode := concatBytes(
+		derExplicit(0, 0x02, derIntegerBytes(6)),
+		derExplicit(4, 0x02, derIntegerBytes(23)),
+	)
+	versionOnly := derExplicit(0, 0x02, derIntegerBytes(6))
+	cases := map[string]struct {
+		rec  []byte
+		want string
+	}{
+		"negoTokens only":            {derEncodeTLV(0x30, nego), "NEGOTIATE"},
+		"negoTokens + pubKeyAuth":    {derEncodeTLV(0x30, auth), "AUTHENTICATE"},
+		"authInfo":                   {derEncodeTLV(0x30, authInfo), "AUTH_INFO"},
+		"errorCode":                  {derEncodeTLV(0x30, errCode), "ERROR_CODE"},
+		"version only":               {derEncodeTLV(0x30, versionOnly), "VERSION_ONLY"},
+		"truncated":                  {derEncodeTLV(0x30, nego)[:len(nego)], ""},
+		"not a TSRequest":            {[]byte{0x03, 0x00, 0x00, 0x0b}, ""},
+		"DER without version field":  {derEncodeTLV(0x30, derExplicit(1, 0x04, []byte{1})), ""},
+		"trailing garbage rejected":  {append(derEncodeTLV(0x30, nego), 0x00), ""},
+	}
+	for name, tc := range cases {
+		if got := tsRequestStage(tc.rec); got != tc.want {
+			t.Errorf("%s: tsRequestStage = %q, want %q", name, got, tc.want)
+		}
 	}
 }
 
