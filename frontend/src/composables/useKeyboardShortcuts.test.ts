@@ -3,13 +3,14 @@ import {
   loadKeybindings, onGlobalKeydown, matchDigitShortcut, panelDigitShortcutsSuppressed,
   tabDigitShortcutPrefix, panelDigitShortcutPrefix, formatDigitShortcut, formatKeyBinding,
   digitModifierCollides, isRebinding, setRebinding, isTabRenameShortcut,
+  matchTabCycleShortcut,
 } from './useKeyboardShortcuts'
 import { DEFAULT_KEYBOARD } from '../types/settings'
 import type { KeyboardSettings } from '../types/settings'
 
-function fakeKey(partial: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean; key: string; isComposing: boolean; keyCode: number }>): KeyboardEvent {
+function fakeKey(partial: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean; key: string; code: string; isComposing: boolean; keyCode: number }>): KeyboardEvent {
   return {
-    ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, key: '',
+    ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, key: '', code: '',
     isComposing: false, keyCode: 0,
     preventDefault() {}, stopPropagation() {},
     ...partial,
@@ -300,5 +301,37 @@ describe('useKeyboardShortcuts — F2 tab rename', () => {
     expect(isTabRenameShortcut(fakeKey({ key: 'F2', metaKey: true }))).toBe(false)
     expect(isTabRenameShortcut(fakeKey({ key: 'F2', altKey: true }))).toBe(false)
     expect(isTabRenameShortcut(fakeKey({ key: 'F3' }))).toBe(false)
+  })
+})
+
+// iTerm / Terminal.app use Cmd+Shift+] and Cmd+Shift+[ for next/previous
+// tab; browsers and GNOME Terminal use Ctrl+PageDown / Ctrl+PageUp on
+// Windows and Linux.
+describe('useKeyboardShortcuts — platform tab cycling', () => {
+  it('maps Cmd+Shift+] / Cmd+Shift+[ to next / previous on macOS', () => {
+    // Shift turns the brackets into braces; matching reads e.code.
+    expect(matchTabCycleShortcut(fakeKey({ metaKey: true, shiftKey: true, key: '}', code: 'BracketRight' }), true)).toBe('next')
+    expect(matchTabCycleShortcut(fakeKey({ metaKey: true, shiftKey: true, key: '{', code: 'BracketLeft' }), true)).toBe('prev')
+  })
+
+  it('requires the exact macOS combo', () => {
+    const right = { key: '}', code: 'BracketRight' }
+    expect(matchTabCycleShortcut(fakeKey(right), true)).toBe(null) // no modifiers
+    expect(matchTabCycleShortcut(fakeKey({ ...right, metaKey: true }), true)).toBe(null) // missing Shift
+    expect(matchTabCycleShortcut(fakeKey({ ...right, metaKey: true, shiftKey: true, altKey: true }), true)).toBe(null)
+    expect(matchTabCycleShortcut(fakeKey({ ...right, metaKey: true, shiftKey: true, ctrlKey: true }), true)).toBe(null)
+    expect(matchTabCycleShortcut(fakeKey({ metaKey: true, shiftKey: true, key: ']', code: 'BracketRight' }), false)).toBe(null) // mac combo on Windows/Linux
+  })
+
+  it('maps Ctrl+PageDown / Ctrl+PageUp on Windows and Linux', () => {
+    expect(matchTabCycleShortcut(fakeKey({ ctrlKey: true, key: 'PageDown' }), false)).toBe('next')
+    expect(matchTabCycleShortcut(fakeKey({ ctrlKey: true, key: 'PageUp' }), false)).toBe('prev')
+  })
+
+  it('requires the exact Windows/Linux combo', () => {
+    expect(matchTabCycleShortcut(fakeKey({ key: 'PageDown' }), false)).toBe(null)
+    expect(matchTabCycleShortcut(fakeKey({ ctrlKey: true, shiftKey: true, key: 'PageDown' }), false)).toBe(null)
+    expect(matchTabCycleShortcut(fakeKey({ ctrlKey: true, altKey: true, key: 'PageDown' }), false)).toBe(null)
+    expect(matchTabCycleShortcut(fakeKey({ ctrlKey: true, key: 'PageDown' }), true)).toBe(null) // Windows/Linux combo on mac
   })
 })
