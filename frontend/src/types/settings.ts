@@ -101,6 +101,10 @@ export interface TerminalSettings {
   // Default local directory for files received with ZMODEM sz. Empty keeps
   // the existing behavior of asking for a directory on every transfer.
   zmodemDownloadDir: string
+  // Idle timeout for in-terminal ZMODEM (rz/sz) transfers, in seconds.
+  // If no protocol activity is observed for this long, the transfer is aborted.
+  // Defaults to 20 to preserve historical behavior.
+  zmodemIdleTimeoutSec: number
   // Filename template: %S session, %H host, %M month, %D day, %h hour, %m minute.
   sessionLogFilename: string
   // Characters that act as word boundaries for xterm.js's double-click
@@ -511,6 +515,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     minimumContrast: 4.5,
     sessionLogDir: '',
     zmodemDownloadDir: '',
+    zmodemIdleTimeoutSec: 20,
     sessionLogFilename: '%S_%H_%M%D_%h%m.log',
     wordSeparator: '\\ :;~`!@#$%^&*()=+|[]{}\'",<>?',
     showLineNumbers: false,

@@ -646,6 +646,8 @@
   "settings.zmodemDownloadDir": "Zmodem-Download-Verzeichnis",
   "settings.zmodemDownloadDirDesc": "Mit sz empfangene Dateien direkt hier speichern. Leer lassen, um bei jeder Übertragung ein Verzeichnis auszuwählen.",
   "settings.zmodemDownloadDirPlaceholder": "Bei jeder Übertragung auswählen",
+  "settings.zmodemIdleTimeoutSec": "Zmodem-Leerlauf-Timeout (Sekunden)",
+  "settings.zmodemIdleTimeoutSecDesc": "Bricht eine rz/sz-Übertragung ab, wenn für diese Anzahl Sekunden keine ZMODEM-Aktivität beobachtet wird. Standard 20. Bereich 5-600.",
   "settings.sessionLogDirDesc": "Speicherort für Sitzungsprotokolle. Leer lassen, um den Standard zu verwenden: {path}",
   "settings.sessionLogFilename": "Log-Dateinamensformat",
   "settings.sessionLogFilenameDesc": "Platzhalter: %S Sitzung, %H Host, %M Monat, %D Tag, %h Stunde, %m Minute. Gleiche Sitzungs- und Hostnamen erscheinen nur einmal.",

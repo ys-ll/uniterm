@@ -646,6 +646,8 @@
   "settings.zmodemDownloadDir": "Dossier de téléchargement Zmodem",
   "settings.zmodemDownloadDirDesc": "Enregistre directement ici les fichiers reçus avec sz. Laissez vide pour choisir un dossier à chaque transfert.",
   "settings.zmodemDownloadDirPlaceholder": "Choisir à chaque transfert",
+  "settings.zmodemIdleTimeoutSec": "Délai d'inactivité Zmodem (secondes)",
+  "settings.zmodemIdleTimeoutSecDesc": "Interrompt un transfert rz/sz si aucune activité ZMODEM n'est détectée pendant ce nombre de secondes. Défaut 20. Plage 5-600.",
   "settings.sessionLogDirDesc": "Emplacement des logs de session. Laisser vide pour utiliser le défaut : {path}",
   "settings.sessionLogFilename": "Format du nom de log",
   "settings.sessionLogFilenameDesc": "Variables : %S session, %H hôte, %M mois, %D jour, %h heure, %m minute. Si la session et l’hôte sont identiques, une seule valeur est conservée.",

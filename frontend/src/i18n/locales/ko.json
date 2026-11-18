@@ -646,6 +646,8 @@
   "settings.zmodemDownloadDir": "Zmodem 다운로드 폴더",
   "settings.zmodemDownloadDirDesc": "sz로 받은 파일을 이 폴더에 바로 저장합니다. 비워 두면 전송할 때마다 폴더를 선택합니다.",
   "settings.zmodemDownloadDirPlaceholder": "전송할 때마다 선택",
+  "settings.zmodemIdleTimeoutSec": "Zmodem 유휴 타임아웃(초)",
+  "settings.zmodemIdleTimeoutSecDesc": "지정한 초 동안 ZMODEM 활동이 없으면 rz/sz 전송을 중단합니다. 기본값 20. 범위 5-600.",
   "settings.sessionLogDirDesc": "세션 로그를 저장할 위치. 비워두면 기본값 사용: {path}",
   "settings.sessionLogFilename": "로그 파일 이름 형식",
   "settings.sessionLogFilenameDesc": "%S 세션, %H 호스트, %M 월, %D 일, %h 시, %m 분을 지원합니다. 세션과 호스트가 같으면 한 번만 포함합니다.",

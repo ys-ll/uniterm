@@ -15,7 +15,8 @@ import { useZmodemStore } from '../stores/zmodemStore'
 import { queuedSessionWrite } from './sessionWriter'
 
 const dialogLocks = new Set<string>()
-const TRANSFER_TIMEOUT_MS = 20_000
+/** Default ZMODEM idle timeout; kept for tests and as the settings fallback. */
+export const DEFAULT_TRANSFER_TIMEOUT_MS = 20_000
 const CANCEL_WRITE_TIMEOUT_MS = 2_000
 // After the cancel sequence, wait for the residual binary stream to drain
 // before leaving binary mode. See waitBinaryQuiet.
@@ -49,12 +50,21 @@ export interface ZmodemServiceOptions {
   sessionId: string
   direction?: 'upload' | 'download'
   getDefaultDownloadDir?: () => string
+  /** Idle timeout in milliseconds. Falls back to DEFAULT_TRANSFER_TIMEOUT_MS. */
+  getIdleTimeoutMs?: () => number
   onComplete?: (files: string[], hint?: string) => void
   onError?: (err: string) => void
   onWarning?: (warning: string) => void
   onTerminalRestoreState?: (restoring: boolean) => void
   onRegister?: (abort: () => void) => void
   onUnregister?: () => void
+}
+
+export function resolveIdleTimeoutMs(getIdleTimeoutMs?: () => number): number {
+  const raw = getIdleTimeoutMs?.()
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_TRANSFER_TIMEOUT_MS
+  // Clamp to a practical range so a bad setting cannot hang forever or fire instantly.
+  return Math.min(600_000, Math.max(5_000, Math.round(raw)))
 }
 
 export function startZmodemService(options: ZmodemServiceOptions) {
@@ -77,7 +87,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
   const lateTrailingOutput: number[] = []
   const { sessionId } = options
   const abortCtl = createTransferControl()
-  const watchdog = createActivityWatchdog(TRANSFER_TIMEOUT_MS)
+  const watchdog = createActivityWatchdog(resolveIdleTimeoutMs(options.getIdleTimeoutMs))
 
   function appendTrailingOutput(bytes: ArrayLike<number>, start = 0, end = bytes.length) {
     const target = captureLateTrailingOutput ? lateTrailingOutput : trailingOutput

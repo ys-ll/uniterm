@@ -646,6 +646,8 @@
   "settings.zmodemDownloadDir": "Zmodem ダウンロード先",
   "settings.zmodemDownloadDirDesc": "sz で受信したファイルをこのフォルダーに直接保存します。空の場合は転送ごとに選択します。",
   "settings.zmodemDownloadDirPlaceholder": "転送ごとに選択",
+  "settings.zmodemIdleTimeoutSec": "Zmodem アイドルタイムアウト（秒）",
+  "settings.zmodemIdleTimeoutSecDesc": "この秒数の間 ZMODEM の活動がない場合、rz/sz 転送を中止します。既定 20。範囲 5-600。",
   "settings.sessionLogDirDesc": "セッションログの保存場所。空欄でデフォルトを使用: {path}",
   "settings.sessionLogFilename": "ログファイル名の形式",
   "settings.sessionLogFilenameDesc": "%S セッション、%H ホスト、%M 月、%D 日、%h 時、%m 分を使用できます。セッション名とホストが同じ場合は一度だけ含めます。",

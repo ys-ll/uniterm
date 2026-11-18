@@ -670,6 +670,8 @@
   "settings.zmodemDownloadDir": "Zmodem download directory",
   "settings.zmodemDownloadDirDesc": "Save files received with sz directly to this directory. Leave empty to choose a directory for each transfer.",
   "settings.zmodemDownloadDirPlaceholder": "Ask for each transfer",
+  "settings.zmodemIdleTimeoutSec": "Zmodem idle timeout (seconds)",
+  "settings.zmodemIdleTimeoutSecDesc": "Abort an rz/sz transfer if no ZMODEM activity is seen for this many seconds. Default 20. Range 5-600.",
   "settings.sessionLogDirDesc": "Where session logs are saved. Leave empty to use the default: {path}",
   "settings.sessionLogFilename": "Log filename format",
   "settings.sessionLogFilenameDesc": "Tokens: %S session, %H host, %M month, %D day, %h hour, %m minute. A duplicate session and host is included only once.",

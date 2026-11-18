@@ -670,6 +670,8 @@
   "settings.zmodemDownloadDir": "Zmodem 下載目錄",
   "settings.zmodemDownloadDirDesc": "透過 sz 接收的檔案直接儲存到此目錄。留空則每次傳輸時選擇目錄。",
   "settings.zmodemDownloadDirPlaceholder": "每次傳輸時選擇",
+  "settings.zmodemIdleTimeoutSec": "Zmodem 閒置逾時（秒）",
+  "settings.zmodemIdleTimeoutSecDesc": "若連續若干秒沒有 ZMODEM 協定活動，則中止 rz/sz 傳輸。預設 20，範圍 5-600。",
   "settings.sessionLogDirDesc": "工作階段日誌檔案的儲存位置。留空使用預設路徑：{path}",
   "settings.sessionLogFilename": "日誌檔名格式",
   "settings.sessionLogFilenameDesc": "支援 %S 工作階段名稱、%H 主機、%M 月、%D 日、%h 時、%m 分。名稱與主機相同時只保留一份。",

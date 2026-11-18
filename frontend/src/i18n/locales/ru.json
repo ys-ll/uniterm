@@ -646,6 +646,8 @@
   "settings.zmodemDownloadDir": "Папка загрузок Zmodem",
   "settings.zmodemDownloadDirDesc": "Сохранять полученные через sz файлы прямо в эту папку. Оставьте пустым для выбора папки при каждой передаче.",
   "settings.zmodemDownloadDirPlaceholder": "Выбирать при каждой передаче",
+  "settings.zmodemIdleTimeoutSec": "Таймаут простоя Zmodem (секунды)",
+  "settings.zmodemIdleTimeoutSecDesc": "Прерывает передачу rz/sz, если в течение указанного числа секунд нет активности ZMODEM. По умолчанию 20. Диапазон 5-600.",
   "settings.sessionLogDirDesc": "Место сохранения журналов сеансов. Оставьте пустым для использования пути по умолчанию: {path}",
   "settings.sessionLogFilename": "Формат имени файла журнала",
   "settings.sessionLogFilenameDesc": "Переменные: %S сеанс, %H хост, %M месяц, %D день, %h час, %m минута. Одинаковые имена сеанса и хоста указываются один раз.",
