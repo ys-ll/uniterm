@@ -221,6 +221,7 @@ func allSyncableStores(t *testing.T) []syncable {
 	return []syncable{
 		mustConnStore(t), mustIdentityStore(t), mustProxyStore(t), mustAIStore(t),
 		NewFavoriteStore(t.TempDir()), NewQuickCommandsStore(t.TempDir()),
+		NewNotesStore(t.TempDir()),
 		NewTunnelStore(t.TempDir()), mustSettingsStore(t),
 		NewSkillsStore(t.TempDir()), NewCommandsStore(t.TempDir()),
 		NewMCPClientStore(t.TempDir()),
@@ -250,6 +251,7 @@ func TestSyncableBlobNames(t *testing.T) {
 		"ai.json":            "ai.json",
 		"favorites.json":     "favorites.json",
 		"quickCommands.json": "quickCommands.json",
+		"notes.json":         "notes.json",
 		"tunnels.json":       "tunnels.json",
 		"settings.json":      "settings.json",
 		"skills.json":        "skills.json",

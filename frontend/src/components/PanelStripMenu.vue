@@ -21,13 +21,17 @@
       </MenuSubmenu>
       <MenuDivider v-if="!uiLayout.narrowLayout" />
     </template>
-    <MenuItem
-      v-for="tab in SIDEBAR_TAB_ORDER"
-      :key="tab.key"
-      iconic
-      :icon="tabVisible(tab.key) ? Check : undefined"
-      @click="onTabVisibilityClick(tab.key)"
-    >{{ t(tab.labelKey) }}</MenuItem>
+    <!-- Tab visibility toggles collapsed into a "面板" submenu (shared by the
+         sidebar and the bottom panel strips). -->
+    <MenuSubmenu :label="t('sidebar.panelsMenu')">
+      <MenuItem
+        v-for="tab in SIDEBAR_TAB_ORDER"
+        :key="tab.key"
+        iconic
+        :icon="tabVisible(tab.key) ? Check : undefined"
+        @click="onTabVisibilityClick(tab.key)"
+      >{{ t(tab.labelKey) }}</MenuItem>
+    </MenuSubmenu>
   </Menu>
 </template>
 

@@ -69,6 +69,7 @@ type App struct {
 	proxyStore           *store.ProxyStore
 	localStateStore      *store.LocalStateStore
 	quickCommandsStore   *store.QuickCommandsStore
+	notesStore           *store.NotesStore
 	skillsStore          *store.SkillsStore
 	commandsStore        *store.CommandsStore
 	tunnelStore          *store.TunnelStore
@@ -453,6 +454,7 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 
 	a.terminalHistoryStore = store.NewTerminalHistoryStore(dataDir)
 	a.quickCommandsStore = store.NewQuickCommandsStore(dataDir)
+	a.notesStore = store.NewNotesStore(dataDir)
 	a.skillsStore = store.NewSkillsStore(dataDir)
 	a.commandsStore = store.NewCommandsStore(dataDir)
 	a.tunnelStore = store.NewTunnelStore(dataDir)
@@ -1710,6 +1712,9 @@ func (a *App) syncableStores() []sync.SyncableStore {
 	if a.quickCommandsStore != nil {
 		stores = append(stores, a.quickCommandsStore)
 	}
+	if a.notesStore != nil {
+		stores = append(stores, a.notesStore)
+	}
 	if a.tunnelStore != nil {
 		stores = append(stores, a.tunnelStore)
 	}
@@ -1749,6 +1754,11 @@ func (a *App) reloadStoresAfterSync() {
 	if a.quickCommandsStore != nil {
 		if data, err := a.quickCommandsStore.Load(); err == nil {
 			a.emit("store:quickCommands:changed", data)
+		}
+	}
+	if a.notesStore != nil {
+		if data, err := a.notesStore.Load(); err == nil {
+			a.emit("store:notes:changed", data)
 		}
 	}
 	if a.identityStore != nil {
@@ -2069,6 +2079,26 @@ func (a *App) LoadQuickCommands() (store.QuickCommandData, error) {
 		return store.QuickCommandData{}, fmt.Errorf("quick commands store not initialized")
 	}
 	return a.quickCommandsStore.Load()
+}
+
+// NotesStore methods
+
+func (a *App) SaveNotes(data store.NotesData) error {
+	if a.notesStore == nil {
+		return fmt.Errorf("notes store not initialized")
+	}
+	err := a.notesStore.Save(data)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
+}
+
+func (a *App) LoadNotes() (store.NotesData, error) {
+	if a.notesStore == nil {
+		return store.NotesData{}, fmt.Errorf("notes store not initialized")
+	}
+	return a.notesStore.Load()
 }
 
 // CommandsStore methods

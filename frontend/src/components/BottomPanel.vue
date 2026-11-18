@@ -68,7 +68,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { X, Network, FolderTree, Activity, ArrowRightLeft, Zap, Clock, Palette, Send } from '@lucide/vue'
+import { X, Network, FolderTree, Activity, ArrowRightLeft, Zap, Clock, Palette, Send, NotebookPen } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { useUiLayoutStore, BOTTOM_PANEL_MIN_HEIGHT, type SidebarView } from '../stores/uiLayoutStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -94,6 +94,7 @@ const TAB_ICONS: Record<string, any> = {
   history: Clock,
   personalization: Palette,
   commandSend: Send,
+  notes: NotebookPen,
 }
 
 function tabVisible(key: string): boolean {

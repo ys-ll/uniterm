@@ -15,10 +15,10 @@ import (
 // pipeline. Add adapters there if the web console must support them.
 
 func (s *SFTPSession) resolveRemotePath(remotePath string) string {
-	if path.IsAbs(remotePath) {
+	if remoteAbs(remotePath) {
 		return remotePath
 	}
-	return path.Join(s.cwd, remotePath)
+	return joinRemotePath(s.cwd, remotePath)
 }
 
 // OpenFileReader opens a remote file for streaming read.

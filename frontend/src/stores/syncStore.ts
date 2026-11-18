@@ -61,6 +61,7 @@ export interface SyncConfig {
 export const SYNC_FILE_ITEMS: { file: string; label: string }[] = [
   { file: 'settings.json', label: 'settings.basic' },
   { file: 'quickCommands.json', label: 'quickCommands.quickCommandsTab' },
+  { file: 'notes.json', label: 'notes.notesTab' },
   { file: 'connections.json', label: 'startTab.connections' },
   { file: 'favorites.json', label: 'sidebar.favorites' },
   { file: 'tunnels.json', label: 'settings.tunnels' },

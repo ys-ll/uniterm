@@ -41,6 +41,7 @@ var defaultSyncedFiles = []string{
 	"favorites.json",
 	"ai.json",
 	"quickCommands.json",
+	"notes.json",
 	"tunnels.json",
 	"identities.json",
 	"proxies.json",

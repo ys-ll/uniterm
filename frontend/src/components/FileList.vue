@@ -153,24 +153,35 @@
 
     <Menu ref="ctxMenuRef" v-model:visible="ctxMenuVisible">
         <template v-if="menuType === 'file'">
-          <MenuItem @click="doEdit">{{ t('sftp.edit') }}</MenuItem>
-          <!-- No external editor / system-app association in the mobile sandbox -->
-          <MenuItem v-if="!isMobilePlatform()" @click="doEditExternal">{{ t('sftp.editExternal') }}</MenuItem>
-          <MenuItem v-if="!isMobilePlatform()" @click="doOpenWithSystem">{{ t('sftp.openWithSystem') }}</MenuItem>
-          <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
-          <MenuItem @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
-          <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
+          <!-- Long menus collapsed into "打开 / 新建 / 传输" submenus; the
+               clipboard group, path copies and destructive items stay
+               top-level (high frequency / keep delete visible). -->
+          <MenuSubmenu :label="t('sftp.openMenu')">
+            <MenuItem @click="doEdit">{{ t('sftp.edit') }}</MenuItem>
+            <!-- No external editor / system-app association in the mobile sandbox -->
+            <MenuItem v-if="!isMobilePlatform()" @click="doEditExternal">{{ t('sftp.editExternal') }}</MenuItem>
+            <MenuItem v-if="!isMobilePlatform()" @click="doOpenWithSystem">{{ t('sftp.openWithSystem') }}</MenuItem>
+          </MenuSubmenu>
+          <MenuSubmenu :label="t('sftp.newMenu')">
+            <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
+            <MenuItem @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
+            <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
+          </MenuSubmenu>
           <MenuDivider />
           <MenuItem @click="doCopyToClipboard">{{ t('sftp.copy') }}</MenuItem>
           <MenuItem @click="doCutToClipboard">{{ t('sftp.cut') }}</MenuItem>
           <MenuItem :class="{ disabled: !clipboardCount }" @click="clipboardCount && doPaste()">{{ t('sftp.paste') }}</MenuItem>
           <MenuItem @click="doSelectAll">{{ t('sftp.selectAll') }}</MenuItem>
           <MenuDivider />
-          <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
-          <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
-          <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
-          <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          <MenuSubmenu v-if="mode === 'remote' || props.showSendToOther !== false" :label="t('terminal.transfer')">
+            <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
+            <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+            <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          </MenuSubmenu>
+          <MenuSubmenu :label="t('sftp.copyPathMenu')">
+            <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
+            <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
+          </MenuSubmenu>
           <MenuDivider />
           <MenuItem @click="doRename">{{ t('sftp.rename') }}</MenuItem>
           <MenuItem @click="doDelete">{{ t('sftp.delete') }}</MenuItem>
@@ -179,20 +190,26 @@
           <MenuItem shortcut="F5" @click="doRefresh">{{ t('sftp.refresh') }}</MenuItem>
         </template>
         <template v-else-if="menuType === 'dir'">
-          <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
-          <MenuItem @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
-          <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
+          <MenuSubmenu :label="t('sftp.newMenu')">
+            <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
+            <MenuItem @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
+            <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
+          </MenuSubmenu>
           <MenuDivider />
           <MenuItem @click="doCopyToClipboard">{{ t('sftp.copy') }}</MenuItem>
           <MenuItem @click="doCutToClipboard">{{ t('sftp.cut') }}</MenuItem>
           <MenuItem :class="{ disabled: !clipboardCount }" @click="clipboardCount && doPaste()">{{ t('sftp.paste') }}</MenuItem>
           <MenuItem @click="doSelectAll">{{ t('sftp.selectAll') }}</MenuItem>
           <MenuDivider />
-          <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
-          <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
-          <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
-          <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          <MenuSubmenu v-if="mode === 'remote' || props.showSendToOther !== false" :label="t('terminal.transfer')">
+            <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
+            <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+            <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          </MenuSubmenu>
+          <MenuSubmenu :label="t('sftp.copyPathMenu')">
+            <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
+            <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
+          </MenuSubmenu>
           <MenuDivider />
           <MenuItem @click="doRename">{{ t('sftp.rename') }}</MenuItem>
           <MenuItem @click="doDelete">{{ t('sftp.delete') }}</MenuItem>
@@ -206,11 +223,15 @@
           <MenuItem :class="{ disabled: !clipboardCount }" @click="clipboardCount && doPaste()">{{ t('sftp.paste') }}</MenuItem>
           <MenuItem @click="doSelectAll">{{ t('sftp.selectAll') }}</MenuItem>
           <MenuDivider />
-          <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-          <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
-          <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
-          <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
-          <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          <MenuSubmenu v-if="mode === 'remote' || props.showSendToOther !== false" :label="t('terminal.transfer')">
+            <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
+            <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+            <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
+          </MenuSubmenu>
+          <MenuSubmenu :label="t('sftp.copyPathMenu')">
+            <MenuItem @click="doCopyPath">{{ t('sftp.copyPath') }}</MenuItem>
+            <MenuItem v-if="showCopyPathToTerminal" @click="doCopyPathToTerminal">{{ t('sftp.copyPathToTerminal') }}</MenuItem>
+          </MenuSubmenu>
           <MenuDivider />
           <MenuItem v-if="mode === 'remote'" class="disabled">{{ t('sftp.renameDisabled') }}</MenuItem>
           <MenuItem v-if="mode === 'local'" @click="doRename">{{ t('sftp.rename') }}</MenuItem>
@@ -220,9 +241,11 @@
           <MenuItem shortcut="F5" @click="doRefresh">{{ t('sftp.refresh') }}</MenuItem>
         </template>
         <template v-else-if="menuType === 'empty'">
-          <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
-          <MenuItem @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
-          <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
+          <MenuSubmenu :label="t('sftp.newMenu')">
+            <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
+            <MenuItem @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
+            <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
+          </MenuSubmenu>
           <MenuDivider />
           <MenuItem :class="{ disabled: !clipboardCount }" @click="clipboardCount && doPaste()">{{ t('sftp.paste') }}</MenuItem>
           <MenuItem @click="doSelectAll">{{ t('sftp.selectAll') }}</MenuItem>
@@ -247,6 +270,13 @@
       <MenuItem v-if="!flatToolbar" @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
       <MenuItem v-if="!flatToolbar" @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
       <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
+      <MenuDivider />
+      <!-- 新建 actions collapsed into a submenu, same as the context menu. -->
+      <MenuSubmenu :label="t('sftp.newMenu')">
+        <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
+        <MenuItem @click="doMkdir">{{ t('sftp.newDirectory') }}</MenuItem>
+        <MenuItem v-if="supportsSymlink" @click="doSymlink">{{ t('sftp.newLink') }}</MenuItem>
+      </MenuSubmenu>
       <MenuDivider />
       <MenuItem class="iconic" :class="{ active: showHidden }" @click="toggleShowHidden">
         <el-icon><Eye :size="'0.875rem'" /></el-icon>
@@ -277,6 +307,7 @@ import PathBreadcrumb from './PathBreadcrumb.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
+import MenuSubmenu from './MenuSubmenu.vue'
 import { uiPx } from '../utils/uiScale'
 import { isMobilePlatform } from '../utils/platform'
 import { useLocalStateStore } from '../stores/localStateStore'
