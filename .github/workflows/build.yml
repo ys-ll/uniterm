@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       preview:
-        description: 'Create a snapshot release (fixed tag, prerelease, rolling)'
+        description: 'Create a snapshot release (unique tag per run, prerelease)'
         type: boolean
         required: false
         default: false
@@ -453,13 +453,15 @@ jobs:
             echo "PRERELEASE=false" >> $GITHUB_ENV
           fi
 
-      - name: Update snapshot tag
+      - name: Create snapshot tag
         if: github.event_name == 'workflow_dispatch' && inputs.preview == true
         run: |
+          SNAPSHOT_TAG="snapshot-$(date -u +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)"
+          echo "SNAPSHOT_TAG=$SNAPSHOT_TAG" >> $GITHUB_ENV
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f main-snapshot
-          git push -f origin main-snapshot
+          git tag "$SNAPSHOT_TAG"
+          git push origin "$SNAPSHOT_TAG"
 
       - name: Download docker image archives
         if: github.event_name == 'push' || inputs.preview == true
@@ -468,10 +470,11 @@ jobs:
           name: docker-image-archives
 
       - name: Create Release
+        if: github.event_name == 'push' || inputs.preview == true
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && 'main-snapshot' || github.ref_name }}
-          name: ${{ github.event_name == 'workflow_dispatch' && 'Main Snapshot' || github.ref_name }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && env.SNAPSHOT_TAG || github.ref_name }}
+          name: ${{ github.event_name == 'workflow_dispatch' && env.SNAPSHOT_TAG || github.ref_name }}
           prerelease: ${{ env.PRERELEASE == 'true' }}
           body_path: release_body.md
           files: |
