@@ -732,6 +732,23 @@
             </div>
           </div>
 
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.zmodemIdleTimeoutSec') }}</div>
+              <div class="setting-desc">{{ t('settings.zmodemIdleTimeoutSecDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-input-number
+                v-model="settingsStore.settings.terminal.zmodemIdleTimeoutSec"
+                :min="5"
+                :max="600"
+                :step="5"
+                controls-position="right"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+
           <!-- Local dirs are not user-selectable under mobile scoped storage -->
           <div v-if="!isMobile" class="setting-card">
             <div class="setting-info">

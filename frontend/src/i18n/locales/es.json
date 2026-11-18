@@ -646,6 +646,8 @@
   "settings.zmodemDownloadDir": "Directorio de descargas Zmodem",
   "settings.zmodemDownloadDirDesc": "Guarda aquí directamente los archivos recibidos con sz. Déjalo vacío para elegir una carpeta en cada transferencia.",
   "settings.zmodemDownloadDirPlaceholder": "Elegir en cada transferencia",
+  "settings.zmodemIdleTimeoutSec": "Tiempo de inactividad de Zmodem (segundos)",
+  "settings.zmodemIdleTimeoutSecDesc": "Aborta una transferencia rz/sz si no hay actividad ZMODEM durante este número de segundos. Predeterminado 20. Rango 5-600.",
   "settings.sessionLogDirDesc": "Ubicación donde se guardan los logs de sesión. Dejar vacío para usar el predeterminado: {path}",
   "settings.sessionLogFilename": "Formato del nombre de log",
   "settings.sessionLogFilenameDesc": "Variables: %S sesión, %H host, %M mes, %D día, %h hora, %m minuto. Si sesión y host coinciden, solo se incluye uno.",

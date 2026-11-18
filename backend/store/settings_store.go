@@ -51,6 +51,10 @@ type TerminalSettings struct {
 	// ZmodemDownloadDir is the device-local default directory for files
 	// received with sz. Empty preserves the directory picker behavior.
 	ZmodemDownloadDir string `json:"zmodemDownloadDir,omitempty"`
+	// ZmodemIdleTimeoutSec is the rz/sz idle watchdog in seconds (frontend
+	// clamps to 5-600, default 20). Zero means the frontend falls back to
+	// its default — omitempty so older settings.json files still load.
+	ZmodemIdleTimeoutSec int `json:"zmodemIdleTimeoutSec,omitempty"`
 	// SessionLogFilename controls names for new output logs. Supported tokens:
 	// %S session name, %H host, %M month, %D day, %h hour, %m minute.
 	SessionLogFilename string `json:"sessionLogFilename,omitempty"`

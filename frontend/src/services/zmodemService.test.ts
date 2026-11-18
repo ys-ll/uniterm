@@ -353,6 +353,29 @@ describe('startZmodemService', () => {
     expect(mockSessionEndZmodem).toHaveBeenCalledWith('s1')
   })
 
+  it('uses a custom idle timeout from getIdleTimeoutMs', async () => {
+    vi.useFakeTimers()
+    const s = makeDownload([[1, 2, 3]])
+    const onError = vi.fn()
+    mockAppendFileBase64.mockImplementation(() => new Promise<void>(() => {}))
+
+    startZmodemService({
+      sessionId: 's-custom-timeout',
+      onError,
+      getIdleTimeoutMs: () => 45_000,
+    })
+    sentryInstances[0].on_detect({ confirm: () => s.zsession })
+    await sleepTicks()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(onError).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(25_000)
+    await vi.advanceTimersByTimeAsync(1500)
+    vi.useRealTimers()
+
+    expect(onError).toHaveBeenCalledWith('ZMODEM transfer timed out after 45s without activity')
+    expect(mockSessionEndZmodem).toHaveBeenCalledWith('s-custom-timeout')
+  })
+
   it('finishes local cancellation even when writing the cancel sequence fails', async () => {
     vi.useFakeTimers()
     const u = makeUpload()

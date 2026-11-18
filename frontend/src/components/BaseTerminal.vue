@@ -484,6 +484,10 @@ function initZmodemService(sessionId: string) {
     sessionId,
     direction: zmodemDirection,
     getDefaultDownloadDir: () => settingsStore.settings.terminal.zmodemDownloadDir,
+    getIdleTimeoutMs: () => {
+      const sec = settingsStore.settings.terminal.zmodemIdleTimeoutSec
+      return (typeof sec === 'number' && Number.isFinite(sec) ? sec : 20) * 1000
+    },
     onTerminalRestoreState: restoring => {
       zmodemRestoringOutput = restoring
       if (!restoring) {

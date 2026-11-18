@@ -642,6 +642,8 @@
   "settings.zmodemDownloadDir": "Thư mục tải về Zmodem",
   "settings.zmodemDownloadDirDesc": "Lưu các tệp nhận qua sz trực tiếp vào thư mục này. Để trống để chọn thư mục cho mỗi lần truyền.",
   "settings.zmodemDownloadDirPlaceholder": "Hỏi cho mỗi lần truyền",
+  "settings.zmodemIdleTimeoutSec": "Thời gian chờ Zmodem khi không hoạt động (giây)",
+  "settings.zmodemIdleTimeoutSecDesc": "Hủy truyền rz/sz nếu không có hoạt động ZMODEM trong số giây này. Mặc định 20. Phạm vi 5-600.",
   "settings.sessionLogDirDesc": "Nơi lưu nhật ký phiên. Để trống để dùng mặc định: {path}",
   "settings.sessionLogFilename": "Định dạng tên tệp nhật ký",
   "settings.sessionLogFilenameDesc": "Token: %S phiên, %H máy chủ, %M tháng, %D ngày, %h giờ, %m phút. Một cặp phiên và máy chủ trùng nhau chỉ được tính một lần.",
