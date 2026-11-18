@@ -9,6 +9,7 @@
       @open-settings="openSettings"
       @open-netscan="openNetscan"
       @open-packetcap="openPacketcap"
+      @open-firewall="openFirewall"
       @open-local-services="openLocalServices"
       @open-new-connection="onNewConnectionFromStart"
       @close-tab="closeTab"
@@ -168,6 +169,7 @@
     <MobileKeyBar v-if="keyBarSessionId" :key="keyBarSessionId" :session-id="keyBarSessionId" />
     <NetworkScanTabContent v-model:visible="netscanVisible" @new-connection="onNetscanNewConnection" />
     <PacketCaptureTabContent v-model:visible="packetcapVisible" />
+    <FirewallTabContent v-model:visible="firewallVisible" />
     <LocalServices v-model:visible="localServicesVisible" />
     <HostKeyChangedDialog />
   </div>
@@ -196,6 +198,7 @@ import { writeClipboard } from './composables/useClipboardWrite'
 import SettingsTabContent from './components/SettingsTabContent.vue'
 import NetworkScanTabContent from './components/netscan/NetworkScanTabContent.vue'
 import PacketCaptureTabContent from './components/packetcap/PacketCaptureTabContent.vue'
+import FirewallTabContent from './components/firewall/FirewallTabContent.vue'
 import HostKeyChangedDialog from './components/HostKeyChangedDialog.vue'
 import LocalServices from './components/localsrv/LocalServices.vue'
 import WorkspaceContent from './components/WorkspaceContent.vue'
@@ -418,6 +421,7 @@ const encryptVisible = ref(false)
 const unlockVisible = ref(false)
 const netscanVisible = ref(false)
 const packetcapVisible = ref(false)
+const firewallVisible = ref(false)
 const localServicesVisible = ref(false)
 
 // Determine which credential dialog (recovery-unlock / setup) to show based
@@ -1320,6 +1324,10 @@ function openNetscan() {
 
 function openPacketcap() {
   packetcapVisible.value = true
+}
+
+function openFirewall() {
+  firewallVisible.value = true
 }
 
 // Open the shared connection form prefilled with a network-scan result.

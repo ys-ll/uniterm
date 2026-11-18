@@ -9,6 +9,7 @@
 - SSH: per-host automatic TOTP authentication — attach a TOTP secret to a connection and the 2FA code is filled automatically at login. (@surenwuyuwuqiu)
 - Terminal: multi-line paste confirmation — pasting multi-line clipboard content shows an editable preview first (line numbers, word-wrap toggle); what you confirm is exactly what gets pasted, with a "don't ask again" switch.
 - Terminal: command send panel — a dockable multi-line editor that sends to the current terminal (broadcast-aware), the whole workspace or every tab; execute line-by-line or as a whole, with drafts surviving restarts.
+- Firewall: remote firewall management over SSH — view status, turn the firewall on / off, toggle boot auto-start, and add / remove persistent inbound allow rules for firewalld and ufw, with a self-lockout check that keeps your SSH port reachable.
 
 **Improvements**
 
