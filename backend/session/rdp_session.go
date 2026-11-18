@@ -462,7 +462,7 @@ func (p *RDPProxy) handleWebSocket(ws *websocket.Conn) {
 			n, err := upstreamConn.Read(buf)
 			if n > 0 {
 				if stage := tsRequestStage(buf[:n]); stage != "" {
-					log.Writef("[RDPProxy] CredSSP server -> client: %s (%dB)", stage, n)
+					log.Writef("[RDPProxy] CredSSP server -> client: %s (%dB) hex=%s", stage, n, credSSPHexDump(buf[:n]))
 				}
 				if writeErr := ws.WriteMessage(websocket.BinaryMessage, buf[:n]); writeErr != nil {
 					log.Writef("[RDPProxy] WebSocket write error: %v", writeErr)
@@ -724,12 +724,11 @@ func handshakeTLSLeg(strategy string, conn net.Conn, host string) (net.Conn, [][
 			return nil, nil, err
 		}
 		state := u.ConnectionState()
-		log.Writef("[RDPProxy] TLS leg OK: strategy=%s version=%s cipher=0x%04x",
-			strategy, tlsVersionName(state.Version), state.CipherSuite)
 		chain := make([][]byte, 0, len(state.PeerCertificates))
 		for _, c := range state.PeerCertificates {
 			chain = append(chain, c.Raw)
 		}
+		logTLSLegOK(strategy, state.Version, state.CipherSuite, chain)
 		return u, chain, nil
 	case tlsStrategyGo12, tlsStrategyGo10:
 		maxVersion := uint16(tls.VersionTLS12)
@@ -745,15 +744,29 @@ func handshakeTLSLeg(strategy string, conn net.Conn, host string) (net.Conn, [][
 			return nil, nil, err
 		}
 		state := tlsConn.ConnectionState()
-		log.Writef("[RDPProxy] TLS leg OK: strategy=%s version=%s cipher=0x%04x",
-			strategy, tlsVersionName(state.Version), state.CipherSuite)
 		chain := make([][]byte, 0, len(state.PeerCertificates))
 		for _, c := range state.PeerCertificates {
 			chain = append(chain, c.Raw)
 		}
+		logTLSLegOK(strategy, state.Version, state.CipherSuite, chain)
 		return tlsConn, chain, nil
 	}
 	return nil, nil, fmt.Errorf("unknown TLS strategy %q", strategy)
+}
+
+// logTLSLegOK logs a completed server-side TLS leg with the negotiated
+// version, cipher and the DER sizes of the delivered certificate chain — the
+// version is the server's choice, and a CredSSP leg landing on TLS 1.0/1.1 is
+// the first thing to check when a hardened server tears the session down
+// mid-authentication. Chain sizes help distinguish which certificate the peer
+// actually presented without shipping its bytes into the log.
+func logTLSLegOK(strategy string, version uint16, cipher uint16, chain [][]byte) {
+	sizes := make([]int, 0, len(chain))
+	for _, c := range chain {
+		sizes = append(sizes, len(c))
+	}
+	log.Writef("[RDPProxy] TLS leg OK: strategy=%s version=%s cipher=0x%04x certs=%d chainSizes=%v",
+		strategy, tlsVersionName(version), cipher, len(chain), sizes)
 }
 
 // tlsVersionName renders a TLS version constant as a compact name.
@@ -1063,7 +1076,17 @@ func tsRequestStage(rec []byte) string {
 	case nego:
 		return "NEGOTIATE"
 	}
-	return ""
+	// A TSRequest carrying only the mandatory version [0] is the initial
+	// handshake message; the server's reply to it is the first thing to
+	// compare between a working and a failing CredSSP session.
+	return "VERSION_ONLY"
+}
+
+// credSSPHexDump renders a CredSSP record as full lowercase hex so failing
+// and working sessions can be compared byte for byte from the log alone.
+// No truncation: the diagnostic snapshot must not hide any bytes.
+func credSSPHexDump(rec []byte) string {
+	return hex.EncodeToString(rec)
 }
 
 // decodeRDCleanPathRequest parses a DER RDCleanPathPdu and returns the
@@ -1395,7 +1418,7 @@ func (h *rdpClientHandshake) rewrite(data []byte) ([]byte, error) {
 		}
 		record := h.pending[:header+length]
 		if stage := tsRequestStage(record); stage != "" {
-			log.Writef("[RDPProxy] CredSSP client -> server: %s (%dB)", stage, header+length)
+			log.Writef("[RDPProxy] CredSSP client -> server: %s (%dB) hex=%s", stage, header+length, credSSPHexDump(record))
 		}
 		output = append(output, record...)
 		h.pending = h.pending[header+length:]

@@ -485,6 +485,7 @@ func TestTsRequestStage(t *testing.T) {
 		derExplicit(0, 0x02, derIntegerBytes(6)),
 		derExplicit(4, 0x02, derIntegerBytes(23)),
 	)
+	versionOnly := derExplicit(0, 0x02, derIntegerBytes(6))
 	cases := map[string]struct {
 		rec  []byte
 		want string
@@ -493,6 +494,7 @@ func TestTsRequestStage(t *testing.T) {
 		"negoTokens + pubKeyAuth":    {derEncodeTLV(0x30, auth), "AUTHENTICATE"},
 		"authInfo":                   {derEncodeTLV(0x30, authInfo), "AUTH_INFO"},
 		"errorCode":                  {derEncodeTLV(0x30, errCode), "ERROR_CODE"},
+		"version only":               {derEncodeTLV(0x30, versionOnly), "VERSION_ONLY"},
 		"truncated":                  {derEncodeTLV(0x30, nego)[:len(nego)], ""},
 		"not a TSRequest":            {[]byte{0x03, 0x00, 0x00, 0x0b}, ""},
 		"DER without version field":  {derEncodeTLV(0x30, derExplicit(1, 0x04, []byte{1})), ""},
