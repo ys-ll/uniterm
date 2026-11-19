@@ -125,14 +125,14 @@ func (p *sqlserverProvider) PrepareExec(db execer, dbName string) error {
 }
 
 func (p *sqlserverProvider) DefaultTableQuery(dbName, tableName string, limit, offset int) string {
-	return fmt.Sprintf(
-		"SELECT * FROM %s ORDER BY (SELECT NULL) OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
-		p.qualifiedTable(tableName), offset, limit,
-	)
+	// ROW_NUMBER wrapping instead of OFFSET ... FETCH NEXT: the latter is
+	// SQL Server 2012+ syntax and fails on 2008/2005.
+	return sqlserverPagingWrap(fmt.Sprintf("SELECT * FROM %s", p.qualifiedTable(tableName)), offset, limit)
 }
 
 func (p *sqlserverProvider) PagedTableQuery(dbName, tableName string, limit, offset int) string {
-	return fmt.Sprintf("SELECT * FROM %s ORDER BY (SELECT NULL) OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", p.qualifiedTable(tableName), offset, limit)
+	// ROW_NUMBER wrapping instead of OFFSET ... FETCH NEXT (see above).
+	return sqlserverPagingWrap(fmt.Sprintf("SELECT * FROM %s", p.qualifiedTable(tableName)), offset, limit)
 }
 
 func (p *sqlserverProvider) qualifiedTable(tableName string) string {
@@ -365,16 +365,18 @@ func (p *sqlserverProvider) GetTablePage(db *sql.DB, dbName string, query string
 		total, _ = strconv.Atoi(countRows[0]["n"])
 	}
 
-	pageSQL := "SELECT table_name, type_desc, table_comment FROM (" + base + ") t"
+	// Offset/limit become an inclusive ROW_NUMBER range (OFFSET..FETCH is
+	// SQL Server 2012+; 2008 needs the ROW_NUMBER wrap). Only the three
+	// listing columns are projected back out, so the synthetic row-number
+	// column never leaks to the caller.
+	pageSQL := "SELECT table_name, type_desc, table_comment FROM (SELECT t.*, ROW_NUMBER() OVER (ORDER BY table_name) AS [" + sqlserverPagingColumn + "] FROM (" + base + ") t) p"
 	pageArgs := append([]any{}, baseArgs...)
 	if query != "" {
-		pageSQL += fmt.Sprintf(" WHERE table_name LIKE @p%d", next)
-		pageArgs = append(pageArgs, "%"+query+"%")
-		pageSQL += fmt.Sprintf(" ORDER BY table_name OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY", next+1, next+2)
-		pageArgs = append(pageArgs, offset, limit)
+		pageSQL += fmt.Sprintf(" WHERE table_name LIKE @p%d AND p.[%s] BETWEEN @p%d AND @p%d", next, sqlserverPagingColumn, next+1, next+2)
+		pageArgs = append(pageArgs, "%"+query+"%", offset+1, offset+limit)
 	} else {
-		pageSQL += fmt.Sprintf(" ORDER BY table_name OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY", next, next+1)
-		pageArgs = append(pageArgs, offset, limit)
+		pageSQL += fmt.Sprintf(" WHERE p.[%s] BETWEEN @p%d AND @p%d", sqlserverPagingColumn, next, next+1)
+		pageArgs = append(pageArgs, offset+1, offset+limit)
 	}
 	results, err := queryStrings(db, p.withUse(dbName, pageSQL), pageArgs...)
 	if err != nil {

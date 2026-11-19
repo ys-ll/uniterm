@@ -161,7 +161,10 @@ func buildBrowseSQL(p Provider, tableName string, cols map[string]bool, opts Bro
 	limit := opts.Limit + 1
 	switch p.DriverName() {
 	case "sqlserver":
-		query += fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", opts.Offset, limit)
+		// OFFSET ... FETCH NEXT requires SQL Server 2012+; ROW_NUMBER wrap also
+		// works on 2008/2005. The synthetic row-number column is stripped after
+		// the scan.
+		query = sqlserverPagingWrap(query, opts.Offset, limit)
 	case "oracle":
 		// OFFSET ... FETCH NEXT requires 12c+; ROWNUM wrapping also works on
 		// 11g. The synthetic row-number column is stripped after the scan.
@@ -186,18 +189,34 @@ func oraclePagingWrap(query string, offset, limit int) string {
 		`"`+oraclePagingColumn+`"`, query, offset+limit, `"`+oraclePagingColumn+`"`, offset)
 }
 
-// stripOraclePagingColumn removes the synthetic pagination column from a
-// result grid (see buildBrowseSQL's oracle branch).
-func stripOraclePagingColumn(result *QueryResult) {
+// sqlserverPagingColumn is the synthetic row-number column added for SQL
+// Server pagination and stripped from the result before display.
+const sqlserverPagingColumn = "__rn__"
+
+// sqlserverPagingWrap paginates a complete SELECT with ROW_NUMBER. OFFSET ...
+// FETCH NEXT requires SQL Server 2012+, so 2008/2005 need this wrap instead;
+// it works on modern releases as well. stripPagingColumn removes the synthetic
+// column from the result.
+func sqlserverPagingWrap(query string, offset, limit int) string {
+	return fmt.Sprintf(
+		`SELECT * FROM (SELECT p_.*, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [%s] FROM (%s) p_) WHERE [%s] BETWEEN %d AND %d`,
+		sqlserverPagingColumn, query, sqlserverPagingColumn, offset+1, offset+limit)
+}
+
+// stripPagingColumn removes the synthetic pagination columns (Oracle's __RN__
+// and SQL Server's __rn__) from a result grid (see buildBrowseSQL's oracle /
+// sqlserver branches).
+func stripPagingColumn(result *QueryResult) {
 	cols := make([]QueryResultColumn, 0, len(result.Columns))
 	for _, c := range result.Columns {
-		if !strings.EqualFold(c.Name, oraclePagingColumn) {
+		if !strings.EqualFold(c.Name, oraclePagingColumn) && !strings.EqualFold(c.Name, sqlserverPagingColumn) {
 			cols = append(cols, c)
 		}
 	}
 	result.Columns = cols
 	for _, row := range result.Rows {
 		delete(row, oraclePagingColumn)
+		delete(row, sqlserverPagingColumn)
 	}
 }
 
@@ -225,8 +244,8 @@ func BrowseTable(p Provider, db *sql.DB, dbName, tableName string, opts BrowseOp
 	if err != nil {
 		return nil, err
 	}
-	if p.DriverName() == "oracle" {
-		stripOraclePagingColumn(result)
+	if p.DriverName() == "oracle" || p.DriverName() == "sqlserver" {
+		stripPagingColumn(result)
 	}
 	result.HasMore = len(result.Rows) > opts.Limit
 	if result.HasMore {

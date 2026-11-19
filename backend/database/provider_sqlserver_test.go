@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -265,5 +266,47 @@ func TestSqlserverPrepareExecCompositeDbName(t *testing.T) {
 	}
 	if fe.lastQuery != "USE [shop]" {
 		t.Errorf("PrepareExec sent %q, want %q", fe.lastQuery, "USE [shop]")
+	}
+}
+
+// TestSqlserverRowNumberPaging guards the SQL Server 2008/2005 compatibility
+// fix: every SQL Server pagination path must use ROW_NUMBER wrapping instead
+// of OFFSET ... FETCH NEXT (SQL Server 2012+ syntax that errors on 2008).
+func TestSqlserverRowNumberPaging(t *testing.T) {
+	p := &sqlserverProvider{}
+
+	assertNoOffsetFetch := func(name, sql string) {
+		t.Helper()
+		if strings.Contains(sql, "OFFSET") || strings.Contains(sql, "FETCH NEXT") {
+			t.Errorf("%s still uses OFFSET/FETCH: %s", name, sql)
+		}
+		if !strings.Contains(sql, "ROW_NUMBER() OVER") || !strings.Contains(sql, "BETWEEN") {
+			t.Errorf("%s missing ROW_NUMBER/BETWEEN wrap: %s", name, sql)
+		}
+	}
+
+	// Parameterless wrap (DefaultTableQuery / PagedTableQuery).
+	wrap := sqlserverPagingWrap("SELECT * FROM [items]", 10, 50)
+	assertNoOffsetFetch("sqlserverPagingWrap", wrap)
+	if !strings.Contains(wrap, "["+sqlserverPagingColumn+"]") {
+		t.Errorf("wrap missing synthetic column alias: %s", wrap)
+	}
+	if !strings.Contains(wrap, "BETWEEN 11 AND 60") { // offset+1 .. offset+limit
+		t.Errorf("wrap bounds wrong (offset=10,limit=50): %s", wrap)
+	}
+	assertNoOffsetFetch("DefaultTableQuery", p.DefaultTableQuery("", "items", 20, 5))
+	assertNoOffsetFetch("PagedTableQuery", p.PagedTableQuery("", "items", 20, 5))
+
+	// GetTablePage: bare db (next=1) and schema-qualified db (next=2). Only
+	// the pageSQL shape is checked — it is built exactly like the production
+	// GetTablePage body so no schema query against a live server is needed.
+	for _, dbName := range []string{"shop", "shop.sales"} {
+		base, _, next := p.tableListBase(dbName)
+		pageSQL := "SELECT table_name, type_desc, table_comment FROM (SELECT t.*, ROW_NUMBER() OVER (ORDER BY table_name) AS [" + sqlserverPagingColumn + "] FROM (" + base + ") t) p"
+		pageSQL += fmt.Sprintf(" WHERE p.[%s] BETWEEN @p%d AND @p%d", sqlserverPagingColumn, next, next+1)
+		assertNoOffsetFetch("GetTablePage "+dbName, pageSQL)
+		if !strings.Contains(pageSQL, "ROW_NUMBER() OVER") {
+			t.Errorf("GetTablePage(%s) missing ROW_NUMBER: %s", dbName, pageSQL)
+		}
 	}
 }
