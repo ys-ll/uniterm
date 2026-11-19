@@ -267,3 +267,43 @@ func TestSqlserverPrepareExecCompositeDbName(t *testing.T) {
 		t.Errorf("PrepareExec sent %q, want %q", fe.lastQuery, "USE [shop]")
 	}
 }
+
+// TestSqlserverRowNumberPaging guards the SQL Server 2008/2005 compatibility
+// fix: every SQL Server pagination path must use ROW_NUMBER wrapping instead
+// of OFFSET ... FETCH NEXT (SQL Server 2012+ syntax that errors on 2008).
+func TestSqlserverRowNumberPaging(t *testing.T) {
+	p := &sqlserverProvider{}
+
+	assertNoOffsetFetch := func(name, sql string) {
+		t.Helper()
+		if strings.Contains(sql, "OFFSET") || strings.Contains(sql, "FETCH NEXT") {
+			t.Errorf("%s still uses OFFSET/FETCH: %s", name, sql)
+		}
+		if !strings.Contains(sql, "ROW_NUMBER() OVER") {
+			t.Errorf("%s missing ROW_NUMBER() OVER wrap: %s", name, sql)
+		}
+	}
+
+	// Browse wrap: user sorts are carried by the OVER clause and the paging
+	// bounds cover offset+1 .. offset+limit (limit includes the extra
+	// has-more row the caller fetches).
+	sorts := BrowseOptions{Sorts: []TableSort{{Column: "id", Desc: true}}, Limit: 20, Offset: 40}
+	query, _, err := buildBrowseSQL(p, "items", map[string]bool{"id": true}, sorts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertNoOffsetFetch("buildBrowseSQL", query)
+	if !strings.Contains(query, "OVER (ORDER BY [id] DESC)") {
+		t.Errorf("browse wrap lost the user sort ordering: %s", query)
+	}
+	if !strings.Contains(query, "__RN__ > 40 AND __RN__ <= 61") {
+		t.Errorf("browse bounds wrong (offset=40,limit=20): %s", query)
+	}
+
+	// DefaultTableQuery / PagedTableQuery emit the wrap unsorted.
+	assertNoOffsetFetch("DefaultTableQuery", p.DefaultTableQuery("", "items", 20, 5))
+	if !strings.Contains(p.DefaultTableQuery("", "items", 20, 5), "__RN__ > 5 AND __RN__ <= 25") {
+		t.Errorf("DefaultTableQuery bounds wrong (limit=20,offset=5): %s", p.DefaultTableQuery("", "items", 20, 5))
+	}
+	assertNoOffsetFetch("PagedTableQuery", p.PagedTableQuery("", "items", 20, 5))
+}

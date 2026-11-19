@@ -53,6 +53,7 @@
 - Docker web mode: the headless server binary is fully statically linked again — on linux/arm64 the user worker no longer fails to start right after login.
 - Tunnels: the upstream proxy password in tunnels.json is no longer stored unprotected.
 - Database: exporting a PostgreSQL table's structure no longer fails with "column a.adbin does not exist" — the default-value expression is read from the right catalog table, and columns without a default export as NULL.
+- Database: SQL Server 2008 no longer shows an empty table list — SQL Server pagination switched from `OFFSET ... FETCH NEXT` (a 2012+ syntax that errored on 2008) to a ROW_NUMBER wrap that works on 2005 and up too. Note: SQL Server 2000/7.0-era servers are still unsupported because the go-mssqldb driver cannot complete its prelogin handshake with them.
 - Terminal: the context menu now closes when the multi-line paste dialog opens instead of lingering underneath.
 - Terminal theme: the mobaxterm-default palette matches the theme it replicates, and bold text in the scrollback screen preview uses brighter colors instead of washing out. (@etanman)
 - UI: splitter drags no longer promote into native drags that stall the UI or crash the WebView2 renderer, and right-clicks inside our own menus are ignored.
@@ -115,6 +116,7 @@ Thanks to @surenwuyuwuqiu, @etanman, @dajiaohuang and @rsipka for their contribu
 - Docker Web 模式：headless server 二进制恢复完全静态链接——linux/arm64 下登录后用户 worker 不再启动失败。
 - 隧道：tunnels.json 中的上游代理密码不再以不受保护的方式存储。
 - 数据库：导出 PostgreSQL 表结构不再报 "column a.adbin does not exist"——默认值表达式改从正确的系统表读取，无默认值的列按 NULL 导出。
+- 数据库：SQL Server 2008 不再显示空表列表——SQL Server 分页由 `OFFSET ... FETCH NEXT`（2012 才支持的语法，2008 会报错）改为 ROW_NUMBER 包一层，2005 及以上版本均兼容。注意：SQL Server 2000/7.0 时代的服务器仍不支持，因 go-mssqldb 驱动无法与其完成 prelogin 握手。
 - 终端：多行粘贴对话框弹出时同步关闭右键菜单，不再残留。
 - 终端主题：mobaXterm-default 配色与其复刻的主题一致，回滚区屏幕预览中的加粗文字使用更亮的颜色，不再发灰。(@etanman)
 - 界面：分隔条拖拽不再被提升为原生拖拽（UI 卡死、WebView2 渲染进程崩溃）；自家菜单内右键不再弹原生菜单。

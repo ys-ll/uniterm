@@ -652,11 +652,53 @@ watch(() => [props.activeDb, props.activeTable], async ([db, table]) => {
 function scrollActiveIntoView() {
   const root = treeContentRef.value
   if (!root || !selectedDb.value) return
-  const b = blocks.value.find(x => x.type !== 'list' && (x.type === 'dbrow' ? x.db.name === selectedDb.value : x.unit.name === selectedDb.value))
-    || blocks.value.find(x => x.type === 'list' && (x.db.name === selectedDb.value || x.unit.name === selectedDb.value))
-  if (!b) return
-  const rowIdx = b.type === 'list' ? b.rowIdx : b.rowIdx
-  root.scrollTop = Math.max(0, rowIdx * ROW_H - viewH.value / 2)
+  // When a specific table is selected, land on that table's row instead of
+  // the db/schema header. The previous code only scrolled to the header block
+  // (its first row), so on a long list the selected table was left out of
+  // view — and with a single/top database the header sits at row 0, making
+  // the list jump all the way back to the top.
+  let rowIdx = -1
+  if (selectedTable.value) {
+    for (const b of blocks.value) {
+      if (b.type !== 'list') continue
+      // Schema-less (MySQL): match by db name. Schema-capable: the unit key
+      // is the "db.schema" composite that selectedDb carries.
+      const matches = b.schema === ''
+        ? b.db.name === selectedDb.value
+        : b.unit.name === selectedDb.value
+      if (!matches) continue
+      const slot = b.unit.tables.findIndex(t => t?.name === selectedTable.value)
+      if (slot >= 0) {
+        rowIdx = b.rowIdx + slot
+        break
+      }
+    }
+  }
+  if (rowIdx < 0) {
+    // No table selected, or the target table isn't loaded yet: fall back to
+    // the db/schema header row so the right section stays in view.
+    const b = blocks.value.find(x => x.type !== 'list' && (x.type === 'dbrow' ? x.db.name === selectedDb.value : x.unit.name === selectedDb.value))
+      || blocks.value.find(x => x.type === 'list' && (x.db.name === selectedDb.value || x.unit.name === selectedDb.value))
+    if (!b) return
+    rowIdx = b.rowIdx
+  }
+  // Only scroll when the target row is outside the visible viewport. If it is
+  // already in view, leave the list completely untouched — forcing it to the
+  // vertical center caused a small but visible jump on every selection.
+  const rowTop = rowIdx * ROW_H
+  const rowBottom = rowTop + ROW_H
+  const viewTop = root.scrollTop
+  const viewBottom = viewTop + viewH.value
+  if (rowTop < viewTop) {
+    // Above the viewport: bring the row in near the top (one-row padding).
+    root.scrollTop = Math.max(0, rowTop - ROW_H)
+  } else if (rowBottom > viewBottom) {
+    // Below the viewport: bring the row in near the bottom (one-row padding).
+    root.scrollTop = rowBottom - viewH.value + ROW_H
+  } else {
+    // Already fully visible — do not move the list.
+    return
+  }
   scrollTop.value = root.scrollTop
   recomputeVisible()
 }
