@@ -2,7 +2,7 @@
   /* Core palette - near-black window floor against lighter panels, so the
      layer contrast reads clearly */
   --bg-base: #0f0f0f;
-  --bg-elevated: #1a1a1a;
+  --bg-elevated: #202020;
   --bg-surface: #242424;
   --bg-overlay: #2b2b2b;
   --bg-hover: #303030;
@@ -118,7 +118,7 @@
 /* Deep blue - oceanic dark */
 [data-theme="deep-blue"] {
   --bg-base: #0b111e;
-  --bg-elevated: #121c30;
+  --bg-elevated: #142036;
   --bg-surface: #182338;
   --bg-overlay: #1e2c49;
   --bg-hover: #243256;
