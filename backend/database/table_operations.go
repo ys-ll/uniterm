@@ -152,16 +152,26 @@ func buildBrowseSQL(p Provider, tableName string, cols map[string]bool, opts Bro
 	if len(predicates) > 0 {
 		query += " WHERE " + strings.Join(predicates, " AND ")
 	}
-	if len(order) > 0 {
+	// The SQL Server branch must not carry a top-level ORDER BY: T-SQL
+	// rejects ORDER BY inside a derived table unless TOP/OFFSET is present,
+	// so the row number's OVER clause carries the ordering instead.
+	if len(order) > 0 && p.DriverName() != "sqlserver" {
 		query += " ORDER BY " + strings.Join(order, ", ")
-	} else if p.DriverName() == "sqlserver" {
-		query += " ORDER BY (SELECT NULL)"
 	}
 	// Fetch one extra row to determine whether a next page exists.
 	limit := opts.Limit + 1
 	switch p.DriverName() {
 	case "sqlserver":
-		query += fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", opts.Offset, limit)
+		// ROW_NUMBER wrap instead of OFFSET/FETCH: the latter is SQL Server
+		// 2012+ syntax and a SQL Server 2008 server rejects it outright, so
+		// table data could not be browsed on old instances. Same
+		// synthetic-column scheme as the Oracle 11g branch; stripped from
+		// the result after the scan.
+		over := strings.Join(order, ", ")
+		if over == "" {
+			over = "(SELECT NULL)"
+		}
+		query = sqlserverPagingWrap(query, over, opts.Offset, limit)
 	case "oracle":
 		// OFFSET ... FETCH NEXT requires 12c+; ROWNUM wrapping also works on
 		// 11g. The synthetic row-number column is stripped after the scan.
@@ -172,32 +182,46 @@ func buildBrowseSQL(p Provider, tableName string, cols map[string]bool, opts Bro
 	return query, args, nil
 }
 
-// oraclePagingColumn is the synthetic row-number column added for Oracle
-// pagination and stripped from the result before display.
-const oraclePagingColumn = "__RN__"
+// rowNumberPagingColumn is the synthetic row-number column shared by the
+// SQL Server and Oracle pagination wraps; stripped from the result before
+// display.
+const rowNumberPagingColumn = "__RN__"
 
 // oraclePagingWrap paginates a complete SELECT with ROWNUM. OFFSET ... FETCH
 // NEXT requires Oracle 12c+, so 11g needs this wrap instead; it works on
-// modern releases as well. stripOraclePagingColumn removes the synthetic
+// modern releases as well. stripRowNumberPagingColumn removes the synthetic
 // column from the result.
 func oraclePagingWrap(query string, offset, limit int) string {
 	return fmt.Sprintf(
 		`SELECT * FROM (SELECT q_.*, ROWNUM %s FROM (%s) q_ WHERE ROWNUM <= %d) WHERE %s > %d`,
-		`"`+oraclePagingColumn+`"`, query, offset+limit, `"`+oraclePagingColumn+`"`, offset)
+		`"`+rowNumberPagingColumn+`"`, query, offset+limit, `"`+rowNumberPagingColumn+`"`, offset)
 }
 
-// stripOraclePagingColumn removes the synthetic pagination column from a
-// result grid (see buildBrowseSQL's oracle branch).
-func stripOraclePagingColumn(result *QueryResult) {
+// sqlserverPagingWrap paginates a complete SELECT with ROW_NUMBER, the
+// SQL Server 2005-compatible replacement for OFFSET/FETCH (2012+ syntax,
+// rejected by SQL Server 2008 — see buildBrowseSQL's sqlserver branch).
+// The synthetic row-number column is stripped from the result afterwards
+// (same scheme as the Oracle 11g branch). overClause supplies the paging
+// order because T-SQL does not allow ORDER BY inside a derived table
+// without TOP.
+func sqlserverPagingWrap(query, overClause string, offset, limit int) string {
+	return fmt.Sprintf(
+		`SELECT * FROM (SELECT q_.*, ROW_NUMBER() OVER (ORDER BY %s) AS %s FROM (%s) q_) __paged WHERE %s > %d AND %s <= %d`,
+		overClause, rowNumberPagingColumn, query, rowNumberPagingColumn, offset, rowNumberPagingColumn, offset+limit)
+}
+
+// stripRowNumberPagingColumn removes the synthetic pagination column from a
+// result grid (see buildBrowseSQL's sqlserver and oracle branches).
+func stripRowNumberPagingColumn(result *QueryResult) {
 	cols := make([]QueryResultColumn, 0, len(result.Columns))
 	for _, c := range result.Columns {
-		if !strings.EqualFold(c.Name, oraclePagingColumn) {
+		if !strings.EqualFold(c.Name, rowNumberPagingColumn) {
 			cols = append(cols, c)
 		}
 	}
 	result.Columns = cols
 	for _, row := range result.Rows {
-		delete(row, oraclePagingColumn)
+		delete(row, rowNumberPagingColumn)
 	}
 }
 
@@ -225,8 +249,8 @@ func BrowseTable(p Provider, db *sql.DB, dbName, tableName string, opts BrowseOp
 	if err != nil {
 		return nil, err
 	}
-	if p.DriverName() == "oracle" {
-		stripOraclePagingColumn(result)
+	if p.DriverName() == "oracle" || p.DriverName() == "sqlserver" {
+		stripRowNumberPagingColumn(result)
 	}
 	result.HasMore = len(result.Rows) > opts.Limit
 	if result.HasMore {
