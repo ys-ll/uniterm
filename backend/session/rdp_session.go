@@ -462,7 +462,7 @@ func (p *RDPProxy) handleWebSocket(ws *websocket.Conn) {
 			n, err := upstreamConn.Read(buf)
 			if n > 0 {
 				if stage := tsRequestStage(buf[:n]); stage != "" {
-					log.Writef("[RDPProxy] CredSSP server -> client: %s (%dB) hex=%s", stage, n, credSSPHexDump(buf[:n]))
+					log.Writef("[RDPProxy] CredSSP server -> client: %s (%dB)", stage, n)
 				}
 				if writeErr := ws.WriteMessage(websocket.BinaryMessage, buf[:n]); writeErr != nil {
 					log.Writef("[RDPProxy] WebSocket write error: %v", writeErr)
@@ -1431,7 +1431,7 @@ func (h *rdpClientHandshake) rewrite(data []byte) ([]byte, error) {
 		}
 		record := h.pending[:header+length]
 		if stage := tsRequestStage(record); stage != "" {
-			log.Writef("[RDPProxy] CredSSP client -> server: %s (%dB) hex=%s", stage, header+length, credSSPHexDump(record))
+			log.Writef("[RDPProxy] CredSSP client -> server: %s (%dB)", stage, header+length)
 		}
 		output = append(output, record...)
 		h.pending = h.pending[header+length:]
