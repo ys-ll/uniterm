@@ -353,6 +353,7 @@ Issue、提案、フィードバックは [GitHub Issues](https://github.com/ys-
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
+    <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
   </tr>
 </table>
 

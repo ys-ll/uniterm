@@ -353,6 +353,7 @@ Gracias a las siguientes personas por contribuir con código y mejoras, y a todo
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
+    <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
   </tr>
 </table>
 

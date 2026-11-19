@@ -353,6 +353,7 @@ Cảm ơn những người đã đóng góp mã nguồn và cải tiến dưới
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
+    <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
   </tr>
 </table>
 
