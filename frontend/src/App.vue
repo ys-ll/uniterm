@@ -252,7 +252,7 @@ import { useSyncStore } from './stores/syncStore'
 import { useCredentialStore } from './stores/credentialStore'
 import { disposeSessionStore } from './stores/sessionStore'
 import { useUpdateCheck } from './composables/useUpdateCheck'
-import { loadKeybindings, installGlobalListener, uninstallGlobalListener, matchDigitShortcut, isRebinding, isTabRenameShortcut } from './composables/useKeyboardShortcuts'
+import { loadKeybindings, installGlobalListener, uninstallGlobalListener, matchDigitShortcut, matchTabCycleShortcut, isRebinding, isTabRenameShortcut } from './composables/useKeyboardShortcuts'
 import { focusPanelTerminal, installTerminalFocusRestore } from './composables/useFocusTerminal'
 import { useDuplicateSession } from './composables/useDuplicateSession'
 import { useTunnelCredentials } from './composables/useTunnelCredentials'
@@ -892,6 +892,18 @@ function onPlatformSystemShortcut(e: KeyboardEvent) {
       tabStore.setActiveTab(tab.id)
       return
     }
+  }
+  // Platform tab-cycling convention: Cmd+Shift+] / Cmd+Shift+[ on macOS,
+  // Ctrl+PageDown / Ctrl+PageUp on Windows/Linux. Fixed aliases, so a user
+  // binding for the same combo (handled by the window-level listener first)
+  // and the configurable nextTab/prevTab actions are left untouched.
+  const cycle = matchTabCycleShortcut(e, isMac)
+  if (cycle) {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    if (cycle === 'next') tabStore.nextTab()
+    else tabStore.prevTab()
+    return
   }
   if (!isMac || !e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
   const key = e.key.toLowerCase()

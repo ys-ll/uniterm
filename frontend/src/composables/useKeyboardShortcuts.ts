@@ -176,6 +176,26 @@ export function isTabRenameShortcut(e: KeyboardEvent): boolean {
   return e.key === 'F2' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
 }
 
+// iTerm-style tab cycling, fixed per platform: Cmd+Shift+] / Cmd+Shift+[ on
+// macOS (Terminal.app, iTerm, Safari) and Ctrl+PageDown / Ctrl+PageUp on
+// Windows and Linux (browsers, VS Code, GNOME Terminal). The bracket keys are
+// matched by e.code because Shift turns them into braces; the Page keys read
+// e.key so the helper also works with synthetic events. Kept separate from
+// the configurable nextTab/prevTab actions: those keep their Ctrl+Tab default,
+// and the platform convention stays available even after a rebind.
+export function matchTabCycleShortcut(e: KeyboardEvent, isMac: boolean): 'next' | 'prev' | null {
+  if (isMac) {
+    if (!e.metaKey || e.ctrlKey || e.altKey || !e.shiftKey) return null
+    if (e.code === 'BracketRight') return 'next'
+    if (e.code === 'BracketLeft') return 'prev'
+    return null
+  }
+  if (!e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return null
+  if (e.key === 'PageDown') return 'next'
+  if (e.key === 'PageUp') return 'prev'
+  return null
+}
+
 export function onTerminalKey(e: KeyboardEvent): boolean {
   const normalized = normalize(e)
   if (fire(e, normalized, shortcutMap)) return false
