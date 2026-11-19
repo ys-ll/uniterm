@@ -201,10 +201,14 @@ async function load() {
     if (seq !== loadSeq) return
     objects.value = all
     allLoaded.value = true
-  } catch {
+  } catch (e) {
     if (seq !== loadSeq) return
     objects.value = []
     loading.value = false
+    // Don't silently swallow: a failed table list used to show an empty list
+    // with no clue why (e.g. SQL Server 2008 OFFSET syntax errors). Surface
+    // the real error so the cause is visible instead of a blank list.
+    msg.error(e?.message || String(e))
   }
 }
 
