@@ -124,15 +124,28 @@ func (p *sqlserverProvider) PrepareExec(db execer, dbName string) error {
 	return err
 }
 
-func (p *sqlserverProvider) DefaultTableQuery(dbName, tableName string, limit, offset int) string {
+// DefaultTableQuery and PagedTableQuery page arbitrary table rows with a
+// ROW_NUMBER wrap instead of OFFSET/FETCH: the latter is SQL Server 2012+
+// syntax and a SQL Server 2008 server rejects it outright. The synthetic
+// __RN__ column stays visible here — unlike the DBBrowseTable path there
+// is no post-scan strip, so users who run the pre-filled SQL by hand see
+// it; it keeps the query self-contained and 2005+ compatible. Like the
+// previous ORDER BY (SELECT NULL), rows carry no stable order, so pages
+// may repeat or skip rows across queries — parity with the OFFSET
+// version.
+func (p *sqlserverProvider) pagedSelect(table string, limit, offset int) string {
 	return fmt.Sprintf(
-		"SELECT * FROM %s ORDER BY (SELECT NULL) OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
-		p.qualifiedTable(tableName), offset, limit,
+		`SELECT * FROM (SELECT q_.*, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS __RN__ FROM (%s) q_) __paged WHERE __RN__ > %d AND __RN__ <= %d`,
+		"SELECT * FROM "+table, offset, offset+limit,
 	)
 }
 
+func (p *sqlserverProvider) DefaultTableQuery(dbName, tableName string, limit, offset int) string {
+	return p.pagedSelect(p.qualifiedTable(tableName), limit, offset)
+}
+
 func (p *sqlserverProvider) PagedTableQuery(dbName, tableName string, limit, offset int) string {
-	return fmt.Sprintf("SELECT * FROM %s ORDER BY (SELECT NULL) OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", p.qualifiedTable(tableName), offset, limit)
+	return p.pagedSelect(p.qualifiedTable(tableName), limit, offset)
 }
 
 func (p *sqlserverProvider) qualifiedTable(tableName string) string {
@@ -365,17 +378,23 @@ func (p *sqlserverProvider) GetTablePage(db *sql.DB, dbName string, query string
 		total, _ = strconv.Atoi(countRows[0]["n"])
 	}
 
-	pageSQL := "SELECT table_name, type_desc, table_comment FROM (" + base + ") t"
+	// ROW_NUMBER() paging instead of OFFSET/FETCH: the latter is SQL
+	// Server 2012+ syntax and a SQL Server 2008 server rejects it, leaving
+	// the tree stuck on "loading all tables" on old instances.
+	// ROW_NUMBER() OVER works on SQL Server 2005+ and, unlike the data-grid
+	// path, the row number can be stripped here because the column list is
+	// known and the rn order (ORDER BY table_name) is deterministic.
+	pageInner := "SELECT table_name, type_desc, table_comment, ROW_NUMBER() OVER (ORDER BY table_name) AS __rn FROM (" + base + ") t"
 	pageArgs := append([]any{}, baseArgs...)
 	if query != "" {
-		pageSQL += fmt.Sprintf(" WHERE table_name LIKE @p%d", next)
+		pageInner += fmt.Sprintf(" WHERE table_name LIKE @p%d", next)
 		pageArgs = append(pageArgs, "%"+query+"%")
-		pageSQL += fmt.Sprintf(" ORDER BY table_name OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY", next+1, next+2)
-		pageArgs = append(pageArgs, offset, limit)
-	} else {
-		pageSQL += fmt.Sprintf(" ORDER BY table_name OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY", next, next+1)
-		pageArgs = append(pageArgs, offset, limit)
 	}
+	pageSQL := fmt.Sprintf(
+		"SELECT table_name, type_desc, table_comment FROM (%s) __paged WHERE __rn BETWEEN @p%d AND @p%d",
+		pageInner, len(pageArgs)+1, len(pageArgs)+2,
+	)
+	pageArgs = append(pageArgs, offset+1, offset+limit)
 	results, err := queryStrings(db, p.withUse(dbName, pageSQL), pageArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("get tables page: %w", err)
