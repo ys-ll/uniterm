@@ -108,3 +108,50 @@ func TestSQLiteSchemaAndCRUD(t *testing.T) {
 		t.Fatalf("expected empty table, got %v", rows)
 	}
 }
+
+func TestSQLiteGetTablePage(t *testing.T) {
+	p, err := NewProvider("sqlite")
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "test.db")
+	db, err := NewDB("sqlite", p.DSN(path, 0, "", "", "", nil))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	for _, name := range []string{"alpha", "bravo", "charlie", "delta", "echo"} {
+		if err := p.CreateTable(db, "main", name); err != nil {
+			t.Fatalf("CreateTable %s: %v", name, err)
+		}
+	}
+
+	// Regression: the LIMIT/OFFSET bind order used to be swapped, so every
+	// page (including the first) came back empty while COUNT still reported
+	// the correct total — the tree showed "N tables, 0 loaded" forever.
+	first, total, err := p.GetTablePage(db, "main", "", 0, 2)
+	if err != nil {
+		t.Fatalf("GetTablePage(0,2): %v", err)
+	}
+	if total != 5 || len(first) != 2 || first[0].Name != "alpha" || first[1].Name != "bravo" {
+		t.Fatalf("GetTablePage(0,2) = %v, total %d; want [alpha bravo], total 5", first, total)
+	}
+
+	second, _, err := p.GetTablePage(db, "main", "", 2, 2)
+	if err != nil {
+		t.Fatalf("GetTablePage(2,2): %v", err)
+	}
+	if len(second) != 2 || second[0].Name != "charlie" || second[1].Name != "delta" {
+		t.Fatalf("GetTablePage(2,2) = %v; want [charlie delta]", second)
+	}
+
+	filtered, ftotal, err := p.GetTablePage(db, "main", "alp", 0, 10)
+	if err != nil {
+		t.Fatalf("GetTablePage(filter): %v", err)
+	}
+	if ftotal != 1 || len(filtered) != 1 || filtered[0].Name != "alpha" {
+		t.Fatalf("GetTablePage(filter) = %v, total %d; want [alpha], total 1", filtered, ftotal)
+	}
+}

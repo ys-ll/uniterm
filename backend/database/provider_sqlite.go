@@ -206,7 +206,7 @@ func (p *sqliteProvider) GetTablePage(db *sql.DB, dbName string, query string, o
 	if query != "" {
 		pageArgs = append(pageArgs, "%"+query+"%")
 	}
-	pageArgs = append(pageArgs, offset, limit)
+	pageArgs = append(pageArgs, limit, offset)
 	results, err := queryStrings(db,
 		"SELECT name, type "+base+" ORDER BY name LIMIT ? OFFSET ?", pageArgs...)
 	if err != nil {
