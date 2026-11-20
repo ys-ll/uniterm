@@ -527,6 +527,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
@@ -575,7 +576,10 @@ jobs:
           # both platforms end up cached under the same tag and
           # `docker save <tag>` exports all of them, which is how an arm64
           # archive once shipped an amd64 image.
-          BUILDER=$(docker buildx ls --format json | jq -r '[.[] | select(.Driver == "docker-container") | .Name][0] // ""')
+          # The builder name comes from the setup action's output — parsing
+          # `docker buildx ls --format json` breaks on newer buildx versions
+          # whose JSON shape the jq filter cannot handle.
+          BUILDER="${{ steps.buildx.outputs.name }}"
           for arch in amd64 arm64; do
             BUILDER_FLAG=""
             [ -n "$BUILDER" ] && BUILDER_FLAG="--builder ${BUILDER}"
