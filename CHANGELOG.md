@@ -1,5 +1,119 @@
 # Changelog
 
+## v1.12.4-alpha
+
+### What's Changed
+
+**New Features**
+
+- Traffic capture: capture packets on local network adapters or on a remote host over SSH (tcpdump), with BPF-style filters, per-protocol field tree, hex view, and CSV / PCAP export; the entry lives in the header Network Toolbox menu. (@etanman)
+- Firewall management: remote firewall management over SSH — view status, turn the firewall on / off, toggle boot auto-start, and add / remove persistent inbound allow rules for firewalld and ufw, with a self-lockout check that keeps your SSH port reachable. (@etanman)
+- Notes: a dockable notes panel with free-form category tags and a Markdown editor / preview; notes join the cloud-sync exchange.
+- Import: Devolutions Remote Desktop Manager (.rdm) exports — folders map to groups, SSH / Telnet / RDP entries become connections with their credentials, and SSH gateway entries become jump hosts; secrets protected by RDM's SafePassword scheme are reported as warnings. (@rsipka)
+
+**Improvements**
+
+- UI: context menus slimmed down — the tab menu and the SFTP file / batch menus collapse into submenus, the AI input toolbar merges attach / # / slash into a single + menu, and the duplicated sidebar-tabs card is removed from Settings.
+- Theme: dark and deep-blue themes lift the title bar / sidebar background for better contrast against the terminal area.
+- Database: the PostgreSQL driver switched from lib/pq (maintenance mode) to pgx v5 — same DSN keywords and identical scan behavior.
+- AI: the chat send shortcut is configurable, the Enter key during IME composition no longer sends the message, and double-press Ctrl (Cmd on macOS) toggles the AI sidebar.
+- AI: compaction summary requests now carry the model session header, matching chat requests.
+- Terminal: clear-screen gains a "preserve history" toggle (clear scrolls the viewport into scrollback instead of wiping it, standard wipe still available) and configurable shortcuts for reset output / clear scrollback.
+- Terminal: configurable ZMODEM idle timeout (was a fixed 20 s). (@caibingxin)
+- Session log: a global auto-start setting — the first session on each panel starts its output log automatically; "open log folder" now always opens the effective log directory (creating it on demand), and the filename template gains a year token.
+- Mosh: UDP port range and locale options for the mosh-server launch — works behind firewalls that only forward a fixed UDP range and on servers whose default locale is not UTF-8.
+- Shortcuts: platform tab-cycle keys — Ctrl+PageDown / PageUp on Windows & Linux, Cmd+Shift+] / [ on macOS — plus opt-in toggle shortcuts for the tunnels / history / personalization / command-send panel views. (@chenxiaoqiang)
+- Start page: the brand line above the search box can be hidden from the layout menu.
+- Proxy: every network-capable connection type can route through the configured proxy — RDP, VNC / SPICE, FTP, SMB, WebDAV / S3 / Elasticsearch, Redis, MongoDB, all database types, Kubernetes, X11 desktop and container SSH; an unreachable proxy now fails the connection instead of silently dialing direct.
+- Terminal: minimize to tray (optional) — the minimize button hides the window into the tray instead of the taskbar; tabs, sessions and background services keep running and are restored from the tray icon.
+
+**Bug Fixes**
+
+- AI: deleting a user message no longer causes later messages in the session to be saved twice.
+- Terminal: the PTY starts at the measured grid instead of 80×24 — output drawn at boot no longer stays wrapped after the resize correction.
+- Terminal: in standard clear mode, ED3 (erase scrollback) passes through natively so "clear + erase scrollback" aliases can wipe the scrollback.
+- Windows: portable-mode window geometry is read from the resolved data dir — the size you picked survives a restart.
+- Windows: after an app update, the WebView2 cache no longer pins the old UI (index.html is served with no-store).
+- SSH: reconnecting a terminal session rebuilds its companion SFTP / monitor sessions — the file sidebar no longer keeps failing until you switch tabs back and forth; the sidebar also shows the connect error instead of a blank list.
+- SSH: automatic TOTP also fills when the server echoes the one-time-code prompt (some bastion hosts set echo=true); MFA option-selection questions are excluded from auto-fill so the code is never sent as a method choice.
+- SFTP: Windows-style absolute remote paths (drive letter / UNC) are recognized on Windows SSH hosts — they were wrongly joined onto the cwd, failing every read / write / list.
+- Telnet: window-size negotiation is gated behind the RFC 1073 handshake — peers without NAWS no longer see "s)" garbage typed into their login prompt.
+- Local Telnet service: arrow keys are dropped so the client cursor and cmd's cursor stay in sync — Del no longer deletes invisible characters after arrow keys were used. (@etanman)
+- MCP: SSH file transfers reuse the terminal's authenticated transport — interactive logins no longer require a second authentication. (@surenwuyuwuqiu)
+- Sync: opt-in skills sync works across devices with mismatched sync scopes, and skill edits publish immediately under auto-sync. (#1517) (@surenwuyuwuqiu)
+- RDP: sessions taken over / re-attached mid-logon no longer disconnect — late license PDUs from the server are tolerated instead of tearing the connection down.
+- RDP: legacy TLS 1.0-only servers (Server 2008 era) complete NLA — the TLS 1.0 CBC record split that broke schannel is dropped.
+- RDP: the fallback to standard RDP security now actually fires on Server 2003-era servers (the NEG_FAILURE response was mangled before it reached the fallback).
+- RDP: Shift works again on keyboards that report it with the E0 extended prefix (e.g. right Shift as E0-36) — uppercase and Shift chords were silently dead.
+- Redis: the db list is built from the server-reported database count instead of a fixed 16.
+- Database: SQLite / rqlite paging had LIMIT and OFFSET bound in swapped order — table trees stuck at "N tables, 0 loaded" now load their pages.
+- Database: a failed table list shows the real error instead of a silent blank list. (@etanman)
+- Database: SQL Server 2008 no longer shows an empty table list — SQL Server pagination switched from `OFFSET ... FETCH NEXT` (a 2012+ syntax that errored on 2008) to a ROW_NUMBER wrap that works on 2005 and up too. Note: SQL Server 2000/7.0-era servers are still unsupported because the go-mssqldb driver cannot complete its prelogin handshake with them. (@etanman)
+- Database tree: selecting a table no longer jumps the list — with a single database it no longer scrolled all the way back to the top. (@etanman)
+
+**Notes**
+
+- As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
+- Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
+
+Thanks to @etanman, @surenwuyuwuqiu, @rsipka, @caibingxin and @chenxiaoqiang for their contributions to this release.
+
+### 更新内容
+
+**新功能**
+
+- 流量捕获：支持对本地网卡或远程主机（经 SSH 执行 tcpdump）实时抓包，内置 BPF 风格过滤器、按协议分层的字段树、十六进制视图，可导出 CSV / PCAP；入口在顶部「网络工具箱」菜单。(@etanman)
+- 防火墙管理：新增基于 SSH 的远程防火墙管理——查看状态、开启 / 关闭防火墙、切换开机自启，为 firewalld 和 ufw 增删持久化的入站放行规则，并带端口 22 自锁检测，保证 SSH 端口始终可达。(@etanman)
+- 笔记：新增可停靠的笔记面板，支持自由分类标签与 Markdown 编辑 / 预览；笔记纳入云同步。
+- 导入：支持导入 Devolutions Remote Desktop Manager（.rdm）导出——文件夹映射为分组，SSH / Telnet / RDP 条目连同凭据转为连接，SSH 网关条目转为跳板机；受 RDM SafePassword 保护的密文无法导入，会在结果中以警告列出。(@rsipka)
+
+**改进**
+
+- 界面：精简各级右键菜单——标签页菜单与 SFTP 文件 / 批量菜单归入子菜单，AI 输入栏的附件 / # / 斜杠命令合并为一个 + 菜单；设置页移除与标签栏右键重复的侧栏卡片。
+- 主题：dark 与 deep-blue 主题调亮标题栏 / 侧栏背景，与终端区域对比更清晰。
+- 数据库：PostgreSQL 驱动由 lib/pq（已停止维护）切换为 pgx v5——DSN 关键字与扫描行为不变。
+- AI：聊天发送快捷键可配置，输入法组词期间的 Enter 不再直接发送消息；双击 Ctrl（macOS 为 Cmd）可开关 AI 侧栏。
+- AI：上下文压缩的摘要请求与聊天请求一致携带模型会话头。
+- 终端：清屏新增「保留历史」开关（清屏先把当前屏滚入回滚区，也可切回标准清屏），以及「重置输出 / 清空回滚区」的可配置快捷键。
+- 终端：ZMODEM 空闲超时可配置（原为固定 20 秒）。(@caibingxin)
+- 会话日志：新增全局「自动开始记录」开关——每个面板的首个会话自动开启输出日志；「打开日志目录」始终打开实际生效的日志目录（按需创建）；文件名模板支持年份占位符。
+- Mosh：新增 mosh-server 启动的 UDP 端口范围与 locale 选项——只放行固定 UDP 段的防火墙、以及默认 locale 非 UTF-8 的服务器均可使用。
+- 快捷键：新增平台习惯的标签页循环键——Windows / Linux 为 Ctrl+PageDown / PageUp，macOS 为 Cmd+Shift+] / [；隧道 / 历史 / 个性化 / 命令发送等面板视图新增可选配的开关快捷键。(@chenxiaoqiang)
+- 起始页：搜索框上方的品牌行可在布局菜单中隐藏。
+- 代理：所有具备网络能力的连接类型均可走已配置的代理——RDP、VNC / SPICE、FTP、SMB、WebDAV / S3 / Elasticsearch、Redis、MongoDB、各类数据库、Kubernetes、X11 桌面与容器 SSH；代理不可达时连接直接失败，不再静默回退直连。
+- 终端：支持「最小化到托盘」（默认关闭）——最小化按钮把窗口收进托盘，标签页、会话与后台服务保持运行，可从托盘图标恢复。
+
+**问题修复**
+
+- AI：删除用户消息不再导致会话中后续消息被重复保存。
+- 终端：PTY 按实测网格启动而非 80×24——启动阶段绘制的输出在后续纠正尺寸后不再保持错误换行。
+- 终端：标准清屏模式下 ED3（擦除回滚区）原样透传，「清屏 + 擦除回滚区」类别名可以真正清空回滚区。
+- Windows：便携模式读取已保存的窗口位置 / 尺寸——用户设置的大小重启后不再丢失。
+- Windows：应用更新后 WebView2 缓存不再卡住旧界面（index.html 以 no-store 下发）。
+- SSH：终端会话重连后自动重建配套的 SFTP / 监控会话——文件侧栏不再需要来回切换标签才恢复；侧栏以空状态显示连接错误而非空白列表。
+- SSH：服务器回显一次性验证码提示（部分堡垒机设置 echo=true）时自动 TOTP 也能正常填入；MFA 认证方式选择类问题不参与自动填充，验证码不会被误当作选项发送。
+- SFTP：识别 Windows 风格的绝对远程路径（盘符 / UNC）——此前会被错误拼接到 cwd 上，导致对 Windows SSH 主机的读 / 写 / 列目录全部失败。
+- Telnet：窗口大小协商按 RFC 1073 握手流程进行——不支持 NAWS 的对端（如 IRIS / Cache ctelnetd）登录提示符不再出现 "s)" 垃圾字符。
+- 本地 Telnet 服务：丢弃方向键序列，客户端光标与 cmd 逻辑光标保持同步——按过方向键后 Del 不再删除不可见字符。(@etanman)
+- MCP：SSH 文件传输复用终端已认证的传输通道——交互式登录的主机不再要求二次认证。(@surenwuyuwuqiu)
+- 同步：技能（skills.json）同步在不同设备同步范围不一致时也能正常工作，且技能编辑在自动同步下立即发布。(#1517) (@surenwuyuwuqiu)
+- RDP：接管 / 中途重连的会话不再断开——容忍服务器在连接序列之外补发的 license PDU。
+- RDP：仅支持 TLS 1.0 的旧服务器（Server 2008 时代）可完成 NLA 认证——去掉了破坏 schannel 的 TLS 1.0 CBC 记录拆分。
+- RDP：回退到标准 RDP 安全层的逻辑真正生效（此前 NEG_FAILURE 响应被改坏，回退从未触发）。
+- RDP：以 E0 扩展前缀上报 Shift 键的键盘（如右 Shift 为 E0-36）大写与 Shift 组合键恢复正常。
+- Redis：数据库列表按服务器上报的数据库总数生成，不再固定 16 个。
+- 数据库：SQLite / rqlite 分页的 LIMIT 与 OFFSET 绑定顺序颠倒——表树停在「N tables, 0 loaded」的现在能正常加载。
+- 数据库：表列表加载失败时显示真实错误，而非无提示的空白列表。(@etanman)
+- 数据库：SQL Server 2008 不再显示空表列表——SQL Server 分页由 `OFFSET ... FETCH NEXT`（2012 才支持的语法，2008 会报错）改为 ROW_NUMBER 包一层，2005 及以上版本均兼容。注意：SQL Server 2000/7.0 时代的服务器仍不支持，因 go-mssqldb 驱动无法与其完成 prelogin 握手。(@etanman)
+- 数据库树：选中表不再引发列表跳动——单数据库时不再整列表滚回顶部。(@etanman)
+
+**说明**
+
+- 本软件未购买代码签名证书，未签名的可执行文件可能被部分杀毒引擎（如 Windows Defender）误报。这是 Go/Wails 应用的已知问题（见 [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)）。可在杀毒软件中添加排除规则放行；请务必从官方开源渠道——GitHub 和 Gitee——下载。如仍有顾虑，可自行下载源码本地构建运行。
+- Android：自 1.11.0 起，Android 应用改用基于 uniterm 域名的新 application ID（`net.uniterm.app`）——如果安装过 1.11.0 之前的版本，请先卸载旧版再安装新版。
+
+感谢 @etanman、@surenwuyuwuqiu、@rsipka、@caibingxin、@chenxiaoqiang 对本版本发布的贡献。
+
 ## v1.12.3
 
 ### What's Changed
@@ -9,7 +123,6 @@
 - SSH: per-host automatic TOTP authentication — attach a TOTP secret to a connection and the 2FA code is filled automatically at login. (@surenwuyuwuqiu)
 - Terminal: multi-line paste confirmation — pasting multi-line clipboard content shows an editable preview first (line numbers, word-wrap toggle); what you confirm is exactly what gets pasted, with a "don't ask again" switch.
 - Terminal: command send panel — a dockable multi-line editor that sends to the current terminal (broadcast-aware), the whole workspace or every tab; execute line-by-line or as a whole, with drafts surviving restarts.
-- Firewall: remote firewall management over SSH — view status, turn the firewall on / off, toggle boot auto-start, and add / remove persistent inbound allow rules for firewalld and ufw, with a self-lockout check that keeps your SSH port reachable.
 
 **Improvements**
 
@@ -53,7 +166,6 @@
 - Docker web mode: the headless server binary is fully statically linked again — on linux/arm64 the user worker no longer fails to start right after login.
 - Tunnels: the upstream proxy password in tunnels.json is no longer stored unprotected.
 - Database: exporting a PostgreSQL table's structure no longer fails with "column a.adbin does not exist" — the default-value expression is read from the right catalog table, and columns without a default export as NULL.
-- Database: SQL Server 2008 no longer shows an empty table list — SQL Server pagination switched from `OFFSET ... FETCH NEXT` (a 2012+ syntax that errored on 2008) to a ROW_NUMBER wrap that works on 2005 and up too. Note: SQL Server 2000/7.0-era servers are still unsupported because the go-mssqldb driver cannot complete its prelogin handshake with them.
 - Terminal: the context menu now closes when the multi-line paste dialog opens instead of lingering underneath.
 - Terminal theme: the mobaxterm-default palette matches the theme it replicates, and bold text in the scrollback screen preview uses brighter colors instead of washing out. (@etanman)
 - UI: splitter drags no longer promote into native drags that stall the UI or crash the WebView2 renderer, and right-clicks inside our own menus are ignored.
@@ -64,7 +176,7 @@
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 - Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
 
-Thanks to @surenwuyuwuqiu, @etanman, @dajiaohuang and @rsipka for their contributions to this release.
+Thanks to @surenwuyuwuqiu, @etanman, @dajiaohuang and @rsipka for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -116,7 +228,6 @@ Thanks to @surenwuyuwuqiu, @etanman, @dajiaohuang and @rsipka for their contribu
 - Docker Web 模式：headless server 二进制恢复完全静态链接——linux/arm64 下登录后用户 worker 不再启动失败。
 - 隧道：tunnels.json 中的上游代理密码不再以不受保护的方式存储。
 - 数据库：导出 PostgreSQL 表结构不再报 "column a.adbin does not exist"——默认值表达式改从正确的系统表读取，无默认值的列按 NULL 导出。
-- 数据库：SQL Server 2008 不再显示空表列表——SQL Server 分页由 `OFFSET ... FETCH NEXT`（2012 才支持的语法，2008 会报错）改为 ROW_NUMBER 包一层，2005 及以上版本均兼容。注意：SQL Server 2000/7.0 时代的服务器仍不支持，因 go-mssqldb 驱动无法与其完成 prelogin 握手。
 - 终端：多行粘贴对话框弹出时同步关闭右键菜单，不再残留。
 - 终端主题：mobaXterm-default 配色与其复刻的主题一致，回滚区屏幕预览中的加粗文字使用更亮的颜色，不再发灰。(@etanman)
 - 界面：分隔条拖拽不再被提升为原生拖拽（UI 卡死、WebView2 渲染进程崩溃）；自家菜单内右键不再弹原生菜单。
@@ -157,7 +268,7 @@ Thanks to @surenwuyuwuqiu, @etanman, @dajiaohuang and @rsipka for their contribu
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 - Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
 
-Thanks to @surenwuyuwuqiu, @etanman, @sonnartliao, @gezerui888 and @kevin9327 for their contributions to this release.
+Thanks to @surenwuyuwuqiu, @etanman, @sonnartliao, @gezerui888 and @kevin9327 for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -252,7 +363,7 @@ Thanks to @surenwuyuwuqiu, @etanman, @sonnartliao, @gezerui888 and @kevin9327 fo
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 - Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
 
-Thanks to @NatureLProokie, @etanman, @laigcss, @dungvv, @surenwuyuwuqiu, @boltomli, @macoladik, @lijinxiao1982, @mikemikimike, @wuqiang57 and @sonnartliao for their contributions to this release.
+Thanks to @NatureLProokie, @etanman, @laigcss, @dungvv, @surenwuyuwuqiu, @boltomli, @macoladik, @lijinxiao1982, @mikemikimike, @wuqiang57 and @sonnartliao for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -340,7 +451,7 @@ Thanks to @NatureLProokie, @etanman, @laigcss, @dungvv, @surenwuyuwuqiu, @boltom
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 - Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
 
-Thanks to @etanman and @dungvv for their contributions to this release.
+Thanks to @etanman and @dungvv for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -382,7 +493,7 @@ Thanks to @etanman and @dungvv for their contributions to this release.
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 - Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
 
-Thanks to @surenwuyuwuqiu for their contribution to this release.
+Thanks to @surenwuyuwuqiu for their contribution to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -445,7 +556,7 @@ Thanks to @surenwuyuwuqiu for their contribution to this release.
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 - Android app: starting with version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
 
-Thanks to @laigcss, @surenwuyuwuqiu, @Merrcurys, @lutzr400 and @zhongqian97 for their contributions to this release.
+Thanks to @laigcss, @surenwuyuwuqiu, @Merrcurys, @lutzr400 and @zhongqian97 for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -546,7 +657,7 @@ Thanks to @laigcss, @surenwuyuwuqiu, @Merrcurys, @lutzr400 and @zhongqian97 for 
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @surenwuyuwuqiu, @dungvv, @andreafunicelli, @chris-edstrom, @IBRAHIMELAMRABET, @zhongqian97 and @laigcss for their contributions to this release.
+Thanks to @surenwuyuwuqiu, @dungvv, @andreafunicelli, @chris-edstrom, @IBRAHIMELAMRABET, @zhongqian97 and @laigcss for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -644,7 +755,7 @@ Thanks to @surenwuyuwuqiu, @dungvv, @andreafunicelli, @chris-edstrom, @IBRAHIMEL
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @surenwuyuwuqiu, @boltomli, @Teejer and @sonnartliao for their contributions to this release.
+Thanks to @surenwuyuwuqiu, @boltomli, @Teejer and @sonnartliao for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -739,7 +850,7 @@ Thanks to @surenwuyuwuqiu, @boltomli, @Teejer and @sonnartliao for their contrib
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @surenwuyuwuqiu, @zhangsir1211 and @sonnartliao for their contributions to this release.
+Thanks to @surenwuyuwuqiu, @zhangsir1211 and @sonnartliao for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -861,7 +972,7 @@ Thanks to @surenwuyuwuqiu, @zhangsir1211 and @sonnartliao for their contribution
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @windtear, @kxn, @surenwuyuwuqiu, @boltomli, @Sunshow, and @feuvan for their contributions to this release.
+Thanks to @windtear, @kxn, @surenwuyuwuqiu, @boltomli, @Sunshow, and @feuvan for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -975,7 +1086,7 @@ Thanks to @windtear, @kxn, @surenwuyuwuqiu, @boltomli, @Sunshow, and @feuvan for
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @surenwuyuwuqiu for their contribution to this release.
+Thanks to @surenwuyuwuqiu for their contribution to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1077,7 +1188,7 @@ Thanks to @surenwuyuwuqiu for their contribution to this release.
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @iCarrear, @boltomli, @surenwuyuwuqiu, and @wangxufeng for their contributions to this release.
+Thanks to @iCarrear, @boltomli, @surenwuyuwuqiu, and @wangxufeng for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1193,7 +1304,7 @@ Thanks to @iCarrear, @boltomli, @surenwuyuwuqiu, and @wangxufeng for their contr
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @surenwuyuwuqiu and @jiayunora for their contributions to this release.
+Thanks to @surenwuyuwuqiu and @jiayunora for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1300,7 +1411,7 @@ Thanks to @surenwuyuwuqiu and @jiayunora for their contributions to this release
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @coderstory, @wangxufeng, and @surenwuyuwuqiu for their contributions to this release.
+Thanks to @coderstory, @wangxufeng, and @surenwuyuwuqiu for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1380,7 +1491,7 @@ Thanks to @coderstory, @wangxufeng, and @surenwuyuwuqiu for their contributions 
 **Notes**
 - As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
 
-Thanks to @surenwuyuwuqiu for their contributions to this release.
+Thanks to @surenwuyuwuqiu for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1474,7 +1585,7 @@ Thanks to @surenwuyuwuqiu for their contributions to this release.
 - Fixed tab duplicate for terminal / SFTP / database tabs, which regressed after v1.5.0 (multi-minute black screen or missing session bind). (@surenwuyuwuqiu)
 - Fixed the tab rename input being unable to take focus because the terminal focus guard immediately stole it back. (@surenwuyuwuqiu)
 
-Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this release.
+Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1528,7 +1639,7 @@ Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this releas
 - Fixed the tab "+" button ignoring clicks when the event was swallowed by header drag detection on Windows.
 - Fixed terminal losing focus after quick command execution, drag, or scrollbar interaction.
 
-Thanks to @wangxufeng and @surenwuyuwuqiu for their contributions to this release.
+Thanks to @wangxufeng and @surenwuyuwuqiu for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1591,7 +1702,7 @@ Thanks to @wangxufeng and @surenwuyuwuqiu for their contributions to this releas
 - Fixed SSH disconnect when full-screen apps (vim/less/tmux) query the terminal in alternate screen. Terminal query responses are now filtered in both screens, preventing stray ESC sequences from being forwarded to the remote app. (@surenwuyuwuqiu)
 - Fixed model form dialog not clearing state between edits: clicking "Add Model" after editing now correctly creates a new model instead of updating the previous one, and test connection results no longer carry over across different model edits.
 
-Thanks to @surenwuyuwuqiu for contributions to this release.
+Thanks to @surenwuyuwuqiu for contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1646,7 +1757,7 @@ Thanks to @surenwuyuwuqiu for contributions to this release.
 - Fixed window geometry not being clamped and saving incorrectly when minimized, which could cause the next launch to restore an off-screen or minuscule window. Added `MinWidth=400, MinHeight=300` and skip geometry save while minimized.
 - Fixed database connection advanced configuration toggle not responding when creating or editing database connections. The SSH tunnel selector was incorrectly nested inside the FTP type template, causing it to not render for non-FTP connection types.
 
-Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this release.
+Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1695,7 +1806,7 @@ Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this releas
 - Fixed SSH connection failures with older servers by adding legacy key exchange algorithms (diffie-hellman-group1-sha1, diffie-hellman-group14-sha1, diffie-hellman-group-exchange-sha1).
 - Fixed version comparison incorrectly treating pre-release versions (e.g. 1.3.3-alpha) as older than stable releases. (@wangxufeng)
 
-Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this release.
+Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1741,7 +1852,7 @@ Thanks to @surenwuyuwuqiu and @wangxufeng for their contributions to this releas
 - Fixed horizontal scrollbar appearing on the start tab when the window is narrow. Content width calculation now matches the actual CSS padding.
 - Removed drag-out-to-desktop download feature to eliminate confusing forbidden cursor icon.
 
-Thanks to @surenwuyuwuqiu for their contribution to this release.
+Thanks to @surenwuyuwuqiu for their contribution to this release (listed in order of first appearance in this changelog).
 
 ### 更新内容
 
@@ -1823,7 +1934,7 @@ Thanks to @surenwuyuwuqiu for their contribution to this release.
 - **bugfix** Fixed mouse scroll wheel misbehavior after reactivating a background tab.
 - **bugfix** Fixed extra newlines when pasting text into vim due to CRLF line endings.
 
-Thanks to @surenwuyuwuqiu for their contribution to this release.
+Thanks to @surenwuyuwuqiu for their contribution to this release (listed in order of first appearance in this changelog).
 
 ---
 
@@ -1867,7 +1978,7 @@ Thanks to @surenwuyuwuqiu for their contribution to this release.
 - **bugfix** Fixed Ctrl+Shift+N opening connection form instead of start tab.
 - **bugfix** Fixed settings page column width being squeezed.
 
-Thanks to @surenwuyuwuqiu for contributions to this release.
+Thanks to @surenwuyuwuqiu for contributions to this release (listed in order of first appearance in this changelog).
 
 ---
 
@@ -1903,7 +2014,7 @@ Thanks to @surenwuyuwuqiu for contributions to this release.
 
 - **bugfix** Fixed garbled CJK input and broken editing keys (Backspace, etc.) in zsh on macOS local terminal. (@surenwuyuwuqiu)
 
-Thanks to @surenwuyuwuqiu for contributions to this release.
+Thanks to @surenwuyuwuqiu for contributions to this release (listed in order of first appearance in this changelog).
 
 ---
 
@@ -1942,7 +2053,7 @@ Thanks to @surenwuyuwuqiu for contributions to this release.
 - **bugfix** Fixed database grid not refreshing immediately after inline edit/delete.
 - **bugfix** Fixed missing key file picker logic in connection form.
 
-Thanks to @yuwei5380 and @surenwuyuwuqiu for their contributions to this release.
+Thanks to @yuwei5380 and @surenwuyuwuqiu for their contributions to this release (listed in order of first appearance in this changelog).
 
 ---
 
