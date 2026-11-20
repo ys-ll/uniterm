@@ -144,7 +144,16 @@ jobs:
         shell: bash
         run: |
           export PATH="$(go env GOPATH)/bin:$PATH"
-          wails3 task common:update:build-assets
+          # Bundle metadata (Info.plist, info.json) must carry the release
+          # version, not the static placeholder in build/config.yml. Pass it
+          # through to the generator; dev-<sha> builds have no numeric version
+          # (the Windows version resource requires one), so keep the
+          # placeholder for those.
+          BUNDLE_VERSION=""
+          case "$VERSION" in
+            v[0-9]*|[0-9]*) BUNDLE_VERSION="${VERSION#v}" ;;
+          esac
+          wails3 task common:update:build-assets VERSION="$BUNDLE_VERSION"
 
       ## ---- Build: wails3 compiles the binary; packaging happens below ----
 

@@ -238,8 +238,13 @@ tasks:
   update:build-assets:
     summary: Updates the build assets
     dir: build
+    # Optional VERSION overrides the static info.version in config.yml so the
+    # generated bundle metadata (Info.plist, windows info.json) carries the
+    # real release version instead of the placeholder.
+    vars:
+      VERSION: '{{.VERSION | default ""}}'
     cmds:
-      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
+      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir . {{if .VERSION}}-productversion "{{.VERSION}}"{{end}}
 
   build:server:
     summary: Builds the application in server mode (no GUI, HTTP server only)
