@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -75,6 +76,21 @@ func sweepLegacyWebview2Dirs() {
 		}
 		_ = os.RemoveAll(filepath.Join(os.TempDir(), name))
 	}
+}
+
+// indexNoCache serves the root document with no-store so the WebView2 HTTP
+// cache can never pin a stale index.html — and with it the old hashed JS
+// bundle and WASM engine — after an app update. Every other resource is
+// content-hashed, so it self-invalidates on update; only index.html can go
+// stale, and the wails asset server sets no cache headers for it.
+func indexNoCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Pragma", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 //go:embed all:frontend/dist
@@ -234,7 +250,7 @@ func main() {
 	w3app := application.New(application.Options{
 		Name:       "uniTerm",
 		Server:     BuildServerOptions(), // empty unless built with -tags server
-		Assets:     application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
+		Assets:     application.AssetOptions{Handler: indexNoCache(application.AssetFileServerFS(assets))},
 		OnShutdown: app.shutdown,
 		// AppKit's terminate: exits the process without returning from Run().
 		// PostShutdown runs after store cleanup and single-instance lock release.
