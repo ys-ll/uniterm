@@ -64,8 +64,8 @@ func TestTOTPChallengeMixedAndRejected(t *testing.T) {
 }
 
 func TestTOTPChallengePromptSafety(t *testing.T) {
+	config := ConnectionConfig{AuthType: "password", Password: "saved", TOTPEnabled: true, TOTPSecret: testTOTPSecret}
 	for _, question := range []string{"[OTP Code]:", "Verification Code:", "One-Time Password:", "TOTP:", "Authentication code:", "Authenticator code:"} {
-		config := ConnectionConfig{AuthType: "password", Password: "saved", TOTPEnabled: true, TOTPSecret: testTOTPSecret}
 		if isSavedPasswordChallenge(config, []string{question}, []bool{false}) {
 			t.Fatalf("password would be sent to %q", question)
 		}
@@ -74,21 +74,48 @@ func TestTOTPChallengePromptSafety(t *testing.T) {
 			t.Fatalf("OTP prompt %q: %v, %v", question, answers, err)
 		}
 	}
-	config := ConnectionConfig{AuthType: "key", Password: "key-passphrase", TOTPEnabled: true, TOTPSecret: testTOTPSecret}
+	// Bastions send the OTP prompt with echo=true; the code is short-lived so
+	// echoing it is acceptable and the answer must still be filled.
+	answers, err := automaticTOTPChallenge(config, nil)("", "", []string{"[OTP Code]: "}, []bool{true})
+	if err != nil || len(answers) != 1 || len(answers[0]) != 6 {
+		t.Fatalf("echoed OTP prompt: %v, %v", answers, err)
+	}
+	config = ConnectionConfig{AuthType: "key", Password: "key-passphrase", TOTPEnabled: true, TOTPSecret: testTOTPSecret}
 	for _, tc := range []struct {
 		q string
 		e []bool
-	}{{"Password:", []bool{false}}, {"Name:", []bool{false}}, {"OTP:", []bool{true}}, {"OTP:", nil}} {
+	}{{"Password:", []bool{false}}, {"Name:", []bool{false}}, {"OTP:", nil}} {
 		if _, err := automaticTOTPChallenge(config, nil)("", "", []string{tc.q}, tc.e); err == nil {
 			t.Fatalf("unsafe challenge accepted: %q", tc.q)
 		}
 	}
 }
 
+func TestTOTPChallengeSelectionPrompt(t *testing.T) {
+	config := ConnectionConfig{AuthType: "password", Password: "saved", TOTPEnabled: true, TOTPSecret: testTOTPSecret}
+	// A multi-option MFA selection lists OTP as a menu entry and echoes; the
+	// code must go to manual input instead of being sent as the choice.
+	for _, question := range []string{
+		"1. OTP\n2. SMS\nOption> ",
+		"Please select MFA method: ",
+		"Send code via sms or email: ",
+		"请选择MFA验证方式: ",
+	} {
+		answers, err := automaticTOTPChallenge(config, nil)("", "", []string{question}, []bool{true})
+		if err == nil {
+			t.Fatalf("selection prompt auto-answered: %q", question)
+		}
+		if answers != nil {
+			t.Fatalf("selection prompt %q: answers = %v", question, answers)
+		}
+	}
+}
+
 func TestTOTPSSHAuthentication(t *testing.T) {
 	server := &ssh.ServerConfig{KeyboardInteractiveCallback: func(conn ssh.ConnMetadata, challenge ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
-		// Both fields in one challenge models PAM password + OTP authentication.
-		answers, err := challenge(conn.User(), "", []string{"Password:", "[OTP Code]:"}, []bool{false, false})
+		// Both fields in one challenge models PAM password + OTP
+		// authentication, with the OTP field echoed the way bastions do it.
+		answers, err := challenge(conn.User(), "", []string{"Password:", "[OTP Code]:"}, []bool{false, true})
 		if err != nil {
 			return nil, err
 		}
