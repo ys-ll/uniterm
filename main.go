@@ -194,8 +194,14 @@ func main() {
 		settingsCh <- loadSavedSettings()
 	}()
 
-	if configDir, err := os.UserConfigDir(); err == nil {
-		ls := store.NewLocalStateStore(filepath.Join(configDir, "uniTerm"))
+	// The early geometry read must use the same data dir the app saves to
+	// (store.ResolveDataDir), not a hardcoded <UserConfigDir>/uniTerm: in
+	// portable mode (exe/data) and custom-dir setups the runtime saves window
+	// geometry next to the data dir, while a fixed config-dir read would
+	// silently restore the geometry of a differently-located install (or the
+	// defaults) on every launch.
+	if dd, err := store.ResolveDataDir(); err == nil && dd.Path != "" {
+		ls := store.NewLocalStateStore(dd.Path)
 		done := make(chan store.LocalState, 1)
 		go func() {
 			if state, err := ls.Load(); err == nil {
