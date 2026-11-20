@@ -211,3 +211,65 @@ describe('AI session changes clear the terminal binding', () => {
     expect(tabStore.getAILockedPanels()).toEqual([])
   })
 })
+
+describe('message deletion keeps the session array independent', () => {
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    closeAllTabs()
+    await useAIStore().init()
+  })
+
+  // Regression: deleteMessage / deleteMessageWithReply / truncateFrom used to
+  // alias session.messages to messages.value, which made the double push in
+  // addMessage store every later message twice (duplicate ids in the saved
+  // session).
+  it('adding messages after a delete does not duplicate them in the session', () => {
+    const ai = useAIStore()
+    ai.createSession()
+    const s = ai.sessions.find(s => s.id === ai.currentSessionId)!
+    ai.addMessage({ id: 'msg-1', role: 'user', content: 'first' })
+    ai.addMessage({ id: 'msg-2', role: 'assistant', content: 'reply' })
+
+    ai.deleteMessage('msg-1')
+    ai.addMessage({ id: 'msg-3', role: 'user', content: 'second' })
+    ai.addMessage({ id: 'msg-4', role: 'assistant', content: 'reply 2' })
+
+    const ids = s.messages.map(m => m.id)
+    expect(ids).toEqual(['msg-2', 'msg-3', 'msg-4'])
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ai.messages.map(m => m.id)).toEqual(ids)
+  })
+
+  it('adding messages after delete-with-reply does not duplicate them in the session', () => {
+    const ai = useAIStore()
+    ai.createSession()
+    const s = ai.sessions.find(s => s.id === ai.currentSessionId)!
+    ai.addMessage({ id: 'msg-1', role: 'user', content: 'first' })
+    ai.addMessage({ id: 'msg-2', role: 'assistant', content: 'reply' })
+
+    ai.deleteMessageWithReply('msg-1')
+    ai.addMessage({ id: 'msg-3', role: 'user', content: 'second' })
+
+    const ids = s.messages.map(m => m.id)
+    expect(ids).toEqual(['msg-3'])
+    expect(ai.messages.map(m => m.id)).toEqual(ids)
+  })
+
+  it('adding messages after truncateFrom does not duplicate them in the session', () => {
+    const ai = useAIStore()
+    ai.createSession()
+    const s = ai.sessions.find(s => s.id === ai.currentSessionId)!
+    ai.addMessage({ id: 'msg-1', role: 'user', content: 'first' })
+    ai.addMessage({ id: 'msg-2', role: 'assistant', content: 'reply' })
+    ai.addMessage({ id: 'msg-3', role: 'user', content: 'second' })
+    ai.addMessage({ id: 'msg-4', role: 'assistant', content: 'reply 2' })
+
+    ai.truncateFrom('msg-2')
+    ai.addMessage({ id: 'msg-5', role: 'user', content: 'third' })
+
+    const ids = s.messages.map(m => m.id)
+    expect(ids).toEqual(['msg-1', 'msg-5'])
+    expect(ai.messages.map(m => m.id)).toEqual(ids)
+  })
+})
