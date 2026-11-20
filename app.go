@@ -181,9 +181,13 @@ type App struct {
 	// customLogDir, when non-empty, overrides defaultSessionLogDir()
 	// as the target for new session logs. Set from settings via
 	// SetDefaultSessionLogDir; ongoing logs are not migrated.
-	customLogDir         string
-	sessionLogFilename   string
-	sessionLogSettingsMu stdsync.RWMutex
+	// sessionLogAutoStart, when true, starts the log of the first
+	// session on every panel automatically (global default; the
+	// per-connection LogOnConnect still applies independently).
+	customLogDir          string
+	sessionLogFilename    string
+	sessionLogAutoStart   bool
+	sessionLogSettingsMu  stdsync.RWMutex
 
 	// errCh accumulates non-fatal init failures during startup() so the
 	// frontend can surface them (see StartupError / "app:startup-error"
@@ -424,6 +428,7 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 		if settings, err := ss.Load(); err == nil {
 			a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
 			a.setSessionLogFilename(settings.Terminal.SessionLogFilename)
+			a.setSessionLogAutoStart(settings.Terminal.SessionLogAutoStart != nil && *settings.Terminal.SessionLogAutoStart)
 		}
 	}
 
@@ -2020,6 +2025,7 @@ func (a *App) SaveSettings(settings store.AppSettings) error {
 	if err == nil {
 		a.SetDefaultSessionLogDir(settings.Terminal.SessionLogDir)
 		a.setSessionLogFilename(settings.Terminal.SessionLogFilename)
+		a.setSessionLogAutoStart(settings.Terminal.SessionLogAutoStart != nil && *settings.Terminal.SessionLogAutoStart)
 		a.triggerAutoSync()
 		// Re-apply the global show/hide hotkey so binding changes (and the
 		// enable switch) take effect immediately. No-op when unchanged.

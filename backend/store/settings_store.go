@@ -58,6 +58,12 @@ type TerminalSettings struct {
 	// SessionLogFilename controls names for new output logs. Supported tokens:
 	// %S session name, %H host, %Y year, %M month, %D day, %h hour, %m minute.
 	SessionLogFilename string `json:"sessionLogFilename,omitempty"`
+	// SessionLogAutoStart, when true, starts the session output log
+	// automatically when a session registers with a panel (new tab or
+	// reconnect). Pointer + omitempty so older settings.json files (which
+	// lack this field) still load; the frontend defaults to false when
+	// nil, preserving manual per-panel logging.
+	SessionLogAutoStart *bool `json:"sessionLogAutoStart,omitempty"`
 	// WordSeparator overrides xterm.js's double-click word-selection
 	// separators. Empty means the frontend falls back to its built-in
 	// default. Mirrors the `wordSeparator` Terminal option.

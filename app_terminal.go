@@ -1077,10 +1077,11 @@ type SessionLogInfo struct {
 // right after CreateSession succeeds, and on every reconnect.
 //
 // On the first Register for a panel (i.e. not a reconnect), if the
-// session was created from a connection with LogOnConnect=true, the
-// log is enabled automatically. Later Registers for the same panel
-// never re-trigger — the user's manual stop is respected across
-// reconnects for the life of the panel.
+// global sessionLogAutoStart setting is on or the session was created
+// from a connection with LogOnConnect=true, the log is enabled
+// automatically. Later Registers for the same panel never re-trigger —
+// the user's manual stop is respected across reconnects for the life
+// of the panel.
 func (a *App) RegisterSessionForPanel(sessionID, panelID string) {
 	if sessionID == "" || panelID == "" {
 		return
@@ -1097,12 +1098,13 @@ func (a *App) RegisterSessionForPanel(sessionID, panelID string) {
 		return
 	}
 
-	// First Register for this panel: check LogOnConnect and auto-enable.
+	// First Register for this panel: check the global auto-log setting
+	// and the per-connection LogOnConnect opt-in, and auto-enable.
 	if !autoTriggered {
 		a.panelLogMu.Lock()
 		a.panelAutoTriggered[panelID] = true
 		a.panelLogMu.Unlock()
-		if a.sessionWantsAutoLog(sessionID) {
+		if a.autoLogRequested(sessionID) {
 			// EnableSessionOutputLog handles the writer install internally.
 			if _, err := a.EnableSessionOutputLog(panelID, ""); err != nil {
 				log.Writef("[RegisterSessionForPanel] auto-enable log failed: %v", err)
@@ -1298,6 +1300,25 @@ func (a *App) GetSessionOutputLogInfo(panelID string) SessionLogInfo {
 	return SessionLogInfo{Enabled: logger.Enabled(), Path: logger.Path()}
 }
 
+// OpenSessionLogDir opens the effective session log directory (the user's
+// configured override, else the OS default) in the platform file manager,
+// creating the directory first when it does not exist yet. Used by the
+// frontend's "open log dir" menu when no per-panel log is active — without
+// the mkdir the explorer call on a not-yet-created directory is a silent
+// no-op.
+func (a *App) OpenSessionLogDir() error {
+	a.sessionLogSettingsMu.RLock()
+	dir := a.customLogDir
+	a.sessionLogSettingsMu.RUnlock()
+	if dir == "" {
+		dir = session.DefaultSessionLogDir()
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("mkdir log dir %s: %w", dir, err)
+	}
+	return a.OpenPathInExplorer(dir)
+}
+
 // SetDefaultSessionLogDir installs a user-configured override for the
 // directory used by new session logs. Empty clears the override and
 // restores the OS default. Existing log files are not migrated; the
@@ -1314,6 +1335,29 @@ func (a *App) setSessionLogFilename(filenameTemplate string) {
 	a.sessionLogSettingsMu.Lock()
 	a.sessionLogFilename = filenameTemplate
 	a.sessionLogSettingsMu.Unlock()
+}
+
+// setSessionLogAutoStart installs the global auto-log preference. When
+// true, the first session registered on a panel starts its output log
+// automatically. False keeps the manual / per-connection behavior.
+func (a *App) setSessionLogAutoStart(v bool) {
+	a.sessionLogSettingsMu.Lock()
+	a.sessionLogAutoStart = v
+	a.sessionLogSettingsMu.Unlock()
+}
+
+// autoLogRequested reports whether a freshly created session should have
+// its output log started automatically: either the global
+// sessionLogAutoStart setting is on, or the connection opted in via
+// LogOnConnect.
+func (a *App) autoLogRequested(sessionID string) bool {
+	a.sessionLogSettingsMu.RLock()
+	auto := a.sessionLogAutoStart
+	a.sessionLogSettingsMu.RUnlock()
+	if auto {
+		return true
+	}
+	return a.sessionWantsAutoLog(sessionID)
 }
 
 // GetDefaultSessionLogDir returns the directory a fresh session log

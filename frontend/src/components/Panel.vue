@@ -172,17 +172,13 @@ import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { formatKeyBinding, panelDigitShortcutsSuppressed, panelDigitShortcutPrefix, formatDigitShortcut } from '../composables/useKeyboardShortcuts'
 import { useDuplicateSession } from '../composables/useDuplicateSession'
+import { useOutputLog } from '../composables/useOutputLog'
 import type { ShortcutAction } from '../types/settings'
 import {
   CreateSession,
   CloseSession,
   K8sExecSession,
   ContainerExecSession,
-  EnableSessionOutputLog,
-  DisableSessionOutputLog,
-  GetSessionOutputLogInfo,
-  DefaultSessionLogDir,
-  OpenPathInExplorer,
   SessionStart,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { msg } from '../services/message'
@@ -306,10 +302,12 @@ const editInputRef = ref<HTMLInputElement>()
 const moreMenuVisible = ref(false)
 const moreMenuRef = ref<InstanceType<typeof Menu> | null>(null)
 
-// Session output log state — mirrors TabItem so both surfaces stay in sync
-// via panelStore.setOutputLog. Refreshed when the more menu opens and on mount.
-const isOutputLogOn = ref(false)
-const outputLogPath = ref('')
+// Session output log state + menu operations, shared with BaseTerminal /
+// TabItem via the useOutputLog composable. Refreshed when the more menu
+// opens and on mount; stays in sync with TabItem through
+// panelStore.setOutputLog and the watch below.
+const { isOutputLogOn, outputLogPath, refreshOutputLogState, toggleOutputLog, openLogDir } =
+  useOutputLog({ getPanelId: () => props.panel.id })
 
 const panelIcon = computed(() => {
   const t = props.panel.type
@@ -367,62 +365,6 @@ async function copyHostAddress() {
     try { await navigator.clipboard.writeText(host) } catch { /* no clipboard */ }
   }
   msg.success(t('tab.hostCopied', { host }))
-}
-
-async function refreshOutputLogState() {
-  try {
-    const info = await GetSessionOutputLogInfo(props.panel.id)
-    isOutputLogOn.value = !!info.enabled
-    outputLogPath.value = info.path || ''
-    panelStore.setOutputLog(props.panel.id, { enabled: isOutputLogOn.value, path: outputLogPath.value })
-  } catch {
-    isOutputLogOn.value = false
-    outputLogPath.value = ''
-  }
-}
-
-async function toggleOutputLog() {
-  try {
-    if (isOutputLogOn.value) {
-      await DisableSessionOutputLog(props.panel.id)
-      const prev = outputLogPath.value
-      isOutputLogOn.value = false
-      outputLogPath.value = ''
-      panelStore.setOutputLog(props.panel.id, { enabled: false, path: '' })
-      msg.info(t('session.logStopped', { path: prev }))
-      return
-    }
-    const path = await EnableSessionOutputLog(props.panel.id, '')
-    if (!path) {
-      msg.error(t('session.logFailed', { error: 'unknown' }))
-      return
-    }
-    isOutputLogOn.value = true
-    outputLogPath.value = path
-    panelStore.setOutputLog(props.panel.id, { enabled: true, path })
-    msg.success(t('session.logStarted', { path }))
-  } catch (e: any) {
-    msg.error(t('session.logFailed', { error: String(e?.message ?? e) }))
-  }
-}
-
-async function openLogDir() {
-  // Always available: without a running panel log, fall back to the
-  // OS-default session log directory.
-  let dir = outputLogPath.value
-  if (!dir) {
-    try {
-      dir = await DefaultSessionLogDir()
-    } catch {
-      return
-    }
-  }
-  if (!dir) return
-  try {
-    await OpenPathInExplorer(dir)
-  } catch (e: any) {
-    msg.error(String(e?.message ?? e))
-  }
 }
 
 // Cast v2 recording controls (same session-keyed recorder the terminal uses).

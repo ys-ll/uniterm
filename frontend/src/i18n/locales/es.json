@@ -659,6 +659,8 @@
   "settings.sessionLogDirDesc": "Ubicación donde se guardan los logs de sesión. Dejar vacío para usar el predeterminado: {path}",
   "settings.sessionLogFilename": "Formato del nombre de log",
   "settings.sessionLogFilenameDesc": "Variables: %S sesión, %H host, %Y año, %M mes, %D día, %h hora, %m minuto. Si sesión y host coinciden, solo se incluye uno.",
+  "settings.sessionLogAutoStart": "Inicio automático del registro",
+  "settings.sessionLogAutoStartDesc": "Inicia el registro de la sesión automáticamente al abrir una terminal. También puede activarse o desactivarse por sesión desde el menú contextual 'Registro y grabación'.",
   "settings.browse": "Examinar…",
   "settings.maxTurns": "Máx. rondas autónomas",
   "settings.maxTurnsDesc": "Rondas máximas de interacción autónoma por solicitud de IA. 0 = ilimitado. Predeterminado: 20.",

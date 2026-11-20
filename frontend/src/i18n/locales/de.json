@@ -659,6 +659,8 @@
   "settings.sessionLogDirDesc": "Speicherort für Sitzungsprotokolle. Leer lassen, um den Standard zu verwenden: {path}",
   "settings.sessionLogFilename": "Log-Dateinamensformat",
   "settings.sessionLogFilenameDesc": "Platzhalter: %S Sitzung, %H Host, %Y Jahr, %M Monat, %D Tag, %h Stunde, %m Minute. Gleiche Sitzungs- und Hostnamen erscheinen nur einmal.",
+  "settings.sessionLogAutoStart": "Sitzungsprotokoll automatisch starten",
+  "settings.sessionLogAutoStartDesc": "Startet das Sitzungsprotokoll automatisch beim Öffnen eines Terminals. Protokolle können weiterhin über das Kontextmenü 'Protokoll & Aufnahme' ein- und ausgeschaltet werden.",
   "settings.browse": "Durchsuchen…",
   "settings.maxTurns": "Max. autonome Runden",
   "settings.maxTurnsDesc": "Maximale Anzahl autonomer Interaktionsrunden pro KI-Anfrage. 0 = unbegrenzt. Standard: 20.",

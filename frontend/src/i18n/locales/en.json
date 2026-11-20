@@ -683,6 +683,8 @@
   "settings.sessionLogDirDesc": "Where session logs are saved. Leave empty to use the default: {path}",
   "settings.sessionLogFilename": "Log filename format",
   "settings.sessionLogFilenameDesc": "Tokens: %S session, %H host, %Y year, %M month, %D day, %h hour, %m minute. A duplicate session and host is included only once.",
+  "settings.sessionLogAutoStart": "Auto-start session log",
+  "settings.sessionLogAutoStartDesc": "Start recording the session log automatically when a terminal opens. Logs can still be toggled per session from the right-click menu.",
   "settings.browse": "Browse…",
   "settings.maxTurns": "Max Autonomous Rounds",
   "settings.maxTurnsDesc": "Maximum autonomous interaction rounds per AI request. Set to 0 for unlimited. Default 20.",

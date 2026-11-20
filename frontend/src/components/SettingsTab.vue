@@ -800,6 +800,19 @@
 
           <div v-if="!isMobile" class="setting-card">
             <div class="setting-info">
+              <div class="setting-title">{{ t('settings.sessionLogAutoStart') }}</div>
+              <div class="setting-desc">{{ t('settings.sessionLogAutoStartDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-switch
+                v-model="settingsStore.settings.terminal.sessionLogAutoStart"
+                @change="settingsStore.save()"
+              />
+            </div>
+          </div>
+
+          <div v-if="!isMobile" class="setting-card">
+            <div class="setting-info">
               <div class="setting-title">{{ t('settings.sessionLogDir') }}</div>
               <div class="setting-desc">{{ t('settings.sessionLogDirDesc', { path: defaultLogDir }) }}</div>
             </div>
