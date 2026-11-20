@@ -152,6 +152,17 @@ func (c *RDPKeyboardCapture) dispatch() {
 	}
 }
 
+// normalizeScan maps non-standard scancodes to their XT set-1 equivalents.
+// Some USB keyboards report Shift with an E0 prefix; set-1 defines no
+// extended Shift and remote servers reject 0xE02A/0xE036, which killed
+// Shift (and every Shift chord) for users of such keyboards.
+func normalizeScan(scan uint16) uint16 {
+	if scan == 0xe02a || scan == 0xe036 {
+		return scan & 0xff
+	}
+	return scan
+}
+
 func (c *RDPKeyboardCapture) run(ready chan<- error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -167,6 +178,7 @@ func (c *RDPKeyboardCapture) run(ready chan<- error) {
 			if scan != 0 && data.Flags&1 != 0 {
 				scan |= 0xe000
 			}
+			scan = normalizeScan(scan)
 			down := data.Flags&0x80 == 0
 			foreground, _, _ := rdpGetForegroundWindow.Call()
 			c.mu.Lock()
