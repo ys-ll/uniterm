@@ -351,6 +351,7 @@ async function connect() {
       source,
       isPath,
       cfg.k8sContext || '',
+      cfg.proxyId || '',
       cfg.tunnelSSHConnId || '',
       tunnelUser,
       tunnelPassword

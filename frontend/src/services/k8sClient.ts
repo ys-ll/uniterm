@@ -20,11 +20,12 @@ export async function connect(
   source: string,
   sourceIsPath: boolean,
   contextName: string,
+  proxyId = '',
   tunnelSSHConnId = '',
   tunnelSSHUser = '',
   tunnelSSHPassword = ''
 ): Promise<string> {
-  return await K8sConnect(source, sourceIsPath, contextName, tunnelSSHConnId, tunnelSSHUser, tunnelSSHPassword)
+  return await K8sConnect(source, sourceIsPath, contextName, proxyId, tunnelSSHConnId, tunnelSSHUser, tunnelSSHPassword)
 }
 
 export function disconnect(connID: string): void {

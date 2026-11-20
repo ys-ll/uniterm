@@ -4,9 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	mssql "github.com/microsoft/go-mssqldb"
+	"github.com/microsoft/go-mssqldb/msdsn"
+	"github.com/go-sql-driver/mysql"
+	pgx "github.com/jackc/pgx/v5"
+	pgxstdlib "github.com/jackc/pgx/v5/stdlib"
+	go_ora "github.com/sijms/go-ora/v2"
 )
 
 // schemaTimeout caps each schema / dictionary query (object tree, table
@@ -47,6 +56,59 @@ func BuildDSN(dbType, host, user, password, dbName, extraParams string, port int
 
 // NewDB opens a database/sql connection for the given database type and DSN.
 func NewDB(dbType, dsn string) (*sql.DB, error) {
+	return NewDBWithDial(dbType, dsn, nil)
+}
+
+// DialContextFunc is the proxy dial hook NewDBWithDial accepts. The method
+// form lets the same value satisfy the dialer interfaces of every driver that
+// supports custom dialing (pgx DialFunc, go-sql-driver, go-mssqldb Dialer,
+// go-ora DialerContext).
+type DialContextFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// DialContext implements the drivers' dialer interfaces.
+func (f DialContextFunc) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	return f(ctx, network, addr)
+}
+
+// dialSeq hands out unique network names for go-sql-driver's global registry,
+// so concurrent sessions with different proxies never overwrite each other.
+var (
+	dialSeqMu   sync.Mutex
+	dialSeqNext int
+)
+
+// NewDBWithDial is NewDB with an optional outbound dial override. When set,
+// the driver's TCP connections route through dialFunc (SOCKS5/HTTP proxy);
+// drivers without an injection point (rqlite, sqlite — local or no hook)
+// ignore it and dial as usual.
+func NewDBWithDial(dbType, dsn string, dialFunc DialContextFunc) (*sql.DB, error) {
+	if dialFunc == nil {
+		return openDB(dbType, dsn)
+	}
+	var (
+		db  *sql.DB
+		err error
+	)
+	switch dbType {
+	case "postgres":
+		db, err = openPostgresWithDial(dsn, dialFunc)
+	case "mysql":
+		db, err = openMySQLWithDial(dsn, dialFunc)
+	case "sqlserver":
+		db, err = openSQLServerWithDial(dsn, dialFunc)
+	case "oracle":
+		db, err = openOracleWithDial(dsn, dialFunc)
+	default:
+		db, err = openDB(dbType, dsn)
+	}
+	if err != nil {
+		return nil, err
+	}
+	configureDBPool(db)
+	return db, nil
+}
+
+func openDB(dbType, dsn string) (*sql.DB, error) {
 	p, err := NewProvider(dbType)
 	if err != nil {
 		return nil, err
@@ -55,11 +117,67 @@ func NewDB(dbType, dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", dbType, err)
 	}
+	configureDBPool(db)
+	return db, nil
+}
+
+func configureDBPool(db *sql.DB) {
 	db.SetMaxOpenConns(20)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	db.SetConnMaxIdleTime(2 * time.Minute)
-	return db, nil
+}
+
+func openPostgresWithDial(dsn string, dialFunc DialContextFunc) (*sql.DB, error) {
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open postgres: %w", err)
+	}
+	cfg.DialFunc = dialFunc.DialContext
+	return pgxstdlib.OpenDB(*cfg), nil
+}
+
+func openMySQLWithDial(dsn string, dialFunc DialContextFunc) (*sql.DB, error) {
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open mysql: %w", err)
+	}
+	// The driver resolves cfg.Net through a global registry; register a fresh
+	// unique name per connection so two sessions through different proxies
+	// never race on the same entry.
+	dialSeqMu.Lock()
+	dialSeqNext++
+	netName := fmt.Sprintf("uniterm-proxy-%d", dialSeqNext)
+	dialSeqMu.Unlock()
+	mysql.RegisterDialContext(netName, func(ctx context.Context, addr string) (net.Conn, error) {
+		return dialFunc(ctx, "tcp", addr)
+	})
+	cfg.Net = netName
+	connector, err := mysql.NewConnector(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("open mysql: %w", err)
+	}
+	return sql.OpenDB(connector), nil
+}
+
+func openSQLServerWithDial(dsn string, dialFunc DialContextFunc) (*sql.DB, error) {
+	cfg, err := msdsn.Parse(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlserver: %w", err)
+	}
+	connector := mssql.NewConnectorConfig(cfg)
+	connector.Dialer = dialFunc
+	return sql.OpenDB(connector), nil
+}
+
+func openOracleWithDial(dsn string, dialFunc DialContextFunc) (*sql.DB, error) {
+	conn := go_ora.NewConnector(dsn)
+	oc, ok := conn.(*go_ora.OracleConnector)
+	if !ok {
+		return nil, fmt.Errorf("open oracle: unexpected connector type %T", conn)
+	}
+	oc.Dialer(dialFunc)
+	return sql.OpenDB(conn), nil
 }
 
 // queryStrings executes a SQL query and returns all rows as []map[string]string.

@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -44,6 +45,11 @@ func (s *WebDAVSession) Connect(config ConnectionConfig) error {
 	s.title = fmt.Sprintf("%s@%s", config.User, url)
 
 	client := gowebdav.NewClient(url, config.User, config.Password)
+	// Route through the configured proxy (SOCKS5/HTTP CONNECT); nil keeps the
+	// default transport.
+	if config.Proxy != nil {
+		client.SetTransport(&http.Transport{Proxy: ProxyHTTPTransportProxy(config.Proxy)})
+	}
 	if err := client.Connect(); err != nil {
 		s.setStatus(StatusError)
 		return fmt.Errorf("webdav connect: %w", err)

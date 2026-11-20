@@ -50,7 +50,7 @@ func (s *SMBSession) Connect(config ConnectionConfig) error {
 	}
 	addr := net.JoinHostPort(config.Host, strconv.Itoa(port))
 
-	conn, err := net.DialTimeout("tcp", addr, 30*time.Second)
+	conn, err := dialFirstHop(addr, config.Proxy)
 	if err != nil {
 		s.setStatus(StatusError)
 		return fmt.Errorf("smb dial: %w", err)

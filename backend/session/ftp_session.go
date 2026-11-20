@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -85,6 +86,12 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 	}
 	enc := encodingByName(encName)
 	dialOpts := []ftp.DialOption{ftp.DialWithTimeout(30 * time.Second)}
+	// Route control AND data (PASV) connections through the configured proxy.
+	if config.Proxy != nil {
+		dialOpts = append(dialOpts, ftp.DialWithDialFunc(func(network, address string) (net.Conn, error) {
+			return dialFirstHop(address, config.Proxy)
+		}))
+	}
 	// Bound the wait for the "closing data connection" status after each
 	// data transfer; some servers never send it (library default is infinite).
 	dialOpts = append(dialOpts, ftp.DialWithShutTimeout(ftpShutTimeout))

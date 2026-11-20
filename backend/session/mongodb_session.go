@@ -65,7 +65,7 @@ func (s *MongoSession) Connect(config ConnectionConfig) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(ctx, mongoOptionsWithProxy(config, uri))
 	if err != nil {
 		log.Writef("[MongoSession.Connect] connect failed: %v", err)
 		s.setStatus(StatusError)
@@ -180,6 +180,17 @@ func (s *MongoSession) Client() *mongo.Client {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.client
+}
+
+// mongoOptionsWithProxy builds client options for uri, routing every member
+// connection through the configured proxy when set (the dialer is
+// per-connection, not per-seed-list).
+func mongoOptionsWithProxy(config ConnectionConfig, uri string) *options.ClientOptions {
+	opts := options.Client().ApplyURI(uri)
+	if config.Proxy != nil {
+		opts.SetDialer(dialerAdapter(config.Proxy))
+	}
+	return opts
 }
 
 // Ping checks connectivity to the MongoDB server.

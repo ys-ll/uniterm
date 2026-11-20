@@ -112,6 +112,11 @@ func (s *S3Session) Connect(config ConnectionConfig) error {
 	// concurrency with headroom.
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxIdleConnsPerHost = 16
+	// Route through the configured proxy; nil keeps the system-default
+	// ProxyFromEnvironment behavior of the cloned transport.
+	if config.Proxy != nil {
+		transport.Proxy = ProxyHTTPTransportProxy(config.Proxy)
+	}
 	s.client = &http.Client{Transport: transport}
 	s3Client.SetClient(s.client)
 	// S3URLStyle="" or "virtual" uses virtual-hosted URLs

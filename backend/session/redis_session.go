@@ -103,6 +103,9 @@ func (s *RedisSession) Connect(config ConnectionConfig) error {
 			Username: config.User,
 			Password: config.Password,
 			DB:       0,
+			// Standalone only: FailoverOptions has no Dialer field, so
+			// sentinel connections cannot route through a proxy.
+			Dialer: ProxyDialFunc(config.Proxy),
 		})
 	}
 

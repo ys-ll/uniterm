@@ -93,7 +93,7 @@ func spiceProxyRead(t *testing.T, ws *websocket.Conn, size int) []byte {
 }
 
 func TestSPICEProxyIndependentChannels(t *testing.T) {
-	proxy := NewSPICEProxy(spiceProxyEchoServer(t))
+	proxy := NewSPICEProxy(spiceProxyEchoServer(t), nil)
 	addr, err := proxy.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestSPICEProxyIndependentChannels(t *testing.T) {
 }
 
 func TestSPICEProxyEndpointIsLocalAndPrivate(t *testing.T) {
-	proxy := NewSPICEProxy("guest.invalid:5900")
+	proxy := NewSPICEProxy("guest.invalid:5900", nil)
 	addr, err := proxy.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ func TestSPICEProxyEndpointIsLocalAndPrivate(t *testing.T) {
 }
 
 func TestSPICEProxyStopClosesEveryChannel(t *testing.T) {
-	proxy := NewSPICEProxy(spiceProxyEchoServer(t))
+	proxy := NewSPICEProxy(spiceProxyEchoServer(t), nil)
 	addr, err := proxy.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +196,7 @@ func TestSPICEProxyStopClosesEveryChannel(t *testing.T) {
 func TestSPICEProxyStopDuringChannelUpgrade(t *testing.T) {
 	for i := range 10 {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			proxy := NewSPICEProxy("127.0.0.1:1")
+			proxy := NewSPICEProxy("127.0.0.1:1", nil)
 			addr, err := proxy.Start()
 			if err != nil {
 				t.Fatal(err)

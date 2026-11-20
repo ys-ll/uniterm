@@ -33,7 +33,7 @@ func TestSessionProxyRegistryLifecycle(t *testing.T) {
 			t.Fatal("rdp proxy left its handler registered after Stop")
 		}
 
-		vnc := NewVNCProxy("127.0.0.1:1")
+		vnc := NewVNCProxy("127.0.0.1:1", nil)
 		addr, err = vnc.Start()
 		if err != nil {
 			t.Fatal(err)
@@ -49,7 +49,7 @@ func TestSessionProxyRegistryLifecycle(t *testing.T) {
 			t.Fatal("vnc proxy left its handler registered after Stop")
 		}
 
-		spice := NewSPICEProxy("127.0.0.1:1")
+		spice := NewSPICEProxy("127.0.0.1:1", nil)
 		addr, err = spice.Start()
 		if err != nil {
 			t.Fatal(err)

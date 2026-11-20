@@ -36,7 +36,7 @@ func (s *VNCSession) Connect(config ConnectionConfig) error {
 
 	s.title = fmt.Sprintf("%s (VNC)", config.Host)
 
-	proxy := NewVNCProxy(target)
+	proxy := NewVNCProxy(target, config.Proxy)
 	addr, err := proxy.Start()
 	if err != nil {
 		s.setStatus(StatusError)

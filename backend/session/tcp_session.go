@@ -5,7 +5,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"time"
 
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/transform"
@@ -64,7 +63,7 @@ func (s *TCPSession) Connect(config ConnectionConfig) error {
 	s.title = fmt.Sprintf("%s:%d", config.Host, port)
 
 	addr := net.JoinHostPort(config.Host, fmt.Sprintf("%d", port))
-	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	conn, err := dialFirstHop(addr, config.Proxy)
 	if err != nil {
 		s.setStatus(StatusError)
 		return fmt.Errorf("tcp dial %s: %w", addr, err)
