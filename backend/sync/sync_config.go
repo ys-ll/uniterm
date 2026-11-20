@@ -128,6 +128,11 @@ type SyncConfig struct {
 	// LastSyncedHash is the aggregate content hash both sides agreed on at
 	// the last successful snapshot sync (three-way base for snapshot mode).
 	LastSyncedHash string `json:"lastSyncedHash,omitempty"`
+	// LastSyncedScope is the sync scope the LastSyncedHash aggregate was
+	// computed over. A device that widens its scope must not treat the
+	// newly covered, never-persisted files as a local edit — the recorded
+	// scope is what tells "scope grew" apart from "data changed".
+	LastSyncedScope []string `json:"lastSyncedScope,omitempty"`
 
 	LastSyncAt     time.Time `json:"lastSyncAt"`
 	LastSyncStatus string    `json:"lastSyncStatus"`

@@ -751,3 +751,181 @@ func TestPushSnapshotUploadsOnlyChangedBlobs(t *testing.T) {
 		t.Fatalf("manifest hashes = %d entries, want %d", len(b.manifest.FileHashes), len(defaultSyncedFiles))
 	}
 }
+
+// TestSnapshotPushKeepsOutOfScopeRemoteBlob: device A (wide scope incl.
+// skills.json) pushes; device B (narrow scope, no skills.json) then pushes
+// its own change. B's manifest must keep A's skills.json hash so a third
+// pull still delivers the blob — the scope is per-device, not per-repo
+// (issue #1517).
+func TestSnapshotPushKeepsOutOfScopeRemoteBlob(t *testing.T) {
+	s, dataDir, key := newSnapshotTestService(t, []string{"connections.json"})
+	writeConfig(t, dataDir, "connections.json", `{"v":1}`)
+	b := newFakeSnapshotBackend()
+
+	// Device B bootstrap: narrow-scope push, records LastSyncedHash.
+	if _, err := s.syncSnapshot(b); err != nil {
+		t.Fatal(err)
+	}
+
+	// Device A (wide scope incl. skills.json) pushes on top: same
+	// connections.json content, plus the skills.json blob.
+	staging := b.staging(t)
+	srcDir := t.TempDir()
+	writeConfig(t, srcDir, "connections.json", `{"v":1}`)
+	writeConfig(t, srcDir, "skills.json", `{"skills":[{"name":"demo"}]}`)
+	wide := []string{"connections.json", "skills.json"}
+	if err := EncryptConfigFilesScoped(wide, srcDir, staging, key); err != nil {
+		t.Fatal(err)
+	}
+	hashes, _, err := canonicalDirHashes(wide, srcDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	skillHash := hashes["skills.json"]
+	if err := b.StoreAll(staging, []byte("0123456789abcdef"), SnapshotInfo{
+		Version: "v2", UpdatedAt: time.Now().UTC(), FileHashes: hashes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// B syncs: the wide-scope remote entry is invisible to B's narrower
+	// scope — over the shared scope nothing moved, so B stays "up to
+	// date" without a pull. The skills.json blob stays on the remote for
+	// the devices whose scope covers it.
+	res, err := s.syncSnapshot(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Direction != SyncNone {
+		t.Fatalf("direction = %v, want none", res.Direction)
+	}
+
+	// B edits its scoped file and pushes.
+	writeConfig(t, dataDir, "connections.json", `{"v":2}`)
+	res, err = s.syncSnapshot(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Direction != SyncPush {
+		t.Fatalf("direction = %v, want push", res.Direction)
+	}
+	if b.manifest.FileHashes["skills.json"] != skillHash {
+		t.Fatalf("push dropped out-of-scope remote skills.json hash: got %q want %q",
+			b.manifest.FileHashes["skills.json"], skillHash)
+	}
+	if _, ok := b.store["skills.json"]; !ok {
+		t.Fatal("push deleted the out-of-scope remote skills.json blob")
+	}
+}
+
+// TestSnapshotWidenedScopePullsOutOfScopeBlob: after B widens its scope to
+// cover skills.json, the blob A left on the remote must arrive — the scoped
+// comparison must not have recorded an anchor that hides it (issue #1517).
+func TestSnapshotWidenedScopePullsOutOfScopeBlob(t *testing.T) {
+	s, dataDir, key := newSnapshotTestService(t, []string{"connections.json"})
+	writeConfig(t, dataDir, "connections.json", `{"v":1}`)
+	b := newFakeSnapshotBackend()
+
+	// B bootstrap push (narrow scope).
+	if _, err := s.syncSnapshot(b); err != nil {
+		t.Fatal(err)
+	}
+
+	// Device A (wide scope) pushes connections.json + skills.json.
+	staging := b.staging(t)
+	srcDir := t.TempDir()
+	writeConfig(t, srcDir, "connections.json", `{"v":1}`)
+	writeConfig(t, srcDir, "skills.json", `{"skills":[{"name":"demo"}]}`)
+	wide := []string{"connections.json", "skills.json"}
+	if err := EncryptConfigFilesScoped(wide, srcDir, staging, key); err != nil {
+		t.Fatal(err)
+	}
+	hashes, _, err := canonicalDirHashes(wide, srcDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.StoreAll(staging, []byte("0123456789abcdef"), SnapshotInfo{
+		Version: "v2", UpdatedAt: time.Now().UTC(), FileHashes: hashes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// B syncs (no-op: out-of-scope entry invisible), then widens its scope.
+	if _, err := s.syncSnapshot(b); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := s.configStore.Load()
+	cfg.SyncScope = wide
+	if err := s.configStore.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// The skills.json blob is not in B's data dir yet, and B's local store
+	// for it reads as never-persisted. Over the widened scope the remote
+	// moved while local == last (scoped to the old scope) → pull must
+	// deliver the blob, not a conflict.
+	res, err := s.syncSnapshot(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dataDir, "skills.json"))
+	if err != nil {
+		t.Fatalf("skills.json must be pulled on widened scope: %v (direction=%v)", err, res.Direction)
+	}
+	if string(data) != `{"skills":[{"name":"demo"}]}` {
+		t.Fatalf("pulled skills.json = %q", data)
+	}
+}
+
+// TestSnapshotNeverPersistedScopedFileStillConflicts: a scoped file that
+// was never persisted locally (null hash) while the scope itself never
+// changed must NOT be mistaken for a scope widening — a genuine
+// both-sides change still surfaces the conflict dialog.
+func TestSnapshotNeverPersistedScopedFileStillConflicts(t *testing.T) {
+	s, dataDir, key := newSnapshotTestService(t, []string{"connections.json", "skills.json"})
+	// Local has connections only; skills.json never written.
+	writeConfig(t, dataDir, "connections.json", `{"v":1}`)
+	b := newFakeSnapshotBackend()
+
+	// Bootstrap: the manifest covers both files (skills = null hash).
+	if _, err := s.syncSnapshot(b); err != nil {
+		t.Fatal(err)
+	}
+
+	// Local edits connections; remote (another device) rewrites
+	// connections differently and now carries skills.json.
+	writeConfig(t, dataDir, "connections.json", `{"v":2}`)
+	staging := b.staging(t)
+	srcDir := t.TempDir()
+	writeConfig(t, srcDir, "connections.json", `{"v":3}`)
+	writeConfig(t, srcDir, "skills.json", `{"skills":[{"name":"demo"}]}`)
+	wide := []string{"connections.json", "skills.json"}
+	if err := EncryptConfigFilesScoped(wide, srcDir, staging, key); err != nil {
+		t.Fatal(err)
+	}
+	hashes, _, err := canonicalDirHashes(wide, srcDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.StoreAll(staging, []byte("0123456789abcdef"), SnapshotInfo{
+		Version: "v2", UpdatedAt: time.Now().UTC(), FileHashes: hashes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.syncSnapshot(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Direction != SyncConflict {
+		t.Fatalf("direction = %v, want conflict", res.Direction)
+	}
+	// The local edit must survive the conflict round.
+	data, err := os.ReadFile(filepath.Join(dataDir, "connections.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != `{"v":2}` {
+		t.Fatalf("local edit overwritten by conflict round: %q", data)
+	}
+}

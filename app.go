@@ -2123,42 +2123,66 @@ func (a *App) SetCommandEnabled(name string, enabled bool) error {
 	if a.commandsStore == nil {
 		return fmt.Errorf("commands store not initialized")
 	}
-	return a.commandsStore.SetEnabled(name, enabled)
+	err := a.commandsStore.SetEnabled(name, enabled)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) SetCommandLocked(name string, locked bool) error {
 	if a.commandsStore == nil {
 		return fmt.Errorf("commands store not initialized")
 	}
-	return a.commandsStore.SetLocked(name, locked)
+	err := a.commandsStore.SetLocked(name, locked)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) SetCommandSortOrder(name string, order int) error {
 	if a.commandsStore == nil {
 		return fmt.Errorf("commands store not initialized")
 	}
-	return a.commandsStore.SetSortOrder(name, order)
+	err := a.commandsStore.SetSortOrder(name, order)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) DeleteCommand(name string) error {
 	if a.commandsStore == nil {
 		return fmt.Errorf("commands store not initialized")
 	}
-	return a.commandsStore.Delete(name)
+	err := a.commandsStore.Delete(name)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) CreateCommand(name, description, argumentHint, body string) error {
 	if a.commandsStore == nil {
 		return fmt.Errorf("commands store not initialized")
 	}
-	return a.commandsStore.CreateCommand(name, description, argumentHint, body)
+	err := a.commandsStore.CreateCommand(name, description, argumentHint, body)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) SaveCommand(name, description, argumentHint, body string) error {
 	if a.commandsStore == nil {
 		return fmt.Errorf("commands store not initialized")
 	}
-	return a.commandsStore.SaveCommand(name, description, argumentHint, body)
+	err := a.commandsStore.SaveCommand(name, description, argumentHint, body)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 // expandDialogDir expands a leading "~" and returns dir only if it is an

@@ -1983,56 +1983,88 @@ func (a *App) SetSkillEnabled(name string, enabled bool) error {
 	if a.skillsStore == nil {
 		return fmt.Errorf("skills store not initialized")
 	}
-	return a.skillsStore.SetEnabled(name, enabled)
+	err := a.skillsStore.SetEnabled(name, enabled)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) SetSkillLocked(name string, locked bool) error {
 	if a.skillsStore == nil {
 		return fmt.Errorf("skills store not initialized")
 	}
-	return a.skillsStore.SetLocked(name, locked)
+	err := a.skillsStore.SetLocked(name, locked)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) SetSkillSortOrder(name string, order int) error {
 	if a.skillsStore == nil {
 		return fmt.Errorf("skills store not initialized")
 	}
-	return a.skillsStore.SetSortOrder(name, order)
+	err := a.skillsStore.SetSortOrder(name, order)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) DeleteSkill(name string) error {
 	if a.skillsStore == nil {
 		return fmt.Errorf("skills store not initialized")
 	}
-	return a.skillsStore.Delete(name)
+	err := a.skillsStore.Delete(name)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) ImportSkillFromDir(srcDir string) (string, error) {
 	if a.skillsStore == nil {
 		return "", fmt.Errorf("skills store not initialized")
 	}
-	return a.skillsStore.ImportFromDir(srcDir)
+	name, err := a.skillsStore.ImportFromDir(srcDir)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return name, err
 }
 
 func (a *App) ImportSkillFromZip(zipPath string) (string, error) {
 	if a.skillsStore == nil {
 		return "", fmt.Errorf("skills store not initialized")
 	}
-	return a.skillsStore.ImportFromZip(zipPath)
+	name, err := a.skillsStore.ImportFromZip(zipPath)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return name, err
 }
 
 func (a *App) CreateSkill(name, description, body string) error {
 	if a.skillsStore == nil {
 		return fmt.Errorf("skills store not initialized")
 	}
-	return a.skillsStore.CreateSkill(name, description, body)
+	err := a.skillsStore.CreateSkill(name, description, body)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 func (a *App) SaveSkill(name, description, body string) error {
 	if a.skillsStore == nil {
 		return fmt.Errorf("skills store not initialized")
 	}
-	return a.skillsStore.SaveSkill(name, description, body)
+	err := a.skillsStore.SaveSkill(name, description, body)
+	if err == nil {
+		a.triggerAutoSync()
+	}
+	return err
 }
 
 // RecentStore methods
@@ -2604,6 +2636,7 @@ func (a *App) saveMCPClient(cfg store.MCPClientConfig, originalName string) erro
 	if err := a.mcpClientStore.Save(all); err != nil {
 		return err
 	}
+	a.triggerAutoSync()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	mgr.Reload(ctx)
@@ -2626,6 +2659,7 @@ func (a *App) RemoveMCPClient(name string) error {
 	if err := a.mcpClientStore.Save(kept); err != nil {
 		return err
 	}
+	a.triggerAutoSync()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	mgr.Reload(ctx)
