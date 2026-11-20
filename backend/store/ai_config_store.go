@@ -24,6 +24,9 @@ type AIStoreData struct {
 	// "" (plain, default) keeps the shared left-aligned full-width layout,
 	// "bubble" right-aligns a content-sized chat bubble (issue #1478).
 	UserMessageStyle string          `json:"userMessageStyle,omitempty"`
+	// SendKey selects the AI-panel send shortcut: "enter" (default) sends on
+	// Enter, "ctrl-enter" sends on Ctrl/Cmd+Enter and Enter inserts a newline.
+	SendKey          string          `json:"sendKey,omitempty"`
 	Models           []AIModelConfig `json:"models"`
 }
 
@@ -137,7 +140,8 @@ func (s *AIConfigStore) MigrateFromSettingsIfNeeded(settings AppSettings) error 
 	}
 	return s.Save(AIStoreData{MaxTurns: maxTurns, Models: settings.AI.Models,
 		AutoCompact: settings.AI.AutoCompact, ContextTokenBudget: settings.AI.ContextTokenBudget,
-		SummaryModelID: settings.AI.SummaryModelID, UserMessageStyle: settings.AI.UserMessageStyle})
+		SummaryModelID: settings.AI.SummaryModelID, UserMessageStyle: settings.AI.UserMessageStyle,
+		SendKey: settings.AI.SendKey})
 }
 
 // BlobName, ExportPlain and ImportPlain implement the sync exchange contract

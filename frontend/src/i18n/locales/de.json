@@ -670,6 +670,10 @@
   "settings.userMessageStylePlain": "Linksbündig",
 
   "settings.userMessageStyleBubble": "Rechtsbündig",
+  "settings.sendKey": "Sende-Taste (KI)",
+  "settings.sendKeyDesc": "Tastenkürzel zum Senden von Nachrichten im KI-Panel.",
+  "settings.sendKeyEnter": "Eingabetaste",
+  "settings.sendKeyCtrlEnter": "Strg+Eingabetaste",
   "settings.modelList": "Modellliste",
   "settings.modelListDesc": "KI-Modelle konfigurieren und verwalten",
   "settings.addModel": "Modell hinzufügen",

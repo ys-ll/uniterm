@@ -670,6 +670,10 @@
   "settings.userMessageStylePlain": "左揃え",
 
   "settings.userMessageStyleBubble": "右揃え",
+  "settings.sendKey": "送信ショートカット",
+  "settings.sendKeyDesc": "AIチャットでメッセージを送信するショートカット。",
+  "settings.sendKeyEnter": "Enter",
+  "settings.sendKeyCtrlEnter": "Ctrl+Enter",
   "settings.modelList": "モデル一覧",
   "settings.modelListDesc": "AI モデルの設定と管理",
   "settings.addModel": "モデルを追加",

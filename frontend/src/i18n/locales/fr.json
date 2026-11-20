@@ -670,6 +670,10 @@
   "settings.userMessageStylePlain": "Aligné à gauche",
 
   "settings.userMessageStyleBubble": "Aligné à droite",
+  "settings.sendKey": "Touche d'envoi (IA)",
+  "settings.sendKeyDesc": "Raccourci d'envoi des messages dans le panneau IA.",
+  "settings.sendKeyEnter": "Entrée",
+  "settings.sendKeyCtrlEnter": "Ctrl+Entrée",
   "settings.modelList": "Liste des modèles",
   "settings.modelListDesc": "Configurer et gérer les modèles d'IA",
   "settings.addModel": "Ajouter un modèle",

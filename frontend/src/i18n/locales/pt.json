@@ -666,6 +666,10 @@
   "settings.userMessageStylePlain": "Alinhado à esquerda",
 
   "settings.userMessageStyleBubble": "Alinhado à direita",
+  "settings.sendKey": "Tecla de envio (IA)",
+  "settings.sendKeyDesc": "Atalho para enviar mensagens no painel de IA.",
+  "settings.sendKeyEnter": "Enter",
+  "settings.sendKeyCtrlEnter": "Ctrl+Enter",
   "settings.modelList": "Lista de modelos",
   "settings.modelListDesc": "Configure e gerencie modelos de IA",
   "settings.addModel": "Adicionar modelo",

@@ -670,6 +670,10 @@
   "settings.userMessageStylePlain": "왼쪽 정렬",
 
   "settings.userMessageStyleBubble": "오른쪽 정렬",
+  "settings.sendKey": "전송 단축키",
+  "settings.sendKeyDesc": "AI 채팅에서 메시지를 전송하는 단축키입니다.",
+  "settings.sendKeyEnter": "Enter",
+  "settings.sendKeyCtrlEnter": "Ctrl+Enter",
   "settings.modelList": "모델 목록",
   "settings.modelListDesc": "AI 모델 구성 및 관리",
   "settings.addModel": "모델 추가",

@@ -666,6 +666,10 @@
   "settings.userMessageStylePlain": "Căn trái",
 
   "settings.userMessageStyleBubble": "Căn phải",
+  "settings.sendKey": "Phím gửi (AI)",
+  "settings.sendKeyDesc": "Phím tắt để gửi tin nhắn trong bảng AI.",
+  "settings.sendKeyEnter": "Enter",
+  "settings.sendKeyCtrlEnter": "Ctrl+Enter",
   "settings.modelList": "Danh sách mô hình",
   "settings.modelListDesc": "Cấu hình và quản lý các mô hình AI",
   "settings.addModel": "Thêm mô hình",

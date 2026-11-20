@@ -694,6 +694,10 @@
   "settings.userMessageStylePlain": "Left-aligned",
 
   "settings.userMessageStyleBubble": "Right-aligned",
+  "settings.sendKey": "AI Chat Send Key",
+  "settings.sendKeyDesc": "Shortcut used to send a message in the AI panel.",
+  "settings.sendKeyEnter": "Enter",
+  "settings.sendKeyCtrlEnter": "Ctrl+Enter",
   "settings.modelList": "Model List",
   "settings.modelListDesc": "Configure and manage AI models",
   "settings.addModel": "Add Model",

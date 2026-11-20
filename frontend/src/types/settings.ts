@@ -174,6 +174,9 @@ export interface AISettings {
   contextTokenBudget?: number
   summaryModelId?: string
   userMessageStyle?: 'plain' | 'bubble'
+  // AI-panel send shortcut: 'enter' (default) sends on Enter,
+  // 'ctrl-enter' sends on Ctrl/Cmd+Enter and Enter inserts a newline.
+  sendKey?: 'enter' | 'ctrl-enter'
   models: AIModelConfig[]
 }
 
@@ -547,6 +550,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     contextTokenBudget: DEFAULT_CONTEXT_TOKEN_BUDGET,
     summaryModelId: '',
     userMessageStyle: 'bubble',
+    sendKey: 'enter',
     models: [
       {
         id: 'model-default',
