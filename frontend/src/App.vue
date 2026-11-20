@@ -1256,6 +1256,14 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
     const pid = tabStore.getActivePanelId()
     if (pid) window.dispatchEvent(new CustomEvent('terminal:paste', { detail: { panelId: pid } }))
   },
+  resetOutput: () => {
+    const pid = tabStore.getActivePanelId()
+    if (pid) window.dispatchEvent(new CustomEvent('terminal:reset-output', { detail: { panelId: pid } }))
+  },
+  clearScrollback: () => {
+    const pid = tabStore.getActivePanelId()
+    if (pid) window.dispatchEvent(new CustomEvent('terminal:clear-scrollback', { detail: { panelId: pid } }))
+  },
   navigatePrev: () => navigatePanel(-1),
   navigateNext: () => navigatePanel(1),
   openSettings: () => openSettings(),

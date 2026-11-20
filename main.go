@@ -478,7 +478,7 @@ func main() {
 	// exists so the click handlers can drive it. Skipped entirely when the
 	// user turned the icon off; created lazily if re-enabled at runtime
 	// (see applyTrayVisibility).
-	if trayIconEnabled(&savedSettings) {
+	if trayIconEnabled(&savedSettings) || minimizeToTrayEnabled(&savedSettings) {
 		setupTray(w3app, app, window, savedSettings.Language)
 	}
 
@@ -747,6 +747,13 @@ func buildTrayMenu(app *App, lang string) *application.Menu {
 // settings.json without the field) means on.
 func trayIconEnabled(s *store.AppSettings) bool {
 	return s.ShowTrayIcon == nil || *s.ShowTrayIcon
+}
+
+// minimizeToTrayEnabled reports whether the minimize button should hide the
+// window into the tray instead of the taskbar (issue #1556). Nil (older
+// settings.json without the field) means off — minimise as usual.
+func minimizeToTrayEnabled(s *store.AppSettings) bool {
+	return s.MinimizeToTray != nil && *s.MinimizeToTray
 }
 
 // applyTrayVisibility shows or hides the tray icon when the setting changes

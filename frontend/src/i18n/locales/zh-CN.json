@@ -1,4 +1,4 @@
-{
+﻿{
   "webUsers.resetPassword": "重置密码",
   "webUsers.resetPrompt": "为 {name} 设置新密码（≥6 位）。该操作会清空其全部密钥数据——登录密码即数据主密码。",
   "webUsers.resetTitle": "重置密码",
@@ -561,6 +561,8 @@
   "settings.closeAppPrompt": "关闭应用提示",
   "settings.showTrayIcon": "托盘图标",
   "settings.showTrayIconDesc": "在系统托盘/菜单栏显示 uniTerm 图标",
+  "settings.minimizeToTray": "最小化到托盘",
+  "settings.minimizeToTrayDesc": "最小化时窗口隐藏到托盘而不显示在任务栏，标签和会话保持运行；可从托盘图标恢复，退出请使用托盘菜单",
   "settings.systemTitleBar": "使用系统标题栏",
   "settings.systemTitleBarDesc": "使用操作系统原生窗口边框，替代内置标题栏（需重启生效）",
   "settings.titleBarRestartTitle": "需要重启",
@@ -630,6 +632,8 @@
   "settings.ctrlWheelZoom": "使用 Ctrl/Cmd+滚轮缩放字体",
   "settings.ctrlWheelZoomDesc": "按住 Ctrl（macOS 为 Cmd）滚动鼠标滚轮调整终端字体大小",
   "settings.maxHistoryDesc": "终端保留的最大输出行数",
+  "settings.clearToScrollback": "clear 时保留历史",
+  "settings.clearToScrollbackDesc": "执行 clear 时先将当前屏幕内容滚入滚动缓冲，不丢历史；关闭后按标准终端行为清屏",
   "settings.smartCompletion": "智能补全",
   "settings.suggestionPopup": "建议弹窗",
   "settings.terminalContrast": "对比度增强",
@@ -1546,6 +1550,8 @@
   "shortcut.terminalSearch": "终端搜索",
   "shortcut.openSettings": "打开设置",
   "shortcut.copy": "终端内复制",
+  "shortcut.resetOutput": "清空终端输出",
+  "shortcut.clearScrollback": "清除滚动缓冲",
   "shortcut.paste": "终端内粘贴",
   "shortcut.toggleLineNumbers": "切换行号显示",
   "shortcut.toggleTimestamps": "切换时间显示",

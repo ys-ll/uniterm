@@ -2028,8 +2028,10 @@ func (a *App) SaveSettings(settings store.AppSettings) error {
 		// No-op when the resolved language is unchanged.
 		a.refreshTrayLanguage(settings.Language)
 		// Show/hide the tray icon when that toggle changed; creates the
-		// tray lazily if the app started with it disabled.
-		a.applyTrayVisibility(trayIconEnabled(&settings), settings.Language)
+		// tray lazily if the app started with it disabled. Minimize-to-tray
+		// leaves no taskbar button, so the tray is the only way back to the
+		// hidden window — it forces the icon on.
+		a.applyTrayVisibility(trayIconEnabled(&settings) || minimizeToTrayEnabled(&settings), settings.Language)
 	}
 	return err
 }

@@ -129,6 +129,14 @@ export interface TerminalSettings {
   // bracketed-paste markers without executing — targets without bracketed
   // paste enabled fall back to 'lines' per target. Defaults to 'lines'.
   commandSendMode?: 'lines' | 'bracketed'
+  // What a clear-screen sequence (ED2, e.g. the shell's `clear`) does (issue
+  // #1551). true (default): the current viewport is scrolled
+  // into the scrollback before the screen clears, so history is never lost,
+  // and ED3 (erase scrollback) is stripped so remote output can never wipe
+  // the scrollback. false (standard terminal): ED2 and ED3 pass through
+  // natively — clear wipes the screen and erase-scrollback sequences clear
+  // the history.
+  clearToScrollback: boolean
 }
 
 export interface AIModelConfig {
@@ -206,6 +214,8 @@ export type ShortcutAction =
   | 'toggleHistory'      // 切换历史命令边栏（no default binding — opt-in）
   | 'togglePersonalization' // 切换个性化边栏（no default binding — opt-in）
   | 'toggleCommandSend'  // 切换命令发送面板（no default binding — opt-in）
+  | 'resetOutput'        // 清空终端输出：wipe screen + scrollback（no default binding — opt-in）
+  | 'clearScrollback'    // 清除滚动缓冲（no default binding — opt-in）
 
 // User-facing bindings only use ctrl/shift/alt. On macOS the runtime mirrors
 // every ctrl combo to Cmd (per-action shortcuts register both; the digit
@@ -264,6 +274,8 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   toggleHistory: 'shortcut.toggleHistory',
   togglePersonalization: 'shortcut.togglePersonalization',
   toggleCommandSend: 'shortcut.toggleCommandSend',
+  resetOutput: 'shortcut.resetOutput',
+  clearScrollback: 'shortcut.clearScrollback',
 }
 
 export const DEFAULT_KEYBOARD: KeyboardSettings = {
@@ -375,6 +387,11 @@ export interface AppSettings {
   // Whether the system tray icon (macOS menu bar status item) is shown.
   // Mirrors ShowTrayIcon in backend/store/settings_store.go.
   showTrayIcon: boolean
+  // The minimize button sends the window to the tray instead of the taskbar:
+  // tabs and sessions keep running, restore via the tray icon (forced on
+  // while this is enabled). Close paths are untouched and keep quitting.
+  // Mirrors MinimizeToTray in backend/store/settings_store.go (issue #1556).
+  minimizeToTray: boolean
   // How the host list opens the connection menu: hover "⋯"/star buttons
   // ("button") or right-click only, with the hover buttons hidden
   // ("rightclick"). The right-click menu works in both modes.
@@ -521,7 +538,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     showLineNumbers: false,
     showTimestamps: false,
     timestampFormat: 'HH:mm:ss',
-    commandSendMode: 'lines'
+    commandSendMode: 'lines',
+    clearToScrollback: true
   },
   ai: {
     maxTurns: 20,
@@ -557,6 +575,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tabCloseButton: 'left',
   showTabShortcutHints: true,
   showTrayIcon: true,
+  minimizeToTray: false,
   hostListMenuStyle: 'button',
   connectionsDisplayMode: 'full',
   quickCommandsDisplayMode: 'list',
