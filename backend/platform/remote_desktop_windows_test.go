@@ -70,3 +70,18 @@ func TestRDPKeyboardHookFullscreenEscapeFlagRefresh(t *testing.T) {
 		t.Fatal("flag refresh must keep the capture without releasing keys")
 	}
 }
+
+func TestNormalizeScanStripsShiftE0Prefix(t *testing.T) {
+	// Keyboards reporting Shift with an E0 prefix must still reach the remote
+	// as plain set-1 Shift; 0xE02A/0xE036 are invalid on the wire.
+	for _, tc := range []struct{ in, want uint16 }{
+		{0xe036, 0x36}, {0xe02a, 0x2a}, // E0-prefixed Shift, both sides
+		{0x2a, 0x2a}, {0x36, 0x36}, // ordinary Shift passes through
+		{0xe01d, 0xe01d}, {0xe053, 0xe053}, {0x2f, 0x2f}, // real extended keys untouched
+		{0x00, 0x00},
+	} {
+		if got := normalizeScan(tc.in); got != tc.want {
+			t.Fatalf("normalizeScan(%#x) = %#x, want %#x", tc.in, got, tc.want)
+		}
+	}
+}
