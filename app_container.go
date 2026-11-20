@@ -31,14 +31,38 @@ func (a *App) K8sListContexts(source string, sourceIsPath bool) ([]K8sContextInf
 // K8sConnect 建立到 kubeconfig 中指定 context 的连接，返回 connID。
 // 若 tunnelSSHConnID 非空，会先起一条 SSH 隧道，把到 apiserver 的 TCP 拨号
 // 劫持到本地 loopback；TLS 校验仍按 kubeconfig 里的原 hostname 走。
+// 无隧道时 proxyID 非空则把到 apiserver 的拨号路由经 SOCKS5/HTTP 代理。
 func (a *App) K8sConnect(source string, sourceIsPath bool, contextName string,
-	tunnelSSHConnID, tunnelSSHUser, tunnelSSHPassword string) (string, error) {
+	proxyID, tunnelSSHConnID, tunnelSSHUser, tunnelSSHPassword string) (string, error) {
 	raw, err := readKubeconfigSource(source, sourceIsPath)
 	if err != nil {
 		return "", err
 	}
 
 	if tunnelSSHConnID == "" {
+		if proxyID != "" {
+			// The "system" sentinel resolves against a concrete target, so the
+			// apiserver address must be known even on the direct path.
+			kc, err := k8s.ParseBytes(raw)
+			if err != nil {
+				return "", fmt.Errorf("kubeconfig: %w", err)
+			}
+			targetHost, targetPort, err := k8sContextServerAddr(kc, contextName)
+			if err != nil {
+				return "", err
+			}
+			mc, err := a.materializeProxy(session.ConnectionConfig{
+				ProxyId: proxyID, Host: targetHost, Port: targetPort,
+			})
+			if err != nil {
+				return "", err
+			}
+			if mc.Proxy != nil {
+				return a.k8sManager.ConnectWith(raw, contextName, k8s.ConnectOptions{
+					DialOverride: session.ProxyDialFunc(mc.Proxy),
+				})
+			}
+		}
 		return a.k8sManager.Connect(a.ctx, raw, contextName)
 	}
 
@@ -48,21 +72,9 @@ func (a *App) K8sConnect(source string, sourceIsPath bool, contextName string,
 	if err != nil {
 		return "", fmt.Errorf("kubeconfig: %w", err)
 	}
-	ctxName := contextName
-	if ctxName == "" {
-		ctxName = kc.CurrentContext
-	}
-	ctxEntry, ok := kc.Contexts[ctxName]
-	if !ok {
-		return "", fmt.Errorf("context %q not found", ctxName)
-	}
-	cluster, ok := kc.Clusters[ctxEntry.Cluster]
-	if !ok {
-		return "", fmt.Errorf("cluster %q not found", ctxEntry.Cluster)
-	}
-	targetHost, targetPort, err := k8s.ParseServerAddr(cluster.Server)
+	targetHost, targetPort, err := k8sContextServerAddr(kc, contextName)
 	if err != nil {
-		return "", fmt.Errorf("parse apiserver url: %w", err)
+		return "", err
 	}
 
 	// 用同一个 key 既做 K8s connID 也做 TunnelService 的 sessionID，
@@ -176,6 +188,24 @@ func readKubeconfigSource(source string, sourceIsPath bool) ([]byte, error) {
 	return os.ReadFile(source)
 }
 
+// k8sContextServerAddr resolves the apiserver host:port of a context. The
+// "system" proxy sentinel and the SSH-tunnel target both need it.
+func k8sContextServerAddr(kc *k8s.Kubeconfig, contextName string) (string, int, error) {
+	ctxName := contextName
+	if ctxName == "" {
+		ctxName = kc.CurrentContext
+	}
+	ctxEntry, ok := kc.Contexts[ctxName]
+	if !ok {
+		return "", 0, fmt.Errorf("context %q not found", ctxName)
+	}
+	cluster, ok := kc.Clusters[ctxEntry.Cluster]
+	if !ok {
+		return "", 0, fmt.Errorf("cluster %q not found", ctxEntry.Cluster)
+	}
+	return k8s.ParseServerAddr(cluster.Server)
+}
+
 // ContainerConnect 打开容器连接：解析配置、按 transport 建 Local 或 SSH runner。
 // SSH 传输时若被引用连接配了跳板机（TunnelSSHConnID），先起本地转发隧道，
 // 与 CreateSession 的单层隧道行为一致。
@@ -228,6 +258,13 @@ func (a *App) ContainerConnect(connectionID, sshUser, sshPassword, tunnelUser, t
 		}
 		sshCfg = &m
 	}
+	// Resolve the runner SSH connection's proxy reference so the container
+	// session inherits it (DialSSHClient honors it).
+	pmc, err := a.materializeProxy(*sshCfg)
+	if err != nil {
+		return err
+	}
+	sshCfg = &pmc
 
 	// 临时账密（凭据补全弹窗"直接连接"未保存时）：只填空缺，不覆盖
 	// 已存储或身份库解析的值，与 setupJumpHostTunnel 的内联凭据语义一致。

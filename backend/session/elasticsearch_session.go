@@ -136,6 +136,10 @@ func (s *ElasticsearchSession) Connect(config ConnectionConfig) error {
 		MaxIdleConns:        20,
 		IdleConnTimeout:     90 * time.Second,
 	}
+	// An explicit proxy takes precedence over the environment fallback.
+	if config.Proxy != nil {
+		transport.Proxy = ProxyHTTPTransportProxy(config.Proxy)
+	}
 	if config.EsUseSSL {
 		transport.TLSClientConfig = &tls.Config{
 			InsecureSkipVerify: config.EsSkipVerify, //nolint:gosec // intentional user opt-in

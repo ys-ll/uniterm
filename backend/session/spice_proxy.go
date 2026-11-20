@@ -21,6 +21,7 @@ type SPICEProxy struct {
 	listener net.Listener
 	server   *http.Server
 	target   string
+	upstream *SocksProxy
 	// authToken scopes the proxy's path in server mode; also the registry
 	// key for the /api/web dispatch.
 	authToken string
@@ -31,13 +32,14 @@ type SPICEProxy struct {
 	cancel    context.CancelFunc
 }
 
-func NewSPICEProxy(target string) *SPICEProxy {
+func NewSPICEProxy(target string, upstream *SocksProxy) *SPICEProxy {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &SPICEProxy{
-		target: target,
-		conns:  make(map[*websocket.Conn]net.Conn),
-		ctx:    ctx,
-		cancel: cancel,
+		target:   target,
+		upstream: upstream,
+		conns:    make(map[*websocket.Conn]net.Conn),
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 }
 
@@ -115,8 +117,7 @@ func (p *SPICEProxy) handleWebSocket(ws *websocket.Conn) {
 		p.mu.Unlock()
 	}()
 
-	dialer := net.Dialer{Timeout: 5 * time.Second}
-	tcp, err := dialer.DialContext(p.ctx, "tcp", p.target)
+	tcp, err := dialFirstHopContext(p.ctx, p.target, p.upstream)
 	if err != nil {
 		log.Writef("[SPICEProxy] TCP dial to %s failed: %v", p.target, err)
 		return

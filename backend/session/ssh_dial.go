@@ -136,6 +136,11 @@ func DialSSHClient(config ConnectionConfig) (*ssh.Client, error) {
 	}
 	factory := newConfig(nil)
 	return dialSSHWithAuthRetry(addr, sets, factory, factory, func() (net.Conn, error) {
+		// Honor a materialized proxy (x11-desktop and container-SSH runners
+		// route through here too); fall back to a direct dial.
+		if config.Proxy != nil {
+			return dialFirstHop(addr, config.Proxy)
+		}
 		return net.DialTimeout("tcp", addr, 30*time.Second)
 	})
 }

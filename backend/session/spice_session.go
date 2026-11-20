@@ -35,7 +35,7 @@ func (s *SPICESession) Connect(config ConnectionConfig) error {
 	}
 
 	s.title = fmt.Sprintf("%s (SPICE)", config.Host)
-	proxy := NewSPICEProxy(net.JoinHostPort(host, strconv.Itoa(port)))
+	proxy := NewSPICEProxy(net.JoinHostPort(host, strconv.Itoa(port)), config.Proxy)
 	addr, err := proxy.Start()
 	if err != nil {
 		s.setStatus(StatusError)

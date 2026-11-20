@@ -1,5 +1,15 @@
 package session
 
+import (
+	"context"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+
+	"github.com/ys-ll/uniterm/backend/database"
+)
+
 // Proxy is a reusable outbound proxy (SOCKS5/HTTP) stored in proxies.json,
 // mirroring Identity in the credential vault. Pass is decrypted in memory and
 // encrypted at rest. Enabled is a tri-state: nil (missing in old JSON) counts
@@ -34,3 +44,53 @@ type ProxyResolver func(id string) (SocksProxy, bool)
 // concrete proxy. Saved proxy IDs are generated as "px-..." so it never
 // collides. An empty reference stays "dial direct".
 const ProxyIDSystem = "system"
+
+// ProxyDialFunc adapts a SocksProxy into the driver-style context dialer that
+// database/redis/mongo connectors accept. nil proxy → nil, so callers can
+// assign the result directly to an optional dialer field. The network argument
+// is ignored: every proxyable session dial is TCP (dialFirstHop's domain).
+func ProxyDialFunc(upstream *SocksProxy) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	if upstream == nil {
+		return nil
+	}
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return dialFirstHopContext(ctx, addr, upstream)
+	}
+}
+
+// proxyContextDialer wraps ProxyDialFunc's closure into the named-method
+// interface shape (ContextDialer) that mongo-driver's SetDialer requires.
+type proxyContextDialer struct{ fn func(ctx context.Context, network, addr string) (net.Conn, error) }
+
+func dialerAdapter(upstream *SocksProxy) proxyContextDialer {
+	return proxyContextDialer{fn: ProxyDialFunc(upstream)}
+}
+
+func (d proxyContextDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	return d.fn(ctx, network, addr)
+}
+
+// dbProxyDial converts a connection's proxy reference into the database
+// package's dial hook. nil when no proxy is configured.
+func dbProxyDial(config ConnectionConfig) database.DialContextFunc {
+	if config.Proxy == nil {
+		return nil
+	}
+	return database.DialContextFunc(ProxyDialFunc(config.Proxy))
+}
+
+// ProxyHTTPTransportProxy returns an http.Transport Proxy hook routing all
+// requests through the upstream proxy. The http.Transport layer understands
+// both http(s):// CONNECT and socks5:// URLs, matching dialFirstHop's two
+// proxy kinds; proxy credentials ride in the URL userinfo. nil proxy → nil
+// so callers can keep their existing Proxy assignment.
+func ProxyHTTPTransportProxy(upstream *SocksProxy) func(*http.Request) (*url.URL, error) {
+	if upstream == nil {
+		return nil
+	}
+	u := &url.URL{Scheme: upstream.Kind, Host: net.JoinHostPort(upstream.Host, strconv.Itoa(upstream.Port))}
+	if upstream.User != "" {
+		u.User = url.UserPassword(upstream.User, upstream.Pass)
+	}
+	return func(*http.Request) (*url.URL, error) { return u, nil }
+}

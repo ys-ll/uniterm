@@ -7,17 +7,18 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/ys-ll/uniterm/backend/log"
 )
 
 // VNCProxy bridges WebSocket (frontend noVNC) to TCP (VNC server).
-// One instance per VNC session, bound to a random local port.
+// One instance per VNC session, bound to a random local port. When upstream
+// is set the server-side dial goes through the configured SOCKS5/HTTP proxy.
 type VNCProxy struct {
 	listener net.Listener
 	target   string
+	upstream *SocksProxy
 	// authToken scopes the proxy's path in server mode; also the registry
 	// key for the /api/web dispatch.
 	authToken string
@@ -29,10 +30,11 @@ type VNCProxy struct {
 	tcpConn   net.Conn
 }
 
-func NewVNCProxy(target string) *VNCProxy {
+func NewVNCProxy(target string, upstream *SocksProxy) *VNCProxy {
 	return &VNCProxy{
-		target: target,
-		stopCh: make(chan struct{}),
+		target:   target,
+		upstream: upstream,
+		stopCh:   make(chan struct{}),
 	}
 }
 
@@ -100,7 +102,7 @@ func (p *VNCProxy) handleWebSocket(ws *websocket.Conn) {
 		p.mu.Unlock()
 	}()
 
-	tcp, err := net.DialTimeout("tcp", p.target, 5*time.Second)
+	tcp, err := dialFirstHop(p.target, p.upstream)
 	if err != nil {
 		log.Writef("[VNCProxy] TCP dial to %s failed: %v", p.target, err)
 		ws.Close()

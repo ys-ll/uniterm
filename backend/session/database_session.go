@@ -52,7 +52,7 @@ func (s *DatabaseSession) Connect(config ConnectionConfig) error {
 	}
 	log.Writef("[DatabaseSession.Connect] DSN built, opening database...")
 
-	db, err := database.NewDB(config.DBType, dsn)
+	db, err := database.NewDBWithDial(config.DBType, dsn, dbProxyDial(config))
 	if err != nil {
 		log.Writef("[DatabaseSession.Connect] NewDB failed: %v", err)
 		s.setStatus(StatusError)

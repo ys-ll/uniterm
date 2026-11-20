@@ -150,7 +150,26 @@ func (a *App) testK8sConnection(config session.ConnectionConfig) (string, error)
 	tunnelID := config.TunnelSSHConnID
 
 	if tunnelID == "" {
-		connID, err := a.k8sManager.ConnectWith(raw, contextName, k8s.ConnectOptions{})
+		opts := k8s.ConnectOptions{}
+		if config.ProxyId != "" {
+			// The "system" sentinel resolves against the apiserver target, so
+			// fill Host/Port from the kubeconfig when the form left them empty.
+			if config.Host == "" || config.Port == 0 {
+				if kc, err := k8s.ParseBytes(raw); err == nil {
+					if host, port, err := k8sContextServerAddr(kc, contextName); err == nil {
+						config.Host, config.Port = host, port
+					}
+				}
+			}
+			mc, err := a.materializeProxy(config)
+			if err != nil {
+				return "", err
+			}
+			if mc.Proxy != nil {
+				opts.DialOverride = session.ProxyDialFunc(mc.Proxy)
+			}
+		}
+		connID, err := a.k8sManager.ConnectWith(raw, contextName, opts)
 		if err != nil {
 			return "", err
 		}

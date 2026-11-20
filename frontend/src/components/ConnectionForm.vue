@@ -1077,7 +1077,17 @@ const TUNNEL_UNSUPPORTED = ['mosh', 'local', 'wsl', 'serial', 'container']
 const showTunnel = computed(() =>
   !TUNNEL_UNSUPPORTED.includes(form.type) && !isSqliteDb.value
 )
-const showProxy = computed(() => ['ssh', 'sftp', 'scp', 'monitor'].includes(form.type))
+// Types whose first outbound TCP dial routes through the configured proxy.
+// Excluded: no network egress (local/wsl/serial), UDP-only (mosh), special
+// paths (container inherits its referenced SSH connection's proxy silently),
+// and driver limits (sqlite file db, rqlite, redis sentinel — no dialer hook).
+const PROXY_UNSUPPORTED = ['mosh', 'local', 'wsl', 'wsl-file', 'serial', 'container']
+const showProxy = computed(() =>
+  !PROXY_UNSUPPORTED.includes(form.type) &&
+  !isSqliteDb.value &&
+  form.dbType !== 'rqlite' &&
+  !isRedisSentinel.value
+)
 const showAdvancedToggle = computed(() =>
   showTunnel.value || form.type === 'ssh' || form.type === 'sftp' || form.type === 'scp' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'wsl' || form.type === 'serial' || form.type === 'ftp' || form.type === 'database' || form.type === 'elasticsearch' || form.type === 'x11-desktop' || form.type === 'rdp'
 )
