@@ -423,30 +423,34 @@ const dcsReassembler = new DcsReassembler()
 function renderTerminalData(rawData: string, countChunk = true) {
   if (!terminal) return
   // MobaXterm-style clear-screen (owner decision, supersedes the native
-  // handling from issue #1028): `clear` should scroll the current viewport
-  // into the scrollback instead of wiping it, so history is never lost.
-  // \x1b[3J (erase scrollback) is stripped — otherwise shells that emit
-  // ED2+ED3 would wipe the scrollback right after we pushed content into it.
-  // \x1b[2J is replaced by newline padding + home, pushing the viewport into
-  // scrollback before clearing. Full-screen apps (vim, tmux…) run on the
-  // alternate buffer and are left untouched. The clearToScrollback switch
-  // (issue #1551) opts into the standard behaviour instead: ED2 passes
-  // through natively and only wipes the screen; ED3 stays stripped either
-  // way so remote output can never wipe the scrollback.
-  let data = stripCursorBlink(rawData, settingsStore.settings.terminal.cursorBlink ?? true).replace(/\x1b\[3J/g, '')
-  if ((settingsStore.settings.terminal.clearToScrollback ?? true) &&
-      data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
-    // Scroll from the current cursor position: rows newlines push every row
-    // above and including the cursor into the scrollback — and nothing
-    // below it, so the blank rows under a mid-screen prompt never pollute
-    // the history. Then wipe whatever is left on screen: the trailing blank
-    // rows for a shell prompt, or residue from a program that exited with
-    // the cursor mid-screen (that residue is dropped from history by
-    // design — trading it for a clean screen and unpolluted scrollback).
-    const scrollClear = '\n'.repeat(terminal.rows) + '\x1b[H\x1b[2J'
-    // Single pass: scrollClear itself ends with \x1b[H\x1b[2J, so a second
-    // replace pass would re-expand the sequence we just inserted.
-    data = data.replace(/\x1b\[H?\x1b\[2J/g, scrollClear)
+  // handling from issue #1028): with clearToScrollback on (default), `clear`
+  // scrolls the current viewport into the scrollback instead of wiping it,
+  // so history is never lost. \x1b[3J (erase scrollback) is stripped in this
+  // mode — otherwise shells that emit ED2+ED3 would wipe the scrollback
+  // right after we pushed content into it. \x1b[2J is replaced by newline
+  // padding + home, pushing the viewport into scrollback before clearing.
+  // Full-screen apps (vim, tmux…) run on the alternate buffer and are left
+  // untouched. With the switch off, standard terminal behaviour applies:
+  // ED2 passes through natively and only wipes the screen, and ED3 passes
+  // through too, so e.g. a `clear && printf '\e[3J'` alias wipes both the
+  // screen and the scrollback (issue #1549).
+  const preserveHistory = settingsStore.settings.terminal.clearToScrollback ?? true
+  let data = stripCursorBlink(rawData, settingsStore.settings.terminal.cursorBlink ?? true)
+  if (preserveHistory) {
+    data = data.replace(/\x1b\[3J/g, '')
+    if (data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
+      // Scroll from the current cursor position: rows newlines push every row
+      // above and including the cursor into the scrollback — and nothing
+      // below it, so the blank rows under a mid-screen prompt never pollute
+      // the history. Then wipe whatever is left on screen: the trailing blank
+      // rows for a shell prompt, or residue from a program that exited with
+      // the cursor mid-screen (that residue is dropped from history by
+      // design — trading it for a clean screen and unpolluted scrollback).
+      const scrollClear = '\n'.repeat(terminal.rows) + '\x1b[H\x1b[2J'
+      // Single pass: scrollClear itself ends with \x1b[H\x1b[2J, so a second
+      // replace pass would re-expand the sequence we just inserted.
+      data = data.replace(/\x1b\[H?\x1b\[2J/g, scrollClear)
+    }
   }
   data = sanitizeLiveTerminalOutput(data)
   if (props.mode === 'sftp') {

@@ -677,18 +677,22 @@ export function useTerminal(
     unsubscribe =Events.On('session:data', (ev) => { const payload: { id: string; data: string } = ev.data; 
       const sid = getSessionId()
       if (payload.id === sid && terminal) {
-        // Filter ED3 (erase scrollback). For ED2 (clear screen), replace with
-        // newline scrolling + home so that current viewport content is pushed
-        // into scrollback before clearing, matching standard terminal behavior.
-        // The clearToScrollback switch (issue #1551) opts into the standard
-        // behaviour instead: ED2 passes through natively, wiping only the
-        // screen. ED3 stays stripped in both modes.
-        let data = stripBlink(payload.data).replace(/\x1b\[3J/g, '')
-        if ((settingsStore.settings.terminal.clearToScrollback ?? true) && data.includes('\x1b[2J')) {
-          const rows = terminal.rows
-          const scrollClear = '\n'.repeat(rows) + '\x1b[H'
-          data = data.replace(/\x1b\[H\x1b\[2J/g, scrollClear)
-          data = data.replace(/\x1b\[2J/g, scrollClear)
+        // clearToScrollback on (default): filter ED3 (erase scrollback) and
+        // rewrite ED2 (clear screen) with newline scrolling + home so the
+        // current viewport content is pushed into scrollback before clearing.
+        // Off: standard terminal behaviour — ED2 and ED3 pass through
+        // natively, so e.g. a `clear && printf '\e[3J'` alias wipes both the
+        // screen and the scrollback (issue #1549).
+        const preserveHistory = settingsStore.settings.terminal.clearToScrollback ?? true
+        let data = stripBlink(payload.data)
+        if (preserveHistory) {
+          data = data.replace(/\x1b\[3J/g, '')
+          if (data.includes('\x1b[2J')) {
+            const rows = terminal.rows
+            const scrollClear = '\n'.repeat(rows) + '\x1b[H'
+            data = data.replace(/\x1b\[H\x1b\[2J/g, scrollClear)
+            data = data.replace(/\x1b\[2J/g, scrollClear)
+          }
         }
         terminal.write(data)
         if (options?.onSessionData) {

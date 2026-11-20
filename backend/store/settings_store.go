@@ -95,8 +95,10 @@ type TerminalSettings struct {
 	// shell's `clear`) does (issue #1551). Pointer + omitempty so settings.json
 	// written by older builds still loads; nil means true (the frontend
 	// default): scroll the viewport into the scrollback before clearing,
-	// preserving history. false lets ED2 through natively, wiping only the
-	// screen; ED3 stays stripped in both modes.
+	// preserving history, and strip ED3 (erase scrollback) so remote output
+	// can never wipe the scrollback. false is standard terminal behaviour:
+	// ED2 wipes only the screen and ED3 passes through, so erase-scrollback
+	// sequences (e.g. a `clear && printf '\e[3J'` alias) clear the history.
 	ClearToScrollback *bool `json:"clearToScrollback,omitempty"`
 }
 

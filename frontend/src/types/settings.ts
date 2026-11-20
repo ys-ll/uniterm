@@ -131,10 +131,11 @@ export interface TerminalSettings {
   commandSendMode?: 'lines' | 'bracketed'
   // What a clear-screen sequence (ED2, e.g. the shell's `clear`) does (issue
   // #1551). true (default): the current viewport is scrolled
-  // into the scrollback before the screen clears, so history is never lost.
-  // false (standard terminal): ED2 passes through natively and only wipes the
-  // screen — no history preservation. ED3 (erase scrollback) stays stripped
-  // in both modes so remote output can never wipe the scrollback.
+  // into the scrollback before the screen clears, so history is never lost,
+  // and ED3 (erase scrollback) is stripped so remote output can never wipe
+  // the scrollback. false (standard terminal): ED2 and ED3 pass through
+  // natively — clear wipes the screen and erase-scrollback sequences clear
+  // the history.
   clearToScrollback: boolean
 }
 
