@@ -541,6 +541,14 @@
                     </el-select>
                   </el-form-item>
                 </template>
+                <template v-if="form.type === 'mosh'">
+                  <el-form-item :label="t('conn.moshPort')">
+                    <el-input v-model="form.moshPort" :placeholder="t('conn.moshPortPlaceholder')" clearable />
+                  </el-form-item>
+                  <el-form-item :label="t('conn.moshLang')">
+                    <el-input v-model="form.moshLang" :placeholder="t('conn.moshLangPlaceholder')" clearable />
+                  </el-form-item>
+                </template>
               </div>
             </template>
             <template v-if="advGroupTerminal">
@@ -1167,6 +1175,8 @@ const form = reactive<ConnectionConfig>({
   encoding: 'utf-8',
   termType: 'xterm-256color',
   backspaceKey: 'del',
+  moshPort: '',
+  moshLang: '',
   telnetNegotiationMode: 'active' as 'active' | 'passive',
   telnetSendMode: 'character' as 'character' | 'line',
   localEcho: false,
@@ -1230,7 +1240,7 @@ const advGroupNetwork = computed(() =>
   showProxy.value || showTunnel.value
 )
 const advGroupProtocol = computed(() =>
-  ['database', 'mongodb', 'redis', 'elasticsearch', 'ftp', 'vnc', 'telnet', 'rdp', 'local', 'wsl'].includes(form.type) ||
+  ['database', 'mongodb', 'redis', 'elasticsearch', 'ftp', 'vnc', 'telnet', 'mosh', 'rdp', 'local', 'wsl'].includes(form.type) ||
   isSSHAlgoType.value
 )
 const sshAlgoDialogVisible = ref(false)
@@ -1614,6 +1624,8 @@ function resetForm() {
   form.encoding = 'utf-8'
   form.termType = 'xterm-256color'
   form.backspaceKey = 'del'
+  form.moshPort = ''
+  form.moshLang = ''
   form.telnetNegotiationMode = 'active'
   form.telnetSendMode = 'character'
   form.localEcho = false
@@ -1907,6 +1919,13 @@ function normalizeForm(): ConnectionConfig {
   if (normalized.type !== 'local' && normalized.type !== 'wsl') {
     normalized.shellArgs = ''
     normalized.cwd = ''
+  }
+  // mosh options only apply to mosh connections; clear them when the
+  // connection is switched to another type so stale values never persist
+  // (same semantics as the shellArgs cleanup above).
+  if (normalized.type !== 'mosh') {
+    normalized.moshPort = ''
+    normalized.moshLang = ''
   }
   const redisSentinel = normalized.type === 'redis' && normalized.redisMode === 'sentinel'
   if (redisSentinel) {

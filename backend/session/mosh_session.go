@@ -88,7 +88,13 @@ func (s *MoshSession) Connect(config ConnectionConfig) error {
 	}
 	client := ssh.NewClient(sshConn, chans, reqs)
 
-	key, udpPort, err := startMoshServer(client)
+	moshCmd, err := buildMoshServerCommand(config)
+	if err != nil {
+		client.Close()
+		s.setStatus(StatusError)
+		return err
+	}
+	key, udpPort, err := startMoshServer(client, moshCmd)
 	if err != nil {
 		client.Close()
 		s.setStatus(StatusError)
@@ -97,8 +103,29 @@ func (s *MoshSession) Connect(config ConnectionConfig) error {
 
 	s.sshClient = client
 
-	// Step 2: Dial mosh server over UDP.
-	moshClient, err := mosh.Dial(config.Host, udpPort, key)
+	// Step 2: Dial mosh server over UDP. mosh.Dial resolves its target with
+	// net.ParseIP, which fails for hostnames — resolve the host ourselves so
+	// hostname connections don't die at the UDP dial.
+	udpHost := config.Host
+	if net.ParseIP(udpHost) == nil {
+		ips, err := net.LookupIP(udpHost)
+		if err != nil {
+			client.Close()
+			s.setStatus(StatusError)
+			return fmt.Errorf("mosh resolve %s: %w", udpHost, err)
+		}
+		udpHost = ""
+		for _, ip := range ips {
+			if ip4 := ip.To4(); ip4 != nil {
+				udpHost = ip4.String()
+				break
+			}
+		}
+		if udpHost == "" {
+			udpHost = ips[0].String()
+		}
+	}
+	moshClient, err := mosh.Dial(udpHost, udpPort, key)
 	if err != nil {
 		client.Close()
 		s.setStatus(StatusError)
@@ -135,7 +162,40 @@ func (s *MoshSession) runPostLoginScript(ctx context.Context, script string) {
 	}, s.IsConnected)
 }
 
-func startMoshServer(client *ssh.Client) (key string, udpPort int, err error) {
+// buildMoshServerCommand assembles the command sent over the SSH session to
+// launch mosh-server on the remote host. The optional port-range and locale
+// values are only allowed [A-Za-z0-9_.:@-] — they end up in a remote shell
+// command line, so this keeps arbitrary shell metacharacters out.
+func buildMoshServerCommand(config ConnectionConfig) (string, error) {
+	args := []string{"mosh-server", "new", "-s"}
+	if v := strings.TrimSpace(config.MoshPort); v != "" {
+		if !safeMoshArg(v) {
+			return "", fmt.Errorf("invalid mosh UDP port range: %q", config.MoshPort)
+		}
+		args = append(args, "-p", v)
+	}
+	if v := strings.TrimSpace(config.MoshLang); v != "" {
+		if !safeMoshArg(v) {
+			return "", fmt.Errorf("invalid mosh locale: %q", config.MoshLang)
+		}
+		args = append(args, "-l", "LANG="+v)
+	}
+	return strings.Join(args, " "), nil
+}
+
+func safeMoshArg(v string) bool {
+	for _, r := range v {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case strings.ContainsRune("_.:@-", r):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func startMoshServer(client *ssh.Client, command string) (key string, udpPort int, err error) {
 	session, err := client.NewSession()
 	if err != nil {
 		return "", 0, fmt.Errorf("new session: %w", err)
@@ -151,7 +211,7 @@ func startMoshServer(client *ssh.Client) (key string, udpPort int, err error) {
 		return "", 0, fmt.Errorf("stderr pipe: %w", err)
 	}
 
-	if err := session.Start("mosh-server new -s"); err != nil {
+	if err := session.Start(command); err != nil {
 		return "", 0, fmt.Errorf("start mosh-server: %w", err)
 	}
 

@@ -171,6 +171,14 @@ export interface ConnectionConfig {
   // 'bs'   = ASCII BS  (0x08) — Huawei/H3C/Cisco network gear, Windows convention
   // 'vt220'= VT220 Delete (ESC[3~) — H3C / late Cisco IOS
   backspaceKey?: 'del' | 'bs' | 'vt220'
+  // Mosh-specific options
+  // UDP port range, e.g. "65530:65535" — passed to mosh-server's -p option
+  // for hosts whose firewall only forwards a fixed UDP range.
+  moshPort?: string
+  // Locale passed to mosh-server's -l option (LANG=<value>, e.g.
+  // "en_US.UTF-8") — mosh-server refuses to start when the server's default
+  // form is not UTF-8 (POSIX/C).
+  moshLang?: string
   // Telnet-specific options
   telnetNegotiationMode?: 'active' | 'passive'
   telnetSendMode?: 'character' | 'line'

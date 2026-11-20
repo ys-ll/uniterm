@@ -277,6 +277,17 @@ type ConnectionConfig struct {
 	// kept here so the Wails binding reflects the full connection contract.
 	// ""(default) | "del"(0x7F) | "bs"(0x08) | "vt220"(ESC[3~)
 	BackspaceKey string `json:"backspaceKey,omitempty"`
+	// Mosh-specific fields
+	// MoshPort is the UDP port range passed to mosh-server's -p option
+	// ("min:max" or a single port) for hosts behind firewalls that only
+	// forward a fixed UDP range. Empty keeps mosh-server's default
+	// (random high port).
+	MoshPort string `json:"moshPort,omitempty"`
+	// MoshLang is the locale passed to mosh-server's -l option
+	// (LANG=<value>, e.g. "en_US.UTF-8"). mosh-server refuses to start when
+	// the server's default locale is not UTF-8 (POSIX/C); this lets the user
+	// pick one explicitly.
+	MoshLang string `json:"moshLang,omitempty"`
 	// Telnet-specific fields
 	// TelnetNegotiationMode controls who initiates option negotiation.
 	// "active" (default) — client sends WILL/DO after connect.
