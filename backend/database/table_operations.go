@@ -70,7 +70,7 @@ func requireColumn(cols map[string]bool, name string) error {
 
 func placeholder(driver string, index int) string {
 	switch driver {
-	case "postgres":
+	case "postgres", "pgx": // lib/pq legacy name and the pgx stdlib driver
 		return fmt.Sprintf("$%d", index)
 	case "sqlserver":
 		return fmt.Sprintf("@p%d", index)
