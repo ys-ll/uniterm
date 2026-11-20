@@ -425,6 +425,14 @@ async function updateMaximisedState() {
 }
 
 function onMinimise() {
+  // Minimize-to-tray (issue #1556): hide the window instead of minimising so
+  // it leaves the taskbar. Tabs and sessions keep running either way — only
+  // the window is hidden; restore via the tray icon (forced on while this
+  // setting is enabled). Close paths are untouched and keep quitting.
+  if (settingsStore.settings.minimizeToTray) {
+    Window.Hide()
+    return
+  }
   Window.Minimise()
 }
 

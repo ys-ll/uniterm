@@ -91,8 +91,8 @@
         </MenuItem>
       </MenuSubmenu>
       <MenuSubmenu :label="t('terminal.clearScreen')">
-        <MenuItem @click="menu.closeMenu(); resetTerminalOutput()">{{ t('terminal.resetOutput') }}</MenuItem>
-        <MenuItem @click="menu.closeMenu(); clearScrollback()">{{ t('terminal.clearScrollback') }}</MenuItem>
+        <MenuItem :shortcut="menuShortcut('resetOutput')" @click="menu.closeMenu(); resetTerminalOutput()">{{ t('terminal.resetOutput') }}</MenuItem>
+        <MenuItem :shortcut="menuShortcut('clearScrollback')" @click="menu.closeMenu(); clearScrollback()">{{ t('terminal.clearScrollback') }}</MenuItem>
       </MenuSubmenu>
       <MenuSubmenu :label="t('session.logRecordMenu')">
         <MenuItem v-if="supportsOutputLog" @click="toggleOutputLog">
@@ -429,9 +429,13 @@ function renderTerminalData(rawData: string, countChunk = true) {
   // ED2+ED3 would wipe the scrollback right after we pushed content into it.
   // \x1b[2J is replaced by newline padding + home, pushing the viewport into
   // scrollback before clearing. Full-screen apps (vim, tmux…) run on the
-  // alternate buffer and are left untouched.
+  // alternate buffer and are left untouched. The clearToScrollback switch
+  // (issue #1551) opts into the standard behaviour instead: ED2 passes
+  // through natively and only wipes the screen; ED3 stays stripped either
+  // way so remote output can never wipe the scrollback.
   let data = stripCursorBlink(rawData, settingsStore.settings.terminal.cursorBlink ?? true).replace(/\x1b\[3J/g, '')
-  if (data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
+  if ((settingsStore.settings.terminal.clearToScrollback ?? true) &&
+      data.includes('\x1b[2J') && terminal.buffer.active.type !== 'alternate') {
     // Scroll from the current cursor position: rows newlines push every row
     // above and including the cursor into the scrollback — and nothing
     // below it, so the blank rows under a mid-screen prompt never pollute

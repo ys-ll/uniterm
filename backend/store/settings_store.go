@@ -91,6 +91,13 @@ type TerminalSettings struct {
 	// bracketed-paste markers without executing. Empty means the frontend
 	// falls back to "lines".
 	CommandSendMode string `json:"commandSendMode,omitempty"`
+	// ClearToScrollback controls what a clear-screen sequence (ED2, e.g. the
+	// shell's `clear`) does (issue #1551). Pointer + omitempty so settings.json
+	// written by older builds still loads; nil means true (the frontend
+	// default): scroll the viewport into the scrollback before clearing,
+	// preserving history. false lets ED2 through natively, wiping only the
+	// screen; ED3 stays stripped in both modes.
+	ClearToScrollback *bool `json:"clearToScrollback,omitempty"`
 }
 
 // TerminalThemeColors mirrors xterm.js's ITheme shape: the 4 base colors
@@ -258,6 +265,13 @@ type AppSettings struct {
 	// Pointer + omitempty so settings.json written by older builds still
 	// loads; nil means "show" (the frontend default).
 	ShowTrayIcon *bool `json:"showTrayIcon,omitempty"`
+	// MinimizeToTray sends the minimize button to the tray instead of the
+	// taskbar (issue #1556): tabs and sessions keep running, restore via the
+	// tray icon — which is forced on while this is enabled so the hidden
+	// window stays recoverable. Close paths are untouched and keep quitting.
+	// Pointer + omitempty so settings.json written by older builds still
+	// loads; nil means "off" (minimise as usual).
+	MinimizeToTray *bool `json:"minimizeToTray,omitempty"`
 	// HostListMenuStyle selects how the host list opens the connection
 	// menu: "button" (hover buttons) or "rightclick". Empty means the
 	// frontend falls back to `button`.

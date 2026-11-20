@@ -244,6 +244,18 @@
             </div>
           </div>
 
+          <!-- Minimize-to-tray: the minimize button hides the window to the
+               tray (issue #1556); no tray on mobile -->
+          <div v-if="!isMobile" class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.minimizeToTray') }}</div>
+              <div class="setting-desc">{{ t('settings.minimizeToTrayDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-switch v-model="settingsStore.settings.minimizeToTray" @change="settingsStore.save()" />
+            </div>
+          </div>
+
           <!-- Reopen last session's tabs at startup (issue #937) -->
           <div class="setting-card">
             <div class="setting-info">
@@ -676,6 +688,18 @@
               <!-- ?? true: settings saved before this option existed have no
                    value for it, and the hint was always on back then. -->
               <el-switch :model-value="settingsStore.settings.terminal.inlineHint ?? true" @update:model-value="(v: boolean) => { settingsStore.settings.terminal.inlineHint = v; settingsStore.save() }" />
+            </div>
+          </div>
+
+          <!-- What the shell's `clear` does: preserve history by scrolling
+               into the scrollback, or a standard screen wipe (issue #1551) -->
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.clearToScrollback') }}</div>
+              <div class="setting-desc">{{ t('settings.clearToScrollbackDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-switch :model-value="settingsStore.settings.terminal.clearToScrollback ?? true" @update:model-value="(v: boolean) => { settingsStore.settings.terminal.clearToScrollback = v; settingsStore.save() }" />
             </div>
           </div>
         </div>
@@ -2544,7 +2568,7 @@ const shortcutCategories: { key: string; label: string; actions: ShortcutAction[
   {
     key: 'terminal',
     label: 'shortcut.catTerminal',
-    actions: ['focusTerminal', 'copy', 'paste', 'terminalSearch', 'zoomFontIn', 'zoomFontOut', 'toggleLineNumbers', 'toggleTimestamps'],
+    actions: ['focusTerminal', 'copy', 'paste', 'terminalSearch', 'zoomFontIn', 'zoomFontOut', 'toggleLineNumbers', 'toggleTimestamps', 'resetOutput', 'clearScrollback'],
   },
 ]
 

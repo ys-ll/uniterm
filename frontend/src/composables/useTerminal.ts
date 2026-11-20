@@ -680,8 +680,11 @@ export function useTerminal(
         // Filter ED3 (erase scrollback). For ED2 (clear screen), replace with
         // newline scrolling + home so that current viewport content is pushed
         // into scrollback before clearing, matching standard terminal behavior.
+        // The clearToScrollback switch (issue #1551) opts into the standard
+        // behaviour instead: ED2 passes through natively, wiping only the
+        // screen. ED3 stays stripped in both modes.
         let data = stripBlink(payload.data).replace(/\x1b\[3J/g, '')
-        if (data.includes('\x1b[2J')) {
+        if ((settingsStore.settings.terminal.clearToScrollback ?? true) && data.includes('\x1b[2J')) {
           const rows = terminal.rows
           const scrollClear = '\n'.repeat(rows) + '\x1b[H'
           data = data.replace(/\x1b\[H\x1b\[2J/g, scrollClear)

@@ -460,6 +460,7 @@ function mergeSettings(loaded: AppSettings): AppSettings {
     tabCloseButton: loaded.tabCloseButton || DEFAULT_SETTINGS.tabCloseButton,
     showTabShortcutHints: loaded.showTabShortcutHints ?? DEFAULT_SETTINGS.showTabShortcutHints,
     showTrayIcon: loaded.showTrayIcon ?? DEFAULT_SETTINGS.showTrayIcon,
+    minimizeToTray: loaded.minimizeToTray ?? DEFAULT_SETTINGS.minimizeToTray,
     hostListMenuStyle: loaded.hostListMenuStyle || DEFAULT_SETTINGS.hostListMenuStyle,
     connectionsDisplayMode: loaded.connectionsDisplayMode === 'compact' ? 'compact' : 'full',
     quickCommandsDisplayMode: loaded.quickCommandsDisplayMode === 'buttons' ? 'buttons' : 'list',
