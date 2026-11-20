@@ -16,6 +16,7 @@ import { usePanelStore } from '../stores/panelStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useZmodemStore } from '../stores/zmodemStore'
 import { queuedSessionWrite } from './sessionWriter'
+import { SessionResize } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { disposeSessionRecorder, getSessionRecorder } from './terminalRecorder'
 import type { CustomTerminalTheme } from '../types/settings'
 import { formatFontFamily } from '../utils/formatFontFamily'
@@ -84,6 +85,17 @@ export interface ManagedTerminal {
   progressDispose: { dispose(): void } | null
   /** IME compatibility patch installed on this terminal (macOS only). */
   imeDispose: { dispose(): void } | null
+  /** Whether the terminal has had its first real fit — the font-ready
+   * measurement in attachTerminal, not the xterm.js constructor defaults
+   * (80x24). getTerminalSize reports 0x0 until this is set so callers
+   * waiting for the initial size never mistake the constructor defaults
+   * for a measurement — the PTY would start at 80x24, and the
+   * already-drawn banner would stay wrapped after the later resize. */
+  hasFitted: boolean
+  /** Last cols/rows this module pushed to the backend from the font-ready
+   * fit, so KeepAlive re-attaches don't spam redundant SessionResize calls. */
+  lastSyncedCols: number
+  lastSyncedRows: number
 }
 
 const terminals = new Map<string, ManagedTerminal>()
@@ -442,6 +454,9 @@ export function acquireTerminal(
       resizeDispose: null,
       progressDispose: null,
       imeDispose: null,
+      hasFitted: false,
+      lastSyncedCols: 0,
+      lastSyncedRows: 0,
     }
     // Headless mirror starts parsing the session stream immediately so its
     // buffer is always current when the panel goes to the background. Never
@@ -636,7 +651,28 @@ export function attachTerminal(sessionId: string, container: HTMLElement): void 
   fontReady.finally(() => {
     // Two rAFs: one for the .xterm element to receive its size, one for
     // the canvas to render with the now-loaded font.
-    requestAnimationFrame(() => requestAnimationFrame(() => managed.fitAddon.fit()))
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      managed.fitAddon.fit()
+      // fit() no-ops on a zero-size container (hidden tab / not yet laid
+      // out) — only mark the size real, and push it to the backend, when
+      // the container actually has pixels. Until then getTerminalSize
+      // keeps reporting 0x0 so waitForTerminalSize callers keep waiting
+      // instead of picking up the 80x24 constructor defaults.
+      const rect = managed.container?.getBoundingClientRect()
+      if (!rect || rect.width === 0 || rect.height === 0) return
+      managed.hasFitted = true
+      // Push the font-measured grid to the PTY: BaseTerminal's mount
+      // retries fire before the fonts finish loading and may already have
+      // sent fallback-font dimensions. Skipped when unchanged so
+      // re-attaches (every tab switch) don't spam redundant resizes.
+      const t = managed.terminal
+      if (t.cols > 0 && t.rows > 0 &&
+          (t.cols !== managed.lastSyncedCols || t.rows !== managed.lastSyncedRows)) {
+        managed.lastSyncedCols = t.cols
+        managed.lastSyncedRows = t.rows
+        SessionResize(sessionId, t.cols, t.rows).catch(() => {})
+      }
+    }))
   })
 }
 
@@ -691,12 +727,16 @@ export function getManagedTerminal(sessionId: string): ManagedTerminal | undefin
 }
 
 /** Return the xterm-measured cols/rows for an existing session, or
- * {0,0} if the session has no terminal yet. Callers use this to learn
- * the actual size to send to the backend as InitialCols/Rows BEFORE
+ * {0,0} if the session has no terminal yet or hasn't had its first real
+ * fit (font-ready measurement in attachTerminal). The gate matters: the
+ * xterm.js constructor starts every terminal at 80x24, and reporting
+ * those defaults before the first fit made waitForTerminalSize callers
+ * start the PTY at 80x24. Callers use this to learn the
+ * actual size to send to the backend as InitialCols/Rows BEFORE
  * CreateSession so the remote PTY starts at the right dimensions. */
 export function getTerminalSize(sessionId: string): { cols: number; rows: number } {
   const m = terminals.get(sessionId)
-  if (!m) return { cols: 0, rows: 0 }
+  if (!m || !m.hasFitted) return { cols: 0, rows: 0 }
   return { cols: m.terminal.cols, rows: m.terminal.rows }
 }
 
