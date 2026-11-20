@@ -658,7 +658,7 @@
   "settings.zmodemIdleTimeoutSecDesc": "Bricht eine rz/sz-Übertragung ab, wenn für diese Anzahl Sekunden keine ZMODEM-Aktivität beobachtet wird. Standard 20. Bereich 5-600.",
   "settings.sessionLogDirDesc": "Speicherort für Sitzungsprotokolle. Leer lassen, um den Standard zu verwenden: {path}",
   "settings.sessionLogFilename": "Log-Dateinamensformat",
-  "settings.sessionLogFilenameDesc": "Platzhalter: %S Sitzung, %H Host, %M Monat, %D Tag, %h Stunde, %m Minute. Gleiche Sitzungs- und Hostnamen erscheinen nur einmal.",
+  "settings.sessionLogFilenameDesc": "Platzhalter: %S Sitzung, %H Host, %Y Jahr, %M Monat, %D Tag, %h Stunde, %m Minute. Gleiche Sitzungs- und Hostnamen erscheinen nur einmal.",
   "settings.browse": "Durchsuchen…",
   "settings.maxTurns": "Max. autonome Runden",
   "settings.maxTurnsDesc": "Maximale Anzahl autonomer Interaktionsrunden pro KI-Anfrage. 0 = unbegrenzt. Standard: 20.",

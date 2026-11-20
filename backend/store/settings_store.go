@@ -56,7 +56,7 @@ type TerminalSettings struct {
 	// its default — omitempty so older settings.json files still load.
 	ZmodemIdleTimeoutSec int `json:"zmodemIdleTimeoutSec,omitempty"`
 	// SessionLogFilename controls names for new output logs. Supported tokens:
-	// %S session name, %H host, %M month, %D day, %h hour, %m minute.
+	// %S session name, %H host, %Y year, %M month, %D day, %h hour, %m minute.
 	SessionLogFilename string `json:"sessionLogFilename,omitempty"`
 	// WordSeparator overrides xterm.js's double-click word-selection
 	// separators. Empty means the frontend falls back to its built-in

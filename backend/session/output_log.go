@@ -452,8 +452,8 @@ const bannerHeader = "=== uniTerm session log ==="
 
 // Enable opens the log file and writes the header banner. Returns the
 // final path. If dir is empty, defaultSessionLogDir() is used.
-// filenameTemplate supports %S (session), %H (host), %M (month), %D (day),
-// %h (hour), and %m (minute). An empty template uses the default.
+// filenameTemplate supports %S (session), %H (host), %Y (year), %M (month),
+// %D (day), %h (hour), and %m (minute). An empty template uses the default.
 // On a name collision, "_2"/"_3"/... is appended before the extension.
 // Any previous file is closed first.
 func (l *OutputLogger) Enable(dir, filenameTemplate, name, host, protocol string) (string, error) {

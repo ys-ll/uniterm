@@ -15,12 +15,13 @@ func TestFormatLogFilename(t *testing.T) {
 		host        string
 		want        string
 	}{
-		{"default", "", "prod", "server.example.com", "prod_server.example.com_0910_0807.log"},
-		{"duplicate session and host", "", "server.example.com", "server.example.com", "server.example.com_0910_0807.log"},
-		{"empty host", "", "local shell", "", "local shell_0910_0807.log"},
+		{"default", "", "prod", "server.example.com", "prod_server.example.com_20260910_0807.log"},
+		{"duplicate session and host", "", "server.example.com", "server.example.com", "server.example.com_20260910_0807.log"},
+		{"empty host", "", "local shell", "", "local shell_20260910_0807.log"},
 		{"duplicate tokens", "%S_%H_%H.log", "host", "host", "host.log"},
 		{"IPv6 colon", "%H.log", "ipv6", "2001:db8::1", "2001-db8--1.log"},
 		{"custom order", "%M-%D %h:%m %S@%H.log", "prod", "host", "09-10 08-07 prod@host.log"},
+		{"year token", "%Y%M%D_%h%m.log", "prod", "host", "20260910_0807.log"},
 		{"extension omitted", "%H", "prod", "server.example.com", "server.example.com.log"},
 		{"Windows reserved name", "%S.log", "CON", "host", "_CON_.log"},
 	}

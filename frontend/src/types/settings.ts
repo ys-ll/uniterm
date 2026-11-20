@@ -105,7 +105,7 @@ export interface TerminalSettings {
   // If no protocol activity is observed for this long, the transfer is aborted.
   // Defaults to 20 to preserve historical behavior.
   zmodemIdleTimeoutSec: number
-  // Filename template: %S session, %H host, %M month, %D day, %h hour, %m minute.
+  // Filename template: %S session, %H host, %Y year, %M month, %D day, %h hour, %m minute.
   sessionLogFilename: string
   // Characters that act as word boundaries for xterm.js's double-click
   // word selection. Default mirrors the built-in xterm separators
@@ -533,7 +533,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     sessionLogDir: '',
     zmodemDownloadDir: '',
     zmodemIdleTimeoutSec: 20,
-    sessionLogFilename: '%S_%H_%M%D_%h%m.log',
+    sessionLogFilename: '%S_%H_%Y%M%D_%h%m.log',
     wordSeparator: '\\ :;~`!@#$%^&*()=+|[]{}\'",<>?',
     showLineNumbers: false,
     showTimestamps: false,

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const DefaultSessionLogFilenameTemplate = "%S_%H_%M%D_%h%m.log"
+const DefaultSessionLogFilenameTemplate = "%S_%H_%Y%M%D_%h%m.log"
 
 // windowsReservedNames are file names that Windows treats as devices,
 // regardless of extension. Comparison is case-insensitive.
@@ -97,6 +97,7 @@ func formatLogFilename(template, sessionName, host string, now time.Time) string
 	replacer := strings.NewReplacer(
 		"%S", sessionName,
 		"%H", host,
+		"%Y", now.Format("2006"),
 		"%M", now.Format("01"),
 		"%D", now.Format("02"),
 		"%h", now.Format("15"),
