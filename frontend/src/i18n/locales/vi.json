@@ -655,6 +655,8 @@
   "settings.sessionLogDirDesc": "Nơi lưu nhật ký phiên. Để trống để dùng mặc định: {path}",
   "settings.sessionLogFilename": "Định dạng tên tệp nhật ký",
   "settings.sessionLogFilenameDesc": "Token: %S phiên, %H máy chủ, %Y năm, %M tháng, %D ngày, %h giờ, %m phút. Một cặp phiên và máy chủ trùng nhau chỉ được tính một lần.",
+  "settings.sessionLogAutoStart": "Tự động ghi nhật ký phiên",
+  "settings.sessionLogAutoStartDesc": "Tự động bắt đầu ghi nhật ký phiên khi mở terminal. Vẫn có thể bật/tắt nhật ký cho từng phiên qua menu chuột phải 'Nhật ký và ghi hình'.",
   "settings.browse": "Duyệt…",
   "settings.maxTurns": "Số vòng tự chủ tối đa",
   "settings.maxTurnsDesc": "Số vòng tương tác tự chủ tối đa cho mỗi yêu cầu AI. Đặt 0 để không giới hạn. Mặc định 20.",

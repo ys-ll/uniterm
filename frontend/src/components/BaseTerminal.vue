@@ -95,10 +95,10 @@
         <MenuItem :shortcut="menuShortcut('clearScrollback')" @click="menu.closeMenu(); clearScrollback()">{{ t('terminal.clearScrollback') }}</MenuItem>
       </MenuSubmenu>
       <MenuSubmenu :label="t('session.logRecordMenu')">
-        <MenuItem v-if="supportsOutputLog" @click="toggleOutputLog">
+        <MenuItem v-if="supportsOutputLog" @click="menu.closeMenu(); toggleOutputLog()">
           {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
         </MenuItem>
-        <MenuItem v-if="supportsOutputLog" @click="openLogDir">
+        <MenuItem v-if="supportsOutputLog" @click="menu.closeMenu(); openLogDir()">
           {{ t('session.openLogDir') }}
         </MenuItem>
         <MenuDivider />
@@ -164,7 +164,7 @@ import '@xterm/xterm/css/xterm.css'
 import { SessionResize, SessionEndZmodem } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { queuedSessionWrite as queueRawSessionWrite } from '../services/sessionWriter'
 import { observeCommandInput, updateCommandWraps, getTerminalSelection } from '../services/terminalCommandWrap'
-import { WriteFileBase64, SaveFileDialog, FrontendLog, EnableSessionOutputLog, DisableSessionOutputLog, GetSessionOutputLogInfo, OpenPathInExplorer } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { WriteFileBase64, SaveFileDialog, FrontendLog } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useNativeFileDrop } from '../composables/useFilePanel'
 import { connectFileMenuKey } from '../utils/fileTransferUtils'
 import { isMobilePlatform } from '../utils/platform'
@@ -181,6 +181,7 @@ import { useSessionStore } from '../stores/sessionStore'
 import { useTabStore } from '../stores/tabStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useTerminalMenu } from '../composables/useTerminalMenu'
+import { useOutputLog } from '../composables/useOutputLog'
 import { writeClipboard, readClipboardText } from '../composables/useClipboardWrite'
 import { filterTerminalInput, stripDeviceReplies } from '../utils/terminalInputFilter'
 import { isAuthFailureError } from '../utils/authError'
@@ -2520,27 +2521,10 @@ const supportsOutputLog = computed(() =>
   !!panel.value && ['ssh', 'telnet', 'serial', 'mosh', 'local', 'wsl'].includes(panel.value.type),
 )
 
-const isOutputLogOn = ref(false)
-const outputLogPath = ref('')
-
-async function refreshOutputLogState() {
-  const pid = props.panelId
-  const p = panel.value
-  if (!pid || !p) {
-    isOutputLogOn.value = false
-    outputLogPath.value = ''
-    return
-  }
-  try {
-    const info = await GetSessionOutputLogInfo(pid)
-    isOutputLogOn.value = !!info.enabled
-    outputLogPath.value = info.path || ''
-    panelStore.setOutputLog(pid, { enabled: isOutputLogOn.value, path: outputLogPath.value })
-  } catch {
-    isOutputLogOn.value = false
-    outputLogPath.value = ''
-  }
-}
+// Session output log state + menu operations, shared with Panel.vue /
+// TabItem.vue via the useOutputLog composable.
+const { isOutputLogOn, refreshOutputLogState, toggleOutputLog, openLogDir } =
+  useOutputLog({ getPanelId: () => props.panelId })
 
 function onTerminalContextMenu(e: MouseEvent) {
   // Right-click on the gutter (line-number/time columns) opens the gutter
@@ -2567,45 +2551,7 @@ function triggerSearch() {
   openSearch()
 }
 
-async function toggleOutputLog() {
-  menu.closeMenu()
-  const pid = props.panelId
-  if (!pid) return
-  try {
-    if (isOutputLogOn.value) {
-      await DisableSessionOutputLog(pid)
-      isOutputLogOn.value = false
-      const prev = outputLogPath.value
-      outputLogPath.value = ''
-      panelStore.setOutputLog(pid, { enabled: false, path: '' })
-      msg.copyable(t('session.logStopped', { path: prev }), 'info')
-      return
-    }
-    const path = await EnableSessionOutputLog(pid, '')
-    if (!path) {
-      msg.error(t('session.logFailed', { error: 'unknown' }))
-      return
-    }
-    isOutputLogOn.value = true
-    outputLogPath.value = path
-    panelStore.setOutputLog(pid, { enabled: true, path })
-    msg.copyable(t('session.logStarted', { path }), 'success')
-  } catch (e: any) {
-    msg.error(t('session.logFailed', { error: String(e?.message ?? e) }))
-  }
-}
-
-async function openLogDir() {
-  menu.closeMenu()
-  if (!outputLogPath.value) return
-  try {
-    await OpenPathInExplorer(outputLogPath.value)
-  } catch (e: any) {
-    msg.error(String(e?.message ?? e))
-  }
-}
-
-function openSftp() {
+async function openSftp() {
   menu.closeMenu()
   const p = panel.value
   if (p) {

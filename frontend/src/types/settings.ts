@@ -107,6 +107,11 @@ export interface TerminalSettings {
   zmodemIdleTimeoutSec: number
   // Filename template: %S session, %H host, %Y year, %M month, %D day, %h hour, %m minute.
   sessionLogFilename: string
+  // Start the session output log automatically for every new panel
+  // (and the first session on it). Individual sessions can still be
+  // toggled from the right-click menu. Defaults to false: logging
+  // stays manual unless enabled here or per connection.
+  sessionLogAutoStart: boolean
   // Characters that act as word boundaries for xterm.js's double-click
   // word selection. Default mirrors the built-in xterm separators
   // extended with the most common shell / path punctuation, so that
@@ -537,6 +542,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     zmodemDownloadDir: '',
     zmodemIdleTimeoutSec: 20,
     sessionLogFilename: '%S_%H_%Y%M%D_%h%m.log',
+    sessionLogAutoStart: false,
     wordSeparator: '\\ :;~`!@#$%^&*()=+|[]{}\'",<>?',
     showLineNumbers: false,
     showTimestamps: false,

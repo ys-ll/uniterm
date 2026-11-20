@@ -683,6 +683,8 @@
   "settings.sessionLogDirDesc": "会话日志文件的存放位置。留空使用默认路径：{path}",
   "settings.sessionLogFilename": "日志文件名格式",
   "settings.sessionLogFilenameDesc": "支持 %S 会话名、%H 主机、%Y 年、%M 月、%D 日、%h 时、%m 分。会话名与主机相同时只保留一份。",
+  "settings.sessionLogAutoStart": "自动记录会话日志",
+  "settings.sessionLogAutoStartDesc": "打开终端时自动开始记录会话日志。也可随时在右键菜单「日志与录制」中手动开启或关闭。",
   "settings.browse": "浏览…",
   "settings.maxTurns": "AI 自主交互最大轮次",
   "settings.maxTurnsDesc": "AI 自主执行命令与反馈的对话轮数上限。设为 0 表示不限制。默认 20。",

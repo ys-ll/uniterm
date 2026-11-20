@@ -121,10 +121,10 @@
         <MenuItem @click="triggerClearScrollback">{{ t('terminal.clearScrollback') }}</MenuItem>
       </MenuSubmenu>
       <MenuSubmenu v-if="tab.type === 'terminal'" :label="t('session.logRecordMenu')">
-        <MenuItem v-if="supportsOutputLog" @click="toggleOutputLog">
+        <MenuItem v-if="supportsOutputLog" @click="closeContextMenu(); toggleOutputLog()">
           {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
         </MenuItem>
-        <MenuItem v-if="supportsOutputLog" @click="openLogDir">
+        <MenuItem v-if="supportsOutputLog" @click="closeContextMenu(); openLogDir()">
           {{ t('session.openLogDir') }}
         </MenuItem>
         <MenuDivider />
@@ -169,13 +169,7 @@ import type { ShortcutAction } from '../types/settings'
 import { useK8sStore } from '../stores/k8sStore'
 import { useContainerStore } from '../stores/containerStore'
 import { useI18n } from '../i18n'
-import {
-  EnableSessionOutputLog,
-  DisableSessionOutputLog,
-  GetSessionOutputLogInfo,
-  DefaultSessionLogDir,
-  OpenPathInExplorer,
-} from '../../bindings/github.com/ys-ll/uniterm/app'
+import { useOutputLog } from '../composables/useOutputLog'
 import { msg } from '../services/message'
 import { ElMessageBox } from 'element-plus'
 import { saveWorkspaceToConnections } from '../composables/savedWorkspace'
@@ -359,11 +353,12 @@ const isDisconnected = computed(() => {
   })
 })
 
-// Session output log state. Refreshed lazily when the right-click menu
-// opens; also written after enable/disable so the REC badge stays in
-// sync without an extra round-trip.
-const isOutputLogOn = ref(false)
-const outputLogPath = ref('')
+// Session output log state + menu operations, shared with BaseTerminal /
+// Panel via the useOutputLog composable. Refreshed lazily when the
+// right-click menu opens; also written after enable/disable so the REC
+// badge stays in sync without an extra round-trip.
+const { isOutputLogOn, outputLogPath, refreshOutputLogState, toggleOutputLog, openLogDir } =
+  useOutputLog({ getPanelId: () => (props.tab as TerminalTab)?.panelId })
 const supportsOutputLog = computed(() => {
   if (props.tab.type !== 'terminal') return false
   const p = panelStore.getPanel((props.tab as TerminalTab).panelId)
@@ -493,24 +488,6 @@ function onContextMenu(e: MouseEvent) {
   ctxMenuRef.value?.openAt(e.clientX, e.clientY, props.tab)
   if (supportsOutputLog.value) {
     refreshOutputLogState()
-  }
-}
-
-async function refreshOutputLogState() {
-  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
-  if (!panel) {
-    isOutputLogOn.value = false
-    outputLogPath.value = ''
-    return
-  }
-  try {
-    const info = await GetSessionOutputLogInfo(panel.id)
-    isOutputLogOn.value = !!info.enabled
-    outputLogPath.value = info.path || ''
-    panelStore.setOutputLog(panel.id, { enabled: isOutputLogOn.value, path: outputLogPath.value })
-  } catch {
-    isOutputLogOn.value = false
-    outputLogPath.value = ''
   }
 }
 
@@ -698,54 +675,6 @@ function enterDesktopFullScreen() {
   nextTick(() => {
     window.dispatchEvent(new CustomEvent(`${props.tab.type}:fullscreen`, { detail: { panelId: (props.tab as RDPTab | VNCTab | SPICETab).panelId } }))
   })
-}
-
-async function toggleOutputLog() {
-  closeContextMenu()
-  const panel = panelStore.getPanel((props.tab as TerminalTab).panelId)
-  if (!panel) return
-  try {
-    if (isOutputLogOn.value) {
-      await DisableSessionOutputLog(panel.id)
-      isOutputLogOn.value = false
-      const prev = outputLogPath.value
-      outputLogPath.value = ''
-      panelStore.setOutputLog(panel.id, { enabled: false, path: '' })
-      msg.copyable(t('session.logStopped', { path: prev }), 'info')
-      return
-    }
-    const path = await EnableSessionOutputLog(panel.id, '')
-    if (!path) {
-      msg.error(t('session.logFailed', { error: 'unknown' }))
-      return
-    }
-    isOutputLogOn.value = true
-    outputLogPath.value = path
-    panelStore.setOutputLog(panel.id, { enabled: true, path })
-    msg.copyable(t('session.logStarted', { path }), 'success')
-  } catch (e: any) {
-    msg.error(t('session.logFailed', { error: String(e?.message ?? e) }))
-  }
-}
-
-async function openLogDir() {
-  closeContextMenu()
-  // Always available: without a running panel log, fall back to the
-  // OS-default session log directory.
-  let dir = outputLogPath.value
-  if (!dir) {
-    try {
-      dir = await DefaultSessionLogDir()
-    } catch {
-      return
-    }
-  }
-  if (!dir) return
-  try {
-    await OpenPathInExplorer(dir)
-  } catch (e: any) {
-    msg.error(String(e?.message ?? e))
-  }
 }
 
 // Cast v2 recording controls (same session-keyed recorder the terminal uses).
