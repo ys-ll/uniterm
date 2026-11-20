@@ -12,7 +12,7 @@
         <!-- Controls row -->
         <div class="redis-toolbar">
           <el-select v-model="currentDb" size="small" style="width: 5.625rem; flex-shrink: 0" @change="onSwitchDB">
-            <el-option v-for="n in 16" :key="n-1" :label="`${n-1} (${dbSizes[n-1] ?? '?'})`" :value="n-1" />
+            <el-option v-for="n in dbCount" :key="n-1" :label="`${n-1} (${dbSizes[n-1] ?? '?'})`" :value="n-1" />
           </el-select>
           <el-input v-model="scanPattern" size="small" placeholder="*" style="flex: 1; min-width: 5.0rem" @keyup.enter="onScan" />
           <button class="btn btn-ghost btn-icon btn-sm" :title="t('redis.refresh')" @click="onScan" style="flex-shrink: 0"><RefreshCw :size="'0.875rem'" /></button>
@@ -355,6 +355,7 @@ import {
   RedisSetKeyTTL,
   RedisSwitchDB,
   RedisKeyspaceInfo,
+  RedisDBCount,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import type { RedisKeyInfo, FieldEntry, ScoredMember, ScanResult, KeyNode } from '../types/redis'
 
@@ -526,7 +527,8 @@ const selectedKeyInfo = ref<RedisKeyInfo | null>(null)
 const loading = ref(false)
 const scanPattern = ref('*')
 const currentDb = ref(0)
-const dbSizes = ref<number[]>(new Array(16).fill(-1))
+const dbCount = ref(16)
+const dbSizes = ref<number[]>([])
 
 // Pagination
 const pageSize = ref(100)
@@ -614,10 +616,19 @@ async function onPageSizeChange() {
   currentPage.value = 1
   await doScan(0)
 }
+async function fetchDBCount() {
+  try {
+    const count = await RedisDBCount(props.sessionId)
+    if (count > 0) {
+      dbCount.value = count
+      dbSizes.value = new Array(count).fill(-1)
+    }
+  } catch (_) { /* keep default 16 */ }
+}
 async function fetchDBSize() {
   try {
     const info = await RedisKeyspaceInfo(props.sessionId)
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < dbCount.value; i++) {
       dbSizes.value[i] = info[i] ?? 0
     }
   } catch (_) { /* ignore */ }
@@ -809,6 +820,7 @@ watch(() => props.sessionId, async (newId) => {
   currentPage.value = 1
   nextCursor.value = 0
   hasMore.value = false
+  await fetchDBCount()
   await fetchDBSize()
   await doScan(0)
 })

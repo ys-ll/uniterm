@@ -426,6 +426,14 @@ func (a *App) RedisKeyspaceInfo(sessionID string) (map[int]int64, error) {
 	return rs.KeyspaceInfo()
 }
 
+func (a *App) RedisDBCount(sessionID string) (int, error) {
+	rs, err := a.redisSession(sessionID)
+	if err != nil {
+		return 0, err
+	}
+	return rs.DBCount()
+}
+
 func (a *App) RedisDeleteKey(sessionID string, key string) error {
 	rs, err := a.redisSession(sessionID)
 	if err != nil {

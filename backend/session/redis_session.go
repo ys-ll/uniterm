@@ -165,7 +165,7 @@ func (s *RedisSession) Client() *redis.Client {
 	return s.client
 }
 
-// DBIndex returns the current database index (0-15).
+// DBIndex returns the current database index.
 func (s *RedisSession) DBIndex() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -183,10 +183,10 @@ func (s *RedisSession) Ping() error {
 	return client.Ping(ctx).Err()
 }
 
-// SwitchDB switches to the specified Redis database index (0-15).
+// SwitchDB switches to the specified Redis database index.
 func (s *RedisSession) SwitchDB(idx int) error {
-	if idx < 0 || idx > 15 {
-		return fmt.Errorf("invalid db index: %d (must be 0-15)", idx)
+	if idx < 0 {
+		return fmt.Errorf("invalid db index: %d (must be >= 0)", idx)
 	}
 	client := s.Client()
 	if client == nil {
@@ -208,6 +208,45 @@ func (s *RedisSession) SwitchDB(idx int) error {
 	s.dbIdx = idx
 	s.mu.Unlock()
 	return nil
+}
+
+// DBCount returns the total number of databases configured on the server.
+// It queries CONFIG GET databases; if the server disallows CONFIG, it falls
+// back to the highest db index reported by INFO keyspace plus one, and
+// finally to the Redis default of 16.
+func (s *RedisSession) DBCount() (int, error) {
+	client := s.Client()
+	if client == nil {
+		return 0, fmt.Errorf("not connected")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if cfg, err := client.ConfigGet(ctx, "databases").Result(); err == nil {
+		if v, ok := cfg["databases"]; ok {
+			if n, parseErr := strconv.Atoi(v); parseErr == nil && n > 0 {
+				return n, nil
+			}
+		}
+	} else {
+		log.Writef("[RedisSession.DBCount] CONFIG GET databases failed: %v", err)
+	}
+
+	// Fallback: INFO keyspace only lists non-empty dbs, so this may
+	// under-report the total on an empty server.
+	if ks, err := s.KeyspaceInfo(); err == nil {
+		max := 0
+		for idx := range ks {
+			if idx+1 > max {
+				max = idx + 1
+			}
+		}
+		if max > 0 {
+			return max, nil
+		}
+	}
+	return 16, nil
 }
 
 // ScanKeys scans keys matching pattern with cursor-based pagination.
