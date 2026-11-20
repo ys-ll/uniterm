@@ -187,9 +187,14 @@ export async function prepareAgentContext(system: string, tools: unknown[], skip
         )
         messages.push({ role: 'user', content: instruction })
         const body = buildChatRequestBody(model.model, system, messages, tools)
+        // Carry the same per-model session header the chat request uses: a
+        // gateway that requires it rejects a summary request
+        // without it, which is what silently broke compaction on long
+        // sessions.
         content = await SummarizeAIContext(
           model.apiKey, model.baseURL, model.model, model.protocol,
           model.userAgent || '', model.proxyId || '', requestId, JSON.stringify(body),
+          sessionId || '', model.sessionHeader || '',
         )
         checkCurrent()
         if (!content.trim() || estimateTokens(content) > SUMMARY_MAX_TOKENS) throw new Error('Invalid summary size')

@@ -1223,7 +1223,7 @@ func TestSummarizeAIContextProtocols(t *testing.T) {
 			var chatCancelled atomic.Bool
 			chatCancel := context.CancelFunc(func() { chatCancelled.Store(true) })
 			app.chatCancel.Store(&chatCancel)
-			got, err := app.SummarizeAIContext("test-key", server.URL+"/v1", "test-model", protocol, "test-agent", "", "request", string(requestJSON))
+			got, err := app.SummarizeAIContext("test-key", server.URL+"/v1", "test-model", protocol, "test-agent", "", "request", string(requestJSON), "", "")
 			if err != nil || got != "handoff" {
 				t.Fatalf("summary = %q, %v", got, err)
 			}
@@ -1232,6 +1232,57 @@ func TestSummarizeAIContextProtocols(t *testing.T) {
 			}
 			if _, exists := app.compactionCancels.Load("request"); exists {
 				t.Fatal("request cancellation leaked")
+			}
+		})
+	}
+}
+
+// TestSummarizeAIContextSessionHeader verifies the compaction summary request
+// carries the model's configured session header, exactly like the chat
+// request: a gateway that requires it rejects the summary with a 4xx
+// otherwise, and compaction silently degrades on long sessions.
+func TestSummarizeAIContextSessionHeader(t *testing.T) {
+	tests := []struct {
+		name       string
+		sessionID  string
+		header     string
+		wantHeader string
+		wantValue  string
+	}{
+		{"configured header", "session-7", "session-id", "Session-Id", "session-7"},
+		{"header without session", "", "session-id", "", ""},
+		{"no header configured", "session-7", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got http.Header
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got = r.Header.Clone()
+				fmt.Fprint(w, `{"choices":[{"finish_reason":"stop","message":{"content":"handoff"}}]}`)
+			}))
+			defer server.Close()
+
+			app := &App{}
+			requestJSON := `{"model":"m","messages":[{"role":"user","content":"history"}]}`
+			gotSummary, err := app.SummarizeAIContext("k", server.URL, "m", "openai", "", "", "request", requestJSON, tt.sessionID, tt.header)
+			if err != nil || gotSummary != "handoff" {
+				t.Fatalf("summary = %q, %v", gotSummary, err)
+			}
+			if got == nil {
+				t.Fatal("no HTTP request sent")
+			}
+			if tt.wantHeader != "" {
+				if value := got.Get(tt.wantHeader); value != tt.wantValue {
+					t.Fatalf("%s = %q, want %q", tt.wantHeader, value, tt.wantValue)
+				}
+			}
+			// No header may be invented when the model configures none, and the
+			// built-in opencode fallback stays off for non-opencode hosts.
+			if tt.wantHeader != "Session-Id" && got.Values("Session-Id") != nil {
+				t.Fatal("Session-Id must be absent")
+			}
+			if got.Values("x-opencode-session") != nil {
+				t.Fatal("x-opencode-session must be absent for a non-opencode base URL")
 			}
 		})
 	}
@@ -1264,7 +1315,7 @@ func TestSummarizeAIContextRetriesWithoutToolChoice(t *testing.T) {
 		"tools":    []interface{}{map[string]interface{}{"name": "run"}},
 	}
 	requestJSON, _ := json.Marshal(neutral)
-	got, err := app.SummarizeAIContext("k", server.URL, "m", "anthropic", "", "", "request", string(requestJSON))
+	got, err := app.SummarizeAIContext("k", server.URL, "m", "anthropic", "", "", "request", string(requestJSON), "", "")
 	if err != nil || got != "handoff" {
 		t.Fatalf("summary = %q, %v", got, err)
 	}
@@ -1291,7 +1342,7 @@ func TestSummarizeAIContextCancellationIsIsolated(t *testing.T) {
 	app.compactionCancels.Store("other-request", otherCancel)
 	done := make(chan error, 1)
 	go func() {
-		_, err := app.SummarizeAIContext("k", server.URL, "m", "openai", "", "", "cancel-me", `{"messages":[{"role":"user","content":"history"}]}`)
+		_, err := app.SummarizeAIContext("k", server.URL, "m", "openai", "", "", "cancel-me", `{"messages":[{"role":"user","content":"history"}]}`, "", "")
 		done <- err
 	}()
 	select {
