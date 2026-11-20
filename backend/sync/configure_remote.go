@@ -108,8 +108,9 @@ func (s *SyncService) ConfigureRepoRemote(backend string, remote RemoteConfig, s
 		}
 
 		if isConfigDirEmpty(files, s.dataDir) {
-			// Local empty → adopt the remote wholesale.
-			if _, err := s.pullSnapshot(files, s.repoPath, encKey, aggregateHash(manifest.FileHashes)); err != nil {
+			// Local empty → adopt the remote wholesale. The anchor is scoped
+			// to this device's files, matching what syncSnapshot compares.
+			if _, err := s.pullSnapshot(files, s.repoPath, encKey, scopedAggregateHash(manifest.FileHashes, files)); err != nil {
 				return nil, err
 			}
 			return &SyncResult{Direction: SyncPull, Message: "仓库配置成功，已从远端同步配置"}, nil
@@ -134,7 +135,7 @@ func (s *SyncService) ConfigureRepoRemote(backend string, remote RemoteConfig, s
 		if err != nil {
 			return nil, err
 		}
-		s.setLastSyncedHash(agg)
+		s.setLastSyncedHash(agg, files)
 		s.updateLastSyncResult("success", "")
 		return &SyncResult{Message: "仓库配置成功"}, nil
 	}

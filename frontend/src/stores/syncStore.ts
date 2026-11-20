@@ -50,6 +50,10 @@ export interface SyncConfig {
   syncScope: string[] | null
   remote: RemoteConfig
   lastSyncedHash: string
+  // Scope the lastSyncedHash was aggregated over (snapshot mode). Managed
+  // by the backend; the UI only round-trips it so a settings save never
+  // drops the sync anchor's provenance.
+  lastSyncedScope: string[] | null
   lastSyncAt: string
   lastSyncStatus: string
   lastSyncError: string
@@ -105,6 +109,7 @@ export const useSyncStore = defineStore('sync', () => {
     syncScope: null,
     remote: emptyRemoteConfig(),
     lastSyncedHash: '',
+    lastSyncedScope: null,
     lastSyncAt: '',
     lastSyncStatus: '',
     lastSyncError: '',
@@ -141,6 +146,7 @@ export const useSyncStore = defineStore('sync', () => {
           share: cfg.remote?.share ?? '',
         },
         lastSyncedHash: cfg.lastSyncedHash ?? (cfg as any).LastSyncedHash ?? '',
+        lastSyncedScope: cfg.lastSyncedScope ?? (cfg as any).LastSyncedScope ?? null,
         lastSyncAt: cfg.lastSyncAt || '',
         lastSyncStatus: cfg.lastSyncStatus || '',
         lastSyncError: cfg.lastSyncError || '',
@@ -161,6 +167,7 @@ export const useSyncStore = defineStore('sync', () => {
       cfg.syncScope = config.value.syncScope ?? undefined
       cfg.remote = { ...config.value.remote }
       cfg.lastSyncedHash = config.value.lastSyncedHash
+      cfg.lastSyncedScope = config.value.lastSyncedScope ?? undefined
       cfg.lastSyncAt = config.value.lastSyncAt
       cfg.lastSyncStatus = config.value.lastSyncStatus
       cfg.lastSyncError = config.value.lastSyncError

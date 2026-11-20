@@ -46,12 +46,16 @@ func (s *SyncService) syncSnapshot(b SnapshotBackend) (*SyncResult, error) {
 	}
 
 	// Hash first: the fast paths below must not download anything.
-	_, localHash, err := hashStoresScoped(s.stores, files)
+	fileHashes, localHash, err := hashStoresScoped(s.stores, files)
 	if err != nil {
 		s.updateLastSyncResult("failed", err.Error())
 		return nil, err
 	}
-	remoteHash := aggregateHash(manifest.FileHashes)
+	// The remote manifest may describe files this device's scope does not
+	// cover (another device syncs skills.json, this one does not). Compare
+	// over the shared scope only: out-of-scope entries are neither compared
+	// nor evicted — a later push carries them over (see pushSnapshot).
+	remoteHash := scopedAggregateHash(manifest.FileHashes, files)
 	last := config.LastSyncedHash
 
 	if last != "" && localHash == last && remoteHash == last {
@@ -62,7 +66,7 @@ func (s *SyncService) syncSnapshot(b SnapshotBackend) (*SyncResult, error) {
 		// Merge base lost (re-configure, migration) but both sides carry
 		// identical content — re-anchor silently instead of surfacing a
 		// spurious conflict (mirrors git mode's no-common-ancestor heal).
-		s.setLastSyncedHash(remoteHash)
+		s.setLastSyncedHash(remoteHash, files)
 		s.updateLastSyncResult("success", "")
 		return &SyncResult{Message: "已是最新"}, nil
 	}
@@ -99,6 +103,17 @@ func (s *SyncService) syncSnapshot(b SnapshotBackend) (*SyncResult, error) {
 		// Only local changed → push.
 		return s.pushSnapshot(b, files, encKey, stagingDir, manifest.FileHashes)
 
+	case last != "" && scopeWidenedSince(config.LastSyncedScope, files, fileHashes):
+		// The device widened its scope: every newly in-scope file was never
+		// persisted locally (null hash), so the "both changed" default below
+		// would be a spurious conflict — the only real change is on the
+		// remote. Pull, so the widened scope starts from the remote copy.
+		// The recorded scope (not the hash) is what makes this safe: a file
+		// that was already in scope but never persisted keeps both sides
+		// reading as null → remoteHash == localHash → an earlier branch
+		// catches it, never this one.
+		return s.pullSnapshot(files, stagingDir, encKey, remoteHash)
+
 	default:
 		// Both changed (or first join with local data) → conflict dialog.
 		s.updateLastSyncResult("conflict", "")
@@ -115,7 +130,10 @@ func (s *SyncService) syncSnapshot(b SnapshotBackend) (*SyncResult, error) {
 // pullSnapshot decrypts the already-fetched remote snapshot (stagingDir)
 // into dataDir. Only files the remote actually carries are decrypted:
 // writing "{}" over out-of-manifest local files would silently wipe them
-// when another device syncs with a narrower scope. Callers must hold s.mu.
+// when another device syncs with a narrower scope. remoteHash is the
+// caller-computed anchor — always scopedAggregateHash over this device's
+// files, matching what syncSnapshot compares and pushSnapshot records.
+// Callers must hold s.mu.
 func (s *SyncService) pullSnapshot(files []string, stagingDir string, encKey []byte, remoteHash string) (*SyncResult, error) {
 	var present []string
 	for _, name := range files {
@@ -132,7 +150,7 @@ func (s *SyncService) pullSnapshot(files []string, stagingDir string, encKey []b
 		s.updateLastSyncResult("failed", fmt.Sprintf("decrypt files: %v", err))
 		return nil, fmt.Errorf("decrypt files: %w", err)
 	}
-	s.setLastSyncedHash(remoteHash)
+	s.setLastSyncedHash(remoteHash, files)
 	s.updateLastSyncResult("success", "")
 	return &SyncResult{Direction: SyncPull, Message: "配置已下载"}, nil
 }
@@ -143,13 +161,36 @@ func (s *SyncService) pullSnapshot(files []string, stagingDir string, encKey []b
 // .sync-salt is reused so the repo keeps one salt identity across pushes.
 // refHashes are the remote snapshot's per-file plaintext hashes (nil on a
 // fresh remote): blobs whose hash matches the local export are not staged,
-// so the upload only carries files whose content actually changed. Callers
-// must hold s.mu.
+// so the upload only carries files whose content actually changed, and
+// entries for files outside this device's scope are carried over into the
+// new manifest so a narrower-scope push cannot evict another device's blob
+// from the snapshot. Callers must hold s.mu.
 func (s *SyncService) pushSnapshot(b SnapshotBackend, files []string, encKey []byte, fetchedDir string, refHashes map[string]string) (*SyncResult, error) {
 	hashes, agg, err := hashStoresScoped(s.stores, files)
 	if err != nil {
 		s.updateLastSyncResult("failed", err.Error())
 		return nil, err
+	}
+	// The manifest describes the whole snapshot, not just this device's
+	// scope: keep every remote entry this push does not cover (the blob
+	// itself is untouched on the remote). The recorded anchor covers the
+	// carried-over entries too, so the next sync's remoteHash comparison
+	// stays consistent with this manifest's shape.
+	if refHashes != nil {
+		scoped := make(map[string]bool, len(files))
+		for _, name := range files {
+			scoped[name] = true
+		}
+		carried := false
+		for name, h := range refHashes {
+			if !scoped[name] && hashes[name] == "" {
+				hashes[name] = h
+				carried = true
+			}
+		}
+		if carried {
+			agg = aggregateHash(hashes)
+		}
 	}
 
 	// Diff on the canonical plaintext hashes: only blobs whose content the
@@ -240,7 +281,7 @@ func (s *SyncService) pushSnapshot(b SnapshotBackend, files []string, encKey []b
 		}, nil
 	}
 
-	s.setLastSyncedHash(agg)
+	s.setLastSyncedHash(agg, files)
 	s.updateLastSyncResult("success", "")
 	return &SyncResult{Direction: SyncPush, Message: "配置已上传"}, nil
 }
@@ -253,6 +294,47 @@ func randomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+// scopedAggregateHash folds the per-file hashes of exactly files into the
+// aggregate, so a device whose scope is narrower than the remote manifest
+// compares and records over its own scope. Out-of-scope entries stay in the
+// manifest and in the remote snapshot; they are not this device's base.
+func scopedAggregateHash(hashes map[string]string, files []string) string {
+	scoped := make(map[string]string, len(files))
+	for _, name := range files {
+		scoped[name] = hashes[name]
+	}
+	return aggregateHash(scoped)
+}
+
+// scopeWidenedSince reports whether the current scope covers files the
+// recorded anchor scope did not, and every such newly covered file's local
+// store never persisted (null hash). Used to route a "remote moved + local
+// moved" state that is really just "remote moved" into a silent pull instead
+// of a spurious conflict. A file that was already in the anchor scope but
+// never persisted does not count: the anchor's aggregate already includes
+// its null hash, so localHash tracks it and the plain both-changed branches
+// apply.
+func scopeWidenedSince(anchorScope, files []string, localHashes map[string]string) bool {
+	prev := make(map[string]bool, len(anchorScope))
+	for _, name := range anchorScope {
+		prev[name] = true
+	}
+	widened := false
+	for _, name := range files {
+		if prev[name] {
+			continue
+		}
+		if localHashes[name] != nullStoreHash() {
+			// Newly in scope but already carried locally (a pull delivered
+			// it earlier, or the store wrote it since): not a widening-only
+			// state — fall through to the normal branches.
+			return false
+		}
+		widened = true
+	}
+	return widened
 }
 
 // newSnapshotVersion returns a unique per-upload snapshot version —
@@ -300,20 +382,21 @@ func (s *SyncService) resolveConflictSnapshot(b SnapshotBackend, useLocal bool) 
 	if useLocal {
 		return s.pushSnapshot(b, files, encKey, s.repoPath, manifest.FileHashes)
 	}
-	return s.pullSnapshot(files, s.repoPath, encKey, aggregateHash(manifest.FileHashes))
+	return s.pullSnapshot(files, s.repoPath, encKey, scopedAggregateHash(manifest.FileHashes, files))
 }
 
-// setLastSyncedHash records the agreed content hash after a successful
-// snapshot sync. Load→mutate→Save keeps every other SyncConfig field
-// (SyncScope, AutoSync, …) intact. Best-effort persistence like
-// updateLastSyncResult.
-func (s *SyncService) setLastSyncedHash(hash string) {
+// setLastSyncedHash records the agreed content hash — and the scope it was
+// aggregated over — after a successful snapshot sync. Load→mutate→Save keeps
+// every other SyncConfig field (SyncScope, AutoSync, …) intact. Best-effort
+// persistence like updateLastSyncResult.
+func (s *SyncService) setLastSyncedHash(hash string, scope []string) {
 	config, err := s.configStore.Load()
 	if err != nil {
 		log.Writef("snapshot sync: load config for hash: %v", err)
 		return
 	}
 	config.LastSyncedHash = hash
+	config.LastSyncedScope = append([]string{}, scope...)
 	if err := s.configStore.Save(config); err != nil {
 		log.Writef("snapshot sync: save hash: %v", err)
 	}
@@ -383,7 +466,12 @@ func (s *SyncService) changePasswordSnapshot(oldPassword, newPassword string) er
 		return utils.UserErr("salt_missing")
 	}
 	oldKey := DeriveKey(oldPassword, oldSalt)
-	if err := verifyDecryptionScoped(files, s.repoPath, oldKey); err != nil {
+	// Rotate every blob the remote carries, not just this device's scope:
+	// the salt is repo-global, so any blob left under the old key would
+	// become undecryptable for every device once the manifest moves on
+	// (the out-of-scope entries another device's push carried over).
+	present := fetchedBlobNames(s.repoPath)
+	if err := verifyDecryptionScoped(present, s.repoPath, oldKey); err != nil {
 		return utils.UserErr("current_password_mismatch")
 	}
 
@@ -393,7 +481,7 @@ func (s *SyncService) changePasswordSnapshot(oldPassword, newPassword string) er
 		return err
 	}
 	defer os.RemoveAll(tmpDir)
-	if err := DecryptConfigFilesScoped(files, s.repoPath, tmpDir, oldKey); err != nil {
+	if err := DecryptConfigFilesScoped(present, s.repoPath, tmpDir, oldKey); err != nil {
 		return fmt.Errorf("decrypt: %w", err)
 	}
 
@@ -409,20 +497,30 @@ func (s *SyncService) changePasswordSnapshot(oldPassword, newPassword string) er
 	if err := os.MkdirAll(s.repoPath, 0755); err != nil {
 		return fmt.Errorf("create staging: %w", err)
 	}
-	if err := EncryptConfigFilesScoped(files, tmpDir, s.repoPath, newKey); err != nil {
+	if err := EncryptConfigFilesScoped(present, tmpDir, s.repoPath, newKey); err != nil {
 		return fmt.Errorf("re-encrypt: %w", err)
 	}
 	if err := WriteSaltFile(s.repoPath, newSalt); err != nil {
 		return fmt.Errorf("write salt: %w", err)
 	}
 	// The rotation re-encrypts the remote's current content, so the manifest
-	// hashes come from the staging plaintext — canonicalDirHashes applies the
-	// same rule hashStoresScoped uses, keeping the next push's comparison
-	// consistent with what was uploaded.
-	hashes, agg, err := canonicalDirHashes(files, tmpDir)
+	// hashes are recomputed from the staged plaintext — same rule
+	// hashStoresScoped applies, keeping the next push's comparison
+	// consistent with what was uploaded. Entries the remote never carried
+	// keep their null hash; the anchor is scoped to this device's files,
+	// matching what syncSnapshot compares.
+	hashes := make(map[string]string, len(manifest.FileHashes))
+	for name, h := range manifest.FileHashes {
+		hashes[name] = h
+	}
+	rotated, _, err := canonicalDirHashes(present, tmpDir)
 	if err != nil {
 		return err
 	}
+	for name, h := range rotated {
+		hashes[name] = h
+	}
+	agg := scopedAggregateHash(hashes, files)
 	now := time.Now().UTC()
 	version, err := newSnapshotVersion()
 	if err != nil {
@@ -440,6 +538,24 @@ func (s *SyncService) changePasswordSnapshot(oldPassword, newPassword string) er
 	if err := s.keychain.StoreEncryptionKey(newKey); err != nil {
 		return fmt.Errorf("store new key: %w", err)
 	}
-	s.setLastSyncedHash(agg)
+	s.setLastSyncedHash(agg, files)
 	return nil
+}
+
+// fetchedBlobNames lists the config blobs a fetched snapshot staging dir
+// actually carries (everything except the salt and the manifest itself) —
+// the rotation scope, which may be wider than this device's sync scope.
+func fetchedBlobNames(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == saltName || e.Name() == manifestName {
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	return names
 }

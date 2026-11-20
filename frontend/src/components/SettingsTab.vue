@@ -1790,7 +1790,7 @@ const webServerMode = ref(false)
 isWebServerMode().then((v) => { webServerMode.value = v })
 import { FetchModels, ChatCompletion, GetPlatform, GetAllFonts, GetDefaultSessionLogDir, OpenDirectoryDialog, OpenFileDialogFiltered, SetBackgroundImage, ClearBackgroundImage, GetBackgroundImage, RelaunchApp, ListExternalEditors, GenerateMCPToken, RevokeMCPToken, ListMCPTokens, GetMCPStatus, ListMCPClients, SaveMCPClient, UpdateMCPClient, RemoveMCPClient, TestMCPClient, MCPClientStatuses } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useSettingsStore } from '../stores/settingsStore'
-import { useSyncStore, SYNC_FILE_ITEMS } from '../stores/syncStore'
+import { useSyncStore, SYNC_FILE_ITEMS, LEGACY_SCOPE } from '../stores/syncStore'
 import { useLocalStateStore } from '../stores/localStateStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { useI18n, locale } from '../i18n'
@@ -2007,9 +2007,9 @@ async function handleAutoSyncToggle() {
   }
 }
 
-// nil scope = legacy default: settings.json unchecked, everything else checked.
-const LEGACY_SCOPE = SYNC_FILE_ITEMS.filter(i => i.file !== 'settings.json').map(i => i.file)
-
+// nil scope = legacy default: the always-on set only, opt-in entries
+// (settings/skills/commands/mcp_clients) unchecked — shared with the store
+// so the picker can never disagree with syncStore's mirror of the backend.
 const syncScopeModel = computed<string[]>({
   get: () => syncStore.config.syncScope ?? LEGACY_SCOPE,
   set: (v) => { syncStore.config.syncScope = v },
