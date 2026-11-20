@@ -9,7 +9,7 @@ vi.mock('../../bindings/github.com/ys-ll/uniterm/app', () => ({
 }))
 const preferences = vi.hoisted(() => ({
   autoCompact: true, contextTokenBudget: 32000, summaryModelId: '',
-  models: [] as Array<{ id: string; apiKey: string; baseURL: string; model: string; protocol: string; userAgent?: string; proxyId?: string }>,
+  models: [] as Array<{ id: string; apiKey: string; baseURL: string; model: string; protocol: string; userAgent?: string; proxyId?: string; sessionHeader?: string }>,
 }))
 vi.mock('../stores/settingsStore', () => ({ useSettingsStore: () => ({ ai: preferences, activeModel: {
   apiKey: 'test', baseURL: 'https://example.invalid/v1', model: 'test', protocol: 'openai',
@@ -83,6 +83,17 @@ describe('incremental context compaction', () => {
     expect(vi.mocked(SummarizeAIContext).mock.calls[0].slice(0, 6)).toEqual([
       'summary-key', 'https://summary.invalid', 'small-model', 'responses', 'summary-agent', 'summary-proxy',
     ])
+  })
+
+  it('sends the chat session id in the model session header on summary requests', async () => {
+    const store = longSession()
+    preferences.summaryModelId = 'summary'
+    preferences.models = [{ id: 'summary', apiKey: 'k', baseURL: 'https://summary.invalid',
+      model: 'small-model', protocol: 'openai', sessionHeader: 'session-id' }]
+    await prepareAgentContext('rules', [])
+    const args = vi.mocked(SummarizeAIContext).mock.calls[0]
+    expect(args[args.length - 2]).toBe(store.currentSessionId)
+    expect(args[args.length - 1]).toBe('session-id')
   })
 
   it('scales the retained history with the configured compaction budget', async () => {

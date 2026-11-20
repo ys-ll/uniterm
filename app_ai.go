@@ -1518,7 +1518,11 @@ func isOfficialOpenAIURL(base string) bool {
 
 // SummarizeAIContext uses non-streaming requests and never emits chat events or
 // changes chatCancel. Each request has its own cancellation identity.
-func (a *App) SummarizeAIContext(apiKey, baseURL, model, protocol, userAgent, proxyID, requestID, requestJSON string) (string, error) {
+// sessionID/sessionHeader mirror the chat path's per-model session header:
+// gateways that require it on every inference request reject a summary
+// request that arrives without it, which silently breaks compaction exactly
+// when the context has grown long enough to need it.
+func (a *App) SummarizeAIContext(apiKey, baseURL, model, protocol, userAgent, proxyID, requestID, requestJSON, sessionID, sessionHeader string) (string, error) {
 	if requestID == "" || strings.TrimSpace(requestJSON) == "" {
 		return "", fmt.Errorf("AI_COMPACTION_INVALID_INPUT")
 	}
@@ -1546,14 +1550,14 @@ func (a *App) SummarizeAIContext(apiKey, baseURL, model, protocol, userAgent, pr
 	// handoff request with a tool call (tools ride along only for cache-prefix
 	// identity). Non-standard relays may reject the parameter: retry once
 	// without it and fall back to the instruction plus response validation.
-	summary, err := a.summarizeAttempt(ctx, client, apiKey, baseURL, model, protocol, userAgent, neutral, true)
+	summary, err := a.summarizeAttempt(ctx, client, apiKey, baseURL, model, protocol, userAgent, neutral, sessionID, sessionHeader, true)
 	if err != nil && strings.HasSuffix(err.Error(), "HTTP_400") {
-		summary, err = a.summarizeAttempt(ctx, client, apiKey, baseURL, model, protocol, userAgent, neutral, false)
+		summary, err = a.summarizeAttempt(ctx, client, apiKey, baseURL, model, protocol, userAgent, neutral, sessionID, sessionHeader, false)
 	}
 	return summary, err
 }
 
-func (a *App) summarizeAttempt(ctx context.Context, client *http.Client, apiKey, baseURL, model, protocol, userAgent string, neutral map[string]interface{}, toolChoiceNone bool) (string, error) {
+func (a *App) summarizeAttempt(ctx context.Context, client *http.Client, apiKey, baseURL, model, protocol, userAgent string, neutral map[string]interface{}, sessionID, sessionHeader string, toolChoiceNone bool) (string, error) {
 	body, endpoint := summaryProtocolBody(protocol, model, baseURL, neutral, toolChoiceNone)
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -1576,6 +1580,9 @@ func (a *App) summarizeAttempt(ctx context.Context, client *http.Client, apiKey,
 	} else {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
+	// Same session header as the chat path, so a gateway that keys caching /
+	// routing on it accepts the summary request too (retry included).
+	applySessionHeader(req, sessionHeader, sessionID, baseURL)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
