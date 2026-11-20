@@ -658,7 +658,7 @@
   "settings.zmodemIdleTimeoutSecDesc": "지정한 초 동안 ZMODEM 활동이 없으면 rz/sz 전송을 중단합니다. 기본값 20. 범위 5-600.",
   "settings.sessionLogDirDesc": "세션 로그를 저장할 위치. 비워두면 기본값 사용: {path}",
   "settings.sessionLogFilename": "로그 파일 이름 형식",
-  "settings.sessionLogFilenameDesc": "%S 세션, %H 호스트, %M 월, %D 일, %h 시, %m 분을 지원합니다. 세션과 호스트가 같으면 한 번만 포함합니다.",
+  "settings.sessionLogFilenameDesc": "%S 세션, %H 호스트, %Y 연도, %M 월, %D 일, %h 시, %m 분을 지원합니다. 세션과 호스트가 같으면 한 번만 포함합니다.",
   "settings.browse": "찾아보기…",
   "settings.maxTurns": "AI 자율 상호작용 최대 라운드",
   "settings.maxTurnsDesc": "AI 요청당 자율 상호작용 라운드의 최대 횟수. 0은 무제한. 기본값: 20.",

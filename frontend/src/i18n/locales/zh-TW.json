@@ -682,7 +682,7 @@
   "settings.zmodemIdleTimeoutSecDesc": "若連續若干秒沒有 ZMODEM 協定活動，則中止 rz/sz 傳輸。預設 20，範圍 5-600。",
   "settings.sessionLogDirDesc": "工作階段日誌檔案的儲存位置。留空使用預設路徑：{path}",
   "settings.sessionLogFilename": "日誌檔名格式",
-  "settings.sessionLogFilenameDesc": "支援 %S 工作階段名稱、%H 主機、%M 月、%D 日、%h 時、%m 分。名稱與主機相同時只保留一份。",
+  "settings.sessionLogFilenameDesc": "支援 %S 工作階段名稱、%H 主機、%Y 年、%M 月、%D 日、%h 時、%m 分。名稱與主機相同時只保留一份。",
   "settings.browse": "瀏覽…",
   "settings.maxTurns": "AI 自主互動最大輪次",
   "settings.maxTurnsDesc": "AI 自主執行命令與回饋的對話輪數上限。設為 0 表示不限制。預設 20。",

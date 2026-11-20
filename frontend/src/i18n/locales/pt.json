@@ -654,7 +654,7 @@
   "settings.zmodemIdleTimeoutSecDesc": "Aborta uma transferência rz/sz se não houver atividade ZMODEM por este número de segundos. Padrão 20. Intervalo 5-600.",
   "settings.sessionLogDirDesc": "Onde os logs de sessão são salvos. Deixe vazio para usar o padrão: {path}",
   "settings.sessionLogFilename": "Formato do nome do arquivo de log",
-  "settings.sessionLogFilenameDesc": "Tokens: %S sessão, %H host, %M mês, %D dia, %h hora, %m minuto. Uma sessão e host duplicados são incluídos apenas uma vez.",
+  "settings.sessionLogFilenameDesc": "Tokens: %S sessão, %H host, %Y ano, %M mês, %D dia, %h hora, %m minuto. Uma sessão e host duplicados são incluídos apenas uma vez.",
   "settings.browse": "Procurar…",
   "settings.maxTurns": "Máx. de rodadas autônomas",
   "settings.maxTurnsDesc": "Número máximo de rodadas de interação autônoma por requisição da IA. Use 0 para ilimitado. Padrão: 20.",

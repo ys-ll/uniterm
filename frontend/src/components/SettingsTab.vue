@@ -832,7 +832,7 @@
             <div class="setting-control">
               <el-input
                 v-model="settingsStore.settings.terminal.sessionLogFilename"
-                placeholder="%S_%H_%M%D_%h%m.log"
+                placeholder="%S_%H_%Y%M%D_%h%m.log"
                 @change="settingsStore.save()"
                 clearable
               />
