@@ -315,7 +315,7 @@
               v-if="!(busy && !inputText.trim())"
               class="send-btn"
               :disabled="(!inputText.trim() && !hasSkillTag && !hasCommandTag && !attachments.length) || (lockedPanels.length === 0 && !currentIsTerminal)"
-              :title="busy ? t('ai.queue') : t('ai.send')"
+              :title="busy ? t('ai.queue') : sendTooltip"
               @click="onSend"
             >
               <ArrowUp :size="'1.125rem'" />
@@ -1827,6 +1827,11 @@ watch(() => aiStore.visible, (visible) => {
   }
 })
 
+// Send-button tooltip mirrors the active shortcut (settings.ai.sendKey).
+const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
+const sendTooltip = computed(() =>
+  `${t('ai.send')} (${settingsStore.settings.ai.sendKey === 'ctrl-enter' ? (isMac ? '⌘+Enter' : 'Ctrl+Enter') : 'Enter'})`)
+
 function onKeydown(e: KeyboardEvent) {
   // Hash dropdown navigation
   if (hashDropdownVisible.value) {
@@ -1888,6 +1893,19 @@ function onKeydown(e: KeyboardEvent) {
     if (isMobile) {
       e.preventDefault()
       Clipboard.Text().then(text => { if (text) insertTextAtCursor(text) }).catch(() => {})
+    }
+    return
+  }
+
+  // IME composition: the Enter that confirms a candidate (or any key while
+  // composing) must never send — keydown carries keyCode 229 on some IMEs.
+  if (e.isComposing || e.keyCode === 229) return
+
+  if (settingsStore.settings.ai.sendKey === 'ctrl-enter') {
+    // Ctrl/Cmd+Enter sends; Enter falls through to the editor's newline.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      onSend()
     }
     return
   }

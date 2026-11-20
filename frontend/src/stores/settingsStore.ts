@@ -62,6 +62,7 @@ export const useSettingsStore = defineStore('settings', () => {
       contextTokenBudget: aiCfg.contextTokenBudget,
       summaryModelId: aiCfg.summaryModelId,
       userMessageStyle: aiCfg.userMessageStyle,
+      sendKey: aiCfg.sendKey,
       models,
     }
   }
@@ -76,6 +77,7 @@ export const useSettingsStore = defineStore('settings', () => {
     aiCfg.contextTokenBudget = normalizeContextTokenBudget(settings.value.ai.contextTokenBudget)
     aiCfg.summaryModelId = settings.value.ai.summaryModelId || ''
     aiCfg.userMessageStyle = settings.value.ai.userMessageStyle === 'plain' ? 'plain' : 'bubble'
+    aiCfg.sendKey = settings.value.ai.sendKey === 'ctrl-enter' ? 'ctrl-enter' : 'enter'
     aiCfg.models = settings.value.ai.models
     aiCfg.save()
   }
@@ -368,6 +370,7 @@ export const useSettingsStore = defineStore('settings', () => {
       aiCfg.autoCompact = data.autoCompact ?? true
       aiCfg.contextTokenBudget = normalizeContextTokenBudget(data.contextTokenBudget)
       aiCfg.summaryModelId = data.summaryModelId || ''
+      aiCfg.sendKey = data.sendKey === 'ctrl-enter' ? 'ctrl-enter' : 'enter'
       aiCfg.models = data.models?.length ? data.models : aiCfg.models
       const wasApplyingSettings = applyingLoadedSettings
       applyingLoadedSettings = true

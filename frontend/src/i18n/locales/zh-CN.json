@@ -694,6 +694,10 @@
   "settings.userMessageStylePlain": "左对齐",
 
   "settings.userMessageStyleBubble": "右对齐",
+  "settings.sendKey": "AI对话发送快捷键",
+  "settings.sendKeyDesc": "AI 对话中发送消息所使用的快捷键。",
+  "settings.sendKeyEnter": "Enter 发送",
+  "settings.sendKeyCtrlEnter": "Ctrl+Enter 发送",
   "settings.modelList": "模型列表",
   "settings.modelListDesc": "配置和管理 AI 模型",
   "settings.addModel": "添加模型",

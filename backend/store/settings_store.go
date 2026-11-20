@@ -166,6 +166,9 @@ type AISettings struct {
 	// "" (plain, default) keeps the shared left-aligned full-width layout,
 	// "bubble" right-aligns a content-sized chat bubble (issue #1478).
 	UserMessageStyle string          `json:"userMessageStyle,omitempty"`
+	// SendKey selects the AI-panel send shortcut: "enter" (default) sends on
+	// Enter, "ctrl-enter" sends on Ctrl/Cmd+Enter and Enter inserts a newline.
+	SendKey          string          `json:"sendKey,omitempty"`
 	Models           []AIModelConfig `json:"models"`
 	// Read only for migration to local_state.json. New clients omit this field.
 	ActiveModelID string `json:"activeModelId,omitempty"`

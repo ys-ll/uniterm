@@ -1337,6 +1337,21 @@
               </el-radio-group>
             </div>
           </div>
+          <div class="setting-card">
+            <div class="setting-info">
+              <div class="setting-title">{{ t('settings.sendKey') }}</div>
+              <div class="setting-desc">{{ t('settings.sendKeyDesc') }}</div>
+            </div>
+            <div class="setting-control">
+              <el-radio-group
+                v-model="settingsStore.settings.ai.sendKey"
+                @change="settingsStore.save()"
+              >
+                <el-radio-button value="enter">{{ t('settings.sendKeyEnter') }}</el-radio-button>
+                <el-radio-button value="ctrl-enter">{{ t('settings.sendKeyCtrlEnter') }}</el-radio-button>
+              </el-radio-group>
+            </div>
+          </div>
 
           <div class="setting-card">
             <div class="setting-info">
