@@ -18,8 +18,21 @@ import (
 var otpPrompt = regexp.MustCompile(`(?i)(\b(?:totp|otp)\b|\bverification[ -]+code\b|\bone[ -]+time[ -]+(?:password|code)\b|\bauthentication[ -]+code\b|\bauthenticator[ -]+code\b)`)
 var passwordPrompt = regexp.MustCompile(`(?i)\bpassword[0-9]*\b`)
 
+// otpSelectionPrompt matches MFA option-selection questions, which list the
+// available second factors and expect a choice, not the code. A bastion may
+// send "1. OTP\n2. SMS\nOption> " (echo=true) before "[OTP Code]: ", so the
+// question merely mentions OTP as a menu entry — the generated code must never
+// be sent as its answer.
+var otpSelectionPrompt = regexp.MustCompile(`(?i)(\b(?:select|choose|choice|option|method|delivery|push)\b|send[ -]+(?:to|via)|\b(?:sms|email)[ -/]+(?:or[ -/]+)?(?:sms|email)\b|选择|请选择|选项|方式|方法|发送到|发送至)`)
+
 func isPasswordPrompt(question string) bool {
 	return passwordPrompt.MatchString(question) && !otpPrompt.MatchString(question)
+}
+
+// isOTPSelectionPrompt reports whether the question asks the user to pick an
+// MFA method rather than to enter a code.
+func isOTPSelectionPrompt(question string) bool {
+	return otpSelectionPrompt.MatchString(question)
 }
 
 func decodeTOTPSecret(secret string) ([]byte, error) {
@@ -83,7 +96,12 @@ func automaticTOTPChallenge(config ConnectionConfig, fallback ssh.KeyboardIntera
 		var indices []int
 		for i, question := range questions {
 			switch {
-			case !echos[i] && otpPrompt.MatchString(question) && !usedOTP:
+			// Echo is deliberately not required here: some bastions send
+			// "[OTP Code]: " with echo=true, and a one-time code is
+			// short-lived enough that echoing it is harmless. Selection
+			// questions are excluded instead — they also echo and mention
+			// OTP, but expect a method choice, not the code.
+			case otpPrompt.MatchString(question) && !isOTPSelectionPrompt(question) && !usedOTP:
 				code, err := totpCode(config.TOTPSecret, time.Now())
 				if err != nil {
 					return nil, err
