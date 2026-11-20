@@ -499,6 +499,17 @@ watch(() => companionStore.activeSshPanelId, () => {
   if (companionStore.monitorVisible) ensureConnected()
 })
 
+// Rebuild the monitor session when the owning SSH panel's terminal session is
+// replaced by a reconnect (Enter retry / right-click reconnect): the monitor
+// session built against the old connection is dead by then, and nothing else
+// re-runs ensureConnected for the same panel id. No-op when it is still alive.
+watch(() => {
+  const pid = companionStore.activeSshPanelId
+  return pid ? panelStore.getPanel(pid)?.sessionId : undefined
+}, (sid, oldSid) => {
+  if (oldSid && sid && oldSid !== sid && companionStore.monitorVisible) ensureConnected()
+})
+
 onMounted(() => {
   bindListeners()
   // Re-mounting after the view was hidden (e.g. switching files<->monitor):

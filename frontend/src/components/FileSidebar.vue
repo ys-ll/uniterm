@@ -2,7 +2,7 @@
   <div
     class="companion-sidebar file-sidebar"
   >
-    <div v-if="!sessionId" class="companion-empty">
+    <div v-if="!sessionId || connectError" class="companion-empty">
       <span v-if="connecting">{{ t('companion.connecting') }}</span>
       <template v-else-if="connectError">
         <span>{{ connectError }}</span>
@@ -260,6 +260,31 @@ async function ensureConnected() {
   }
 }
 
+// Recovery for a listing that hit a dead companion session ("not connected").
+// The action is gated by real session state — without this, an unreachable
+// host turns every failed list into an immediate re-list and the panel
+// refreshes in a tight loop:
+// - companion still connecting → wait; its 'connected' status event re-lists.
+// - companion connected → transient race, single delayed retry.
+// - companion dead → rebuild ONLY while the owning terminal session can still
+//   come up; when that one is down too, stay quiet — the terminal's
+//   'connected' status hook rebuilds the companion once it reconnects.
+async function recoverNotConnected() {
+  const sid = sessionId.value
+  try {
+    const sessions = await ListSessions()
+    const st = sessions.find(s => s.id === sid)?.status
+    if (st === 'connecting') return
+    if (st === 'connected') { scheduleRefreshRetry(); return }
+    const pid = companionStore.activeFilesPanelId
+    const ownerSid = pid ? panelStore.getPanel(pid)?.sessionId : undefined
+    const ownerSt = ownerSid ? sessions.find(s => s.id === ownerSid)?.status : undefined
+    if (ownerSt === 'connected' || ownerSt === 'connecting') ensureConnected()
+  } catch {
+    scheduleRefreshRetry() // status unknown — fall back to the plain retry
+  }
+}
+
 // Listing / navigation engine (refresh coalescing + retry glue stays here).
 const listing = useFileListing({
   sid: () => sessionId.value ?? undefined,
@@ -269,7 +294,14 @@ const listing = useFileListing({
   listTimeoutMs: LIST_TIMEOUT_MS,
   onListSuccess: () => { connectError.value = '' },
   onListError: (err) => {
-    if (/not connected/i.test(err)) { scheduleRefreshRetry(); return true }
+    if (/not connected/i.test(err)) {
+      // The companion session is gone (e.g. the owning SSH session was
+      // reconnected, which orphans the session built against the old
+      // connection). Recover by state-gated rebuild/retry, never by an
+      // immediate re-list (see recoverNotConnected).
+      recoverNotConnected()
+      return true
+    }
     if (/timeout/i.test(err)) { msg.warning(t('companion.refreshTimeout')); return true }
     return false
   },
@@ -496,7 +528,16 @@ function bindListeners() {
   unsubData?.()
   unsubExtEdit?.()
   unsubStatus =Events.On('session:status', (ev) => { const payload: { id: string; status: string } = ev.data;
-    if (payload.id === followTerminalSessionId.value && payload.status === 'connected') syncCwdTracking()
+    if (payload.id === followTerminalSessionId.value && payload.status === 'connected') {
+      syncCwdTracking()
+      // The owning SSH panel (re)connected — e.g. the user pressed Enter to
+      // retry after a drop, which builds a NEW terminal session. The companion
+      // SFTP session created against the old connection is dead by then, so
+      // rebuild it (a no-op when it is still alive) instead of leaving the
+      // file view and drag-drop uploads broken until the user switches tabs
+      // back and forth.
+      if (companionStore.filesVisible) ensureConnected()
+    }
     if (payload.id !== sessionId.value) return
     if (payload.status === 'connected') {
       onRefresh()
