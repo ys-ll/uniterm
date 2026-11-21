@@ -214,6 +214,10 @@ func (s *FTPSession) resolveRemotePath(p string) string {
 	return path.Join(cwd, p)
 }
 
+func (s *FTPSession) remoteDirExists(dir string) bool {
+	return s.conn.ChangeDir(s.ftpEncodePath(dir)) == nil
+}
+
 // ftpDecodeName converts a raw name from the server's listing into UTF-8 for
 // display. In UTF-8 mode names that are not valid UTF-8 are assumed to be GBK
 // (same fallback FileZilla uses). The raw bytes of every decoded name are
@@ -268,7 +272,7 @@ func (s *FTPSession) ftpList(dir string) ([]*ftp.Entry, error) {
 	// Legacy/embedded FTP servers (such as Xbox 360 Aurora) do not support
 	// "LIST <path>" directly and return an empty 226 response even for
 	// non-existent directories. Use "CWD <path>" + "LIST" instead so both
-	// directory listing and existence checks (e.g. mkdirAllRemote) work.
+	// directory listing and existence checks work reliably.
 	if encPath != "" {
 		if err := s.conn.ChangeDir(encPath); err != nil {
 			return nil, err
@@ -634,7 +638,8 @@ func (s *FTPSession) GetContent(remotePath string) ([]byte, error) {
 	return io.ReadAll(r)
 }
 
-// Copy copies a remote file via FTP (download + re-upload — FTP has no server-side copy).
+// Copy copies a remote file via FTP (streaming download to temp file + re-upload
+// to avoid buffering entire files in memory).
 func (s *FTPSession) Copy(oldPath, newPath string) error {
 	if err := s.requireClient(); err != nil {
 		return err
@@ -643,18 +648,34 @@ func (s *FTPSession) Copy(oldPath, newPath string) error {
 	defer s.connMu.Unlock()
 	old := s.resolveRemotePath(oldPath)
 	n := s.resolveRemotePath(newPath)
-	// FTP cannot copy directories via Retr, check first
-	if _, listErr := s.ftpList(old); listErr == nil {
+	// FTP cannot copy directories via Retr, check first via CWD
+	if s.remoteDirExists(old) {
 		return fmt.Errorf("cannot copy directory via FTP: %s", old)
 	}
-	// Download
+	// Stream download to a temporary file so large files do not exhaust memory
 	r, err := s.ftpRetr(old)
 	if err != nil {
 		return err
 	}
-	defer r.Close()
-	data, err := io.ReadAll(r)
+	tmpFile, err := os.CreateTemp("", "uniterm-ftp-copy-*")
 	if err != nil {
+		_ = r.Close()
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	_, copyErr := io.Copy(tmpFile, r)
+	// Close the RETR response before issuing further control commands so the
+	// server's 226 transfer-complete reply is drained cleanly.
+	closeErr := r.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
 	// Create parent directories for destination
@@ -662,8 +683,8 @@ func (s *FTPSession) Copy(oldPath, newPath string) error {
 	if err := s.mkdirAllRemote(parentDir); err != nil {
 		return err
 	}
-	// Upload
-	return s.ftpStor(n, strings.NewReader(string(data)))
+	// Stream upload from temporary file
+	return s.ftpStor(n, tmpFile)
 }
 
 // Move moves a remote file via FTP Rename (server-side, no data transfer).
@@ -676,9 +697,9 @@ func (s *FTPSession) mkdirAllRemote(dir string) error {
 	if dir == "/" || dir == "." || dir == "" {
 		return nil
 	}
-	// Try to list the directory; if it fails, create parent then this one
-	_, err := s.ftpList(dir)
-	if err == nil {
+	// Check directory existence via CWD on the control connection instead of
+	// opening a PASV data connection with LIST for every path level.
+	if s.remoteDirExists(dir) {
 		return nil // already exists
 	}
 	// Create parent first
