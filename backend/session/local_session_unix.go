@@ -79,6 +79,16 @@ type LocalSession struct {
 	mouseTrackingEnabled atomic.Bool
 	foregroundShell      string
 
+	// Typed cwd-hook injection (same machinery as the Windows build). The
+	// hook body is built at session start for bash/zsh/fish shells; the
+	// OSC-7 scanner picks up reports either from the injected hook or from
+	// the user's own prompt integration (e.g. iTerm2 shell integration).
+	cwdHookShellBase string
+	cwdHookBody      string
+	hook             typedCwdHookState
+	cwdHookRequested atomic.Bool
+	osc7             osc7Scanner
+
 	mu             sync.RWMutex
 	enc            encoding.Encoding
 	decoder        *encoding.Decoder
@@ -144,6 +154,15 @@ func (s *LocalSession) Connect(config ConnectionConfig) error {
 	s.mu.Lock()
 	s.foregroundShell = shell
 	s.mu.Unlock()
+	// Typed cwd hook for bash/zsh/fish shells; other shells stay passive
+	// (OSC-7 from the user's own prompt integration). Optional — never fails
+	// the session.
+	if body, ok := buildShellCwdHookBody(shell); ok {
+		s.mu.Lock()
+		s.cwdHookShellBase = shellHookBase(shell)
+		s.cwdHookBody = body
+		s.mu.Unlock()
+	}
 	s.cmd.Env = ensureTerminalEnv(os.Environ(), ExplicitTermType(config.TermType))
 	s.cmd.Dir = workDir
 
@@ -260,9 +279,28 @@ func (s *LocalSession) readLoop() {
 		n, err := s.pty.Read(buf)
 		if n > 0 {
 			s.RecordReadActivity()
-			data := buf[:n]
-			s.emitData(s.decodeOutput(data))
-			s.updateMouseTrackingState(data)
+			data := append([]byte(nil), buf[:n]...)
+			// OSC-7 extraction runs on the RAW byte stream, BEFORE decoding:
+			// the sequence is pure ASCII while legacy codecs could mangle its
+			// bytes. The cleaned remainder replaces the data downstream so
+			// stripped sequences never render.
+			cwd, cleaned, found := s.osc7.Feed(data)
+			if found {
+				recordSessionCwd(s.id, cwd)
+				if TerminalCwdSink != nil {
+					TerminalCwdSink(s.id, cwd)
+				}
+			}
+			cleaned, armed, confirmed := s.hook.onOutput(cleaned)
+			if armed {
+				go s.writeCwdHookBody(s.hook.takeArmedBody())
+			}
+			if confirmed {
+				s.hook.confirm()
+				log.Writef("local: cwd hook confirmed via ready marker")
+			}
+			s.emitData(s.decodeOutput(cleaned))
+			s.updateMouseTrackingState(cleaned)
 		}
 		if err != nil {
 			// If the quit channel is already closed, another goroutine

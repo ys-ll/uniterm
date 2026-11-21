@@ -48,6 +48,9 @@ func (sm *SessionManager) Create(sessionType string, config ConnectionConfig) (S
 	case "wsl-file":
 		s = NewWSLFileSession(config.ID)
 
+	case "local-file":
+		s = NewLocalFileSession(config.ID)
+
 	case "database":
 		s = NewDatabaseSession(config.ID)
 

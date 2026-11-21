@@ -162,9 +162,17 @@ func decodeOSC7Payload(raw string) string {
 // position. The typed hook is only used by WSL; SSH uses SFTP cwd discovery.
 const cwdHookCleanup = `printf '\033[6n'; if IFS=';' read -rs -d R -t 1 __u7y __u7x < /dev/tty && [ "${__u7x-}" = 1 ]; then printf '\033[2K\033[1A\033[2K\033[1A\033[2K\033[1A\033[2K\r'; else printf '\r\033[2K\033[1A\033[2K\r'; fi;`
 
-// buildShellCwdHookBody builds the WSL prompt hook body.
+// shellHookBase normalizes a shell path for hook matching: backslashes
+// become slashes, the .exe suffix and case are dropped ("C:\...\powershell.exe"
+// and "/usr/bin/pwsh" both resolve to their switch case below).
+func shellHookBase(shell string) string {
+	return strings.ToLower(strings.TrimSuffix(shellBasename(strings.ReplaceAll(shell, `\`, "/")), ".exe"))
+}
+
+// buildShellCwdHookBody builds the prompt hook body for a shell. Used by WSL
+// distros and local terminals alike (any bash/zsh/fish/powershell shell).
 func buildShellCwdHookBody(shell string) (string, bool) {
-	base := shellBasename(shell)
+	base := shellHookBase(shell)
 	const oscFn = `__uniterm_osc7() { printf '\033]7;file://%s\033\\' "$PWD" 2>/dev/null; }`
 	switch base {
 	case "bash":
@@ -189,6 +197,20 @@ func buildShellCwdHookBody(shell string) (string, bool) {
 			"function fish_prompt; __uniterm_osc7; __uniterm_orig_prompt; end; " +
 			`function __uniterm_osc7; printf '\e]7;file://%s\e\\' $PWD; end; end` +
 			`; stty echo; printf '\r\e[2K'; printf '\e]7777;uniterm-ok\a'` + "\n", true
+	case "powershell", "pwsh":
+		// Windows PowerShell and PowerShell Core: override the prompt function
+		// once to emit OSC-7 on every prompt. Single-phase (no stty echo-off
+		// on Windows consoles): the typed snippet may briefly echo, like fish.
+		// [string]::Concat avoids string-escaping pitfalls around the control
+		// bytes. PS 5.1 with a legacy console codepage may mangle non-ASCII
+		// paths in the OSC-7 payload; PowerShell 7 reports UTF-8 correctly.
+		return " if (-not (Get-Variable __unitermOrigPrompt -Scope Global -ErrorAction SilentlyContinue)) { " +
+			"$global:__unitermOrigPrompt = $function:prompt; " +
+			"function global:prompt { " +
+			"$loc = $ExecutionContext.SessionState.Path.CurrentLocation.ProviderPath.Replace('\\', '/'); " +
+			"[Console]::Out.Write([string]::Concat([char]27, ']7;file:///', $loc, [char]7)); " +
+			"& $global:__unitermOrigPrompt }; " +
+			"[Console]::Out.Write([string]::Concat([char]27, ']7777;uniterm-ok', [char]7)) }\n", true
 	}
 	return "", false
 }

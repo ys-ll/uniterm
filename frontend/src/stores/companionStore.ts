@@ -102,14 +102,27 @@ export const useCompanionStore = defineStore('companion', () => {
     return pid
   }
 
-  /** Active panel that owns a file sidebar: an SSH panel, a WSL terminal or a container exec terminal. */
+  function getActiveLocalPanelId(): string | null {
+    const pid = tabStore.getActivePanelId()
+    if (!pid) return null
+    const panel = panelStore.getPanel(pid)
+    if (!panel || panel.type !== 'local') return null
+    return pid
+  }
+
+  /** Active panel that owns a file sidebar: an SSH panel, a WSL terminal, a container exec terminal or a local terminal. */
   function getActiveFilesPanelId(): string | null {
-    return getActiveSshPanelId() ?? getActiveWslPanelId() ?? getActiveContainerExecPanelId()
+    return getActiveSshPanelId() ?? getActiveWslPanelId() ?? getActiveContainerExecPanelId() ?? getActiveLocalPanelId()
   }
 
   function isWslPanel(pid: string | null): boolean {
     if (!pid) return false
     return panelStore.getPanel(pid)?.type === 'wsl'
+  }
+
+  function isLocalPanel(pid: string | null): boolean {
+    if (!pid) return false
+    return panelStore.getPanel(pid)?.type === 'local'
   }
 
   function isContainerExecPanel(pid: string | null): boolean {
@@ -245,6 +258,18 @@ export const useCompanionStore = defineStore('companion', () => {
       if (isWslPanel(sshPanelId)) {
         config.type = 'wsl-file'
         const info = await CreateSession('wsl-file', config)
+        entries.value = {
+          ...entries.value,
+          [sshPanelId]: { ...entries.value[sshPanelId], sftpSessionId: info.id, creatingSftp: false },
+        }
+        sessionStore.initSession(info.id)
+        return info.id
+      }
+      // Local terminals browse the local filesystem — the local-file session
+      // (dual local views; no credentials, no transport).
+      if (isLocalPanel(sshPanelId)) {
+        config.type = 'local-file'
+        const info = await CreateSession('local-file', config)
         entries.value = {
           ...entries.value,
           [sshPanelId]: { ...entries.value[sshPanelId], sftpSessionId: info.id, creatingSftp: false },
@@ -417,6 +442,7 @@ export const useCompanionStore = defineStore('companion', () => {
     getActiveSshPanelId,
     getActiveFilesPanelId,
     isWslPanel,
+    isLocalPanel,
     isContainerExecPanel,
     getFileViewCache,
     setFileViewCache,

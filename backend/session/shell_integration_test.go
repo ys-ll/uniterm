@@ -129,7 +129,17 @@ func TestBuildShellCwdHookBody(t *testing.T) {
 		},
 		{name: "unsupported ksh", shell: "/usr/bin/ksh", wantOK: false},
 		{name: "windows cmd", shell: "cmd", wantOK: false},
-		{name: "windows backslash path", shell: `C:\Program Files\Git\bin\bash.exe`, wantOK: false},
+		// Windows local shells: the base match normalizes backslashes and the
+		// .exe suffix, so git-bash and PowerShell carry the typed hook too.
+		{name: "windows git-bash backslash path", shell: `C:\Program Files\Git\bin\bash.exe`,
+			wantOK:   true,
+			mustHave: []string{"__uniterm_osc7"}},
+		{name: "windows powershell", shell: `C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe`,
+			wantOK:   true,
+			mustHave: []string{"__unitermOrigPrompt", "]7;file:///"}},
+		{name: "pwsh", shell: "pwsh",
+			wantOK:   true,
+			mustHave: []string{"__unitermOrigPrompt"}},
 		{name: "empty", shell: "", wantOK: false},
 	}
 	for _, tt := range tests {
@@ -144,7 +154,12 @@ func TestBuildShellCwdHookBody(t *testing.T) {
 			if !strings.HasPrefix(got, " ") || !strings.HasSuffix(got, "\n") {
 				t.Fatalf("snippet must start with a space and end with a newline: %q", got)
 			}
-			if !strings.Contains(got, "__uniterm_osc7") {
+			// POSIX-family snippets define the shared __uniterm_osc7 helper;
+			// PowerShell overrides the prompt inline and is fully covered by
+			// its own mustHave list.
+			if !strings.Contains(got, "__uniterm_osc7") && tt.shell != "pwsh" &&
+				!strings.HasSuffix(strings.ToLower(tt.shell), "powershell.exe") &&
+				!strings.EqualFold(tt.shell, "powershell") {
 				t.Fatalf("snippet must define the __uniterm_osc7 hook: %q", got)
 			}
 			for _, want := range tt.mustHave {
