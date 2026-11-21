@@ -1,6 +1,6 @@
 # Sidebar
 
-The sidebar sits on the left side of the main interface and brings together companion panels such as file management, server monitoring, tunnels, and quick commands, so they can be used alongside the terminal tabs.
+The sidebar sits on the left side of the main interface and brings together companion panels such as file management, server monitoring, tunnels, quick commands, command send, and notes, so they can be used alongside the terminal tabs.
 
 ## Sidebar Tabs
 
@@ -10,8 +10,10 @@ The top of the sidebar is a tab bar containing the following tabs:
 - **Files** — The file management panel for the current terminal connection. See [File Sidebar](#file-sidebar) below
 - **Monitor** — Real-time resource monitoring of the host of the current connection. See [Monitor Sidebar](#monitor-sidebar)
 - **Tunnels** — The SSH tunnel manager. See [SSH Tunnel](/en/features/network-toolbox)
+- **Command Send** — A multi-line command editor that sends to the current terminal (broadcast-aware), the whole workspace, or every tab. See [Command Send](#command-send)
 - **Quick Commands** — Save frequently used command snippets and send them to the current terminal with a click. See [Quick Commands and History](#quick-commands-and-history)
 - **History** — View and reuse commands entered in the terminal. See [Quick Commands and History](#quick-commands-and-history)
+- **Notes** — A Markdown notes panel. See [Notes](#notes)
 - **Personalization** — A quick settings panel for theme, language, font, and font size
 
 ![Sidebar Connection List](/imgs/sidebar_connection_light.webp)
@@ -23,7 +25,6 @@ The **Collapse** button at the far right of the tab bar folds the entire sidebar
 Tabs you rarely use can be hidden:
 
 - **Right-click the tab bar at the top of the sidebar** — Check or uncheck items in the popup menu
-- **Settings → Sidebar Tabs** — Choose which tabs to display in the same way
 
 When you hide the tab currently being displayed, the sidebar automatically falls back to the Connection List view. The sidebar width can be adjusted by dragging its edge.
 
@@ -31,10 +32,11 @@ When you hide the tab currently being displayed, the sidebar automatically falls
 
 ![File Sidebar](/imgs/sidebar_file_light.webp)
 
-The File Sidebar is a file management panel that follows the current connection. It supports two kinds of sessions:
+The File Sidebar is a file management panel that follows the current connection. It supports three kinds of sessions:
 
 - **SSH connections** — Browse remote files via SFTP or SCP (depending on the file transfer protocol configured for the connection)
 - **WSL terminals** — Browse and manage WSL distribution files through the `\\wsl.localhost\<distribution>` share; `/mnt/<drive>/...` paths map directly to local Windows drive letters, with no SFTP subsystem needed
+- **Local terminals / local-file connections** — Browse the local filesystem; on Windows the root shows synthesized drive entries
 
 When no session is available, "No SSH session available" is shown. The **Open SFTP Tab** button at the bottom of the sidebar opens the file panel as an independent tab.
 
@@ -94,8 +96,8 @@ Copy / Cut / Paste are supported:
 
 When the "Follow terminal path" toggle on the transfer panel toolbar is enabled, the file sidebar automatically follows the working directory of the current terminal (implemented via shell directory reporting):
 
-- For SSH connections that did not inject reporting at startup, enabling the toggle injects it into the running shell (bash / zsh / fish only)
-- The WSL panel injects reporting automatically at startup
+- **SSH connections** — the working directory is discovered over SFTP; nothing is injected into the shell, so every shell works
+- **Local and WSL terminals** — never injected at startup; the hook is typed into the current shell only when the toggle is enabled, confirmed per session; bash / zsh / fish (git-bash included) and PowerShell are supported, and git-bash MSYS-style paths (`/c/Users/...`) are normalized to drive-letter form
 
 ### Symbolic Links
 
@@ -141,6 +143,25 @@ uniTerm automatically records commands entered in the terminal, deduplicates the
 - **Run / Paste / Copy** — The same three execution modes as quick commands
 - **Save as quick command** — Select history entries and turn them into quick commands in one click
 - **Delete** — Remove history entries you no longer need
+
+## Command Send
+
+A dockable multi-line command editor for bulk input or sending commands to multiple hosts:
+
+- **Send scope** — the current terminal (follows the active terminal, broadcast sessions included), all terminals in the current workspace, or every terminal tab
+- **Send mode** — multi-line content can be executed **line by line** (each line sent with Enter) or **as a whole block** (bracketed paste)
+- **Send** — `Ctrl+Enter` sends to the connected terminals in the target scope
+- **Drafts persist** — edited content survives restarts
+- **Word wrap** — long commands can wrap inside the editor
+
+## Notes
+
+A dockable Markdown notes panel, always at hand in the sidebar:
+
+- **Create / delete** — manage notes in the left-hand list, with search filtering by title
+- **Category tags** — create categories freely and filter by category
+- **Edit / preview** — switch between Markdown editing and rendered preview; code blocks can be copied with one click
+- **Cloud sync** — notes join the cloud-sync exchange and are shared across devices
 
 ## Monitor Sidebar
 
