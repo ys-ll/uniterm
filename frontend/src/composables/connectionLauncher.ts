@@ -111,6 +111,13 @@ export async function launchWslFileBrowser(config: ConnectionConfig, opts: Launc
   await runSpec('wsl-file', fileConfig, SPECS['wsl-file'], { ...opts, persist: false })
 }
 
+// Open the local file browser (local-file session: dual-pane local view).
+// Never persists — it is a transient companion view of a local terminal.
+export async function launchLocalFileBrowser(config: ConnectionConfig, opts: LaunchOptions = {}) {
+  const fileConfig: ConnectionConfig = { ...config, type: 'local-file' }
+  await runSpec('local-file', fileConfig, SPECS['local-file'], { ...opts, persist: false })
+}
+
 // Open a container's file browser (container-file session over docker
 // exec/cp). Never persists — it is a transient view bound to a container
 // connection; the config carries the container connection id + container id.
@@ -224,6 +231,14 @@ const SPECS: Record<string, ConnectSpec> = {
     needsCredentials: false,
     title: c => c.name || `WSL ${parseWslFromShell(c.shellPath) || ''}`,
     prepare: c => { c.type = 'wsl-file' },
+  },
+  // Local file browser: a dual-pane view over the local filesystem (both
+  // panes are local; the "remote" pane is a second local view with its own
+  // cwd). No credentials, no transport.
+  'local-file': {
+    uiType: 'sftp',
+    needsCredentials: false,
+    title: c => c.name || t('conn.localFiles'),
   },
   // Container file browser: docker exec/cp backed file session over a
   // container connection. The config carries containerFileConnId +

@@ -51,7 +51,7 @@
           @delete="onDelete"
           @mkdir="onMkdir"
           @symlink="onSymlink"
-          :supports-symlink="true"
+          :supports-symlink="!isLocalCompanion"
           show-copy-path-to-terminal
           @chmod="onChmod"
           @send-to-other="onDownloadTo"
@@ -352,6 +352,12 @@ function openStandaloneSftp() {
     }))
     return
   }
+  if (companionStore.isLocalPanel(pid)) {
+    window.dispatchEvent(new CustomEvent('app:connect-local-file', {
+      detail: { ...panel, sourceTabId: panel.tabId, initialPath },
+    }))
+    return
+  }
   const ev = companionStore.isWslPanel(pid) ? 'app:connect-wsl-file' : 'app:connect-sftp'
   // sourceTabId anchors the new tab beside the owning terminal tab
   window.dispatchEvent(new CustomEvent(ev, { detail: { ...panel, sourceTabId: panel.tabId, initialPath } }))
@@ -367,11 +373,16 @@ const followActive = computed(() => {
   const pid = companionStore.activeFilesPanelId
   return !!pid && companionStore.followPathByPanel[pid] === true
 })
-// Following requires an SSH or WSL terminal panel (the only panels that emit
-// terminal:cwd with POSIX paths).
+// Following requires a terminal panel that emits terminal:cwd: SSH (polling),
+// WSL (injected prompt hook) and local terminals (OSC-7 scanner; shells with
+// prompt integration report on their own, others get the hook injected on
+// demand).
 const followSupported = computed(() => !!companionStore.activeFilesPanelId)
 
-// WSL sessions whose terminal reported the cwd hook as requested this
+// Whether the active companion owns a local terminal panel.
+const isLocalCompanion = computed(() => companionStore.isLocalPanel(companionStore.activeFilesPanelId))
+
+// WSL/local sessions whose terminal reported the cwd hook as requested this
 // session: the follow toggle must not re-ask (or re-inject) for them.
 // Per-session by design — the hook lives in the session's shell, so every
 // new session asks once via the toggle confirmation.
@@ -382,7 +393,7 @@ async function toggleFollow() {
   if (!pid) return
   const enabling = companionStore.followPathByPanel[pid] !== true
   const panel = panelStore.getPanel(pid)
-  if (enabling && panel?.type === 'wsl' && panel.sessionId
+  if (enabling && (panel?.type === 'wsl' || panel?.type === 'local') && panel.sessionId
     && !cwdHookRequested.has(panel.sessionId)) {
     // The WSL cwd hook is typed into the session's shell on demand; ask
     // once per session before the first injection (issue #1388: injecting
@@ -442,15 +453,26 @@ function scheduleFollowNavigate(path: string) {
 
 let unsubCwd: (() => void) | null = null
 
+// A local terminal companion browses the local filesystem, whose sessions
+// report OSC-7 cwd as "/C:/Users/x" (url.Parse of "file:///C:/..."). The
+// sidebar and the local-file session speak the drive-first form ("C:/Users/x").
+function normalizeLocalCwdReport(path: string): string {
+  return /^\/[A-Za-z]:/.test(path) ? path.slice(1) : path
+}
+
 function onTerminalCwd(ev: { data?: unknown }) {
   const p = ev?.data as { sessionId?: string; cwd?: string } | undefined
   if (!p?.sessionId || !p.cwd) return
-  // Only the active SSH/WSL panel's own terminal session drives navigation.
+  // Only the active SSH/WSL/local panel's own terminal session drives navigation.
   const pid = companionStore.activeFilesPanelId
   if (!pid || companionStore.followPathByPanel[pid] !== true) return
   const panel = panelStore.getPanel(pid)
   if (!panel || panel.sessionId !== p.sessionId) return
-  if (!p.cwd.startsWith('/')) return // Windows local terminals are out of scope
+  if (companionStore.isLocalPanel(pid)) {
+    scheduleFollowNavigate(normalizeLocalCwdReport(p.cwd))
+    return
+  }
+  if (!p.cwd.startsWith('/')) return // Windows paths only apply to local companions
   scheduleFollowNavigate(p.cwd)
 }
 

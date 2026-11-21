@@ -862,7 +862,9 @@ export interface ListingResult { files: FileItem[]; dir: string }
 /** Resolves '..' and relative names against a POSIX-style cwd (remote panels). */
 export function resolveRemoteTarget(cwd: string, path: string): string {
   if (path === '..') return '/' + cwd.split('/').filter(Boolean).slice(0, -1).join('/')
-  if (!path.startsWith('/')) return joinPath(cwd, path)
+  // Windows-style absolute paths (the local-file browser's remote pane) are
+  // already absolute — same guard resolveLocalTarget applies.
+  if (!path.startsWith('/') && !/^[A-Za-z]:/.test(path)) return joinPath(cwd, path)
   return path
 }
 

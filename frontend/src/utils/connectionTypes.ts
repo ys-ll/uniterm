@@ -12,7 +12,7 @@
 import type { Component } from 'vue'
 import {
   Activity, AppWindow, ArrowLeftRight, Box, Boxes, Cable, Cloud, Database, DatabaseSearch,
-  DatabaseZap, FileBox, FileUp, FolderOpen, FolderUp, Folders, Globe, HardDrive, Laptop,
+  DatabaseZap, FileBox, FileUp, Folder, FolderOpen, FolderUp, Folders, Globe, HardDrive, Laptop,
   LaptopMinimal, LayoutDashboard, Layers, Monitor, MonitorCloud, MonitorSmartphone,
   MoreHorizontal, Settings, ShipWheel, SquarePlus, SquareTerminal, Terminal, Zap,
 } from '@lucide/vue'
@@ -62,8 +62,10 @@ export const CONNECTION_TYPES: ConnectionTypeInfo[] = [
   { type: 'smb', label: 'SMB', icon: HardDrive, category: 'filetransfer', defaultPort: 445, connectMenuKey: 'sidebar.connectSmb' },
   { type: 's3', label: 'S3', icon: Cloud, category: 'filetransfer', connectMenuKey: 'sidebar.connectS3' },
   { type: 'webdav', label: 'WebDAV', icon: Globe, category: 'filetransfer', connectMenuKey: 'sidebar.connectWebdav' },
-  // WSL file browser — a runtime variant of the wsl terminal, never persisted
-  { type: 'wsl-file', label: 'WSL Files', icon: FolderOpen, category: 'filetransfer', formHidden: true },
+  // Local file browser — a dual-pane view over the local filesystem
+  { type: 'local-file', label: 'Local Files', labelKey: 'conn.localFiles', icon: Folder, category: 'filetransfer', connectMenuKey: 'sidebar.connectLocalFile' },
+  // WSL file browser — a dual-pane view over //wsl.localhost/<distro>
+  { type: 'wsl-file', label: 'WSL Files', labelKey: 'conn.wslFiles', icon: FolderOpen, category: 'filetransfer', windowsOnly: true, connectMenuKey: 'sidebar.connectWslFile' },
   // Container file browser — a runtime view over docker exec/cp, never persisted
   { type: 'container-file', label: 'Container Files', icon: FileBox, category: 'filetransfer', formHidden: true },
   // Remote desktop

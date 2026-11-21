@@ -30,8 +30,9 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	}
 	// Server build: a local shell runs as root inside the multi-tenant
 	// container and can read every tenant's data plus the gateway's own
-	// secrets (users.json, JWT key). Disabled unconditionally.
-	if serverMode && sessionType == "local" {
+	// secrets (users.json, JWT key). Disabled unconditionally. local-file
+	// browses the same filesystem, so it is disabled for the same reason.
+	if serverMode && (sessionType == "local" || sessionType == "local-file") {
 		return nil, fmt.Errorf("local terminals are disabled in server mode")
 	}
 	log.Writef("[CreateSession] type=%s, dbType=%s, host=%s, port=%d, user=%s, dbName=%s, name=%s",

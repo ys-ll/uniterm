@@ -6,7 +6,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -166,6 +165,8 @@ func NewWSLFileSession(id string) *WSLFileSession {
 
 // Connect resolves the distro (config.Distro, else config.ShellPath wsl://name),
 // probes the user home inside the distro and marks the session connected.
+// A config.Cwd holding a POSIX path (the standalone "WSL Files" connection's
+// start path) overrides the home probe.
 func (s *WSLFileSession) Connect(config ConnectionConfig) error {
 	distro, _ := parseWSLPath(config.ShellPath)
 	if distro == "" {
@@ -177,7 +178,11 @@ func (s *WSLFileSession) Connect(config ConnectionConfig) error {
 	s.setStatus(StatusConnecting)
 	ctx, cancel := context.WithCancel(context.Background())
 	s.connectCancel = cancel
-	s.cwd = s.resolveHome(ctx, distro)
+	if start := strings.TrimSpace(config.Cwd); strings.HasPrefix(start, "/") {
+		s.cwd = path.Clean(start)
+	} else {
+		s.cwd = s.resolveHome(ctx, distro)
+	}
 	s.setStatus(StatusConnected)
 	return nil
 }
@@ -235,51 +240,10 @@ func (s *WSLFileSession) resolveLocal(p string) string {
 	return filepath.Clean(p)
 }
 
-// joinEntry appends name to a directory. UNC roots stay forward-slashed (see the
-// type doc comment); ordinary local paths use filepath.Join.
-func joinEntry(dir, name string) string {
-	if strings.HasPrefix(dir, `//`) || strings.HasPrefix(dir, `\\`) {
-		return dir + "/" + name
-	}
-	return filepath.Join(dir, name)
-}
+// joinEntry lives in local_file_session.go (shared with the local-file session).
 
-// fileItemsFromDir builds FileItem entries from an os.ReadDir result.
-func fileItemsFromDir(dir string, entries []os.DirEntry) []FileItem {
-	files := make([]FileItem, 0, len(entries))
-	for _, e := range entries {
-		fi, err := e.Info()
-		var mode os.FileMode
-		var modTime time.Time
-		var size int64
-		if err == nil {
-			mode = fi.Mode()
-			modTime = fi.ModTime()
-			size = fi.Size()
-		}
-		isDir := e.IsDir()
-		full := joinEntry(dir, e.Name())
-		if err == nil && mode&os.ModeSymlink != 0 {
-			if target, terr := os.Stat(full); terr == nil && target.IsDir() {
-				isDir = true
-			}
-		}
-		isHidden := e.Name() != "" && e.Name()[0] == '.'
-		if !isHidden {
-			isHidden = isPathHidden(full)
-		}
-		files = append(files, FileItem{
-			Name:     e.Name(),
-			Size:     size,
-			ModTime:  modTime.Format(time.RFC3339),
-			Mode:     mode.String(),
-			IsDir:    isDir,
-			IsHidden: isHidden,
-			Owner:    "",
-		})
-	}
-	return files
-}
+// fileItemsFromDir lives in local_file_session.go (shared with the local-file
+// session, which needs it on every platform).
 
 // --- listing ---------------------------------------------------------------
 
@@ -734,100 +698,8 @@ func (s *WSLFileSession) startLocalTransfer(tfType, local, remote string) (strin
 	return task.ID, nil
 }
 
-// dirSize sums the bytes of a file or all files under a directory tree.
-func dirSize(p string) (int64, error) {
-	fi, err := os.Stat(p)
-	if err != nil {
-		return 0, err
-	}
-	if !fi.IsDir() {
-		return fi.Size(), nil
-	}
-	var total int64
-	var walk func(string) error
-	walk = func(dir string) error {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return err
-		}
-		for _, e := range entries {
-			if ei, err := e.Info(); err == nil && !ei.IsDir() {
-				total += ei.Size()
-				continue
-			}
-			full := joinEntry(dir, e.Name())
-			if fi2, err := os.Stat(full); err == nil && fi2.IsDir() {
-				if err := walk(full); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	return total, walk(p)
-}
-
-// copyPath copies a file or directory tree. task, if non-nil, receives byte
-// progress updates and pauses/cancels via transferTask.
-func copyPath(src, dst string, task *TransferTask) error {
-	fi, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-	if fi.IsDir() {
-		if err := os.MkdirAll(dst, 0o755); err != nil {
-			return err
-		}
-		entries, err := os.ReadDir(src)
-		if err != nil {
-			return err
-		}
-		for _, e := range entries {
-			if err := copyPath(joinEntry(src, e.Name()), joinEntry(dst, e.Name()), task); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	return copyFile(src, dst, task)
-}
-
-func copyFile(src, dst string, task *TransferTask) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	if task != nil {
-		task.waitIfPaused() // blocks while paused / returns on cancel
-	}
-	buf := make([]byte, 64*1024)
-	for {
-		task.waitIfPaused()
-		n, rerr := in.Read(buf)
-		if n > 0 {
-			if _, werr := out.Write(buf[:n]); werr != nil {
-				out.Close()
-				return werr
-			}
-			if task != nil {
-				task.addProgress(int64(n))
-			}
-		}
-		if rerr == io.EOF {
-			break
-		}
-		if rerr != nil {
-			out.Close()
-			return rerr
-		}
-	}
-	return out.Close()
-}
+// dirSize/copyPath/copyFile/joinEntry live in local_file_session.go (shared with
+// the local-file session, which needs the same copy machinery cross-platform).
 
 // RetryTransfer (re)starts a transfer from a frontend-held checkpoint.
 // resolveLocal/resolveRemote are idempotent on the resolved paths the spec
@@ -919,4 +791,3 @@ func (s *WSLFileSession) Disconnect() error {
 	s.setStatus(StatusDisconnected)
 	return nil
 }
-
