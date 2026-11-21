@@ -73,7 +73,7 @@ Quản lý kết nối, chia khung, đồng bộ đám mây, chủ đề & đa n
 
 - **Trình quản lý kết nối** — Nhóm, tìm kiếm và quản lý hàng loạt các kết nối máy chủ; nhập/xuất mã hóa và nhập từ các ứng dụng terminal khác (MobaXterm, Xshell, v.v.).
 - **Không gian làm việc** — Kéo tab terminal vào vùng nội dung để chia tách tự do và kết hợp chúng thành một không gian làm việc; kéo mép các khung để thay đổi kích thước và sắp xếp lại.
-- **Bộ công cụ mạng** — Quét mạng, đường hầm chuyển tiếp cổng SSH và dịch vụ cục bộ để chạy máy chủ tạm thời cho các thiết bị khác.
+- **Bộ công cụ mạng** — Quét mạng, đường hầm chuyển tiếp cổng SSH, bắt gói tin, quản lý tường lửa và dịch vụ cục bộ để chạy máy chủ tạm thời cho các thiết bị khác.
 - **Đồng bộ đám mây** — Đồng bộ đám mây mã hóa với năm chế độ: kho lưu trữ Git, WebDAV, SFTP, S3 và SMB — không lo mất dữ liệu hoặc rò rỉ, và tiếp tục công việc liền mạch trên nhiều thiết bị.
 - **Chủ đề & Quốc tế hóa** — 28 chủ đề terminal cùng 3 chủ đề giao diện (Tối / Xanh đậm / Sáng) và hình nền có thể tùy chỉnh; giao diện 11 ngôn ngữ: tiếng Trung giản thể, tiếng Trung phồn thể, tiếng Anh, tiếng Nhật, tiếng Hàn, tiếng Đức, tiếng Tây Ban Nha, tiếng Pháp, tiếng Nga, tiếng Bồ Đào Nha, tiếng Việt.
 

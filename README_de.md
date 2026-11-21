@@ -73,7 +73,7 @@ Verbindungsverwaltung, geteilte Bereiche, Cloud-Sync, Themes & Internationalisie
 
 - **Verbindungsmanager** — Serververbindungen gruppieren, durchsuchen und im Stapel verwalten; verschlüsselter Import/Export sowie Import aus anderen Terminal-Apps (MobaXterm, Xshell usw.).
 - **Workspace** — Terminal-Tabs per Drag & Drop in den Inhaltsbereich ziehen, um sie frei zu teilen und zu einem Workspace zu kombinieren; Panelränder ziehen, um Größe und Anordnung anzupassen.
-- **Netzwerk-Toolbox** — Netzwerkscan, SSH-Port-Weiterleitungs-Tunnel und lokale Dienste zum Betreiben temporärer Server für andere Geräte.
+- **Netzwerk-Toolbox** — Netzwerkscan, SSH-Port-Weiterleitungs-Tunnel, Traffic-Capture, Firewall-Verwaltung und lokale Dienste zum Betreiben temporärer Server für andere Geräte.
 - **Cloud-Sync** — Verschlüsselte Cloud-Synchronisierung in fünf Modi: Git-Repository, WebDAV, SFTP, S3 und SMB — keine Sorge um Datenverlust oder Datenlecks, und nahtloses Weiterarbeiten über Geräte hinweg.
 - **Themes & Internationalisierung** — 28 Terminal-Themes sowie 3 UI-Themes (Dark / Deep Blue / Light) und ein anpassbares Hintergrundbild; UI in 11 Sprachen: Englisch, Deutsch, Spanisch, Französisch, Russisch, Portugiesisch, Japanisch, Koreanisch, vereinfachtes Chinesisch, traditionelles Chinesisch, Vietnamesisch.
 

@@ -33,6 +33,8 @@ uniTerm supports 30+ connection protocols, covering terminals, remote desktops, 
 | SMB | 445 | Windows file sharing |
 | WebDAV | 80 / 443 | HTTP-based file management |
 | S3 | Custom | S3 API-compatible object storage |
+| Local File | Local | Dual-pane browser over the local filesystem |
+| WSL File | Local | File browser for WSL distributions (Windows only) |
 | Zmodem | - (within SSH terminals) | `rz`/`sz` transfers inside SSH terminals, with a configurable default download directory |
 
 ## Databases

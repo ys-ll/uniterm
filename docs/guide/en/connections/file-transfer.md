@@ -80,6 +80,26 @@ Amazon S3 API-compatible object storage. Also supports MinIO, Alibaba Cloud OSS,
 | Region | Region |
 | URL Style | Virtual-hosted (default) for Alibaba Cloud OSS / Tencent COS / Huawei OBS; Path for AWS S3 / MinIO |
 
+### Local File
+
+Use the dual-pane file browser over the local filesystem — both sides are local directories (the right side is a second local view with its own path; on Windows the root synthesizes drive entries).
+
+| Parameter | Description |
+|------|------|
+| Name | Connection name |
+
+### WSL File
+
+Browse the filesystem inside WSL distributions (Windows only).
+
+| Parameter | Description |
+|------|------|
+| Name | Connection name |
+| Distribution | Pick an installed WSL distribution |
+| Start Path | Optional, POSIX path to enter on open |
+
+> The terminal context-menu "Open WSL File" entry still opens the current distribution's file browser directly, without creating a connection.
+
 
 ## File Browser
 

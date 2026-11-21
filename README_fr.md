@@ -73,7 +73,7 @@ Gestion des connexions, volets divisés, synchronisation cloud, thèmes et i18n 
 
 - **Gestionnaire de connexions** — Regroupement, recherche et gestion par lot des connexions serveur ; import/export chiffré, et import depuis d'autres applications de terminal (MobaXterm, Xshell, etc.).
 - **Espace de travail** — Faites glisser les onglets de terminal dans la zone de contenu pour les diviser librement et les combiner en un espace de travail ; faites glisser les bords des panneaux pour redimensionner et réorganiser.
-- **Boîte à outils réseau** — Scan réseau, tunnels de redirection de ports SSH et services locaux pour exécuter des serveurs temporaires pour d'autres appareils.
+- **Boîte à outils réseau** — Scan réseau, tunnels de redirection de ports SSH, capture de trafic, gestion du pare-feu et services locaux pour exécuter des serveurs temporaires pour d'autres appareils.
 - **Synchronisation cloud** — Synchronisation cloud chiffrée en cinq modes : dépôt Git, WebDAV, SFTP, S3 et SMB — sans craindre la perte ni la fuite de données, et reprenez votre travail en toute transparence entre les appareils.
 - **Thèmes et internationalisation** — 28 thèmes de terminal plus 3 thèmes d'interface (Sombre / Bleu profond / Clair) et une image de fond personnalisable ; interface en 11 langues : chinois simplifié, chinois traditionnel, anglais, japonais, coréen, allemand, espagnol, français, russe, portugais, vietnamien.
 

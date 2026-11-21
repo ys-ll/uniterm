@@ -1,12 +1,14 @@
 # Network Toolbox
 
-The uniTerm Network Toolbox gathers common network tools in one place, with three parts:
+The uniTerm Network Toolbox gathers common network tools in one place, with five parts:
 
 - **Network Scan** — discover reachable hosts and open ports on a subnet
 - **Local Network Services** — run temporary TFTP / FTP / HTTP / SSH/SFTP / Telnet / NFS / S3 servers on this machine for other devices to access
+- **Traffic Capture** — capture packets on a local adapter or a remote host in real time, with filters and protocol decoding
+- **Firewall Management** — manage firewalld / ufw over SSH: on / off, boot auto-start, and inbound port rules
 - **SSH Tunnel** — local / remote / dynamic port forwarding with multi-tunnel management and monitoring
 
-Entry: header menu → **Network → Network Scan / Local Network Services / SSH Tunnels**.
+Entry: header menu → **Network → Network Scan / Local Network Services / Traffic Capture / Firewall Management / SSH Tunnels**.
 
 ## Network Scan
 
@@ -57,6 +59,31 @@ Common settings:
 ::: warning Security note
 FTP and Telnet are plaintext protocols; use them temporarily on trusted networks only, and let "Auto stop" shut services down for you.
 :::
+
+## Traffic Capture
+
+Capture and decode packets on a network interface in real time, in local or remote mode:
+
+- **Local** — pick a local adapter and start capturing. On Windows, if the app is not running as administrator an elevated worker process is launched automatically; on Linux / macOS root or the equivalent privilege is required (`CAP_NET_RAW` / `/dev/bpf`)
+- **Remote** — pick an SSH host and a remote interface (or "all interfaces"); traffic is captured with `tcpdump` on the remote host (the target host must have tcpdump installed, e.g. `sudo apt install tcpdump`)
+
+Features:
+
+- **Filter** — BPF-style expressions supporting `tcp / udp / icmp / arp / ipv4 / ipv6`, `port N`, `host IP`, `src / dst`; leave empty to capture everything
+- **Live list** — time / protocol / source / destination / service / flags / length columns refresh in real time; click a packet to see its per-protocol field tree and raw data (hex)
+- **Export** — save results as CSV or PCAP
+- **Capture cap** — capture stops automatically when the buffer limit is reached, so memory cannot grow unbounded
+
+## Firewall Management
+
+Manage the firewall of a Linux host over SSH (firewalld and ufw are supported) — handy for remote servers without a desktop environment:
+
+- **Host** — pick an SSH host to connect to; the target must have firewalld or ufw installed, and the account needs root or sudo privileges
+- **Firewall status** — view and toggle the running state (on / off)
+- **Boot auto-start** — toggle whether the firewall is loaded automatically on system restart, independent of the current running state
+- **Port rules** — add inbound allow rules: a single port or a range (e.g. `8000-8100`), with an optional source IP (empty = any); rules can be removed from the list
+- **Save / Apply** — firewalld rules are written to the permanent configuration first, then applied manually to reload; UFW rule changes take effect immediately on save
+- **SSH self-lockout check** — before saving / applying, the inbound allow rule for the current SSH port is verified so you cannot lock yourself out of the server
 
 ## SSH Tunnel
 

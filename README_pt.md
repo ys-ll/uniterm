@@ -73,7 +73,7 @@ Gerenciamento de conexões, painéis divididos, sincronização em nuvem, temas 
 
 - **Gerenciador de Conexões** — Agrupe, pesquise e gerencie em lote conexões de servidores; importação/exportação criptografada e importação de outros apps de terminal (MobaXterm, Xshell etc.).
 - **Workspace** — Arraste abas de terminal para a área de conteúdo para dividir livremente e combiná-las em um workspace; arraste as bordas dos painéis para redimensionar e reorganizar.
-- **Caixa de Ferramentas de Rede** — Varredura de rede, túneis de encaminhamento de porta SSH e serviços locais para executar servidores temporários para outros dispositivos.
+- **Caixa de Ferramentas de Rede** — Varredura de rede, túneis de encaminhamento de porta SSH, captura de tráfego, gerenciamento de firewall e serviços locais para executar servidores temporários para outros dispositivos.
 - **Sincronização em Nuvem** — Sincronização em nuvem criptografada em cinco modos: repositório Git, WebDAV, SFTP, S3 e SMB — sem se preocupar com perda ou vazamento de dados, e retome seu trabalho perfeitamente entre dispositivos.
 - **Temas e Internacionalização** — 28 temas de terminal, além de 3 temas de UI (Escuro / Azul Profundo / Claro) e uma imagem de fundo personalizável; UI em 11 idiomas: chinês simplificado, chinês tradicional, inglês, japonês, coreano, alemão, espanhol, francês, russo, português, vietnamita.
 
