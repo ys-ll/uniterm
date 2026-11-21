@@ -103,37 +103,58 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 		InsecureSkipVerify: config.FtpSkipVerify,
 	}
 
-	var conn *ftp.ServerConn
-	var err error
+	tryConnect := func(opts []ftp.DialOption) (*ftp.ServerConn, error) {
+		var c *ftp.ServerConn
+		var e error
 
-	switch encryption {
-	case "required":
-		conn, err = ftp.Dial(addr,
-			append(dialOpts, ftp.DialWithExplicitTLS(tlsConfig))...)
-		if err != nil {
-			s.setStatus(StatusError)
-			return fmt.Errorf("ftp dial (TLS required): %w", err)
+		switch encryption {
+		case "required":
+			c, e = ftp.Dial(addr,
+				append(opts, ftp.DialWithExplicitTLS(tlsConfig))...)
+			if e != nil {
+				return nil, fmt.Errorf("ftp dial (TLS required): %w", e)
+			}
+		case "auto":
+			c, e = ftp.Dial(addr,
+				append(opts, ftp.DialWithExplicitTLS(tlsConfig))...)
+			if e != nil {
+				// Fall back to plain FTP
+				c, e = ftp.Dial(addr, opts...)
+			}
+		default: // "none"
+			c, e = ftp.Dial(addr, opts...)
 		}
-	case "auto":
-		conn, err = ftp.Dial(addr,
-			append(dialOpts, ftp.DialWithExplicitTLS(tlsConfig))...)
-		if err != nil {
-			// Fall back to plain FTP
-			conn, err = ftp.Dial(addr, dialOpts...)
+
+		if e != nil {
+			return nil, fmt.Errorf("ftp dial: %w", e)
 		}
-	default: // "none"
-		conn, err = ftp.Dial(addr, dialOpts...)
+
+		if e := c.Login(config.User, config.Password); e != nil {
+			c.Quit()
+			return nil, fmt.Errorf("ftp login: %w", e)
+		}
+
+		return c, nil
+	}
+
+	// 1. Try standard connection first (with OPTS UTF8 negotiation if enc == nil).
+	conn, err := tryConnect(dialOpts)
+
+	// 2. Smart fallback for legacy/embedded FTP servers (e.g., Xbox 360 Aurora, PS3)
+	// that reject "OPTS UTF8 ON" with 500 command not found.
+	if err != nil && enc == nil {
+		fallbackOpts := make([]ftp.DialOption, 0, len(dialOpts)+1)
+		fallbackOpts = append(fallbackOpts, dialOpts...)
+		fallbackOpts = append(fallbackOpts, ftp.DialWithDisabledUTF8(true))
+		if fallbackConn, fallbackErr := tryConnect(fallbackOpts); fallbackErr == nil {
+			conn = fallbackConn
+			err = nil
+		}
 	}
 
 	if err != nil {
 		s.setStatus(StatusError)
-		return fmt.Errorf("ftp dial: %w", err)
-	}
-
-	if err := conn.Login(config.User, config.Password); err != nil {
-		conn.Quit()
-		s.setStatus(StatusError)
-		return fmt.Errorf("ftp login: %w", err)
+		return err
 	}
 
 	s.conn = conn
@@ -229,7 +250,17 @@ func (s *FTPSession) ftpEncodePath(p string) string {
 // Encoded-path wrappers around the raw connection. All outgoing paths go
 // through ftpEncodePath so non-UTF-8 servers see names in their own charset.
 func (s *FTPSession) ftpList(dir string) ([]*ftp.Entry, error) {
-	return s.conn.List(s.ftpEncodePath(dir))
+	encPath := s.ftpEncodePath(dir)
+
+	// Legacy/embedded FTP servers (such as Xbox 360 Aurora) do not support
+	// "LIST <path>" directly and require "CWD <path>" followed by "LIST".
+	if err := s.conn.ChangeDir(encPath); err == nil {
+		if entries, err := s.conn.List(""); err == nil {
+			return entries, nil
+		}
+	}
+
+	return s.conn.List(encPath)
 }
 func (s *FTPSession) ftpMakeDir(dir string) error {
 	return s.conn.MakeDir(s.ftpEncodePath(dir))
