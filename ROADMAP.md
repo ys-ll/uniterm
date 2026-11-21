@@ -121,7 +121,7 @@ Legend: ✅ Shipped, 🚧 Planned
 | Connection Import / Export | ✅ | v1.8.0 | Import and export connection configurations |  |
 | Session Recording | ✅ | v1.12.0 | Record a terminal session to asciinema cast v2 and replay it | [@laigcss](https://github.com/laigcss) |
 
-## Network Toolbox
+### Network Toolbox
 
 | Tool | Status | Since | Notes | Contributor |
 |------|--------|-------|-------|-------------|
@@ -131,7 +131,7 @@ Legend: ✅ Shipped, 🚧 Planned
 | Traffic Capture | ✅ | v1.12.4 | Local / remote packet capture | [@etanman](https://github.com/etanman) |
 | Firewall Management | ✅ | v1.12.4 | firewalld / ufw over SSH | [@etanman](https://github.com/etanman) |
 
-## Sidebar Panels
+### Sidebar Panels
 
 | Panel | Status | Since | Notes | Contributor |
 |-------|--------|-------|-------|-------------|
