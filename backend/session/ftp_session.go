@@ -158,7 +158,9 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 	}
 
 	s.conn = conn
+	s.mu.Lock()
 	s.cwd = "/"
+	s.mu.Unlock()
 	s.encName = encName
 	s.enc = enc
 	s.rawNames = sync.Map{} // fresh connection, no names seen yet
@@ -191,6 +193,7 @@ func (s *FTPSession) Disconnect() error {
 		s.conn.Quit()
 		s.conn = nil
 	}
+	s.rawNames = sync.Map{}
 	s.setStatus(StatusDisconnected)
 	return nil
 }
@@ -200,6 +203,16 @@ func (s *FTPSession) IsConnected() bool {
 }
 
 // --- Internal helpers ---
+
+func (s *FTPSession) resolveRemotePath(p string) string {
+	if path.IsAbs(p) {
+		return p
+	}
+	s.mu.RLock()
+	cwd := s.cwd
+	s.mu.RUnlock()
+	return path.Join(cwd, p)
+}
 
 // ftpDecodeName converts a raw name from the server's listing into UTF-8 for
 // display. In UTF-8 mode names that are not valid UTF-8 are assumed to be GBK
@@ -325,9 +338,11 @@ func (s *FTPSession) ListRemote(dir string) (FileListResult, error) {
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
 	if dir == "" {
+		s.mu.RLock()
 		dir = s.cwd
-	} else if !path.IsAbs(dir) {
-		dir = path.Join(s.cwd, dir)
+		s.mu.RUnlock()
+	} else {
+		dir = s.resolveRemotePath(dir)
 	}
 	entries, err := s.ftpList(dir)
 	if err != nil {
@@ -366,10 +381,7 @@ func (s *FTPSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 	if err := s.requireClient(); err != nil {
 		return FileListResult{}, err
 	}
-	target := dir
-	if !path.IsAbs(dir) {
-		target = path.Join(s.cwd, dir)
-	}
+	target := s.resolveRemotePath(dir)
 	// Validate directory exists by listing it — must hold connMu because
 	// the FTP control connection is not concurrent-safe (SESSION-15).
 	s.connMu.Lock()
@@ -410,10 +422,7 @@ func (s *FTPSession) MakeDir(dir string) error {
 	}
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
-	p := dir
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
-	}
+	p := s.resolveRemotePath(dir)
 	return s.ftpMakeDir(p)
 }
 
@@ -423,9 +432,7 @@ func (s *FTPSession) Remove(p string, recursive bool) error {
 	}
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
-	if !path.IsAbs(p) {
-		p = path.Join(s.cwd, p)
-	}
+	p = s.resolveRemotePath(p)
 	if recursive {
 		return s.rmRecursive(p)
 	}
@@ -448,14 +455,8 @@ func (s *FTPSession) Rename(oldName, newName string) error {
 	}
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
-	old := oldName
-	if !path.IsAbs(old) {
-		old = path.Join(s.cwd, old)
-	}
-	newPath := newName
-	if !path.IsAbs(newPath) {
-		newPath = path.Join(s.cwd, newPath)
-	}
+	old := s.resolveRemotePath(oldName)
+	newPath := s.resolveRemotePath(newName)
 	return s.ftpRename(old, newPath)
 }
 
@@ -467,10 +468,7 @@ func (s *FTPSession) Get(remotePath, localPath string, recursive bool) (string, 
 	if err := s.requireClient(); err != nil {
 		return "", err
 	}
-	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
-	}
+	rp := s.resolveRemotePath(remotePath)
 	lp := localPath
 	if !filepath.IsAbs(lp) {
 		lp = filepath.Join(s.localCwd, lp)
@@ -542,10 +540,7 @@ func (s *FTPSession) Put(localPath, remotePath string, recursive bool) (string, 
 	if !filepath.IsAbs(lp) {
 		lp = filepath.Join(s.localCwd, lp)
 	}
-	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
-	}
+	rp := s.resolveRemotePath(remotePath)
 	if recursive {
 		total, err := s.dirSizeLocal(lp)
 		if err != nil {
@@ -611,10 +606,9 @@ func (s *FTPSession) PutContent(remotePath string, content []byte) error {
 	if err := s.requireClient(); err != nil {
 		return err
 	}
-	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
-	}
+	s.connMu.Lock()
+	defer s.connMu.Unlock()
+	rp := s.resolveRemotePath(remotePath)
 	// Ensure parent directory exists
 	parentDir := path.Dir(rp)
 	if err := s.mkdirAllRemote(parentDir); err != nil {
@@ -631,10 +625,7 @@ func (s *FTPSession) GetContent(remotePath string) ([]byte, error) {
 	}
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
-	rp := remotePath
-	if !path.IsAbs(rp) {
-		rp = path.Join(s.cwd, rp)
-	}
+	rp := s.resolveRemotePath(remotePath)
 	r, err := s.ftpRetr(rp)
 	if err != nil {
 		return nil, err
@@ -650,14 +641,8 @@ func (s *FTPSession) Copy(oldPath, newPath string) error {
 	}
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
-	old := oldPath
-	if !path.IsAbs(old) {
-		old = path.Join(s.cwd, old)
-	}
-	n := newPath
-	if !path.IsAbs(n) {
-		n = path.Join(s.cwd, n)
-	}
+	old := s.resolveRemotePath(oldPath)
+	n := s.resolveRemotePath(newPath)
 	// FTP cannot copy directories via Retr, check first
 	if _, listErr := s.ftpList(old); listErr == nil {
 		return fmt.Errorf("cannot copy directory via FTP: %s", old)
@@ -1106,6 +1091,10 @@ func (s *FTPSession) transferFile(task *TransferTask, localPath, remotePath, tfT
 				s.emitTransferProgress(task)
 			}
 			if e != nil {
+				if e != io.EOF {
+					pw.CloseWithError(e)
+					return e
+				}
 				break
 			}
 		}
