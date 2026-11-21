@@ -39,6 +39,11 @@ interface LocalState {
   // SFTP file-list columns the user hid via the header context menu. Columns
   // absent from the list stay visible.
   sftpHiddenColumns: string[]
+  // Show-hidden-files toggle of the SFTP file list, one per pane mode (local
+  // vs remote). Shared by every file list of the same mode; local-only UI
+  // preference, never synced.
+  sftpShowHiddenLocal: boolean
+  sftpShowHiddenRemote: boolean
   // Last directory used by the SFTP upload/download pickers (shared by both).
   // Per device — never synced.
   sftpDialogDir: string
@@ -83,6 +88,8 @@ const DEFAULT: LocalState = {
   systemTitleBar: false,
   externalEditor: '',
   sftpHiddenColumns: [],
+  sftpShowHiddenLocal: false,
+  sftpShowHiddenRemote: false,
   sftpDialogDir: '',
   mcp: { ...DEFAULT_MCP_SETTINGS },
   lastTabsSnapshot: null,

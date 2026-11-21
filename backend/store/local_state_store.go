@@ -53,6 +53,11 @@ type LocalState struct {
 	// context menu (type/modTime/size/permission/owner/group). Local-only UI
 	// state, never synced; columns absent from the list stay visible.
 	SftpHiddenColumns []string `json:"sftpHiddenColumns,omitempty"`
+	// Show-hidden-files toggles of the SFTP file list, one per pane mode
+	// (local vs remote). Shared by every file list of the same mode;
+	// local-only UI preference, never synced.
+	SftpShowHiddenLocal  bool `json:"sftpShowHiddenLocal"`
+	SftpShowHiddenRemote bool `json:"sftpShowHiddenRemote"`
 	// SftpDialogDir is the last directory used by the SFTP upload/download
 	// pickers (one shared path for both). Local-only, never synced. The
 	// backend skips it when it no longer exists (resolveDialogDir).
