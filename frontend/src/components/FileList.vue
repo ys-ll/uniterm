@@ -390,7 +390,23 @@ const { t, locale } = useI18n()
 const localStateStore = useLocalStateStore()
 
 const filterText = ref('')
-const showHidden = ref(false)
+// Clearing the name filter when the directory changes (issue #1572): a filter
+// left over from the previous folder empties the new listing. Refreshing the
+// same directory keeps the filter.
+watch(() => props.breadcrumbPath, () => { filterText.value = '' })
+// Show-hidden is a per-mode preference persisted in local_state.json: every
+// FileList of the same mode (dual-pane tab, sidebar) shares one value and it
+// survives restarts.
+const showHidden = computed({
+  get: () => props.mode === 'local'
+    ? !!localStateStore.state.sftpShowHiddenLocal
+    : !!localStateStore.state.sftpShowHiddenRemote,
+  set: (v: boolean) => {
+    void localStateStore.update(props.mode === 'local'
+      ? { sftpShowHiddenLocal: v }
+      : { sftpShowHiddenRemote: v })
+  },
+})
 const selectedItems = ref<FileItem[]>([])
 // Keep the selection pointing at live row objects: after a refresh the list is
 // rebuilt with new objects, and stale ones would carry outdated fields (e.g.
@@ -545,7 +561,9 @@ const filteredFiles = computed(() => {
   }
   const q = filterText.value.trim().toLowerCase()
   if (!q) return list
-  return list.filter(f => f.name.toLowerCase().includes(q))
+  // '..' is navigation, not an entry: keep it listed even while filtering so
+  // the way back up is always reachable.
+  return list.filter(f => f.name === '..' || f.name.toLowerCase().includes(q))
 })
 
 // --- Progressive loading ---------------------------------------------------
