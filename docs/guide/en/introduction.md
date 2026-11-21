@@ -2,7 +2,7 @@
 
 uniTerm is a lightweight all-in-one terminal emulator supporting **30+** connection protocols, covering remote terminals, remote desktops, file transfers, database management, containers, and server monitoring. It ships with a built-in **autonomous AI Agent** that can independently plan and execute multi-round shell commands.
 
-Supported platforms: **Windows / macOS / Linux / Android**.
+Supported platforms: **Windows / macOS / Linux / Android / Docker Web**.
 
 
 ## Core Features

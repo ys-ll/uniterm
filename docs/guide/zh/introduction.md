@@ -2,7 +2,7 @@
 
 uniTerm 是一款轻量级全能终端模拟器，支持 **30+** 种连接协议，覆盖远程终端、远程桌面、文件传输、数据库管理、容器和服务器监控。内置**自主 AI Agent**，可独立规划并执行多轮 Shell 命令。
 
-支持的平台：**Windows / macOS / Linux / Android**。
+支持的平台：**Windows / macOS / Linux / Android / Docker Web**。
 
 
 ## 核心特性
