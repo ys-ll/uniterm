@@ -4,6 +4,18 @@ This document tracks the protocols and core features uniTerm already ships, and 
 
 Legend: ✅ Shipped, 🚧 Planned
 
+## Platform Support
+
+| Platform | Status | Since | Notes | Contributor |
+|----------|--------|-------|-------|-------------|
+| Windows | ✅ | initial release | amd64 / arm64 |  |
+| macOS | ✅ | initial release | Apple Silicon / Intel |  |
+| Linux | ✅ | initial release | TAR.GZ / DEB / RPM, amd64 / arm64 |  |
+| Android | ✅ | v1.10.0 | Touch and narrow-viewport adaptation for phones |  |
+| Docker Web | ✅ | v1.12.0 | Browser-accessible multi-tenant deployment | [@NatureLProokie](https://github.com/NatureLProokie) |
+| HarmonyOS | 🚧 | planned | |  |
+| iOS | 🚧 | planned | |  |
+
 ## Protocol Support
 
 ### Terminal
@@ -29,6 +41,8 @@ Legend: ✅ Shipped, 🚧 Planned
 | WebDAV | ✅ | v1.2.2 | WebDAV file management |  |
 | S3 | ✅ | v1.2.2 | Amazon S3 compatible object storage |  |
 | SCP | ✅ | v1.9.3 | Fallback for legacy SSH servers without SFTP support |  |
+| WSL File | ✅ | v1.9.4 | WSL distribution file browser |  |
+| Local File | ✅ | v1.12.4 | Dual-pane browser over the local filesystem |  |
 
 ### Remote Desktop
 
@@ -96,17 +110,37 @@ Legend: ✅ Shipped, 🚧 Planned
 | Feature | Status | Since | Notes | Contributor |
 |---------|--------|-------|-------|-------------|
 | Workspace | ✅ | v2026.05.13-alpha | Split panes and broadcast input |  |
+| Broadcast Input | ✅ | v2026.05.22-alpha | Send keyboard input to all or selected panels |  |
 | Cloud Sync | ✅ | v2026.05.24-alpha | Encrypted sync via your own private repo |  |
 | Terminal Search | ✅ | v2026.05.27-alpha | In-terminal text search |  |
-| Command History | ✅ | v2026.05.29-alpha | Searchable terminal command history |  |
 | Smart Completion | ✅ | v2026.05.29-alpha | Real-time command suggestions |  |
 | Server Monitor | ✅ | v2026.05.29-alpha | Real-time server metrics |  |
 | Text Highlighting | ✅ | v2026.06.02-alpha | Terminal text highlighting |  |
 | SSH Jump Host | ✅ | v2026.06.14-alpha | Route connections through an SSH jump host |  |
-| Quick Commands | ✅ | v1.0.1 | Manage and run reusable commands |  |
 | Session Logging | ✅ | v1.4.0 | Log terminal output to file | [@wangxufeng](https://github.com/wangxufeng) |
-| SSH Tunnel Manager | ✅ | v1.4.1 | Local, remote, and dynamic port forwarding | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
 | Connection Import / Export | ✅ | v1.8.0 | Import and export connection configurations |  |
+| Session Recording | ✅ | v1.12.0 | Record a terminal session to asciinema cast v2 and replay it | [@laigcss](https://github.com/laigcss) |
+
+## Network Toolbox
+
+| Tool | Status | Since | Notes | Contributor |
+|------|--------|-------|-------|-------------|
+| SSH Tunnel Manager | ✅ | v1.4.1 | Local / remote / dynamic port forwarding | [@surenwuyuwuqiu](https://github.com/surenwuyuwuqiu) |
+| Network Scan | ✅ | v1.11.2 | IP / port scan | [@etanman](https://github.com/etanman) |
+| Local Network Services | ✅ | v1.12.0 | Temporary local servers | [@etanman](https://github.com/etanman) |
+| Traffic Capture | ✅ | v1.12.4 | Local / remote packet capture | [@etanman](https://github.com/etanman) |
+| Firewall Management | ✅ | v1.12.4 | firewalld / ufw over SSH | [@etanman](https://github.com/etanman) |
+
+## Sidebar Panels
+
+| Panel | Status | Since | Notes | Contributor |
+|-------|--------|-------|-------|-------------|
+| History | ✅ | v2026.05.29-alpha | Searchable terminal command history |  |
+| Quick Commands | ✅ | v1.0.1 | Send saved command snippets to the terminal |  |
+| Files | ✅ | v1.9.0 | File management following the current connection | [@iCarrear](https://github.com/iCarrear) |
+| Monitor | ✅ | v1.9.0 | Real-time resource metrics of the current host | [@iCarrear](https://github.com/iCarrear) |
+| Command Send | ✅ | v1.12.3 | Multi-line editor for current terminal / workspace / all tabs |  |
+| Notes | ✅ | v1.12.4 | Markdown notes with categories and cloud sync |  |
 
 ## Contributing
 
