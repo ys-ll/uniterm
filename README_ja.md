@@ -50,7 +50,7 @@
 リモートターミナル、ローカルとシリアルのターミナル、ファイル転送、リモートデスクトップ、データベース、コンテナ、サーバーの監視まで、リモートアクセスに必要なものをすべてカバーします。
 
 - **ターミナル** — SSH / Telnet / Mosh / Raw TCP / シリアル、さらにローカルシェル（PowerShell / CMD / Git Bash / WSL）。
-- **ファイル転送** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem。2 ペインでのブラウジングと、SSH のターミナルでの `rz`/`sz` に対応しています。
+- **ファイル転送** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / ローカルファイル / WSL ファイル / Zmodem。2 ペインでのブラウジングと、SSH のターミナルでの `rz`/`sz` に対応しています。
 - **リモートデスクトップ** — RDP（Windows のリモートデスクトップ）、VNC（Linux のリモート操作）、SPICE（KVM/QEMU の仮想マシン）、X11（X Window のフォワーディング）
 - **データベースのクライアント** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch。AI による自然言語でのクエリと、データの行の編集に対応しています。
 - **Kubernetes とコンテナ** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC。クラスターのリソースとイメージの管理、Pod のログと exec のターミナル、CPU/メモリーのメトリクスに対応しています。
@@ -94,6 +94,8 @@
 | ファイル転送 | SMB | Windows の共有フォルダー、NAS のファイルへのアクセス |
 | ファイル転送 | WebDAV | WebDAV サーバーのファイルの管理 |
 | ファイル転送 | S3 | Amazon S3 互換のオブジェクトストレージ |
+| ファイル転送 | ローカルファイル | ローカルファイルシステムの 2 ペインブラウザ |
+| ファイル転送 | WSL ファイル | WSL ディストリビューション向けのファイルブラウザ (Windows のみ) |
 | ファイル転送 | Zmodem | rz/sz コマンドによるターミナル内でのファイル転送 |
 | リモートデスクトップ | RDP | Windows サーバーのリモートデスクトップの管理 |
 | リモートデスクトップ | VNC | Linux サーバーのリモート操作 |
@@ -354,6 +356,7 @@ Issue、提案、フィードバックは [GitHub Issues](https://github.com/ys-
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
+    <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
   </tr>
 </table>
 

@@ -50,7 +50,7 @@
 Terminal từ xa, terminal cục bộ & cổng serial, truyền tệp, máy tính từ xa, cơ sở dữ liệu, container và giám sát máy chủ — đáp ứng mọi nhu cầu truy cập từ xa.
 
 - **Terminal** — SSH / Telnet / Mosh / Raw TCP / Serial, cùng các shell cục bộ (PowerShell / CMD / Git Bash / WSL).
-- **Truyền tệp** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem với duyệt tệp hai khung và hỗ trợ `rz`/`sz` trong terminal SSH.
+- **Truyền tệp** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Tệp cục bộ / Tệp WSL / Zmodem với duyệt tệp hai khung và hỗ trợ `rz`/`sz` trong terminal SSH.
 - **Máy tính từ xa** — RDP (Remote Desktop của Windows), VNC (điều khiển từ xa Linux), SPICE (máy ảo KVM/QEMU), X11 (chuyển tiếp X Window)
 - **Ứng dụng khách cơ sở dữ liệu** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, với truy vấn ngôn ngữ tự nhiên hỗ trợ bởi AI và chỉnh sửa trực tiếp các dòng dữ liệu.
 - **Kubernetes & Container** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, với quản lý tài nguyên & image của cluster, log Pod và terminal exec, cùng chỉ số CPU/bộ nhớ.
@@ -94,6 +94,8 @@ Quản lý kết nối, chia khung, đồng bộ đám mây, chủ đề & đa n
 | Truyền tệp | SMB | Thư mục chia sẻ Windows, truy cập tệp NAS |
 | Truyền tệp | WebDAV | Quản lý tệp trên máy chủ WebDAV |
 | Truyền tệp | S3 | Lưu trữ đối tượng tương thích Amazon S3 |
+| Truyền tệp | Tệp cục bộ | Trình duyệt hai khung cho hệ thống tệp cục bộ |
+| Truyền tệp | Tệp WSL | Trình duyệt tệp cho các bản phân phối WSL (chỉ Windows) |
 | Truyền tệp | Zmodem | Truyền tệp trong terminal qua các lệnh rz/sz |
 | Máy tính từ xa | RDP | Quản lý máy tính từ xa máy chủ Windows |
 | Máy tính từ xa | VNC | Điều khiển từ xa máy chủ Linux |
@@ -354,6 +356,7 @@ Cảm ơn những người đã đóng góp mã nguồn và cải tiến dưới
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
+    <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
   </tr>
 </table>
 

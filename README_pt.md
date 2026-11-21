@@ -50,7 +50,7 @@
 Terminal remoto, terminal local e serial, transferência de arquivos, área de trabalho remota, banco de dados, containers e monitoramento de servidores — cobrindo todas as necessidades de acesso remoto.
 
 - **Terminal** — SSH / Telnet / Mosh / Raw TCP / Serial, além de shells locais (PowerShell / CMD / Git Bash / WSL).
-- **Transferência de Arquivos** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, com navegação em painéis duplos e suporte a `rz`/`sz` em terminais SSH.
+- **Transferência de Arquivos** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Arquivo local / Arquivos WSL / Zmodem, com navegação em painéis duplos e suporte a `rz`/`sz` em terminais SSH.
 - **Área de Trabalho Remota** — RDP (área de trabalho remota do Windows), VNC (controle remoto de Linux), SPICE (máquinas virtuais KVM/QEMU), X11 (encaminhamento do X Window)
 - **Cliente de Banco de Dados** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, com consultas em linguagem natural assistidas por IA e edição de linhas de dados.
 - **Kubernetes e Containers** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, com gerenciamento de recursos e imagens do cluster, logs de Pods e terminais exec, e métricas de CPU/memória.
@@ -94,6 +94,8 @@ Gerenciamento de conexões, painéis divididos, sincronização em nuvem, temas 
 | Transferência de Arquivos | SMB | Pastas compartilhadas do Windows, acesso a arquivos em NAS |
 | Transferência de Arquivos | WebDAV | Gerenciamento de arquivos em servidores WebDAV |
 | Transferência de Arquivos | S3 | Armazenamento de objetos compatível com Amazon S3 |
+| Transferência de Arquivos | Arquivo local | Navegador de dois painéis do sistema de arquivos local |
+| Transferência de Arquivos | Arquivos WSL | Navegador de arquivos para distribuições WSL (apenas Windows) |
 | Transferência de Arquivos | Zmodem | Transferência de arquivos no terminal via comandos rz/sz |
 | Área de Trabalho Remota | RDP | Gerenciamento de área de trabalho remota de servidores Windows |
 | Área de Trabalho Remota | VNC | Controle remoto de servidores Linux |
@@ -354,6 +356,7 @@ Agradecemos às seguintes pessoas por contribuírem com código e melhorias, e a
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
+    <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
   </tr>
 </table>
 

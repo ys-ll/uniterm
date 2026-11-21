@@ -50,7 +50,7 @@
 원격 터미널, 로컬 및 시리얼 터미널, 파일 전송, 원격 데스크톱, 데이터베이스, 컨테이너, 서버 모니터링까지 — 원격 접속에 필요한 모든 것을 다룹니다.
 
 - **터미널** — SSH / Telnet / Mosh / Raw TCP / 시리얼, 그리고 로컬 셸(PowerShell / CMD / Git Bash / WSL).
-- **파일 전송** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem을 지원하며, 듀얼 패인 브라우징과 SSH 터미널에서의 `rz`/`sz`를 지원합니다.
+- **파일 전송** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / 로컬 파일 / WSL 파일 / Zmodem을 지원하며, 듀얼 패인 브라우징과 SSH 터미널에서의 `rz`/`sz`를 지원합니다.
 - **원격 데스크톱** — RDP(Windows 원격 데스크톱), VNC(Linux 원격 제어), SPICE(KVM/QEMU 가상 머신), X11(X Window 포워딩)
 - **데이터베이스 클라이언트** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch를 지원하며, AI 기반 자연어 쿼리와 데이터 행 편집을 제공합니다.
 - **Kubernetes 및 컨테이너** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC를 지원하며, 클러스터 리소스 및 이미지 관리, Pod 로그와 exec 터미널, CPU/메모리 메트릭을 제공합니다.
@@ -94,6 +94,8 @@
 | 파일 전송 | SMB | Windows 공유 폴더, NAS 파일 접근 |
 | 파일 전송 | WebDAV | WebDAV 서버 파일 관리 |
 | 파일 전송 | S3 | Amazon S3 호환 오브젝트 스토리지 |
+| 파일 전송 | 로컬 파일 | 로컬 파일 시스템 듀얼 패인 브라우저 |
+| 파일 전송 | WSL 파일 | WSL 배포판용 파일 브라우저 (Windows 전용) |
 | 파일 전송 | Zmodem | rz/sz 명령을 통한 터미널 내 파일 전송 |
 | 원격 데스크톱 | RDP | Windows 서버 원격 데스크톱 관리 |
 | 원격 데스크톱 | VNC | Linux 서버 원격 제어 |
@@ -354,6 +356,7 @@ uniTerm이 도움이 되었다면 ⭐ Star를 눌러 주세요 — 프로젝트�
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
+    <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
   </tr>
 </table>
 

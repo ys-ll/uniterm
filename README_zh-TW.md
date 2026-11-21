@@ -50,7 +50,7 @@
 遠端終端機、本地與序列埠終端機、檔案傳輸、遠端桌面、資料庫、容器與伺服器監控 —— 涵蓋所有遠端存取需求。
 
 - **終端機** — SSH / Telnet / Mosh / Raw TCP / 序列埠，外加本地 Shell（PowerShell / CMD / Git Bash / WSL）。
-- **檔案傳輸** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，雙窗格瀏覽，並在 SSH 終端機內支援 `rz`/`sz`。
+- **檔案傳輸** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / 本機檔案 / WSL 檔案 / Zmodem，雙窗格瀏覽，並在 SSH 終端機內支援 `rz`/`sz`。
 - **遠端桌面** — RDP（Windows 遠端桌面）、VNC（Linux 遠端控制）、SPICE（KVM/QEMU 虛擬機器）、X11（X Window 轉發）
 - **資料庫用戶端** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch，支援 AI 自然語言查詢與資料列編輯。
 - **Kubernetes 與容器** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC，叢集資源與映像檔管理、Pod 日誌與 exec 終端機、CPU/記憶體指標。
@@ -94,6 +94,8 @@
 | 檔案傳輸 | SMB | Windows 共用資料夾、NAS 檔案存取 |
 | 檔案傳輸 | WebDAV | WebDAV 伺服器檔案管理 |
 | 檔案傳輸 | S3 | 相容 Amazon S3 的物件儲存 |
+| 檔案傳輸 | 本機檔案 | 本機檔案系統的雙窗格瀏覽器 |
+| 檔案傳輸 | WSL 檔案 | WSL 發行版檔案瀏覽器（僅 Windows） |
 | 檔案傳輸 | Zmodem | 在終端機內透過 rz/sz 指令傳輸檔案 |
 | 遠端桌面 | RDP | Windows 伺服器遠端桌面管理 |
 | 遠端桌面 | VNC | Linux 伺服器遠端控制 |
@@ -354,6 +356,7 @@ uniTerm/
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
+    <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
   </tr>
 </table>
 

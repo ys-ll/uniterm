@@ -50,7 +50,7 @@
 Terminal remota, terminal local y de serie, transferencia de archivos, escritorio remoto, bases de datos, contenedores y monitorización de servidores: cubre todas las necesidades de acceso remoto.
 
 - **Terminal** — SSH / Telnet / Mosh / Raw TCP / Serie, además de shells locales (PowerShell / CMD / Git Bash / WSL).
-- **Transferencia de archivos** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem, con exploración de doble panel y compatibilidad con `rz`/`sz` en terminales SSH.
+- **Transferencia de archivos** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Archivo local / Archivos WSL / Zmodem, con exploración de doble panel y compatibilidad con `rz`/`sz` en terminales SSH.
 - **Escritorio remoto** — RDP (escritorio remoto de Windows), VNC (control remoto de Linux), SPICE (máquinas virtuales KVM/QEMU), X11 (reenvío de X Window)
 - **Cliente de bases de datos** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, con consultas en lenguaje natural asistidas por IA y edición de filas de datos.
 - **Kubernetes y contenedores** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, con gestión de recursos e imágenes del clúster, terminales de logs y exec de Pods, y métricas de CPU/memoria.
@@ -94,6 +94,8 @@ Gestión de conexiones, paneles divididos, sincronización en la nube, temas e i
 | Transferencia de archivos | SMB | Carpetas compartidas de Windows, acceso a archivos de NAS |
 | Transferencia de archivos | WebDAV | Gestión de archivos en servidores WebDAV |
 | Transferencia de archivos | S3 | Almacenamiento de objetos compatible con Amazon S3 |
+| Transferencia de archivos | Archivo local | Explorador de doble panel del sistema de archivos local |
+| Transferencia de archivos | Archivos WSL | Explorador de archivos para distribuciones WSL (solo Windows) |
 | Transferencia de archivos | Zmodem | Transferencia de archivos dentro de la terminal mediante los comandos rz/sz |
 | Escritorio remoto | RDP | Gestión de escritorio remoto de servidores Windows |
 | Escritorio remoto | VNC | Control remoto de servidores Linux |
@@ -354,6 +356,7 @@ Gracias a las siguientes personas por contribuir con código y mejoras, y a todo
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
+    <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
   </tr>
 </table>
 

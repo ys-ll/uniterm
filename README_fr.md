@@ -50,7 +50,7 @@
 Terminal distant, terminal local et série, transfert de fichiers, bureau à distance, bases de données, conteneurs et supervision de serveurs — tout ce dont vous avez besoin pour l'accès distant.
 
 - **Terminal** — SSH / Telnet / Mosh / TCP brut / Série, plus des shells locaux (PowerShell / CMD / Git Bash / WSL).
-- **Transfert de fichiers** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem avec navigation à double volet et prise en charge de `rz`/`sz` dans les terminaux SSH.
+- **Transfert de fichiers** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Fichier local / Fichiers WSL / Zmodem avec navigation à double volet et prise en charge de `rz`/`sz` dans les terminaux SSH.
 - **Bureau à distance** — RDP (bureau à distance Windows), VNC (contrôle à distance Linux), SPICE (machines virtuelles KVM/QEMU), X11 (redirection X Window)
 - **Client de bases de données** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, avec requêtes en langage naturel assistées par IA et édition des lignes de données.
 - **Kubernetes et conteneurs** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, avec gestion des ressources et des images du cluster, journaux et terminaux exec des Pods, et métriques CPU/mémoire.
@@ -94,6 +94,8 @@ Gestion des connexions, volets divisés, synchronisation cloud, thèmes et i18n 
 | Transfert de fichiers | SMB | Dossiers partagés Windows, accès aux fichiers NAS |
 | Transfert de fichiers | WebDAV | Gestion des fichiers d'un serveur WebDAV |
 | Transfert de fichiers | S3 | Stockage d'objets compatible Amazon S3 |
+| Transfert de fichiers | Fichier local | Navigateur à double volet du système de fichiers local |
+| Transfert de fichiers | Fichiers WSL | Navigateur de fichiers pour les distributions WSL (Windows uniquement) |
 | Transfert de fichiers | Zmodem | Transfert de fichiers dans le terminal via les commandes rz/sz |
 | Bureau à distance | RDP | Gestion du bureau à distance des serveurs Windows |
 | Bureau à distance | VNC | Contrôle à distance des serveurs Linux |
@@ -354,6 +356,7 @@ Merci aux personnes suivantes pour leurs contributions de code et leurs amélior
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
+    <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
   </tr>
 </table>
 

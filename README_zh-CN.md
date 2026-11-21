@@ -50,7 +50,7 @@
 远程终端、本地 & 串口终端、文件传输、远程桌面、数据库、容器、服务器监控 —— 覆盖全部远程访问场景。
 
 - **终端** — SSH / Telnet / Mosh / Raw TCP / 串口，外加本地 Shell（PowerShell / CMD / Git Bash / WSL）。
-- **文件传输** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Zmodem，双栏浏览、鼠标拖拽上传下载，SSH 内 `rz`/`sz`
+- **文件传输** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / 本地文件 / WSL 文件 / Zmodem，双栏浏览、鼠标拖拽上传下载，SSH 内 `rz`/`sz`
 - **远程桌面** — RDP（Windows 远程桌面）、VNC（Linux 远程控制）、SPICE（KVM/QEMU 虚拟机）、X11（X Window 图形界面转发）
 - **数据库客户端** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch，支持 AI 自然语言生成查询与数据行编辑
 - **Kubernetes & 容器** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC，集群资源与容器镜像管理、Pod 日志与 exec 终端、CPU/内存指标
@@ -94,6 +94,8 @@
 | 文件传输 | SMB | Windows 共享文件夹、NAS 文件访问 |
 | 文件传输 | WebDAV | WebDAV 服务器文件管理 |
 | 文件传输 | S3 | 兼容 Amazon S3 的对象存储 |
+| 文件传输 | 本地文件 | 本地文件系统的双栏浏览器 |
+| 文件传输 | WSL 文件 | WSL 发行版文件浏览器（仅 Windows） |
 | 文件传输 | Zmodem | SSH 终端内 rz/sz 命令传输文件 |
 | 远程桌面 | RDP | Windows 服务器远程桌面管理 |
 | 远程桌面 | VNC | Linux 服务器远程控制 |
@@ -354,6 +356,7 @@ uniTerm/
   <tr>
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
+    <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
   </tr>
 </table>
 
