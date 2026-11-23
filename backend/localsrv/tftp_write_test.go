@@ -7,13 +7,14 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
 // TestTftpWriteMultiBlock simulates a network device doing a WRQ (put) with
-// a blksize option and a multi-block payload — mirroring the Huawei YuZhou
-// S5735 `tftp put vrpcfg.zip` scenario that previously died at ~51%.
+// a blksize option and a multi-block payload — the scenario that previously
+// stalled part-way through the upload.
 func TestTftpWriteMultiBlock(t *testing.T) {
 	root := t.TempDir()
 	mgr := NewManager()
@@ -26,7 +27,7 @@ func TestTftpWriteMultiBlock(t *testing.T) {
 	id, err := mgr.StartTFTPServer(TFTPConfig{
 		RootDir:   root,
 		Port:      port,
-		BlockSize: 512,
+		BlockSize: 8192,
 	})
 	if err != nil {
 		t.Fatalf("start tftp: %v", err)
@@ -39,7 +40,7 @@ func TestTftpWriteMultiBlock(t *testing.T) {
 		payload[i] = byte(i*7 + i/3)
 	}
 
-	const blksize = 1428 // Huawei class devices commonly negotiate ~1428
+	const blksize = 1428 // commonly negotiated by network devices
 	if err := wrqTransfer(t, port, "cfg.bin", payload, blksize); err != nil {
 		t.Fatalf("WRQ transfer failed: %v", err)
 	}
@@ -53,6 +54,20 @@ func TestTftpWriteMultiBlock(t *testing.T) {
 		t.Fatalf("on-disk mismatch: got %d bytes, want %d", len(onDisk), len(payload))
 	}
 	t.Logf("OK: WRQ %d bytes @ blksize=%d persisted %d bytes", payloadLen, blksize, len(onDisk))
+}
+
+// oackIntOption extracts an integer option from an OACK payload
+// (opcode already stripped): "name\0value\0" pairs.
+func oackIntOption(body []byte, name string) int {
+	parts := strings.Split(string(body), "\x00")
+	for i := 0; i+1 < len(parts); i += 2 {
+		if strings.EqualFold(parts[i], name) {
+			v := 0
+			fmt.Sscanf(parts[i+1], "%d", &v)
+			return v
+		}
+	}
+	return 0
 }
 
 // wrqTransfer performs a complete WRQ client exchange against the TFTP server
@@ -101,6 +116,13 @@ func wrqTransfer(t *testing.T, port int, name string, payload []byte, blksize in
 		ack := binary.BigEndian.AppendUint16(binary.BigEndian.AppendUint16(nil, 4), 0)
 		conn.WriteTo(ack, fromUDP)
 		if op == 6 || (op == 4 && binary.BigEndian.Uint16(buf[2:4]) == 0) {
+			if op == 6 {
+				// RFC 2347: the server's OACK value is authoritative. It may be
+				// smaller than what we asked for (capped by the server config).
+				if v := oackIntOption(buf[2:n], "blksize"); v > 0 {
+					blksize = v
+				}
+			}
 			tid = fromUDP
 			break
 		}
