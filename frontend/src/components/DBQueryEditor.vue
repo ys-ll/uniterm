@@ -102,7 +102,7 @@
             class="btn btn-default btn-sm"
             @click.stop="importMenuRef?.toggle($event.currentTarget)"
           >
-            <Upload :size="14" /> {{ t('db.import') }}
+            <Download :size="14" /> {{ t('db.import') }}
           </button>
           <Menu
             v-if="tableName && !isView"
@@ -118,7 +118,7 @@
             :title="t('db.exportResults')"
             @click.stop="exportMenuRef?.toggle($event.currentTarget)"
           >
-            <Download :size="14" /> {{ t('db.export') }}
+            <Upload :size="14" /> {{ t('db.export') }}
           </button>
           <Menu
             ref="exportMenuRef"
@@ -190,7 +190,8 @@
           @duplicate-row="onDuplicateRowByRow"
           @delete-row="onDeleteRowByRow"
           @editing-change="onEditingChange"
-          @sort-change="onSortChange"
+          @insert-row="startInsertRow"
+          @delete-rows="onDeleteRows"
         />
       </div>
 
@@ -355,12 +356,10 @@ type SortRule = { column: string; desc: boolean }
 const browseControlsOpen = ref(false)
 const filterDrafts = ref<FilterRule[]>([])
 const sortDrafts = ref<SortRule[]>([])
-const appliedFilters = ref<FilterRule[]>([])
 const appliedSorts = ref<SortRule[]>([])
+const appliedFilters = ref<FilterRule[]>([])
 const browseColumns = computed(() => props.tableColumns?.length ? props.tableColumns.map(c => c.name) : (queryResult.value?.columns.map(c => c.name) || []))
 const resultFilter = ref('')
-const sortProp = ref('')
-const sortOrder = ref<'ascending' | 'descending' | null>(null)
 
 const historyOpen = ref(false)
 const history = ref<HistoryEntry[]>([])
@@ -462,19 +461,6 @@ const displayRows = computed(() => {
     )
   }
   if (browseMode.value) return rows
-  if (sortProp.value && sortOrder.value) {
-    const prop = sortProp.value
-    const dir = sortOrder.value === 'ascending' ? 1 : -1
-    rows = [...rows].sort((a, b) => {
-      const av = a[prop]
-      const bv = b[prop]
-      if (av == null && bv == null) return 0
-      if (av == null) return -1 * dir
-      if (bv == null) return 1 * dir
-      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
-      return String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir
-    })
-  }
   return rows
 })
 
@@ -948,21 +934,6 @@ async function onPageSizeChange(size: number) {
   await executeBrowse()
 }
 
-async function onSortChange(payload: { field: string; order: 'asc' | 'desc' | null }) {
-  if (browseMode.value) {
-    if (!(await confirmDiscardEdits())) return
-    const sorts: SortRule[] = payload.field && payload.order ? [{ column: payload.field, desc: payload.order === 'desc' }] : []
-    sortDrafts.value = sorts
-    appliedSorts.value = sorts
-    page.value = 0
-    await loadBrowseSql(0)
-    await executeBrowse()
-    return
-  }
-  sortProp.value = payload.field || ''
-  sortOrder.value = payload.order === 'asc' ? 'ascending' : payload.order === 'desc' ? 'descending' : null
-}
-
 const resultGridRef = ref<InstanceType<typeof DBResultGrid> | null>(null)
 
 /** Number of unsaved inline cell edits staged in the result grid. */
@@ -1054,6 +1025,57 @@ async function onDeleteRowByRow(row: Record<string, any>) {
     return
   }
   await onDeleteRow(idx)
+}
+
+/** 右键「删除选中行」：批量删除选区覆盖的行。二次确认提示行数，逐行
+ *  按主键删除，全部成功后一次性从结果集中移除。 */
+async function onDeleteRows(rows: Record<string, any>[]) {
+  const pks = resolvedPrimaryKeys.value
+  if (!rows.length) return
+  if (!props.tableName || !pks.length) {
+    error.value = t('db.noPrimaryKey')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(t('db.deleteRowsConfirm', { count: rows.length }), t('common.confirm'), {
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  if (!(await confirmDiscardEdits())) return
+
+  const allRows = queryResult.value!.rows
+  const targets: number[] = []
+  for (const row of rows) {
+    const idx = rowIndexOf(row)
+    if (idx >= 0) targets.push(idx)
+  }
+  const failed = new Set<number>()
+  for (const idx of targets) {
+    const row = allRows[idx]
+    const where: Record<string, any> = {}
+    for (const pk of pks) {
+      where[pk] = row[pk] ?? null
+    }
+    try {
+      await DBDeleteRow(props.sessionId, props.dbName || '', props.tableName, where)
+    } catch (e: any) {
+      failed.add(idx)
+      error.value = e?.toString?.() || 'Failed to delete row'
+    }
+  }
+  if (targets.length) {
+    const deleted = new Set(targets.filter(i => !failed.has(i)))
+    queryResult.value = {
+      ...queryResult.value!,
+      rows: allRows.filter((_, i) => !deleted.has(i))
+    }
+    emit('cellUpdated')
+  }
+  if (!failed.size) error.value = ''
 }
 
 // ?? Resize splitter ??
