@@ -22,7 +22,8 @@ import (
 
 	"github.com/jlaffaye/ftp"
 	"github.com/pkg/sftp"
-	"github.com/redis/go-redis/v9"
+	"github.com/FZambia/sentinel"
+	"github.com/gomodule/redigo/redis"
 	"github.com/rhnvrm/simples3"
 	"github.com/studio-b12/gowebdav"
 	"golang.org/x/crypto/ssh"
@@ -320,7 +321,8 @@ func probeSMB(config ConnectionConfig) (string, error) {
 }
 
 func probeRedis(config ConnectionConfig) (string, error) {
-	var client *redis.Client
+	var conn redis.Conn
+	var err error
 	if config.RedisMode == "sentinel" {
 		var addrs []string
 		for _, a := range strings.Split(config.RedisSentinels, ",") {
@@ -334,30 +336,48 @@ func probeRedis(config ConnectionConfig) (string, error) {
 		if config.RedisMasterName == "" {
 			return "", fmt.Errorf("redis sentinel: master name required")
 		}
-		client = redis.NewFailoverClient(&redis.FailoverOptions{
-			MasterName:       config.RedisMasterName,
-			SentinelAddrs:    addrs,
-			SentinelUsername: config.SentinelUser,
-			SentinelPassword: config.SentinelPassword,
-			Username:         config.User,
-			Password:         config.Password,
-			DB:               0,
-		})
+		sntnl := &sentinel.Sentinel{
+			Addrs:      addrs,
+			MasterName: config.RedisMasterName,
+			Dial: func(addr string) (redis.Conn, error) {
+				opts := []redis.DialOption{
+					redis.DialConnectTimeout(10 * time.Second),
+					redis.DialReadTimeout(5 * time.Second),
+					redis.DialWriteTimeout(5 * time.Second),
+				}
+				if config.SentinelUser != "" {
+					opts = append(opts, redis.DialUsername(config.SentinelUser))
+				}
+				if config.SentinelPassword != "" {
+					opts = append(opts, redis.DialPassword(config.SentinelPassword))
+				}
+				if config.Proxy != nil {
+					proxyDial := ProxyDialFunc(config.Proxy)
+					opts = append(opts, redis.DialNetDial(func(network, a string) (net.Conn, error) {
+						return proxyDial(context.Background(), network, a)
+					}))
+				}
+				return redis.Dial("tcp", addr, opts...)
+			},
+		}
+		var masterAddr string
+		masterAddr, err = sntnl.MasterAddr()
+		if err != nil {
+			return "", fmt.Errorf("redis sentinel: resolve master: %w", err)
+		}
+		conn, err = redis.Dial("tcp", masterAddr, redigoDialOptions(config.User, config.Password, config.Proxy)...)
 	} else {
-		client = redis.NewClient(&redis.Options{
-			Addr:     fmt.Sprintf("%s:%d", config.Host, config.Port),
-			Username: config.User,
-			Password: config.Password,
-			DB:       0,
-			// Standalone only: FailoverOptions has no Dialer field.
-			Dialer: ProxyDialFunc(config.Proxy),
-		})
+		addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+		// Standalone dials honor the proxy; sentinel dial options are wired
+		// into the sentinel Dial above.
+		conn, err = redis.Dial("tcp", addr, redigoDialOptions(config.User, config.Password, config.Proxy)...)
 	}
-	defer client.Close()
+	if err != nil {
+		return "", fmt.Errorf("redis dial: %w", err)
+	}
+	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if _, err := client.Ping(ctx).Result(); err != nil {
+	if _, err := redis.DoWithTimeout(conn, 10*time.Second, "PING"); err != nil {
 		return "", fmt.Errorf("redis ping: %w", err)
 	}
 	return fmt.Sprintf("redis: connected to %s", probeRedisAddr(config)), nil
