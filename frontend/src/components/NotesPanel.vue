@@ -802,6 +802,8 @@ defineExpose({ flushPending })
   padding: 0.75rem 1rem;
   font-size: 0.8125rem;
   line-height: 1.6;
+  word-break: break-word;
+  font-family: var(--font-ui);
   /* Body disables selection globally (style.css) — the preview is reading
      surface and must be selectable; right-click offers the shared
      .copyable-text copy menu (main.ts). */
@@ -827,64 +829,111 @@ defineExpose({ flushPending })
   justify-content: center;
 }
 
-/* Markdown preview typography (used by the wide-layout preview pane).
-   :deep() everywhere — the preview body is injected via v-html. */
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4,
-.markdown-body h5,
-.markdown-body h6 {
-  margin: 0.75rem 0 0.375rem;
-  line-height: 1.4;
+/* Markdown preview typography — mirrors AIMessage.vue's .text :deep() rules
+   so the preview renders identically to AI messages. :deep() is required on
+   every rule: the preview body is injected via v-html and carries no scope
+   attribute, so plain scoped selectors (e.g. ".markdown-body table") compile
+   to ".markdown-body table[data-v-…]" and never match. */
+.markdown-body :deep(h1) { font-size: 1rem; margin: 0.5rem 0 0.25rem; }
+.markdown-body :deep(h2) { font-size: 0.875rem; margin: 0.5rem 0 0.25rem; }
+.markdown-body :deep(h3) { font-size: 0.875rem; margin: 0.375rem 0 0.25rem; }
+.markdown-body :deep(h4) { font-size: 0.8125rem; margin: 0.375rem 0 0.25rem; }
+.markdown-body :deep(h5) { font-size: 0.75rem; margin: 0.25rem 0 0.125rem; }
+.markdown-body :deep(h6) { font-size: 0.75rem; margin: 0.25rem 0 0.125rem; color: var(--text-muted); }
+
+.markdown-body :deep(p) {
+  margin: 0.3125rem 0;
 }
 
-.markdown-body p {
-  margin: 0.375rem 0;
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  padding-left: 0;
+  margin: 0.25rem 0;
+  list-style-position: inside;
 }
 
-.markdown-body ul,
-.markdown-body ol {
-  margin: 0.375rem 0;
-  padding-left: 1.25rem;
+.markdown-body :deep(li) {
+  margin: 0.125rem 0;
 }
 
-.markdown-body blockquote {
-  margin: 0.375rem 0;
-  padding: 0.125rem 0.75rem;
-  border-left: 2px solid var(--border-subtle);
+.markdown-body :deep(li ul),
+.markdown-body :deep(li ol) {
+  padding-left: 0.75rem;
+}
+
+.markdown-body :deep(ol ol) { list-style-type: lower-alpha; }
+.markdown-body :deep(ol ol ol) { list-style-type: lower-roman; }
+.markdown-body :deep(ul ul) { list-style-type: circle; }
+.markdown-body :deep(ul ul ul) { list-style-type: square; }
+
+.markdown-body :deep(.task-check) {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 0.25rem;
+  color: var(--text-muted);
+}
+
+.markdown-body :deep(.task-check.checked) {
+  color: var(--success);
+}
+
+.markdown-body :deep(del) {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.markdown-body :deep(blockquote) {
+  margin: 0.5rem 0;
+  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+  border-left: 0.1875rem solid var(--accent);
+  background: var(--bg-overlay);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--text-secondary);
 }
 
-.markdown-body table {
+.markdown-body :deep(hr) {
+  margin: 0.875rem 0;
+  border: none;
+  border-top: 1px solid var(--border-hover);
+}
+
+.markdown-body :deep(table) {
   border-collapse: collapse;
-  margin: 0.5rem 0;
+  margin: 0.25rem 0;
+  font-size: 0.75rem;
 }
 
-.markdown-body th,
-.markdown-body td {
-  border: 1px solid var(--border-subtle);
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  border: 1px solid var(--border-hover);
   padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  text-align: left;
 }
 
-.markdown-body code {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  background: var(--bg-subtle);
-  padding: 0.0625rem 0.25rem;
-  border-radius: var(--radius-sm);
+.markdown-body :deep(th) {
+  background: var(--bg-overlay);
+  font-weight: bold;
 }
 
-.markdown-body pre {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
+.markdown-body :deep(code) {
+  background: var(--bg-base);
+  padding: 0.125rem 0.3125rem;
   border-radius: var(--radius-sm);
-  padding: 0.5rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--accent);
+}
+
+.markdown-body :deep(pre) {
+  background: var(--bg-base);
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-sm);
   overflow-x: auto;
+  margin: 0.375rem 0;
+  border: 1px solid var(--border-subtle);
 }
 
-.markdown-body pre code {
+.markdown-body :deep(pre code) {
   background: transparent;
   padding: 0;
 }
@@ -941,7 +990,11 @@ defineExpose({ flushPending })
   opacity: 1;
 }
 
-.markdown-body a {
-  color: var(--accent);
+.markdown-body :deep(a) {
+  color: var(--info);
+}
+
+.markdown-body :deep(a:hover) {
+  color: var(--info);
 }
 </style>
