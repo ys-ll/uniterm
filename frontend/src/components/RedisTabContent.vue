@@ -675,8 +675,8 @@ async function onSave() {
   saving.value = true
   try {
     const key = selectedKey.value
-    const t = selectedKeyInfo.value?.type
-    switch (t) {
+    const keyType = selectedKeyInfo.value?.type
+    switch (keyType) {
       case 'string': await RedisSetString(props.sessionId, key, stringValue.value); break
       case 'hash': {
         const current = await RedisGetHashAll(props.sessionId, key)
