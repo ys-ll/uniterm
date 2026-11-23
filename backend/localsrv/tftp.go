@@ -156,6 +156,7 @@ func (m *Manager) handleTFTPRequest(ctx context.Context, id string, clientAddr n
 
 	// Negotiate block size via OACK if the client sent "blksize".
 	negotiatedBlock := blockSize
+	didOACK := false
 	if bs, ok := options["blksize"]; ok {
 		var requested int
 		fmt.Sscanf(bs, "%d", &requested)
@@ -170,21 +171,24 @@ func (m *Manager) handleTFTPRequest(ctx context.Context, id string, clientAddr n
 		if _, err := conn.WriteTo(oack, clientAddr); err != nil {
 			return
 		}
-		// Wait for the client to ACK the OACK (block 0).
-		if !m.recvTFTPAck(conn, clientAddr, 0) {
-			return
-		}
+		didOACK = true
+		// OACK is itself the implicit acknowledgement. Don't sit here waiting
+		// for an explicit ACK(0) — many TFTP clients (notably Huawei network
+		// devices) skip it and jump straight to the first DATA block. The
+		// data/ACK loops in tftpWriteFile/tftpReadFile will handle whichever
+		// packet shows up first, and learn the peer's current source address
+		// from it.
 	}
 
 	if op == tftpOpRRQ {
-		m.tftpReadFile(ctx, id, conn, clientAddr, fullPath, negotiatedBlock)
+		m.tftpReadFile(ctx, id, conn, clientAddr, fullPath, negotiatedBlock, didOACK)
 	} else {
-		m.tftpWriteFile(ctx, id, conn, clientAddr, fullPath, negotiatedBlock)
+		m.tftpWriteFile(ctx, id, conn, clientAddr, fullPath, negotiatedBlock, didOACK)
 	}
 }
 
 // tftpReadFile sends a file to the client in DATA packets.
-func (m *Manager) tftpReadFile(ctx context.Context, id string, conn net.PacketConn, clientAddr net.Addr, fullPath string, blockSize int) {
+func (m *Manager) tftpReadFile(ctx context.Context, id string, conn net.PacketConn, clientAddr net.Addr, fullPath string, blockSize int, didOACK bool) {
 	f, err := os.Open(fullPath)
 	if err != nil {
 		m.sendTFTPError(clientAddr, tftpErrFileNotFound, "file not found")
@@ -217,7 +221,13 @@ func (m *Manager) tftpReadFile(ctx context.Context, id string, conn net.PacketCo
 			if _, werr := conn.WriteTo(data, clientAddr); werr != nil {
 				return
 			}
-			if m.recvTFTPAck(conn, clientAddr, block) {
+			if ok, newAddr := m.recvTFTPAck(conn, clientAddr, block); ok {
+				// Learn the peer's current address from every ACK we get —
+				// the client may re-source to a different ephemeral port
+				// mid-transfer, so keep our target up-to-date.
+				if newAddr != nil {
+					clientAddr = newAddr
+				}
 				break
 			}
 			if retries == 4 {
@@ -234,10 +244,17 @@ func (m *Manager) tftpReadFile(ctx context.Context, id string, conn net.PacketCo
 }
 
 // tftpWriteFile receives a file from the client in DATA packets.
-func (m *Manager) tftpWriteFile(ctx context.Context, id string, conn net.PacketConn, clientAddr net.Addr, fullPath string, blockSize int) {
-	// ACK block 0 to signal readiness to receive.
-	if !m.sendTFTPAck(conn, clientAddr, 0) {
-		return
+func (m *Manager) tftpWriteFile(ctx context.Context, id string, conn net.PacketConn, clientAddr net.Addr, fullPath string, blockSize int, didOACK bool) {
+	// Standard WRQ flow: if no OACK was negotiated we send ACK(0) now to
+	// signal we are ready to receive. When OACK was negotiated that already
+	// serves as the implicit acknowledgement — sending ACK(0) on top would
+	// be redundant and, with clients that close their initial socket right
+	// after WRQ (Huawei network devices), would just generate a spurious
+	// ICMP port-unreachable back at us.
+	if !didOACK {
+		if !m.sendTFTPAck(conn, clientAddr, 0) {
+			return
+		}
 	}
 
 	f, err := os.Create(fullPath)
@@ -263,8 +280,14 @@ func (m *Manager) tftpWriteFile(ctx context.Context, id string, conn net.PacketC
 			m.log(ServiceTFTP, id, fmt.Sprintf("receive error: %v", err))
 			return
 		}
+		// Learn the peer's current address from every incoming packet. Many
+		// TFTP clients (notably Huawei/YuZhou network devices) re-source
+		// subsequent DATA/ACK packets from a *different* ephemeral port than
+		// the one used for the initial WRQ/RRQ. If we still send our ACKs to
+		// the stale address captured at WRQ time, the peer will never see them
+		// and time out mid-transfer — the classic "51 % dead" symptom.
 		if addr.String() != clientAddr.String() {
-			continue
+			clientAddr = addr
 		}
 		if n < 4 {
 			continue
@@ -274,47 +297,62 @@ func (m *Manager) tftpWriteFile(ctx context.Context, id string, conn net.PacketC
 			m.log(ServiceTFTP, id, "client error")
 			return
 		}
+		// After an OACK negotiation the client may send an explicit ACK(0)
+		// (RFC-compliant) or jump straight to the first DATA block (Huawei
+		// and other terse clients). Either is fine — an ACK(0) just means
+		// "proceed", so skip it and keep waiting for real data.
+		if op == tftpOpACK {
+			continue
+		}
 		if op != tftpOpDATA {
 			continue
 		}
 		recvBlock := binary.BigEndian.Uint16(buf[2:4])
-		if recvBlock != block {
+		if recvBlock == block {
+			// Expected block: append payload and advance.
+			data := buf[4:n]
+			if _, werr := f.Write(data); werr != nil {
+				m.sendTFTPError(clientAddr, tftpErrDiskFull, "write failed")
+				return
+			}
+			m.sendTFTPAck(conn, clientAddr, recvBlock)
+			if recvBlock != 0 && len(data) < blockSize {
+				m.log(ServiceTFTP, id, fmt.Sprintf("received %s", filepath.Base(fullPath)))
+				return
+			}
+			block++
 			continue
 		}
-		data := buf[4:n]
-		if _, werr := f.Write(data); werr != nil {
-			m.sendTFTPError(clientAddr, tftpErrDiskFull, "write failed")
-			return
+		// Old/duplicate block (our ACK was lost, so the client resends) or an
+		// out-of-order block: don't advance, but idempotently re-ACK it so the
+		// client can continue instead of timing out and aborting the transfer.
+		if recvBlock > 0 && recvBlock < block {
+			m.sendTFTPAck(conn, clientAddr, recvBlock)
 		}
-		m.sendTFTPAck(conn, clientAddr, block)
-		if len(data) < blockSize {
-			m.log(ServiceTFTP, id, fmt.Sprintf("received %s", filepath.Base(fullPath)))
-			return
-		}
-		block++
 	}
 }
 
 // recvTFTPAck reads a packet and returns true if it is an ACK for block.
-func (m *Manager) recvTFTPAck(conn net.PacketConn, clientAddr net.Addr, block uint16) bool {
+// The caller-provided clientAddr is used only as a hint for the initial peer
+// address; we intentionally accept an ACK from *any* source address and
+// return the actual peer address so the caller can learn if the client has
+// re-sourced to a different ephemeral port (as Huawei network devices do).
+func (m *Manager) recvTFTPAck(conn net.PacketConn, clientAddr net.Addr, block uint16) (bool, net.Addr) {
 	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	buf := make([]byte, 64)
 	n, addr, err := conn.ReadFrom(buf)
 	if err != nil {
-		return false
-	}
-	if addr.String() != clientAddr.String() {
-		return false
+		return false, clientAddr
 	}
 	if n < 4 {
-		return false
+		return false, clientAddr
 	}
 	op := binary.BigEndian.Uint16(buf[:2])
 	if op != tftpOpACK {
-		return false
+		return false, clientAddr
 	}
 	recvBlock := binary.BigEndian.Uint16(buf[2:4])
-	return recvBlock == block
+	return recvBlock == block, addr
 }
 
 // sendTFTPAck sends an ACK packet for the given block number.
