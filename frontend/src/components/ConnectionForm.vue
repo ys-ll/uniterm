@@ -276,7 +276,7 @@
             </template>
             <template v-if="form.type === 's3'">
               <el-form-item :label="t('conn.s3Region')" required>
-                <el-input v-model="form.s3Region" placeholder="us-east-1" />
+                <el-input v-model="form.s3Region" :placeholder="t('conn.s3RegionPlaceholder')" />
               </el-form-item>
               <el-form-item :label="t('conn.s3Bucket')">
                 <el-input v-model="form.s3Bucket" placeholder="my-bucket (leave empty to list all buckets)" />

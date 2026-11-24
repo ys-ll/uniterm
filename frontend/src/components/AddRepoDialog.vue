@@ -73,14 +73,14 @@
           <el-form-item :label="t('conn.s3Bucket')">
             <el-input
               v-model="s3Bucket"
-              placeholder="uniTerm-sync"
+              :placeholder="t('conn.s3BucketPlaceholder')"
             />
           </el-form-item>
 
           <el-form-item :label="t('conn.s3Region')">
             <el-input
               v-model="s3Region"
-              placeholder="us-east-1"
+              :placeholder="t('conn.s3RegionPlaceholder')"
             />
           </el-form-item>
 
@@ -109,9 +109,13 @@
         </template>
 
         <el-form-item :label="t('addRepo.basePath')">
+          <!-- Prefilled with the sync directory name (issue #1589): a
+               placeholder read like a default, so users left the field
+               empty expecting uniTerm-sync to be used and WebDAV servers
+               rejecting root writes failed with e.g. "MkdirAll /: 403".
+               The backend treats an empty path as the server root. -->
           <el-input
             v-model="remotePath"
-            placeholder="uniTerm-sync"
           />
         </el-form-item>
       </template>
@@ -174,7 +178,10 @@ const repoUrl = ref('')
 const username = ref('')
 const token = ref('')
 const remoteServer = ref('')
-const remotePath = ref('')
+// Real prefilled value, not a placeholder: an empty path means the server
+// root on every snapshot backend, which WebDAV services like jianguoyun
+// reject on write (issue #1589).
+const remotePath = ref('uniTerm-sync')
 const remoteUser = ref('')
 const remoteSecret = ref('')
 const s3Bucket = ref('')
@@ -218,7 +225,7 @@ function resetForm() {
   username.value = ''
   token.value = ''
   remoteServer.value = ''
-  remotePath.value = ''
+  remotePath.value = 'uniTerm-sync'
   remoteUser.value = ''
   remoteSecret.value = ''
   s3Bucket.value = ''
