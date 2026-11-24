@@ -350,11 +350,11 @@ export function getXtermTheme(name: string, customThemes?: CustomTerminalTheme[]
       return {
         background: '#1e1e1e', foreground: '#ececec', cursor: '#b4b4c0',
         selectionBackground: 'rgba(236,236,236,0.2)',
-        black: '#000000', red: '#ff6060', green: '#0eb16c', yellow: '#ffff36',
-        blue: '#6060ff', magenta: '#ff36ff', cyan: '#36ffff', white: '#ececec',
-        brightBlack: '#363636', brightRed: '#ff8080', brightGreen: '#18ed93',
-        brightYellow: '#ffff80', brightBlue: '#1bbae9', brightMagenta: '#ff80ff',
-        brightCyan: '#80ffff', brightWhite: '#ffffff'
+        black: '#1e1e1e', red: '#ff6060', green: '#0eb16c', yellow: '#dedc12',
+        blue: '#1296be', magenta: '#ff4dff', cyan: '#54ccef', white: '#cccccc',
+        brightBlack: '#808080', brightRed: '#ff8080', brightGreen: '#18ed93',
+        brightYellow: '#ffff36', brightBlue: '#1bbae9', brightMagenta: '#ff7dff',
+        brightCyan: '#8eddf4', brightWhite: '#cccccc'
       }
     // MobaXterm / GNOME Ubuntu terminal style (common built-in alternative)
     case 'mobaxterm-ubuntu':
