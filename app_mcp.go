@@ -628,7 +628,6 @@ func mcpTerminalAllowed(mode, kind string) bool {
 	return kind == "ssh"
 }
 
-// Both MCP modes reuse the normal session creation and frontend sizing flow.
 func (a *App) mcpConnect(connectionID string) (string, error) {
 	return a.mcpOpenTerminal(connectionID, "", "")
 }
@@ -663,15 +662,25 @@ func (a *App) mcpOpenTerminal(connectionID, terminalType, shellPath string) (str
 		config.Name = terminalType
 		config.ShellPath = shellPath
 	}
-	if !mcpTerminalAllowed(a.mcpExecMode(), terminalType) {
+	mode := a.mcpExecMode()
+	if !mcpTerminalAllowed(mode, terminalType) {
 		return "", fmt.Errorf("terminal type %s is unavailable in this execution mode", terminalType)
 	}
 	info, err := a.CreateSession(terminalType, config)
 	if err != nil {
 		return "", err
 	}
+	// Background SSH connections start at the default PTY size. Opening a
+	// terminal view later resizes the same session to fit the window.
+	background := mode == mcp.ModeBackground
+	if background {
+		if err := a.SessionStart(info.ID, config); err != nil {
+			_ = a.CloseSession(info.ID)
+			return "", err
+		}
+	}
 	a.emit("mcp:session-created", map[string]interface{}{
-		"sessionId": info.ID, "type": terminalType, "name": config.Name, "host": config.Host, "config": config,
+		"sessionId": info.ID, "type": terminalType, "name": config.Name, "host": config.Host, "config": config, "background": background,
 	})
 	return info.ID, nil
 }
