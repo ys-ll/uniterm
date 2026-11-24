@@ -35,7 +35,7 @@ export function buildTabSnapshot(): SavedTabsSnapshot {
   const panelStore = usePanelStore()
   const tabs: SavedTabEntry[] = []
   for (const tab of tabStore.tabs) {
-    if (tab.type === 'start' || tab.type === 'settings' || tab.type === 'netscan') continue
+    if (tab.type === 'start' || tab.type === 'settings' || tab.type === 'tools' || tab.type === 'netscan') continue
     if (tab.type === 'workspace') {
       const ws = tab as WorkspaceTab
       const serialized = serializeWorkspaceState(ws)
