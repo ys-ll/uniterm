@@ -106,6 +106,7 @@ func NewLocalSession(id string) *LocalSession {
 			status:      StatusDisconnected,
 		},
 		quit: make(chan struct{}),
+		hook: newTypedCwdHookState(),
 	}
 	// Set a generous default size so the PTY is unlikely to scroll before
 	// the frontend sends its first Resize() with the real dimensions.
