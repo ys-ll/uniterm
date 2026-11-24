@@ -9,6 +9,7 @@ import {
   ReadFileChunkBase64,
   OpenDirectoryDialog,
   OpenMultipleFilesDialog,
+  FrontendLog,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { Events } from '@wailsio/runtime'
 import { useZmodemStore } from '../stores/zmodemStore'
@@ -83,11 +84,19 @@ export function startZmodemService(options: ZmodemServiceOptions) {
   let captureLateTrailingOutput = false
   let receivedFileOffer = false
   let lastBinaryAt = 0
+  // Issue #1582 instrumentation: track the binary stream's integrity as the
+  // frontend sees it, so a transfer failure can be attributed to the
+  // transport (seq gap / content mismatch) or to the protocol decode.
+  let lastBinarySeq = 0
+  let wireBytes = 0
   const trailingOutput: number[] = []
   const lateTrailingOutput: number[] = []
   const { sessionId } = options
   const abortCtl = createTransferControl()
   const watchdog = createActivityWatchdog(resolveIdleTimeoutMs(options.getIdleTimeoutMs))
+  const diag = (msg: string) => {
+    try { FrontendLog('zmodem-diag', `${sessionId}: ${msg}`) } catch (_) { /* diagnostics must never break the transfer */ }
+  }
 
   function appendTrailingOutput(bytes: ArrayLike<number>, start = 0, end = bytes.length) {
     const target = captureLateTrailingOutput ? lateTrailingOutput : trailingOutput
@@ -113,6 +122,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
     if (notified) return
     notified = true
     watchdog.stop()
+    diag(`transfer error: ${errorMessage(error)}, lastSeq=${lastBinarySeq}, wireBytes=${wireBytes}`)
     options.onError?.(errorMessage(error))
   }
 
@@ -328,6 +338,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       if (!recoverMissingOverAndOut(error)
         && !tolerateUnexpectedZack(error)
         && !recoverPeerAbortBeforeOffer(error)) {
+        diag(`sentry decode error: ${errorMessage(error)}, lastSeq=${lastBinarySeq}, wireBytes=${wireBytes}`)
         void fail(error)
       }
     }
@@ -427,6 +438,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
       const zsession = detection.confirm()
       currentZsession = zsession
       dialogLocks.add(sessionId)
+      diag(`zmodem ${zsession.type} session detected, lastSeq=${lastBinarySeq}, wireBytes=${wireBytes}`)
       if (zsession.type === 'send') {
         // zmodem.js discards trailing input after a send session ends. Start
         // capturing before Sentry finishes consuming the ZFIN chunk so a
@@ -504,11 +516,36 @@ export function startZmodemService(options: ZmodemServiceOptions) {
   })
 
   binaryUnsub = Events.On('session:binary', (ev) => {
-    const payload: { id: string; data: string } = ev.data
+    const payload: { id: string; data: string; seq?: number; n?: number; crc?: number } = ev.data
     if (payload.id !== sessionId || disposed) return
     lastBinaryAt = Date.now()
     watchdog.touch()
-    consumeIncoming(base64ToUint8Array(payload.data))
+    const bytes = base64ToUint8Array(payload.data)
+    wireBytes += bytes.length
+    // Transport integrity probes (issue #1582): the backend tags every
+    // binary event with seq/n/crc. Older backends omit them; then nothing
+    // is checked.
+    if (typeof payload.seq === 'number') {
+      if (lastBinarySeq !== 0 && payload.seq !== lastBinarySeq + 1) {
+        diag(`binary seq gap: expected ${lastBinarySeq + 1}, got ${payload.seq}, wireBytes=${wireBytes}`)
+      }
+      lastBinarySeq = payload.seq
+      // Periodic heartbeat correlating the frontend's receipt with the
+      // backend's "zmodem-bin ... emitted" log lines.
+      if (payload.seq % 100 === 0) {
+        diag(`binary progress seq=${payload.seq}, wireBytes=${wireBytes}`)
+      }
+    }
+    if (typeof payload.n === 'number' && payload.n !== bytes.length) {
+      diag(`binary length mismatch: wire ${payload.n}, decoded ${bytes.length}, seq=${payload.seq}, wireBytes=${wireBytes}`)
+    }
+    if (typeof payload.crc === 'number') {
+      const actual = crc32(bytes)
+      if (actual !== payload.crc) {
+        diag(`binary content mismatch: wire crc ${payload.crc}, computed ${actual}, seq=${payload.seq}, wireBytes=${wireBytes}`)
+      }
+    }
+    consumeIncoming(bytes)
   })
 
   const svc = {
@@ -691,6 +728,7 @@ async function receiveOffer(
   const details = offer.get_details()
   const filename = safeDownloadFilename(details.name, sep === '\\')
   const size = details.size || 0
+  try { FrontendLog('zmodem-diag', `${sessionId}: offer accepted "${filename}" size=${size}`) } catch (_) { /* diagnostics only */ }
   const finalSavePath = `${saveDir}${saveDir.endsWith('/') || saveDir.endsWith('\\') ? '' : sep}${filename}`
   const transferId = `${sessionId}-dl-${offerIndex}`
   store.addTransfer(sessionId, {
@@ -701,6 +739,7 @@ async function receiveOffer(
   let received = 0
   let buffer: number[] = []
   let bufferOffset = 0
+  let lastProgressLog = 0
   let pendingWrites: Promise<void> = Promise.resolve()
   const flush = () => {
     while (buffer.length > 0) {
@@ -719,6 +758,10 @@ async function receiveOffer(
     buffer.push(...payload)
     received += payload.length
     watchdog.touch()
+    if (received - lastProgressLog >= 5 * 1024 * 1024) {
+      lastProgressLog = received
+      try { FrontendLog('zmodem-diag', `${sessionId}: receive progress "${filename}" ${received}/${size} bytes`) } catch (_) { /* diagnostics only */ }
+    }
     store.updateTransfer(sessionId, transferId, { transferred: received })
     if (buffer.length >= DOWNLOAD_BATCH) flush()
   }
@@ -836,6 +879,28 @@ function base64ToUint8Array(base64: string): Uint8Array {
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
   return bytes
+}
+
+// IEEE CRC-32 over a byte array, matching the backend's crc32.ChecksumIEEE.
+// Table computed lazily; used only for the issue #1582 transport probes.
+const crc32Table = (() => {
+  const table = new Uint32Array(256)
+  for (let n = 0; n < 256; n++) {
+    let c = n
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) !== 0 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1
+    }
+    table[n] = c >>> 0
+  }
+  return table
+})()
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xFFFFFFFF
+  for (let i = 0; i < bytes.length; i++) {
+    crc = crc32Table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8)
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0
 }
 
 function arrayBufferToBase64(buffer: Uint8Array): string {

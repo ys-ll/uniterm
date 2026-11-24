@@ -536,6 +536,17 @@ type baseSession struct {
 	emitQuit chan struct{}
 	emitDone chan struct{}
 	emitOnce sync.Once
+	// Binary (zmodem) output coalescer — same shape as the data emit queue,
+	// but lossless by design (no drop-oldest tier): a dropped binary chunk
+	// breaks the zmodem byte stream (issue #1582). Backpressure instead comes
+	// from the channel buffer, which backpressures the SSH readLoop and the
+	// remote sender. Lazy-started by the first emitBinary; stopped (with a
+	// final flush) from stopEmitLoop.
+	binaryMu    sync.Mutex
+	binaryOnce  sync.Once
+	binaryQueue chan []byte
+	binaryQuit  chan struct{}
+	binaryDone  chan struct{}
 }
 
 const (
@@ -547,6 +558,23 @@ const (
 	// cosmetic, but losing bytes from a full-screen TUI (menuconfig, vim,
 	// ...) desyncs the screen — so dropping is a last resort, not the norm.
 	emitQueueCapacity = 64
+
+	// binaryQueueChunks bounds the pending binary chunk queue. The producer
+	// (readLoop) blocks when full, which backpressures the PTY/SSH channel
+	// and pauses the remote sender — flow control, never byte loss. 512
+	// chunks of up to 16 KB ≈ 8 MB, far more than a wedged frontend needs
+	// before the transfer simply stalls.
+	binaryQueueChunks = 512
+
+	// binaryFlushMaxBytes caps a coalesced binary event. The frontend's
+	// zmodem decoder appends each received chunk with
+	// `push.apply(input_buffer, input)` (zmodem.js zsession.js), and apply
+	// blows the JS engine's argument limit on very large arrays — a merged
+	// event of several hundred KB crashes the transfer with "Maximum call
+	// stack size exceeded". 64 KB keeps each event comfortably below that
+	// limit while still cutting the event rate 4-8x versus one event per
+	// 16 KB SSH read.
+	binaryFlushMaxBytes = 64 * 1024
 )
 
 var (
@@ -699,6 +727,7 @@ func (s *baseSession) startEmitLoop() {
 // Disconnect) is never lost. After it returns, emitData falls back to the
 // synchronous path. Safe to call multiple times and when never started.
 func (s *baseSession) stopEmitLoop() {
+	s.stopBinaryEmitLoop()
 	s.emitMu.Lock()
 	if s.emitQuit == nil || s.emitClosing {
 		s.emitMu.Unlock()
@@ -997,6 +1026,15 @@ func (s *baseSession) SetOnBinaryCallback(cb func([]byte)) {
 	s.onBinaryCallback = cb
 }
 
+// emitBinary delivers binary (zmodem) output to the frontend. Chunks are
+// coalesced over emitFlushInterval so a burst of SSH reads costs one IPC
+// event per window instead of one per read: the zmodem byte stream is
+// order-preserving under concatenation, so joining chunks is lossless, and
+// the 10-100x lower event rate keeps the webview's script dispatch queue
+// shallow. Without this, a fast transfer outpaces the frontend's processing
+// rate and the wails event payload store (upstream wails#5930, wails#6619)
+// sweeps aged-out payloads, silently dropping whole events — one dropped
+// event is one broken zmodem CRC (issue #1582).
 func (s *baseSession) emitBinary(data []byte) {
 	s.mu.Lock()
 	cb := s.onBinaryCallback
@@ -1004,8 +1042,158 @@ func (s *baseSession) emitBinary(data []byte) {
 		s.setZmodemModeLocked(true)
 	}
 	s.mu.Unlock()
-	if cb != nil {
+	if cb == nil {
+		return
+	}
+	s.binaryOnce.Do(s.startBinaryEmitLoop)
+	// Copy: the readLoop reuses its read buffer across iterations.
+	chunk := append([]byte(nil), data...)
+	select {
+	case <-s.binaryQuit:
+		// Loop is shutting down (session disconnecting): fall back to the
+		// synchronous path so the tail is never lost.
 		cb(data)
+		return
+	default:
+	}
+	select {
+	case s.binaryQueue <- chunk:
+	case <-s.binaryQuit:
+		cb(data)
+	}
+}
+
+// startBinaryEmitLoop lazily starts the binary coalescing loop. Called via
+// sync.Once from emitBinary; guarded by binaryMu for the once-callback
+// deadlock safety of concurrent first emitters.
+func (s *baseSession) startBinaryEmitLoop() {
+	s.binaryMu.Lock()
+	defer s.binaryMu.Unlock()
+	if s.binaryQueue != nil {
+		return
+	}
+	s.binaryQueue = make(chan []byte, binaryQueueChunks)
+	s.binaryQuit = make(chan struct{})
+	s.binaryDone = make(chan struct{})
+	go s.binaryEmitLoop()
+}
+
+// stopBinaryEmitLoop shuts the coalescing loop down, flushing everything
+// still queued so the tail of a transfer (final zmodem frames) is never
+// lost. Safe to call multiple times and when never started.
+func (s *baseSession) stopBinaryEmitLoop() {
+	s.binaryMu.Lock()
+	if s.binaryQuit == nil {
+		s.binaryMu.Unlock()
+		return
+	}
+	select {
+	case <-s.binaryQuit:
+		s.binaryMu.Unlock()
+		return
+	default:
+	}
+	close(s.binaryQuit)
+	s.binaryMu.Unlock()
+	select {
+	case <-s.binaryDone:
+	case <-time.After(emitStopWait):
+		log.Writef("session %s: binaryEmitLoop did not exit within %s during stop", s.id, emitStopWait)
+	}
+}
+
+func (s *baseSession) binaryEmitLoop() {
+	defer close(s.binaryDone)
+	timer := time.NewTimer(time.Hour)
+	if !timer.Stop() {
+		<-timer.C
+	}
+	var pending [][]byte
+	for {
+		var first []byte
+		select {
+		case first = <-s.binaryQueue:
+		case <-s.binaryQuit:
+			// Shutting down: flush whatever is still queued so the tail of a
+			// transfer (final zmodem frames) is never lost.
+			s.drainBinaryQueue(&pending)
+			s.flushBinaryChunks(pending)
+			return
+		}
+		pending = pending[:0]
+		pending = append(pending, first)
+		pendingBytes := len(first)
+		timer.Reset(emitFlushInterval)
+	collect:
+		for {
+			select {
+			case chunk := <-s.binaryQueue:
+				pending = append(pending, chunk)
+				pendingBytes += len(chunk)
+				if pendingBytes >= binaryFlushMaxBytes {
+					// Size cap reached before the window expired: flush now
+					// so a single event never exceeds the JS engine's
+					// push.apply argument limit.
+					break collect
+				}
+			case <-timer.C:
+				break collect
+			case <-s.binaryQuit:
+				// Shutting down mid-window: flush what has accumulated.
+				s.drainBinaryQueue(&pending)
+				break collect
+			}
+		}
+		s.flushBinaryChunks(pending)
+		pending = pending[:0]
+		select {
+		case <-s.binaryQuit:
+			s.drainBinaryQueue(&pending)
+			s.flushBinaryChunks(pending)
+			return
+		default:
+		}
+	}
+}
+
+// drainBinaryQueue moves every chunk that is already in the queue (non-
+// blocking) into pending. Chunks that a producer is mid-send when the loop
+// exits fall back to the synchronous path via the done channel.
+func (s *baseSession) drainBinaryQueue(pending *[][]byte) {
+	for {
+		select {
+		case chunk := <-s.binaryQueue:
+			*pending = append(*pending, chunk)
+		default:
+			return
+		}
+	}
+}
+
+// flushBinaryChunks joins the coalesced chunks into callback invocations.
+// The callback is looked up at flush time (SetOnBinaryCallback may have been
+// re-registered after a reconnect). Events are split at binaryFlushMaxBytes:
+// the frontend's zmodem decoder appends event bytes with push.apply, which
+// blows the JS engine's argument limit on very large arrays, so no single
+// event may exceed it — the shutdown drain in particular can accumulate far
+// more than the collect-loop cap.
+func (s *baseSession) flushBinaryChunks(pending [][]byte) {
+	s.mu.RLock()
+	cb := s.onBinaryCallback
+	s.mu.RUnlock()
+	if cb == nil || len(pending) == 0 {
+		return
+	}
+	joined := make([]byte, 0, binaryFlushMaxBytes+16*1024)
+	for _, c := range pending {
+		if len(joined)+len(c) > binaryFlushMaxBytes && len(joined) > 0 {
+			cb(joined)
+			joined = make([]byte, 0, binaryFlushMaxBytes+16*1024)
+		}
+		joined = append(joined, c...)
+	}
+	if len(joined) > 0 {
+		cb(joined)
 	}
 }
 

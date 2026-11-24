@@ -323,3 +323,152 @@ func TestEmitDataWedgeFallsBackToDropOldest(t *testing.T) {
 		t.Fatalf("delivered %v, want chunks %d..%d (drop-oldest after watchdog)", got, 10, emitQueueCapacity+9)
 	}
 }
+
+func TestEmitBinaryDeliversWithoutExplicitStart(t *testing.T) {
+	s := &baseSession{}
+	var mu sync.Mutex
+	var got []byte
+	s.SetOnBinaryCallback(func(data []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, data...)
+	})
+
+	// Unlike the data emit loop, the binary coalescer starts itself on the
+	// first chunk — a session that only ever emits binary (zmodem) never
+	// needs a startEmitLoop call.
+	s.emitBinary([]byte("abc"))
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(got)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("emitBinary self-started loop never delivered the chunk")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if string(got) != "abc" {
+		t.Fatalf("emitBinary delivered %q, want %q", got, "abc")
+	}
+}
+
+func TestEmitBinaryBatchesChunksWithoutLoss(t *testing.T) {
+	oldInterval := emitFlushInterval
+	emitFlushInterval = 40 * time.Millisecond
+	t.Cleanup(func() { emitFlushInterval = oldInterval })
+
+	s := &baseSession{}
+	var mu sync.Mutex
+	var got []byte
+	calls := 0
+	s.SetOnBinaryCallback(func(data []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, data...)
+		calls++
+	})
+	t.Cleanup(s.stopBinaryEmitLoop)
+
+	// Concurrent producers, interleaved with the flush window, like a
+	// readLoop racing the coalescer during a fast transfer.
+	const producers = 4
+	const perProducer = 200
+	var wg sync.WaitGroup
+	wg.Add(producers)
+	for p := 0; p < producers; p++ {
+		go func(p int) {
+			defer wg.Done()
+			for i := 0; i < perProducer; i++ {
+				s.emitBinary([]byte{byte(p), byte(i)})
+			}
+		}(p)
+	}
+	wg.Wait()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		mu.Lock()
+		n := len(got)
+		mu.Unlock()
+		if n >= producers*perProducer*2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for delivery: got %d bytes, want %d", n, producers*perProducer*2)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != producers*perProducer*2 {
+		t.Fatalf("delivered %d bytes, want %d (no loss)", len(got), producers*perProducer*2)
+	}
+	seen := make(map[[2]byte]int)
+	for i := 0; i < len(got); i += 2 {
+		seen[[2]byte{got[i], got[i + 1]}]++
+	}
+	for p := 0; p < producers; p++ {
+		for i := 0; i < perProducer; i++ {
+			if seen[[2]byte{byte(p), byte(i)}] != 1 {
+				t.Fatalf("chunk (producer=%d, seq=%d) seen %d times", p, i, seen[[2]byte{byte(p), byte(i)}])
+			}
+		}
+	}
+	if calls >= producers*perProducer {
+		t.Fatalf("callback ran %d times for %d chunks; batching did not happen", calls, producers*perProducer)
+	}
+}
+
+func TestEmitBinaryStopFlushesTail(t *testing.T) {
+	oldInterval := emitFlushInterval
+	emitFlushInterval = 30 * time.Second // window never fires on its own
+	t.Cleanup(func() { emitFlushInterval = oldInterval })
+
+	s := &baseSession{}
+	var mu sync.Mutex
+	var got []byte
+	s.SetOnBinaryCallback(func(data []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, data...)
+	})
+	t.Cleanup(s.stopBinaryEmitLoop)
+
+	s.emitBinary([]byte("tail"))
+	s.stopBinaryEmitLoop() // must flush the pending chunk despite the long window
+
+	mu.Lock()
+	defer mu.Unlock()
+	if string(got) != "tail" {
+		t.Fatalf("stop left %d bytes undelivered (got %q)", 4-len(got), got)
+	}
+}
+
+func TestEmitBinaryPostStopFallsBackToSync(t *testing.T) {
+	s := &baseSession{}
+	var mu sync.Mutex
+	var got []byte
+	s.SetOnBinaryCallback(func(data []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, data...)
+	})
+	s.emitBinary([]byte("a")) // starts the loop
+	s.stopBinaryEmitLoop()
+	s.emitBinary([]byte("b")) // after stop: synchronous fallback
+
+	mu.Lock()
+	defer mu.Unlock()
+	if string(got) != "ab" {
+		t.Fatalf("post-stop emitBinary delivered %q, want %q", got, "ab")
+	}
+}
