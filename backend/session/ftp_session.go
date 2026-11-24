@@ -286,6 +286,13 @@ func (s *FTPSession) ftpList(dir string) ([]*ftp.Entry, error) {
 
 	filtered := make([]*ftp.Entry, 0, len(entries))
 	for _, e := range entries {
+		// Device-style `ls` output pads columns with several spaces; the
+		// parser only consumes one delimiter, so the surplus spaces end up
+		// inside the name. They are never part of the real name but would
+		// break every path built from it later (e.g. CWD "/ led_data"),
+		// while the panel hides them because HTML collapses whitespace.
+		// Trim the ends only — interior spaces are real name characters.
+		e.Name = strings.TrimSpace(e.Name)
 		if e.Name == "." || e.Name == ".." {
 			continue
 		}
@@ -392,7 +399,7 @@ func (s *FTPSession) ChangeRemoteDir(dir string) (FileListResult, error) {
 	entries, err := s.ftpList(target)
 	s.connMu.Unlock()
 	if err != nil {
-		return FileListResult{}, fmt.Errorf("no such directory: %s", target)
+		return FileListResult{}, fmt.Errorf("no such directory: %s: %w", target, err)
 	}
 	s.mu.Lock()
 	s.cwd = target
