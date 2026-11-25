@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_RDP_QUALITY, normalizeRdpQuality, rdpQualityProfile } from './rdpQuality'
+import { DEFAULT_RDP_QUALITY, normalizeRdpQuality, qualityExtensions, rdpQualityProfile } from './rdpQuality'
 
 describe('normalizeRdpQuality', () => {
   it('defaults to the balanced tier', () => {
@@ -42,5 +42,33 @@ describe('rdpQualityProfile', () => {
     expect(profile.performanceFlags).toBe(0x6f) // 0x8f minus font smoothing, plus cursor flags
     expect(profile.performanceFlags & 0x80).toBe(0) // font smoothing off
     expect(profile.performanceFlags & 0x100).toBe(0) // no desktop composition
+  })
+})
+
+describe('qualityExtensions', () => {
+  it('always sends the selected tier, including the default balanced', () => {
+    expect(DEFAULT_RDP_QUALITY).toBe('balanced')
+    expect(qualityExtensions('balanced')).toEqual([
+      { name: 'connection_type', value: 4 }, // BroadbandHigh
+      { name: 'performance_flags', value: 0x8f }, // wallpaper/theming/animations off, font smoothing on
+    ])
+  })
+
+  it('sends both extensions for every non-default tier too', () => {
+    expect(qualityExtensions('high')).toEqual([
+      { name: 'connection_type', value: 6 },
+      { name: 'performance_flags', value: 0x86 },
+    ])
+    expect(qualityExtensions('low')).toEqual([
+      { name: 'connection_type', value: 1 },
+      { name: 'performance_flags', value: 0x6f },
+    ])
+  })
+
+  it('falls back to balanced for unknown or malformed tiers without throwing', () => {
+    for (const value of [undefined, null, '', 'ultra', 6, {}, []]) {
+      expect(() => qualityExtensions(value)).not.toThrow()
+      expect(qualityExtensions(value)).toEqual(qualityExtensions('balanced'))
+    }
   })
 })
