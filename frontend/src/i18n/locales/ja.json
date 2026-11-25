@@ -939,6 +939,7 @@
   "remoteDesktop.fullscreen": "全画面",
   "remoteDesktop.softKeyboard": "ソフトキーボード",
   "remoteDesktop.fullscreenToolbar": "全画面ツールバー",
+  "remoteDesktop.sendKeys": "キー送信",
   "remoteDesktop.restore": "元に戻す",
   "remoteDesktop.pinToolbar": "ツールバーを固定",
   "remoteDesktop.unpinToolbar": "ツールバーの固定を解除",

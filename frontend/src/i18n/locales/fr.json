@@ -939,6 +939,7 @@
   "remoteDesktop.fullscreen": "Plein écran",
   "remoteDesktop.softKeyboard": "Clavier virtuel",
   "remoteDesktop.fullscreenToolbar": "Barre plein écran",
+  "remoteDesktop.sendKeys": "Touches",
   "remoteDesktop.restore": "Restaurer",
   "remoteDesktop.pinToolbar": "Épingler la barre",
   "remoteDesktop.unpinToolbar": "Détacher la barre",

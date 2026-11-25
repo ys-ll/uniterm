@@ -963,6 +963,7 @@
   "remoteDesktop.fullscreen": "全屏",
   "remoteDesktop.softKeyboard": "软键盘",
   "remoteDesktop.fullscreenToolbar": "全屏工具条",
+  "remoteDesktop.sendKeys": "按键",
   "remoteDesktop.restore": "还原",
   "remoteDesktop.pinToolbar": "固定工具条",
   "remoteDesktop.unpinToolbar": "取消固定工具条",
