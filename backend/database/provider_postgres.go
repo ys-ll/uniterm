@@ -113,7 +113,7 @@ func (p *postgresProvider) InsertRow(db *sql.DB, dbName, tableName string, value
 		args = append(args, values[c])
 	}
 	sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-		p.Quote(tableName), strings.Join(quotedCols, ", "), strings.Join(placeholders, ", "))
+		p.QualifyTable(tableName), strings.Join(quotedCols, ", "), strings.Join(placeholders, ", "))
 	return execPrepared(p, db, dbName, sql, args)
 }
 
@@ -143,7 +143,7 @@ func (p *postgresProvider) UpdateRow(db *sql.DB, dbName, tableName string, set, 
 		}
 	}
 
-	sql := fmt.Sprintf("UPDATE %s SET %s", p.Quote(tableName), strings.Join(setParts, ", "))
+	sql := fmt.Sprintf("UPDATE %s SET %s", p.QualifyTable(tableName), strings.Join(setParts, ", "))
 	if len(whereParts) > 0 {
 		sql += " WHERE " + strings.Join(whereParts, " AND ")
 	}
@@ -164,7 +164,7 @@ func (p *postgresProvider) DeleteRow(db *sql.DB, dbName, tableName string, where
 		}
 	}
 
-	sql := fmt.Sprintf("DELETE FROM %s", p.Quote(tableName))
+	sql := fmt.Sprintf("DELETE FROM %s", p.QualifyTable(tableName))
 	if len(whereParts) > 0 {
 		sql += " WHERE " + strings.Join(whereParts, " AND ")
 	}
@@ -524,8 +524,7 @@ func (p *postgresProvider) DropTable(db *sql.DB, dbName, tableName string) error
 }
 
 func (p *postgresProvider) DropView(db *sql.DB, dbName, viewName string) error {
-	q := p.Quote
-	_, err := db.Exec(fmt.Sprintf("DROP VIEW %s", q(viewName)))
+	_, err := db.Exec(fmt.Sprintf("DROP VIEW %s", p.QualifyTable(viewName)))
 	return err
 }
 
