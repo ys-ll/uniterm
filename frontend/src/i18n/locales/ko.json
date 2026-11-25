@@ -939,6 +939,7 @@
   "remoteDesktop.fullscreen": "전체 화면",
   "remoteDesktop.softKeyboard": "소프트 키보드",
   "remoteDesktop.fullscreenToolbar": "전체 화면 도구 모음",
+  "remoteDesktop.sendKeys": "키 보내기",
   "remoteDesktop.restore": "복원",
   "remoteDesktop.pinToolbar": "도구 모음 고정",
   "remoteDesktop.unpinToolbar": "도구 모음 고정 해제",

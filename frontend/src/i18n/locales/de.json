@@ -939,6 +939,7 @@
   "remoteDesktop.fullscreen": "Vollbild",
   "remoteDesktop.softKeyboard": "Bildschirmtastatur",
   "remoteDesktop.fullscreenToolbar": "Vollbild-Symbolleiste",
+  "remoteDesktop.sendKeys": "Tasten",
   "remoteDesktop.restore": "Wiederherstellen",
   "remoteDesktop.pinToolbar": "Symbolleiste anheften",
   "remoteDesktop.unpinToolbar": "Symbolleiste lösen",

@@ -963,6 +963,7 @@
   "remoteDesktop.fullscreen": "Fullscreen",
   "remoteDesktop.softKeyboard": "Soft keyboard",
   "remoteDesktop.fullscreenToolbar": "Fullscreen toolbar",
+  "remoteDesktop.sendKeys": "Keys",
   "remoteDesktop.restore": "Restore",
   "remoteDesktop.pinToolbar": "Pin toolbar",
   "remoteDesktop.unpinToolbar": "Unpin toolbar",

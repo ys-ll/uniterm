@@ -46,6 +46,7 @@
     <div v-show="status === 'connected' && !isFullscreen" class="spice-statusbar">
       <RemoteDesktopZoomSelect v-model="zoom" />
       <span class="spice-status-spacer" />
+      <RemoteDesktopKeysMenu :disabled="status !== 'connected'" @send="onSendKeys" @closed="focusDesktop" />
       <button class="spice-fullscreen-btn" @click="toggleFullscreen">{{ t('remoteDesktop.fullscreen') }}</button>
     </div>
     <RemoteDesktopToolbar
@@ -59,7 +60,17 @@
       @focus-desktop="focusDesktop"
       @minimize="blurDesktop"
       @error="onToolbarError"
-    />
+    >
+      <template #keys>
+        <RemoteDesktopKeysMenu
+          compact
+          :disabled="status !== 'connected'"
+          :teleported="false"
+          @send="onSendKeys"
+          @closed="focusDesktop"
+        />
+      </template>
+    </RemoteDesktopToolbar>
     <!-- Android/iOS: soft keyboard trigger + touch gestures (tap = left
          click, long-press = right click; spice-html5 has no touch support). -->
     <RemoteMobileControls
@@ -83,6 +94,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { Loader } from '@lucide/vue'
 import RemoteDesktopToolbar from './RemoteDesktopToolbar.vue'
+import RemoteDesktopKeysMenu from './RemoteDesktopKeysMenu.vue'
 import RemoteDesktopZoomSelect from './RemoteDesktopZoomSelect.vue'
 import RemoteMobileControls from './RemoteMobileControls.vue'
 import { useRemoteDesktopPreferences } from '../composables/useRemoteDesktopPreferences'
@@ -92,7 +104,7 @@ import { createSpiceClipboard } from '../utils/spiceClipboard'
 import { getSpiceConnectionMonitor } from '../utils/spiceConnection'
 import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { readClipboardText, writeClipboard } from '../composables/useClipboardWrite'
-import { queueRemoteKeyboardChange, REMOTE_KEY_SCANCODES } from '../utils/remoteKeyboard'
+import { queueRemoteKeyboardChange, REMOTE_KEY_COMBOS, REMOTE_KEY_SCANCODES } from '../utils/remoteKeyboard'
 import type { NativeRdpKey } from '../utils/remoteKeyboard'
 import { charToScancode } from '../utils/remoteCharInput'
 import { toWebSocketURL } from '../utils/webSocketUrl'
@@ -478,6 +490,16 @@ function queueKey(scancode: number, down: boolean) {
   else inputKeys.delete(scancode)
   if (paste) inputQueue.enqueue(() => syncLocalClipboard())
   inputQueue.enqueue(() => { keyboard.key(scancode, down) })
+}
+
+// Shortcut menu (Ctrl+Alt+Del etc.), routed through queueKey so the pressed-
+// key tracking stays consistent with the ordinary keyboard path.
+function onSendKeys(id: string) {
+  const combo = REMOTE_KEY_COMBOS[id]
+  if (!combo || status.value !== 'connected') return
+  for (const scancode of combo) queueKey(scancode, true)
+  for (const scancode of [...combo].reverse()) queueKey(scancode, false)
+  focusDesktop()
 }
 
 function onFocusIn() {

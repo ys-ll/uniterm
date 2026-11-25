@@ -65,6 +65,11 @@
         style="--el-switch-on-color: var(--success); --el-switch-off-color: var(--text-disabled)"
       />
       <span class="vnc-status-spacer" />
+      <RemoteDesktopKeysMenu
+        :disabled="status !== 'connected' || viewOnly"
+        @send="onSendKeys"
+        @closed="focusDesktop"
+      />
       <button class="vnc-fullscreen-btn" @click="toggleFullscreen">{{ t('remoteDesktop.fullscreen') }}</button>
     </div>
     <RemoteDesktopToolbar
@@ -79,6 +84,15 @@
       @minimize="blurDesktop"
       @error="onToolbarError"
     >
+      <template #keys>
+        <RemoteDesktopKeysMenu
+          compact
+          :disabled="status !== 'connected' || viewOnly"
+          :teleported="false"
+          @send="onSendKeys"
+          @closed="focusDesktop"
+        />
+      </template>
       <template #displays>
         <RemoteDisplaySelect
           :displays="displayState.displays" :width="displayState.width" :height="displayState.height"
@@ -111,6 +125,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { Loader } from '@lucide/vue'
 import RemoteDesktopToolbar from './RemoteDesktopToolbar.vue'
+import RemoteDesktopKeysMenu from './RemoteDesktopKeysMenu.vue'
 import RemoteDisplaySelect from './RemoteDisplaySelect.vue'
 import RemoteDesktopZoomSelect from './RemoteDesktopZoomSelect.vue'
 import DesktopRegionEditor from './DesktopRegionEditor.vue'
@@ -530,6 +545,28 @@ function onMobileSpecial(code: string, down: boolean) {
   const keysym = CODE_KEYSYMS[code]
   if (keysym === undefined) return
   queueVncKey(keysym, code, down, () => rfb?.sendKey(keysym, code, down))
+}
+
+// Shortcut menu (Ctrl+Alt+Del etc.) — combos the local OS reserves are
+// injected as keysym press/release pairs, routed through queueVncKey so
+// stuck-key release tracking stays consistent. F4/KeyL have no CODE_KEYSYMS
+// entry, so their X11 keysyms are literal.
+const VNC_KEY_COMBOS: Record<string, [keysym: number, code: string][]> = {
+  cad: [[CODE_KEYSYMS.ControlLeft, 'ControlLeft'], [CODE_KEYSYMS.AltLeft, 'AltLeft'], [CODE_KEYSYMS.Delete, 'Delete']],
+  ctrlShiftEsc: [[CODE_KEYSYMS.ControlLeft, 'ControlLeft'], [CODE_KEYSYMS.ShiftLeft, 'ShiftLeft'], [CODE_KEYSYMS.Escape, 'Escape']],
+  win: [[CODE_KEYSYMS.MetaLeft, 'MetaLeft']],
+  winL: [[CODE_KEYSYMS.MetaLeft, 'MetaLeft'], [0x6c, 'KeyL']],
+  altTab: [[CODE_KEYSYMS.AltLeft, 'AltLeft'], [CODE_KEYSYMS.Tab, 'Tab']],
+  altF4: [[CODE_KEYSYMS.AltLeft, 'AltLeft'], [0xffbe, 'F4']],
+}
+
+function onSendKeys(id: string) {
+  const combo = VNC_KEY_COMBOS[id]
+  if (!combo || !rfb || status.value !== 'connected' || viewOnly.value) return
+  const target = rfb
+  for (const [keysym, code] of combo) queueVncKey(keysym, code, true, () => target.sendKey(keysym, code, true))
+  for (const [keysym, code] of [...combo].reverse()) queueVncKey(keysym, code, false, () => target.sendKey(keysym, code, false))
+  focusDesktop()
 }
 
 function onVisibilityChange() {

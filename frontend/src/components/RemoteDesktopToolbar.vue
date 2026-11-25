@@ -69,6 +69,9 @@
         />
       </label>
     </template>
+    <!-- Protocol-specific extras (e.g. RDP's shortcut-keys menu) slot in
+         ahead of the window controls. -->
+    <slot name="keys" />
     <span class="remote-desktop-toolbar-divider" />
     <button
       class="remote-desktop-toolbar-btn remote-desktop-toolbar-minimize"

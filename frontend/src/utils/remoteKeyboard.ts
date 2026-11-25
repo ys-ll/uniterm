@@ -66,3 +66,16 @@ export const REMOTE_KEY_SCANCODES: Record<string, number> = {
   Insert: 0xe052, MetaLeft: 0xe05b, MetaRight: 0xe05c, ContextMenu: 0xe05d,
   PrintScreen: 0xe037,
 }
+
+// Combos the local OS reserves before they can reach the webview
+// (Ctrl+Alt+Del, Win+L) plus a few conveniences, sent as one press-then-
+// release sequence — the same scancodes mstsc sends. Scancode-based, shared
+// by the RDP and SPICE send paths.
+export const REMOTE_KEY_COMBOS: Record<string, number[]> = {
+  cad: [REMOTE_KEY_SCANCODES.ControlLeft, REMOTE_KEY_SCANCODES.AltLeft, REMOTE_KEY_SCANCODES.Delete],
+  ctrlShiftEsc: [REMOTE_KEY_SCANCODES.ControlLeft, REMOTE_KEY_SCANCODES.ShiftLeft, REMOTE_KEY_SCANCODES.Escape],
+  win: [REMOTE_KEY_SCANCODES.MetaLeft],
+  winL: [REMOTE_KEY_SCANCODES.MetaLeft, REMOTE_KEY_SCANCODES.KeyL],
+  altTab: [REMOTE_KEY_SCANCODES.AltLeft, REMOTE_KEY_SCANCODES.Tab],
+  altF4: [REMOTE_KEY_SCANCODES.AltLeft, REMOTE_KEY_SCANCODES.F4],
+}
