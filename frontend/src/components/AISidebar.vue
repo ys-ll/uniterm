@@ -2197,9 +2197,6 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  /* Continuous-curvature corners (macOS-style squircle); older engines
-     ignore this and fall back to the circular radius */
-  corner-shape: squircle;
   /* No overflow:hidden: the resize handle sits outside the box in the gutter */
   display: flex;
   flex-direction: column;
@@ -2207,9 +2204,9 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   flex-shrink: 0;
 }
 .ai-sidebar.collapsed {
-  width: 0 !important;
-  border: none;
-  overflow: hidden;
+  /* Out of the flex flow entirely (like BottomPanel's v-show): the outer
+     0.125rem frame margin stays, and no flex gaps leak around the stub */
+  display: none;
 }
 .ai-sidebar.maximized {
   position: absolute !important;
@@ -2227,8 +2224,10 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
 }
 .resize-handle {
   position: absolute;
-  /* Sit centered in the 4px gutter to the left of the panel */
-  left: -0.25rem;
+  /* Sit centered in the 4px gutter to the left of the panel. The offset is
+     from the padding-box edge, and the panel's 1px border shifts that 1px
+     inward, so the extra -1px puts the handle exactly over the gutter. */
+  left: calc(-0.25rem - 1px);
   top: 0;
   bottom: 0;
   width: 0.25rem;
@@ -2248,8 +2247,6 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   bottom: 0;
   left: 0;
   right: 0;
-  margin-inline: auto;
-  width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
@@ -2262,8 +2259,7 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* Horizontal padding matches the sidebar's toolbar rows. */
-  padding: 0.75rem 0.625rem;
+  padding: 0.375rem 0.375rem;
   font-size: 0.75rem;
   font-family: var(--font-ui);
   font-weight: 600;
@@ -2292,7 +2288,7 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   color: var(--text-primary);
 }
 .ai-session-bar {
-  padding: 0.375rem 0.75rem;
+  padding: 0.375rem 0.375rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2348,7 +2344,7 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.375rem 0.625rem;
+  padding: 0.375rem;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -2492,7 +2488,7 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   50% { opacity: 0.5; }
 }
 .ai-input {
-  padding: 0.625rem 1rem;
+  padding: 0.625rem 0.375rem;
   flex-shrink: 0;
   position: relative;
 }
@@ -2597,7 +2593,7 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
 }
 .ai-editable {
   /* Horizontal padding matches the sidebar's toolbar rows. */
-  padding: 0.75rem 0.625rem;
+  padding: 0.75rem 0.375rem;
   font-size: 0.75rem;
   font-family: var(--font-ui);
   color: var(--text-primary);
@@ -2857,7 +2853,7 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.375rem 0.625rem;
+  padding: 0.375rem 0.375rem;
   font-size: 0.75rem;
   transition: background 0.1s;
 }
@@ -2903,7 +2899,7 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-  padding: 0.375rem 0.625rem;
+  padding: 0.375rem 0.375rem;
   font-size: 0.75rem;
   transition: background 0.1s;
 }

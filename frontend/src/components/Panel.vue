@@ -80,18 +80,22 @@
               {{ t('tab.duplicateChannel') }}
             </MenuItem>
             <MenuItem @click="forceReconnect(); moreMenuVisible = false">{{ t('tab.reconnect') }}</MenuItem>
-            <MenuItem v-if="serverHost" @click="copyHostAddress">{{ t('tab.copyHostAddress') }}</MenuItem>
-            <MenuItem :shortcut="menuShortcut('lockAI')" @click="toggleAiLockFromMenu">
-              {{ isAILocked ? t('terminal.aiLocked') : t('terminal.lockAI') }}
-            </MenuItem>
-            <MenuItem @click="renamePanel">{{ t('tab.rename') }}</MenuItem>
-            <MenuItem v-if="panel.config?.id" @click="locateConnection">{{ t('tab.locate') }}</MenuItem>
-            <MenuItem
-              v-if="(panel.type === 'ssh' || panel.type === 'local' || panel.type === 'wsl') && workspaceId"
-              @click="toggleBroadcastTarget"
-            >
-              {{ isPanelBroadcastTarget ? t('tab.unbroadcast') : t('tab.broadcast') }}
-            </MenuItem>
+            <!-- Tab-management items collapsed into a "标签" submenu, same
+                 folding as the tab context menu; hidden when every child is. -->
+            <MenuSubmenu v-if="hasPanelTabMenu" :label="t('tab.tabMenu')">
+              <MenuItem v-if="serverHost" @click="copyHostAddress">{{ t('tab.copyHostAddress') }}</MenuItem>
+              <MenuItem :shortcut="menuShortcut('lockAI')" @click="toggleAiLockFromMenu">
+                {{ isAILocked ? t('terminal.aiLocked') : t('terminal.lockAI') }}
+              </MenuItem>
+              <MenuItem @click="renamePanel">{{ t('tab.rename') }}</MenuItem>
+              <MenuItem v-if="panel.config?.id" @click="locateConnection">{{ t('tab.locate') }}</MenuItem>
+              <MenuItem
+                v-if="(panel.type === 'ssh' || panel.type === 'local' || panel.type === 'wsl') && workspaceId"
+                @click="toggleBroadcastTarget"
+              >
+                {{ isPanelBroadcastTarget ? t('tab.unbroadcast') : t('tab.broadcast') }}
+              </MenuItem>
+            </MenuSubmenu>
 
             <!-- ② 会话文本操作 -->
             <MenuDivider />
@@ -336,6 +340,15 @@ function onHeaderContextMenu(e: MouseEvent) {
 
 // Connection host (IP or hostname) — empty for local/wsl/serial panels.
 const serverHost = computed(() => props.panel.config?.host || '')
+
+/* The "标签" submenu is shown only when at least one of its children is
+   visible (mirrors TabItem's hasTabMenu) */
+const hasPanelTabMenu = computed(
+  () =>
+    !!serverHost.value ||
+    !!props.panel.config?.id ||
+    ((props.panel.type === 'ssh' || props.panel.type === 'local' || props.panel.type === 'wsl') && !!props.workspaceId)
+)
 
 const isPanelBroadcastTarget = computed(() =>
   tabStore.isPanelBroadcasting(props.panel.id)

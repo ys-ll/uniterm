@@ -7,8 +7,8 @@
   --bg-overlay: #2b2b2b;
   --bg-hover: #303030;
   --bg-active: #383838;
-  /* Title bar: between base and elevated so it sits above the gutter floor
-     but below the side panels */
+  /* Chrome plane (header + gutters): muted gray, independent of window
+     activation */
   --bg-titlebar: #141414;
 
   /* Text - slightly softened white so large text areas (AI answers, logs)
@@ -77,7 +77,7 @@
 
   /* Spacing - two-tier radius: 8px controls, 8px surfaces */
   --radius-sm: 0.5rem;
-  --radius-md: 1rem;
+  --radius-md: 0.5rem;
   --radius-lg: 0.5rem;
 
   /* Scrollbar */
@@ -199,15 +199,15 @@
   --bg-surface: #ebebeb;
   --bg-overlay: #e0e0e0;
   --bg-hover: #d5d5d5;
-  --bg-active: #c8c8c8;
+  --bg-active: #dcdcdc;
   /* Light theme inverts the elevation logic: between the white floor (#fff)
      and the gray panels (#f5f5f5) */
   --bg-titlebar: #fdfdfd;
 
   /* Text - pure black primary, heavier grays for contrast on white */
   --text-primary: #000000;
-  --text-secondary: #3d3d3d;
-  --text-muted: #5c5c5c;
+  --text-secondary: #1f1f1f;
+  --text-muted: #454545;
   --text-disabled: #8a8a8a;
 
   /* Accent - system blue */
@@ -262,9 +262,9 @@
   --el-fill-color-light: #ebebeb;
   --el-fill-color-lighter: #e0e0e0;
   --el-text-color-primary: #000000;
-  --el-text-color-regular: #3d3d3d;
-  --el-text-color-secondary: #6e6e6e;
-  --el-text-color-placeholder: #8a8a8a;
+  --el-text-color-regular: #262626;
+  --el-text-color-secondary: #4d4d4d;
+  --el-text-color-placeholder: #767676;
   --el-border-color: var(--border-subtle);
   --el-border-color-light: color-mix(in srgb, #000000 8%, var(--bg-base));
   --el-border-color-lighter: color-mix(in srgb, #000000 6%, var(--bg-base));
@@ -386,23 +386,6 @@ html:not([data-theme]) body,
 
 [data-theme="light"] body {
   background: linear-gradient(180deg, var(--bg-base) 0%, color-mix(in srgb, var(--bg-base) 95%, #000) 100%);
-}
-
-/* Noise texture overlay for atmosphere */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0.015;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 8rem;
-}
-
-[data-theme="light"] body::before {
-  opacity: 0.006;
 }
 
 /* Scrollbar - minimal */
@@ -894,7 +877,8 @@ body::before {
   line-height: 1.25rem !important;
   font-family: var(--font-ui);
   font-size: 0.75rem !important;
-  border-radius: var(--radius-sm);
+  /* No blanket radius: EP's own first/last-child rules round only the group
+     ends, keeping middle segments square (segmented control) */
   transition: all 0.15s ease;
   background: var(--bg-base) !important;
   border-color: var(--border-subtle) !important;
@@ -1690,4 +1674,17 @@ button:disabled,
 /* Compact query editors on narrow screens: less reserved editor height. */
 @media (max-width: 640px) {
   .sql-editor-wrap { min-height: 4rem !important; }
+}
+
+/* ── Background-image mode: selection rings ──────────────────────────────
+   The has-bg wildcard forces every fill transparent, so selection state
+   (which is fill-only since the panel refresh) becomes invisible over the
+   image. Restore the pre-refresh accent ring on selected items there. */
+.app-container.has-bg .tab-item.active,
+.app-container.has-bg .sidebar-tab.active,
+.app-container.has-bg .bottom-panel-tab.active,
+.app-container.has-bg .connection-item.active,
+.app-container.has-bg .qc-item.active,
+.app-container.has-bg .note-item.active {
+  box-shadow: inset 0 0 0 1px var(--accent);
 }

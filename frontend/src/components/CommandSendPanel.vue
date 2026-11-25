@@ -147,7 +147,7 @@ function send() {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.5rem 0.625rem;
+  padding: 0.5rem 0.375rem;
   flex-shrink: 0;
 }
 
@@ -171,7 +171,7 @@ function send() {
 .cs-editor {
   flex: 1;
   min-height: 0;
-  padding: 0 0.625rem;
+  padding: 0 0.375rem;
 }
 
 .cs-meta {
@@ -179,7 +179,7 @@ function send() {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.3rem 0.625rem 0.5rem;
+  padding: 0.3rem 0.375rem 0.5rem;
   font-size: 0.6875rem;
   color: var(--text-muted);
   flex-shrink: 0;

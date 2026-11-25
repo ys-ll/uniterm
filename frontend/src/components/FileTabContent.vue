@@ -705,7 +705,6 @@ async function onDropRemote(e: DragEvent) {
   /* Island look, matching the shell's floating panels */
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
   position: relative;
 }
 .drop-overlay {

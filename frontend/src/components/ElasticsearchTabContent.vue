@@ -817,7 +817,6 @@ function onResizeStart(e: MouseEvent) {
   flex-direction: column;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -925,15 +924,14 @@ function onResizeStart(e: MouseEvent) {
   background: transparent;
   flex-shrink: 0;
 }
-.es-resizer:hover::after {
+.es-resizer:hover::after,
+.es-resizer.hint::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
   right: 0;
-  margin-inline: auto;
-  width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
@@ -946,7 +944,6 @@ function onResizeStart(e: MouseEvent) {
   min-height: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
 }
 .es-tab-bar {
   display: flex;

@@ -1,12 +1,15 @@
 <template>
   <div
+    ref="el"
     class="panel-splitter"
     :class="direction"
-    @mousedown="onMouseDown"
+    @mousedown="startDrag"
   ></div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+
 const props = defineProps<{
   direction: 'horizontal' | 'vertical'
 }>()
@@ -15,15 +18,21 @@ const emit = defineEmits<{
   resize: [delta: number]
 }>()
 
-function onMouseDown(e: MouseEvent) {
+const el = ref<HTMLElement | null>(null)
+
+/* Crossing grips (SplitterCrossings.vue) start drags with a synthetic
+   mousedown carrying the grip's coordinates, so the plain @mousedown entry
+   point serves both real and grip-driven gestures. */
+function startDrag(e: MouseEvent) {
   e.preventDefault()
   window.dispatchEvent(new CustomEvent('split:resize-start'))
   const direction = props.direction
-  const splitter = e.currentTarget as HTMLElement
+  const splitter = el.value ?? (e.currentTarget as HTMLElement)
   const grid = splitter.parentElement
   const gridRect = grid?.getBoundingClientRect()
   const gridSize = direction === 'horizontal' ? (gridRect?.width || 400) : (gridRect?.height || 400)
   let lastPos = direction === 'horizontal' ? e.clientX : e.clientY
+  splitter.classList.add('dragging')
 
   function onMove(ev: MouseEvent) {
     ev.preventDefault()
@@ -34,6 +43,7 @@ function onMouseDown(e: MouseEvent) {
   }
 
   function onUp() {
+    splitter.classList.remove('dragging')
     document.removeEventListener('mousemove', onMove)
     document.removeEventListener('mouseup', onUp)
     window.dispatchEvent(new CustomEvent('split:resize-end'))
@@ -51,7 +61,9 @@ function onMouseDown(e: MouseEvent) {
   background: transparent;
   transition: background 0.15s;
 }
-.panel-splitter:hover {
+.panel-splitter:hover,
+.panel-splitter.hint,
+.panel-splitter.dragging {
   background: var(--accent);
 }
 .panel-splitter.horizontal {

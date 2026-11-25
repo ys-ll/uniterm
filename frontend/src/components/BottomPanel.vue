@@ -2,27 +2,11 @@
   <div
     ref="panelEl"
     class="bottom-panel"
-    :class="{ resizing: isResizing, 'corner-hint': cornerHint !== '' }"
+    :class="{ resizing: isResizing }"
     v-show="!uiLayout.narrowLayout && (uiLayout.bottomPanelVisible || !!uiLayout.draggingPanel)"
     :style="{ height: uiLayout.bottomPanelHeight + 'px' }"
   >
     <div class="resize-handle" @mousedown="onResizeStart" />
-    <!-- T-junction corners: bottom panel's top gutter × each side panel's
-         gutter. Drag resizes the bottom panel AND the adjacent side panel. -->
-    <div
-      class="resize-corner left"
-      :class="{ hint: cornerHint === 'left' }"
-      @mousedown="onCornerResizeStart($event, 'left')"
-      @mouseenter="setCornerHint('left', true)"
-      @mouseleave="setCornerHint('left', false)"
-    />
-    <div
-      class="resize-corner right"
-      :class="{ hint: cornerHint === 'right' }"
-      @mousedown="onCornerResizeStart($event, 'right')"
-      @mouseenter="setCornerHint('right', true)"
-      @mouseleave="setCornerHint('right', false)"
-    />
     <div
       class="bottom-panel-header"
       :class="{ 'drag-over': stripDragOver }"
@@ -102,11 +86,6 @@ const settingsStore = useSettingsStore()
 
 const emit = defineEmits<{
   (e: 'select', view: string): void
-  /* Corner of the bottom panel's top gutter crossing a side panel's gutter:
-     the drag must resize BOTH panels at once */
-  (e: 'corner-resize', payload: { event: MouseEvent; side: 'left' | 'right' }): void
-  /* Hover on the corner also lights the adjacent side panel's indicator bar */
-  (e: 'corner-resize-hint', payload: { side: 'left' | 'right'; active: boolean }): void
 }>()
 
 const TAB_ICONS: Record<string, any> = {
@@ -168,19 +147,6 @@ watch(
 // ── Top-edge resize (mirrors the sidebar's side handle) ──
 const panelEl = ref<HTMLElement | null>(null)
 const isResizing = ref(false)
-/* Which corner (if any) is hovered: lights this panel's own horizontal
-   indicator bar in addition to the hover target */
-const cornerHint = ref<'' | 'left' | 'right'>('')
-
-function setCornerHint(side: 'left' | 'right', active: boolean) {
-  /* While a corner drag is running the corner moves under the cursor, so
-     enter/leave events fire repeatedly; a hint flip would re-render the
-     panels mid-drag and their :style bindings would snap the sizes back —
-     the reported jitter. Freeze the hint during a drag. */
-  if (isResizing.value) return
-  cornerHint.value = active ? side : cornerHint.value === side ? '' : cornerHint.value
-  emit('corner-resize-hint', { side, active })
-}
 
 function onResizeStart(e: MouseEvent) {
   e.preventDefault()
@@ -229,16 +195,6 @@ function onResizeStart(e: MouseEvent) {
   document.addEventListener('mouseup', onMouseUp)
 }
 
-/* T-junction corner drag: run this panel's own vertical resize and hand the
-   same mousedown to the adjacent side panel (App.vue routes it to the
-   Sidebar / AISidebar exposed startResize), so both borders follow the
-   cursor in one gesture. */
-function onCornerResizeStart(e: MouseEvent, side: 'left' | 'right') {
-  e.preventDefault()
-  onResizeStart(e)
-  emit('corner-resize', { event: e, side })
-}
-
 // ── Tab-strip context menu (move views between sidebar and bottom) ──
 const tabStripMenuRef = ref<InstanceType<typeof PanelStripMenu> | null>(null)
 
@@ -267,9 +223,6 @@ onMounted(() => {
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  /* Continuous-curvature corners (macOS-style squircle); older engines
-     ignore this and fall back to the circular radius */
-  corner-shape: squircle;
   /* No overflow:hidden: the resize handle sits outside the box in the gutter */
 }
 
@@ -279,69 +232,27 @@ onMounted(() => {
 
 .resize-handle {
   position: absolute;
-  /* Sit centered in the 4px gutter above the panel */
+  /* Sit centered in the 4px gutter above the panel. The offset is from the
+     padding-box edge, and the panel's 1px border shifts that 1px downward,
+     so the extra -1px puts the handle exactly over the gutter. */
   left: 0;
   right: 0;
-  top: -0.25rem;
+  top: calc(-0.25rem - 1px);
   height: 0.25rem;
   cursor: row-resize;
   z-index: 10;
   background: transparent;
 }
 
-/* Hover: 0.1875rem accent bar centered in the gutter */
-.resize-handle:hover::after {
+/* Hover or crossing-grip hint: accent bar filling the 4px gutter */
+.resize-handle:hover::after,
+.resize-handle.hint::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
   bottom: 0;
-  margin-block: auto;
-  height: 0.1875rem;
-  background: var(--accent);
-  box-shadow: 0 0 0.375rem var(--accent-glow);
-}
-
-/* T-junction corner grips: 0.75rem squares centered on the crossing of the
-   panel's top gutter and each side panel's gutter. They overlap both linear
-   handles (z-index above them) so the whole crossing area drags BOTH
-   borders — horizontal moves resize the side panel, vertical moves the
-   bottom panel. */
-.resize-corner {
-  position: absolute;
-  top: -0.5rem;
-  width: 0.75rem;
-  height: 0.75rem;
-  z-index: 20;
-  background: transparent;
-  /* Four-direction arrow: the grip moves both borders */
-  cursor: move;
-}
-.resize-corner.left {
-  left: -0.5rem;
-}
-.resize-corner.right {
-  right: -0.5rem;
-}
-/* Hover on the corner lights BOTH dragged edges: this rule shows the bottom
-   panel's top edge; the side panel's edge lights via corner-resize-hint */
-.resize-corner.hint::after {
-  content: '';
-  position: absolute;
-  inset: 0.25rem;
-  background: var(--accent);
-  box-shadow: 0 0 0.375rem var(--accent-glow);
-}
-.bottom-panel.corner-hint .resize-handle::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  margin-block: auto;
-  height: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
@@ -350,8 +261,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.125rem;
-  /* Horizontal padding matches the sidebar's toolbar rows. */
-  padding: 0.375rem 0.625rem;
+  padding: 0.375rem 0.375rem;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -401,8 +311,9 @@ onMounted(() => {
 }
 
 .bottom-panel-tab.active {
-  color: var(--accent);
-  background: var(--accent-subtle);
+  /* Activity-bar tab: neutral gray rounded highlight, bright label */
+  color: var(--text-primary);
+  background: var(--bg-active);
 }
 
 .bottom-panel-spacer {
@@ -464,7 +375,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.25rem 0.625rem;
+  padding: 0.25rem 0.375rem;
   font-size: 0.75rem;
   font-family: var(--font-ui);
   color: var(--text-secondary);

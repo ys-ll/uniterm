@@ -700,7 +700,6 @@ function onResizeEnd() {
   flex-shrink: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
   overflow: hidden;
 }
 .db-resizer {
@@ -713,15 +712,14 @@ function onResizeEnd() {
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
-.db-resizer:hover::after {
+.db-resizer:hover::after,
+.db-resizer.hint::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
   right: 0;
-  margin-inline: auto;
-  width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
@@ -733,7 +731,6 @@ function onResizeEnd() {
   min-width: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
 }
 .doc-tabs {
   display: flex;

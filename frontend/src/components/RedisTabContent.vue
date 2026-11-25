@@ -844,7 +844,6 @@ watch(() => props.sessionId, async (newId) => {
   flex-direction: column;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
   overflow: hidden;
 }
 .redis-resizer {
@@ -857,7 +856,8 @@ watch(() => props.sessionId, async (newId) => {
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
-.redis-resizer:hover::after {
+.redis-resizer:hover::after,
+.redis-resizer.hint::after {
   content: '';
   position: absolute;
   top: 0;
@@ -865,7 +865,7 @@ watch(() => props.sessionId, async (newId) => {
   left: 0;
   right: 0;
   margin-inline: auto;
-  width: 0.1875rem;
+  width: 0.25rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
@@ -876,7 +876,6 @@ watch(() => props.sessionId, async (newId) => {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
 }
 .redis-toolbar {
   display: flex;

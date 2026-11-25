@@ -153,12 +153,12 @@ function doDeleteTunnel(tn: Tunnel) {
 
 <style scoped>
 .tunnels-panel { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.tn-toolbar { display: flex; align-items: center; gap: 0.25rem; padding: 0.625rem 0.625rem 0.375rem; flex-shrink: 0; }
+.tn-toolbar { display: flex; align-items: center; gap: 0.25rem; padding: 0.375rem; flex-shrink: 0; }
 .tn-search-input { flex: 1; min-width: 0; }
 .tn-icon-btn { width: 1.625rem; height: 1.625rem; display: flex; align-items: center; justify-content: center; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); flex-shrink: 0; }
 .tn-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
 .tn-list { flex: 1; overflow-y: auto; padding: 0 0.5rem 0.5rem; }
-.tn-item { display: flex; align-items: center; gap: 0.625rem; padding: 0.4375rem 0.625rem; min-height: 2.5rem; border-radius: var(--radius-sm); margin: 1px 0; user-select: none; }
+.tn-item { display: flex; align-items: center; gap: 0.625rem; padding: 0.4375rem 0.375rem; min-height: 2.5rem; border-radius: var(--radius-sm); margin: 1px 0; user-select: none; }
 .tn-item:hover { background: var(--bg-hover); }
 .tn-status { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--text-disabled); flex-shrink: 0; }
 .tn-item.running .tn-status { background: var(--success, #24c08a); box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--success, #24c08a) 20%, transparent); }

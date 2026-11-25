@@ -530,6 +530,18 @@ onBeforeUnmount(() => {
 
 .k8s-list-table {
   flex: 1;
+  /* Flush in the detail pane: no rounded corners, and the outer frame keeps
+     only the top divider — left/bottom/right lines removed */
+  border-radius: 0;
+}
+.k8s-list-table::before,
+.k8s-list-table::after {
+  display: none;
+}
+.k8s-list-table.el-table--border {
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
 }
 
 /* Action-column cell: tighter padding + 0.25rem gap between .btn-icon buttons
