@@ -1080,6 +1080,15 @@ func (a *App) LoadConnections() (session.ConnectionStoreData, error) {
 	return a.connectionStore.Load()
 }
 
+// GetTOTPCode returns the current code for a decrypted TOTP secret. Bastion
+// web consoles ask the user to type the current code while binding an
+// authenticator, so the UI needs to display what SSH would submit (#1583).
+// The secret is already available to the frontend via LoadConnections; this
+// method keeps code generation in one place instead of duplicating RFC 6238.
+func (a *App) GetTOTPCode(secret string) (session.TOTPCode, error) {
+	return session.CurrentTOTPCode(secret, time.Now())
+}
+
 func (a *App) LoadIdentities() (session.IdentityStoreData, error) {
 	if a.identityStore == nil {
 		return session.IdentityStoreData{Identities: []session.Identity{}}, nil

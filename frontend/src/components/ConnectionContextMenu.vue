@@ -11,6 +11,7 @@
     <MenuItem v-if="config?.type === 'ssh'" @click="onConnectClick($event, 'monitor')">{{ t('sidebar.connectMonitor') }}</MenuItem>
     <MenuItem v-if="config && canLocate" @click="locateSession">{{ t('sidebar.locateSession') }}</MenuItem>
     <MenuItem v-if="canBatchExecute" @click="onBatchExecute">{{ t('sidebar.batchExecute') }}</MenuItem>
+    <MenuItem v-if="canViewTotpCode" @click="onViewTotpCode">{{ t('conn.totpViewCode') }}</MenuItem>
     <MenuDivider />
     <MenuItem :class="{ disabled: targets.length > 1 }" @click="targets.length === 1 && onEditClick()">{{ t('sidebar.edit') }}</MenuItem>
     <MenuItem @click="duplicate()">{{ t('sidebar.duplicate') }}</MenuItem>
@@ -24,6 +25,12 @@
 
   <!-- Batch execute dialog (opened from the context menu) -->
   <BatchExecuteDialog v-model="batchDialogVisible" :hosts="batchHosts" />
+  <!-- Live TOTP code for bastion web-console binding (issue #1583) -->
+  <TotpCodeDialog
+    v-model:visible="totpDialogVisible"
+    :secret="totpConfig?.totpSecret || ''"
+    :host-name="totpConfig?.name"
+  />
 </template>
 
 <script setup lang="ts">
@@ -39,6 +46,7 @@ import MenuItem from './MenuItem.vue'
 import MenuDivider from './MenuDivider.vue'
 import MenuSubmenu from './MenuSubmenu.vue'
 import BatchExecuteDialog from './BatchExecuteDialog.vue'
+import TotpCodeDialog from './TotpCodeDialog.vue'
 import type { ConnectionConfig } from '../types/session'
 import { CONNECTION_TYPES } from '../utils/connectionTypes'
 import { connectFileMenuKey } from '../utils/fileTransferUtils'
@@ -119,6 +127,23 @@ const batchHosts = computed(() =>
 )
 const canBatchExecute = computed(() => batchHosts.value.length >= 2)
 const batchDialogVisible = ref(false)
+
+// Only offer the live code for a single saved host that already has a secret;
+// the edit form covers the not-yet-saved case. Keep a copy of the config since
+// closing the menu clears the parent's selection.
+const canViewTotpCode = computed(() =>
+  props.targets.length === 1 && !!props.config?.totpEnabled && !!props.config?.totpSecret,
+)
+const totpDialogVisible = ref(false)
+const totpConfig = ref<ConnectionConfig | null>(null)
+
+function onViewTotpCode() {
+  const c = props.config
+  if (!c) return
+  totpConfig.value = c
+  close()
+  totpDialogVisible.value = true
+}
 
 function onBatchExecute() {
   close()

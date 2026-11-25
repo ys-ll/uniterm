@@ -206,6 +206,13 @@
               <el-form-item v-if="form.totpEnabled" :label="t('conn.totpSecret')" required>
                 <el-input v-model="form.totpSecret" type="password" show-password :key="passwordInputKey" autocomplete="new-password" :placeholder="t('conn.totpSecretPlaceholder')" />
                 <div class="field-hint">{{ t('conn.totpHint') }}</div>
+                <!-- Live code for bastion web-console binding (#1583). Uses the
+                     secret as typed, so it also works before the host is saved. -->
+                <div v-if="form.totpSecret" class="totp-current">
+                  <div class="totp-current-label">{{ t('conn.totpCurrentCode') }}</div>
+                  <TotpCodePanel :secret="form.totpSecret" :active="visible" />
+                  <div class="field-hint">{{ t('conn.totpCodeHint') }}</div>
+                </div>
               </el-form-item>
             </template>
             <el-form-item v-if="(form.type === 'database' && form.dbType !== 'rqlite' && form.dbType !== 'sqlite' && form.dbType !== 'redis' && form.dbType !== 'elasticsearch') || form.type === 'mongodb'" :label="form.type === 'database' && form.dbType === 'oracle' ? t('db.serviceName') : t('db.databases')" :required="form.dbType === 'postgres' || (form.type === 'database' && form.dbType === 'oracle')">
@@ -822,6 +829,7 @@ import type { K8sContextInfo } from '../types/k8s'
 import IdentityEditDialog from './IdentityEditDialog.vue'
 import ProxyEditDialog from './ProxyEditDialog.vue'
 import SSHAlgorithmsDialog from './SSHAlgorithmsDialog.vue'
+import TotpCodePanel from './TotpCodePanel.vue'
 import { isSqlDbType } from '../utils/quickConnect'
 import {
   isWebServerMode,
@@ -2364,6 +2372,22 @@ function onConnect() {
   color: var(--text-muted);
   font-size: 0.75rem;
   line-height: 1.4;
+}
+
+/* ── Live TOTP code under the secret field (issue #1583) ── */
+.totp-current {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.375rem;
+  background: var(--bg-elevated);
+}
+
+.totp-current-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-bottom: 0.125rem;
 }
 
 /* Hint that follows a switch on the same line: occupy the remaining width

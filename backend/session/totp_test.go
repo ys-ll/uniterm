@@ -39,6 +39,45 @@ func TestTOTPCodeRFC6238(t *testing.T) {
 	}
 }
 
+func TestCurrentTOTPCode(t *testing.T) {
+	// The code shown in the UI must be the exact code SSH would submit, and
+	// the countdown must describe the same 30-second period boundary.
+	for _, tc := range []struct {
+		seconds  int64
+		wantCode string // empty: only compare against totpCode for that instant
+	}{
+		{0, ""}, {29, ""}, {30, ""}, // period boundaries
+		{59, "287082"}, {1111111109, "081804"}, {1111111111, "050471"},
+		{1234567890, "005924"}, {2000000000, "279037"}, // RFC 6238 Appendix B
+	} {
+		now := time.Unix(tc.seconds, 0)
+		got, err := CurrentTOTPCode(testTOTPSecret, now)
+		if err != nil {
+			t.Fatalf("CurrentTOTPCode(%d): %v", tc.seconds, err)
+		}
+		direct, err := totpCode(testTOTPSecret, now)
+		if err != nil || got.Code != direct {
+			t.Fatalf("shown code %q differs from submitted code %q (%v)", got.Code, direct, err)
+		}
+		if tc.wantCode != "" && got.Code != tc.wantCode {
+			t.Fatalf("CurrentTOTPCode(%d) = %q; want %q", tc.seconds, got.Code, tc.wantCode)
+		}
+		if want := 30 - int(tc.seconds%30); got.SecondsRemaining != want || got.Period != 30 {
+			t.Fatalf("CurrentTOTPCode(%d) = %+v; want %d seconds left", tc.seconds, got, want)
+		}
+	}
+	for _, secret := range []string{"", "invalid!secret", "enc:v1:secret", "AAAA"} {
+		got, err := CurrentTOTPCode(secret, time.Now())
+		if err == nil || got.Code != "" {
+			t.Fatalf("expected an error for %q, got %+v, %v", secret, got, err)
+		}
+	}
+	// Secrets pasted from an authenticator page carry spaces and lowercase.
+	if _, err := CurrentTOTPCode("  "+strings.ToLower(testTOTPSecret)+" \n", time.Now()); err != nil {
+		t.Fatalf("normalized secret rejected: %v", err)
+	}
+}
+
 func TestTOTPChallengeMixedAndRejected(t *testing.T) {
 	config := ConnectionConfig{AuthType: "password", Password: "saved", TOTPEnabled: true, TOTPSecret: testTOTPSecret}
 	var prompts []string

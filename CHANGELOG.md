@@ -11,6 +11,7 @@
 - Notes: a dockable notes panel with free-form category tags and a Markdown editor / preview; notes join the cloud-sync exchange.
 - Import: Devolutions Remote Desktop Manager (.rdm) exports — folders map to groups, SSH / Telnet / RDP entries become connections with their credentials, and SSH gateway entries become jump hosts; secrets protected by RDM's SafePassword scheme are reported as warnings. (@rsipka)
 - Files: new "local file" and "WSL file" connection types — a dual-pane browser over the local filesystem with cross-pane copy / move wired into the transfer panel's progress and conflict handling, and the WSL file browser with a distro picker and start path; the file sidebar now also works with local terminals, with directory tracking for PowerShell, git-bash and more.
+- SSH: the current TOTP code is now visible — live in the connection form (even before the host is saved) and from the connection right-click menu, with a countdown and one-click copy, so authenticator binding on a bastion's web console is possible. (#1583)
 
 **Improvements**
 
@@ -72,6 +73,7 @@ Thanks to @etanman, @surenwuyuwuqiu, @rsipka, @caibingxin666, @chenxiaoqiang and
 - 笔记：新增可停靠的笔记面板，支持自由分类标签与 Markdown 编辑 / 预览；笔记纳入云同步。
 - 导入：支持导入 Devolutions Remote Desktop Manager（.rdm）导出——文件夹映射为分组，SSH / Telnet / RDP 条目连同凭据转为连接，SSH 网关条目转为跳板机；受 RDM SafePassword 保护的密文无法导入，会在结果中以警告列出。(@rsipka)
 - 文件：新增「本地文件」和「WSL 文件」连接类型——本地文件系统的双栏浏览器，跨栏复制 / 移动接入传输面板的进度与冲突处理，WSL 文件浏览器可选发行版与起始路径；文件侧栏额外支持本地终端，PowerShell、git-bash 等本地终端的目录跟踪现已可用。
+- SSH：新增当前 TOTP 验证码展示——连接编辑表单内实时显示（保存前也可查看），连接右键菜单也能随时打开，带 30 秒倒计时与一键复制，方便在堡垒机 Web 页面完成验证器绑定。(#1583)
 
 **改进**
 

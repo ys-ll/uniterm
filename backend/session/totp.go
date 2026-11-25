@@ -81,6 +81,32 @@ func totpCode(secret string, now time.Time) (string, error) {
 	return fmt.Sprintf("%06d", value%1000000), nil
 }
 
+// TOTPCode is the code an authenticator app would show right now, plus the
+// time left before it rolls over. The UI renders it for bastions that ask the
+// user to confirm a freshly generated code on their web console (#1583).
+type TOTPCode struct {
+	Code             string `json:"code"`
+	SecondsRemaining int    `json:"secondsRemaining"`
+	Period           int    `json:"period"`
+}
+
+// CurrentTOTPCode returns the current code using the same clock and algorithm
+// as automaticTOTPChallenge, so the code shown in the UI is exactly the one
+// SSH authentication would submit. The secret must already be decrypted by
+// the credential vault; ciphertext is rejected rather than used as a key.
+func CurrentTOTPCode(secret string, now time.Time) (TOTPCode, error) {
+	code, err := totpCode(secret, now)
+	if err != nil {
+		return TOTPCode{}, err
+	}
+	const period = 30
+	return TOTPCode{
+		Code:             code,
+		SecondsRemaining: period - int(now.Unix()%period),
+		Period:           period,
+	}, nil
+}
+
 // automaticTOTPChallenge answers each recognized field once per handshake.
 // Unknown or rejected questions go to the terminal callback; unattended callers
 // fail promptly. Secrets and generated codes are never printed to the terminal.
