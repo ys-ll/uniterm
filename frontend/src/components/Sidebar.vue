@@ -1888,9 +1888,6 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  /* Continuous-curvature corners (macOS-style squircle); older engines
-     ignore this and fall back to the circular radius */
-  corner-shape: squircle;
   /* No overflow:hidden here: the resize handle lives OUTSIDE the panel's
      box (in the gutter) and overflow clipping would hide it */
   display: flex;
@@ -1900,19 +1897,21 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
 }
 
 .sidebar.collapsed {
-  width: 0 !important;
-  border: none;
-  overflow: hidden;
+  /* Out of the flex flow entirely (like BottomPanel's v-show): the outer
+     0.125rem frame margin stays, and no flex gaps leak around the stub */
+  display: none;
 }
 
 .sidebar.resizing {
   transition: none;
 }
 
-.resize-handle {
+ .resize-handle {
   position: absolute;
-  /* Sit centered in the 4px gutter to the right of the panel */
-  right: -0.25rem;
+  /* Sit centered in the 4px gutter to the right of the panel. The offset is
+     from the padding-box edge, and the panel's 1px border shifts that 1px
+     outward, so the extra -1px puts the handle exactly over the gutter. */
+  right: calc(-0.25rem - 1px);
   top: 0;
   bottom: 0;
   width: 0.25rem;
@@ -1923,7 +1922,9 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   background: transparent;
 }
 
-/* Hover: 0.1875rem accent bar centered in the gutter */
+/* Hover: accent bar filling the whole 4px gutter. Full-fill is the only
+   width that stays pixel-crisp at fractional DPRs (125%/150% scale) and it
+   is centered by construction. */
 .resize-handle:hover::after,
 .resize-handle.hint::after {
   content: '';
@@ -1932,8 +1933,6 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   bottom: 0;
   left: 0;
   right: 0;
-  margin-inline: auto;
-  width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
@@ -1942,10 +1941,8 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   display: flex;
   align-items: center;
   gap: 0.125rem;
-  /* Bottom padding separates the tab strip from the title bar / panel
-     content below (their own rows carry no vertical padding). Horizontal
-     padding matches the panels' toolbars so right-edge buttons align. */
-  padding: 0.625rem 0.625rem 0.5rem;
+  /* Bottom padding separates the tab strip from the panel content below */
+  padding: 0.375rem 0.375rem 0.375rem;
   flex-shrink: 0;
 }
 
@@ -2055,7 +2052,7 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.25rem 0.625rem;
+  padding: 0.25rem 0.375rem;
   font-size: 0.75rem;
   font-family: var(--font-ui);
   color: var(--text-secondary);
@@ -2078,15 +2075,23 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
 }
 
 .sidebar-tab.active {
-  color: var(--accent);
-  background: var(--accent-subtle);
+  /* Activity-bar tab: neutral gray rounded highlight, bright icon —
+     not an accent-tinted button */
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
+
+/* View title bars docked in THIS sidebar sit further in from the left edge
+   than the shell-wide 0.375rem (bottom panel keeps its own tighter value) */
+.sidebar :deep(.panel-title-bar) {
+  padding-left: 0.625rem;
 }
 
 .search-box {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.625rem 0.625rem 0.375rem;
+  padding: 0.375rem;
   flex-shrink: 0;
 }
 
@@ -2118,7 +2123,7 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.375rem 0.625rem 0.375rem 0.375rem;
+  padding: 0.375rem;
   user-select: none;
   border-radius: var(--radius-sm);
   transition: background 0.12s ease;
@@ -2165,7 +2170,7 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.5rem 0.625rem;
+  padding: 0.5rem 0.375rem;
   border-radius: var(--radius-sm);
   transition: all 0.12s ease;
   margin-bottom: 0.125rem;

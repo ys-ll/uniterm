@@ -132,10 +132,14 @@
           </KeepAlive>
         </template>
       </div>
-      <BottomPanel @select="onBottomPanelSelect" @corner-resize="onCornerResize" @corner-resize-hint="onCornerResizeHint" />
+      <BottomPanel @select="onBottomPanelSelect" />
       </div>
       <AISidebar ref="aiSidebarRef" @open-settings="openSettings" />
     </div>
+    <!-- Universal ＋ junctions: four-way grips wherever a vertical drag bar
+         (workspace splitter / sidebar / AI sidebar handle) crosses a
+         horizontal one (row splitter / bottom panel handle) -->
+    <SplitterCrossings />
     <ConnectionForm v-model="showConnectionForm" :edit-config="editConfig" :default-group-id="pendingGroupId" @save="onSaveOnly" @connect="(c: ConnectionConfig, ko?: boolean) => { const wasEdit = !!editConfig?.id; editConfig = null; onConnect(c, ko, wasEdit) }" @connect-only="onConnectOnly" @cancel="editConfig = null" />
 
     <CredentialPrompt
@@ -220,6 +224,7 @@ import StartTabContent from './components/StartTabContent.vue'
 import ConnectionForm from './components/ConnectionForm.vue'
 import AISidebar from './components/AISidebar.vue'
 import BottomPanel from './components/BottomPanel.vue'
+import SplitterCrossings from './components/SplitterCrossings.vue'
 import SyncConflictDialog from './components/SyncConflictDialog.vue'
 import WorkspaceSaveDialog from './components/WorkspaceSaveDialog.vue'
 import MultilinePasteDialog from './components/MultilinePasteDialog.vue'
@@ -1199,20 +1204,6 @@ function onBottomPanelSelect(view: string) {
   sidebarRef.value?.openTab(view)
 }
 
-/* T-junction corner drag from the bottom panel: the panel runs its own
-   vertical resize, and the same mousedown is routed here to the adjacent
-   side panel's exposed startResize so one gesture moves both borders. */
-function onCornerResize({ event, side }: { event: MouseEvent; side: 'left' | 'right' }) {
-  if (side === 'left') sidebarRef.value?.startResize(event)
-  else aiSidebarRef.value?.startResize(event)
-}
-
-/* Corner hover: light the adjacent side panel's indicator bar as well */
-function onCornerResizeHint({ side, active }: { side: 'left' | 'right'; active: boolean }) {
-  const target = side === 'left' ? sidebarRef.value : aiSidebarRef.value
-  target?.setResizeHint(active)
-}
-
 const actionHandlers: Record<ShortcutAction, () => void> = {
   nextTab: () => tabStore.nextTab(),
   prevTab: () => tabStore.prevTab(),
@@ -2115,8 +2106,8 @@ watch(
      Top gutter is tighter so the title bar doesn't drift too far from
      the content. */
   gap: 0.25rem;
-  /* Outer frame margin tighter than the inner gutters */
-  padding: 0 0.125rem 0.125rem;
+  /* Outer frame margin, same width as the inner gutters */
+  padding: 0 0.25rem 0.25rem;
   position: relative;
   z-index: 1;
 }
@@ -2128,16 +2119,15 @@ watch(
   overflow: hidden;
   background: var(--bg-base);
   border-radius: var(--radius-md);
-  /* Continuous-curvature corners (macOS-style squircle); ignored by older
-     engines, which fall back to the circular radius */
-  corner-shape: squircle;
   border: 1px solid var(--border-subtle);
 }
 /* Multi-panel workspace: the panels carry their own island borders, so the
    enclosing frame would read as a second ring around them. Border goes away;
    the tab-area radius still clips the grid's outer corners. */
 .tab-area.frameless {
-  border-color: transparent;
+  /* Remove the border entirely: transparent-color kept a 1px empty ring
+     around self-framing views (workspace/sftp/db/container/...) */
+  border: none;
 }
 
 /* Center column between the left sidebar and the AI sidebar: active tab
@@ -2148,7 +2138,7 @@ watch(
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* 4px gutter between the tab area and the docked bottom panel */
+  /* Gutter between the tab area and the docked bottom panel */
   gap: 0.25rem;
 }
 

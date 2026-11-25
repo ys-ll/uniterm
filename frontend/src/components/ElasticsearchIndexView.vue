@@ -533,13 +533,15 @@ function onTopResizeStart(e: MouseEvent) {
   background: transparent;
   flex-shrink: 0;
 }
-.editor-resizer:hover::after {
+.editor-resizer:hover::after,
+.editor-resizer.hint::after {
   content: '';
   position: absolute;
   top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
-  height: 0.1875rem;
+
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }

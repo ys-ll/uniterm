@@ -252,7 +252,6 @@ function onDrop(e: DragEvent, panelId: string) {
      separated from siblings by the grid gutters the split style inserts */
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
 }
 /* Active panel: the island frame lights up instead of the header underline.
    Mixed toward the normal border so it reads as a tint, not a bright outline */

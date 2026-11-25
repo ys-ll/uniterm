@@ -523,7 +523,7 @@ defineExpose({ flushPending })
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.625rem 0.625rem 0.375rem;
+  padding: 0.375rem;
   flex-shrink: 0;
 }
 
@@ -578,6 +578,7 @@ defineExpose({ flushPending })
 }
 
 .notes-divider:hover::before,
+.notes-divider.hint::before,
 .notes-divider.dragging::before {
   left: 0.125rem;
   width: 0.1875rem;
@@ -591,7 +592,7 @@ defineExpose({ flushPending })
   display: flex;
   align-items: flex-start;
   gap: 0.125rem;
-  padding: 0 0.625rem 0.375rem;
+  padding: 0 0.375rem 0.375rem;
   flex-shrink: 0;
 }
 
@@ -668,7 +669,7 @@ defineExpose({ flushPending })
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.4375rem 0.625rem;
+  padding: 0.4375rem 0.375rem;
   border-radius: var(--radius-sm);
   transition: all 0.12s ease;
   margin-bottom: 0.125rem;
@@ -743,7 +744,7 @@ defineExpose({ flushPending })
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.625rem 0.625rem 0.375rem;
+  padding: 0.375rem;
   flex-shrink: 0;
 }
 

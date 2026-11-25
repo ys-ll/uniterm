@@ -95,7 +95,7 @@ function hidePanel() {
   /* Horizontal padding matches the panels' toolbars (search box etc.) so
      the more button aligns with their right-edge buttons; no vertical
      padding — the tab strip sits right above. */
-  padding: 0 0.625rem;
+  padding: 0 0.375rem;
   flex-shrink: 0;
 }
 

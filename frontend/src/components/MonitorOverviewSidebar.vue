@@ -574,7 +574,7 @@ onUnmounted(() => {
   flex-flow: row wrap;
   align-content: flex-start;
   gap: 0.625rem;
-  padding: 0.625rem;
+  padding: 0.375rem;
   min-height: 0;
 }
 

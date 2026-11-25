@@ -831,7 +831,6 @@ watch(() => props.sessionId, () => {
   flex-shrink: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -847,7 +846,8 @@ watch(() => props.sessionId, () => {
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
-.mongo-resizer:hover::after {
+.mongo-resizer:hover::after,
+.mongo-resizer.hint::after {
   content: '';
   position: absolute;
   top: 0;
@@ -855,7 +855,7 @@ watch(() => props.sessionId, () => {
   left: 0;
   right: 0;
   margin-inline: auto;
-  width: 0.1875rem;
+  width: 0.25rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
@@ -867,7 +867,6 @@ watch(() => props.sessionId, () => {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  corner-shape: squircle;
 }
 /* ── Search ── */
 .search-wrap {

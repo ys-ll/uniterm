@@ -324,7 +324,8 @@ watch(() => [props.mode, props.target], () => {
   background: transparent;
   transition: background 0.15s ease;
 }
-.drawer-resizer:hover {
+.drawer-resizer:hover,
+.drawer-resizer.hint {
   background: var(--accent, #4096ff);
 }
 

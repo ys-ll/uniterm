@@ -45,6 +45,8 @@ defineEmits<{
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* Anchor for the splitter-crossing grips overlay */
+  position: relative;
 }
 /* Single-panel workspace: the panel fills the tab-area frame, so the leaf's
    own island border/radius would read as a second frame inside it */
