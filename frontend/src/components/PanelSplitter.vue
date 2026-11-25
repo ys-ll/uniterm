@@ -47,7 +47,8 @@ function onMouseDown(e: MouseEvent) {
 <style scoped>
 .panel-splitter {
   flex-shrink: 0;
-  background: var(--border-subtle);
+  /* The gutter between island panels shows the floor; only a hover lights it */
+  background: transparent;
   transition: background 0.15s;
 }
 .panel-splitter:hover {

@@ -2,7 +2,7 @@
   <div
     v-if="node.type === 'leaf'"
     class="leaf-node"
-    :class="{ 'maximized-hidden': maximizedPanelId && node.panelId !== maximizedPanelId }"
+    :class="{ 'maximized-hidden': maximizedPanelId && node.panelId !== maximizedPanelId, 'leaf-active': activePanelId === node.panelId }"
   >
     <SettingsTab v-if="panel?.type === 'settings'" />
     <NetworkScanTabContent
@@ -248,6 +248,16 @@ function onDrop(e: DragEvent, panelId: string) {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* Island look, matching the shell's floating panels: rounded, bordered,
+     separated from siblings by the grid gutters the split style inserts */
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
+}
+/* Active panel: the island frame lights up instead of the header underline.
+   Mixed toward the normal border so it reads as a tint, not a bright outline */
+.leaf-node.leaf-active {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
 }
 .leaf-node.maximized-hidden {
   visibility: hidden;

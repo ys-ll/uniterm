@@ -687,22 +687,26 @@ async function onDropRemote(e: DragEvent) {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  /* Gutter between the file panes and the transfer panel below */
+  gap: 0.25rem;
 }
 .panes-area {
   flex: 1;
   display: flex;
   overflow: hidden;
+  /* Gutter between the local and remote islands */
+  gap: 0.25rem;
 }
 .local-pane, .remote-pane {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-right: 1px solid var(--border-subtle);
+  /* Island look, matching the shell's floating panels */
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
   position: relative;
-}
-.remote-pane {
-  border-right: none;
 }
 .drop-overlay {
   position: absolute;

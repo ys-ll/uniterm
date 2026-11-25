@@ -1039,7 +1039,6 @@ defineExpose({
 .db-result-table :deep(.el-table__body tr td.el-table__cell.db-cell-selected) {
   background-color: var(--bg-base);
   background-image: linear-gradient(var(--accent-glow), var(--accent-glow)), linear-gradient(var(--accent-glow), var(--accent-glow));
-  box-shadow: inset 0 0 0 1px var(--accent);
   outline: none;
 }
 /* 操作列同为 sticky 固定列：底色权重高于 hover 透明规则（rAF 摘类窗口

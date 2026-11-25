@@ -605,8 +605,7 @@ onUnmounted(() => {
   height: 2.75rem;
   padding: 0 0.5rem;
   gap: 0.125rem;
-  background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-titlebar);
   flex-shrink: 0;
   position: relative;
   z-index: 10;

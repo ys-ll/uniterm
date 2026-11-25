@@ -815,7 +815,9 @@ function onResizeStart(e: MouseEvent) {
 .es-left {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -915,10 +917,8 @@ function onResizeStart(e: MouseEvent) {
   text-align: center;
 }
 .es-resizer {
-  /* Hover area floats over the tree edge (negative margin) so it takes
-     no layout width when idle and never blanks the content side. */
+  /* Occupies the gutter between the two islands */
   width: 0.25rem;
-  margin-left: -0.25rem;
   position: relative;
   z-index: 1;
   cursor: col-resize;
@@ -931,6 +931,8 @@ function onResizeStart(e: MouseEvent) {
   top: 0;
   bottom: 0;
   left: 0;
+  right: 0;
+  margin-inline: auto;
   width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
@@ -942,6 +944,9 @@ function onResizeStart(e: MouseEvent) {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
 }
 .es-tab-bar {
   display: flex;

@@ -7,9 +7,13 @@
   --bg-overlay: #2b2b2b;
   --bg-hover: #303030;
   --bg-active: #383838;
+  /* Title bar: between base and elevated so it sits above the gutter floor
+     but below the side panels */
+  --bg-titlebar: #141414;
 
-  /* Text */
-  --text-primary: #ffffff;
+  /* Text - slightly softened white so large text areas (AI answers, logs)
+     don't read as harsh pure white on the dark base */
+  --text-primary: #e0e0e0;
   --text-secondary: #cccccc;
   --text-muted: #9a9a9a;
   --text-disabled: #636363;
@@ -49,9 +53,13 @@
   --error-subtle: rgba(248, 113, 113, 0.06);
   --error-glow: rgba(248, 113, 113, 0.15);
 
-  /* Borders - separators read slightly heavier than hairlines */
-  --border-subtle: rgba(255, 255, 255, 0.16);
-  --border-hover: rgba(255, 255, 255, 0.22);
+  /* Borders - soft hairlines, mixed against --bg-base to an OPAQUE color:
+     a translucent white border composites brighter over lighter panels
+     (sidebar #202020) than over dark ones (tab area #0f0f0f), which made
+     the same token read as two different colors. Opaque mixes stay uniform
+     regardless of the backdrop. */
+  --border-subtle: color-mix(in srgb, #ffffff 14%, var(--bg-base));
+  --border-hover: color-mix(in srgb, #ffffff 20%, var(--bg-base));
 
   /* Shadows */
   --shadow-sm: 0 1px 0.125rem rgba(0, 0, 0, 0.3);
@@ -67,9 +75,9 @@
   --font-ui: -apple-system, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', sans-serif;
   --font-mono: 'JetBrains Mono Variable', monospace;
 
-  /* Spacing - two-tier radius: 4px controls, 8px surfaces */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
+  /* Spacing - two-tier radius: 8px controls, 8px surfaces */
+  --radius-sm: 0.5rem;
+  --radius-md: 1rem;
   --radius-lg: 0.5rem;
 
   /* Scrollbar */
@@ -84,19 +92,21 @@
      currently-applied [data-theme] defines. */
   --el-color-primary: var(--accent);
   --el-input-focus-border-color: var(--accent);
+  /* Keep EP component corners in sync with our control radius (--radius-sm) */
+  --el-border-radius-base: var(--radius-sm);
   --el-bg-color: #1a1a1a;
   --el-bg-color-page: #0f0f0f;
   --el-fill-color-blank: #1f1f1f;
   --el-fill-color: #1a1a1a;
   --el-fill-color-light: #262626;
   --el-fill-color-lighter: #2d2d2d;
-  --el-text-color-primary: #ffffff;
+  --el-text-color-primary: #e0e0e0;
   --el-text-color-regular: #cccccc;
   --el-text-color-secondary: #9a9a9a;
   --el-text-color-placeholder: #636363;
-  --el-border-color: rgba(255, 255, 255, 0.14);
-  --el-border-color-light: rgba(255, 255, 255, 0.1);
-  --el-border-color-lighter: rgba(255, 255, 255, 0.08);
+  --el-border-color: var(--border-subtle);
+  --el-border-color-light: color-mix(in srgb, #ffffff 7%, var(--bg-base));
+  --el-border-color-lighter: color-mix(in srgb, #ffffff 5%, var(--bg-base));
   /* Loading mask: uniform dark overlay matching the project's .loading-overlay convention (no white flash on refresh) */
   --el-mask-color: var(--scrim);
 
@@ -123,8 +133,9 @@
   --bg-overlay: #1e2c49;
   --bg-hover: #243256;
   --bg-active: #2b3a5f;
+  --bg-titlebar: #0d1424;
 
-  --text-primary: #ffffff;
+  --text-primary: #e0e0e0;
   --text-secondary: #c3cfdd;
   --text-muted: #8fa1bd;
   --text-disabled: #5f6f8a;
@@ -156,8 +167,8 @@
   --error-subtle: rgba(248, 113, 113, 0.06);
   --error-glow: rgba(248, 113, 113, 0.15);
 
-  --border-subtle: rgba(255, 255, 255, 0.16);
-  --border-hover: rgba(255, 255, 255, 0.22);
+  --border-subtle: color-mix(in srgb, #ffffff 14%, var(--bg-base));
+  --border-hover: color-mix(in srgb, #ffffff 20%, var(--bg-base));
 
   --shadow-sm: 0 1px 0.125rem rgba(0, 0, 0, 0.4);
   --shadow-md: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.5);
@@ -169,13 +180,13 @@
   --el-fill-color: #121c30;
   --el-fill-color-light: #1e2c49;
   --el-fill-color-lighter: #243256;
-  --el-text-color-primary: #ffffff;
+  --el-text-color-primary: #e0e0e0;
   --el-text-color-regular: #c3cfdd;
   --el-text-color-secondary: #8fa1bd;
   --el-text-color-placeholder: #5f6f8a;
-  --el-border-color: rgba(255, 255, 255, 0.14);
-  --el-border-color-light: rgba(255, 255, 255, 0.1);
-  --el-border-color-lighter: rgba(255, 255, 255, 0.08);
+  --el-border-color: var(--border-subtle);
+  --el-border-color-light: color-mix(in srgb, #ffffff 7%, var(--bg-base));
+  --el-border-color-lighter: color-mix(in srgb, #ffffff 5%, var(--bg-base));
 
   --el-input-height: 1.75rem;
   --el-component-size: 1.75rem;
@@ -189,6 +200,9 @@
   --bg-overlay: #e0e0e0;
   --bg-hover: #d5d5d5;
   --bg-active: #c8c8c8;
+  /* Light theme inverts the elevation logic: between the white floor (#fff)
+     and the gray panels (#f5f5f5) */
+  --bg-titlebar: #fdfdfd;
 
   /* Text - pure black primary, heavier grays for contrast on white */
   --text-primary: #000000;
@@ -227,9 +241,10 @@
   --error-subtle: rgba(209, 52, 56, 0.06);
   --error-glow: rgba(209, 52, 56, 0.15);
 
-  /* Borders - cool light grays */
-  --border-subtle: rgba(0, 0, 0, 0.12);
-  --border-hover: rgba(0, 0, 0, 0.18);
+  /* Borders - opaque mixes against the white floor, same reasoning as the
+     dark themes above (translucent borders composite differently per panel) */
+  --border-subtle: color-mix(in srgb, #000000 14%, var(--bg-base));
+  --border-hover: color-mix(in srgb, #000000 20%, var(--bg-base));
 
   /* Scrim - translucent white so dark loading text stays legible */
   --scrim: rgba(255, 255, 255, 0.6);
@@ -250,9 +265,9 @@
   --el-text-color-regular: #3d3d3d;
   --el-text-color-secondary: #6e6e6e;
   --el-text-color-placeholder: #8a8a8a;
-  --el-border-color: rgba(0, 0, 0, 0.12);
-  --el-border-color-light: rgba(0, 0, 0, 0.08);
-  --el-border-color-lighter: rgba(0, 0, 0, 0.06);
+  --el-border-color: var(--border-subtle);
+  --el-border-color-light: color-mix(in srgb, #000000 8%, var(--bg-base));
+  --el-border-color-lighter: color-mix(in srgb, #000000 6%, var(--bg-base));
 
   --el-input-height: 1.75rem;
   --el-component-size: 1.75rem;
@@ -1121,6 +1136,10 @@ body::before {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-ui);
+  /* Rounded table corners at the control radius; clipped so the header/row
+     fills don't poke past the corners */
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 .el-table__body,
 .el-table__footer,

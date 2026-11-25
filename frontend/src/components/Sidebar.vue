@@ -5,7 +5,7 @@
     :class="{ collapsed: !visible && !uiLayout.draggingPanel, resizing: isResizing }"
     :style="{ width: sidebarWidth + 'px' }"
   >
-    <div class="resize-handle" @mousedown="onResizeStart" />
+    <div class="resize-handle" :class="{ hint: resizeHint }" @mousedown="onResizeStart" />
     <div
       class="sidebar-header"
       :class="{ 'drag-over': tabStripDragOver }"
@@ -1008,10 +1008,16 @@ watch(searchQuery, (q) => {
 })
 
 // ── Resize ──
-const SIDEBAR_MIN_WIDTH = 240
+const SIDEBAR_MIN_WIDTH = 180
 const SIDEBAR_MAX_WIDTH = 400
+/* Dragging below this hides the panel (VS Code-style); the same drag reopening
+   past it restores the panel at the min width */
+const SIDEBAR_COLLAPSE_AT = 90
 const sidebarWidth = ref(SIDEBAR_MIN_WIDTH)
 const isResizing = ref(false)
+/* Lit from App.vue while the bottom panel's T-junction corner is hovered, so
+   both dragged edges show their indicator bars during a corner gesture */
+const resizeHint = ref(false)
 const sidebarEl = ref<HTMLDivElement>()
 
 // Restore the persisted width once LocalState is loaded (App.vue awaits
@@ -1039,17 +1045,38 @@ function onResizeStart(e: MouseEvent) {
 
   window.dispatchEvent(new CustomEvent('split:resize-start'))
 
+  let collapsedDuringDrag = false
+
   function onMouseMove(ev: MouseEvent) {
     if (!isResizing.value) return
-    const delta = ev.clientX - startX
-    const newWidth = Math.min(Math.max(startWidth + delta, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH)
+    const raw = startWidth + (ev.clientX - startX)
+    /* Dragged past the collapse point: hide the panel, but keep tracking the
+       drag — pulling back reopens it at the min width */
+    if (raw <= SIDEBAR_COLLAPSE_AT) {
+      collapsedDuringDrag = true
+      el!.style.width = '0px'
+      return
+    }
+    collapsedDuringDrag = false
+    const newWidth = Math.min(Math.max(raw, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH)
     el!.style.width = newWidth + 'px'
+    /* Keep the :style-bound ref in sync: any re-render mid-drag re-applies
+       this binding and would otherwise snap the width back (corner-drag jitter) */
+    sidebarWidth.value = newWidth
   }
 
   function onMouseUp() {
     isResizing.value = false
-    sidebarWidth.value = el!.offsetWidth
-    useLocalStateStore().update({ sidebarWidth: sidebarWidth.value })
+    if (collapsedDuringDrag) {
+      /* Closed via drag: flip visibility and persist a sane width so the next
+         open doesn't restore 0 */
+      sidebarWidth.value = SIDEBAR_MIN_WIDTH
+      useLocalStateStore().update({ sidebarWidth: sidebarWidth.value })
+      emit('toggle')
+    } else {
+      sidebarWidth.value = el!.offsetWidth
+      useLocalStateStore().update({ sidebarWidth: sidebarWidth.value })
+    }
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
     window.dispatchEvent(new CustomEvent('split:resize-end'))
@@ -1853,13 +1880,19 @@ function openChangeGroupForGroup(groupId: string) {
   showChangeGroupDialog.value = true
 }
 
-defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, openChangeGroupForGroup, activeView })
+defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, openChangeGroupForGroup, activeView, startResize: onResizeStart, setResizeHint: (v: boolean) => { resizeHint.value = v } })
 </script>
 
 <style scoped>
 .sidebar {
   background: var(--bg-elevated);
-  border-right: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  /* Continuous-curvature corners (macOS-style squircle); older engines
+     ignore this and fall back to the circular radius */
+  corner-shape: squircle;
+  /* No overflow:hidden here: the resize handle lives OUTSIDE the panel's
+     box (in the gutter) and overflow clipping would hide it */
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -1868,7 +1901,7 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
 
 .sidebar.collapsed {
   width: 0 !important;
-  border-right: none;
+  border: none;
   overflow: hidden;
 }
 
@@ -1878,10 +1911,11 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
 
 .resize-handle {
   position: absolute;
-  right: -0.375rem;
+  /* Sit centered in the 4px gutter to the right of the panel */
+  right: -0.25rem;
   top: 0;
   bottom: 0;
-  width: 0.375rem;
+  width: 0.25rem;
   cursor: col-resize;
   user-select: none;
   -webkit-user-drag: none;
@@ -1889,13 +1923,16 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
   background: transparent;
 }
 
-/* Hover: 0.1875rem accent bar extending into sidebar */
-.resize-handle:hover::after {
+/* Hover: 0.1875rem accent bar centered in the gutter */
+.resize-handle:hover::after,
+.resize-handle.hint::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
+  right: 0;
+  margin-inline: auto;
   width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
@@ -2161,7 +2198,6 @@ defineExpose({ focusSearch, openQuickCommands, openTab, openChangeGroupFor, open
 
 .connection-item.active {
   background: var(--accent-subtle);
-  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .connection-item.active .name {

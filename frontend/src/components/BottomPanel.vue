@@ -2,11 +2,27 @@
   <div
     ref="panelEl"
     class="bottom-panel"
-    :class="{ resizing: isResizing }"
+    :class="{ resizing: isResizing, 'corner-hint': cornerHint !== '' }"
     v-show="!uiLayout.narrowLayout && (uiLayout.bottomPanelVisible || !!uiLayout.draggingPanel)"
     :style="{ height: uiLayout.bottomPanelHeight + 'px' }"
   >
     <div class="resize-handle" @mousedown="onResizeStart" />
+    <!-- T-junction corners: bottom panel's top gutter × each side panel's
+         gutter. Drag resizes the bottom panel AND the adjacent side panel. -->
+    <div
+      class="resize-corner left"
+      :class="{ hint: cornerHint === 'left' }"
+      @mousedown="onCornerResizeStart($event, 'left')"
+      @mouseenter="setCornerHint('left', true)"
+      @mouseleave="setCornerHint('left', false)"
+    />
+    <div
+      class="resize-corner right"
+      :class="{ hint: cornerHint === 'right' }"
+      @mousedown="onCornerResizeStart($event, 'right')"
+      @mouseenter="setCornerHint('right', true)"
+      @mouseleave="setCornerHint('right', false)"
+    />
     <div
       class="bottom-panel-header"
       :class="{ 'drag-over': stripDragOver }"
@@ -71,6 +87,9 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { X, Network, FolderTree, Activity, ArrowRightLeft, Zap, Clock, Palette, Send, NotebookPen } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { useUiLayoutStore, BOTTOM_PANEL_MIN_HEIGHT, type SidebarView } from '../stores/uiLayoutStore'
+/* Dragging the panel height below this hides it (VS Code-style); the same drag
+   pulling back up restores it at the min height */
+const BOTTOM_PANEL_COLLAPSE_AT = 60
 import { useSettingsStore } from '../stores/settingsStore'
 import { SIDEBAR_TAB_DEFAULTS, SIDEBAR_TAB_ORDER } from '../types/settings'
 import { usePanelStripDrag } from '../composables/usePanelStripDrag'
@@ -83,6 +102,11 @@ const settingsStore = useSettingsStore()
 
 const emit = defineEmits<{
   (e: 'select', view: string): void
+  /* Corner of the bottom panel's top gutter crossing a side panel's gutter:
+     the drag must resize BOTH panels at once */
+  (e: 'corner-resize', payload: { event: MouseEvent; side: 'left' | 'right' }): void
+  /* Hover on the corner also lights the adjacent side panel's indicator bar */
+  (e: 'corner-resize-hint', payload: { side: 'left' | 'right'; active: boolean }): void
 }>()
 
 const TAB_ICONS: Record<string, any> = {
@@ -144,6 +168,19 @@ watch(
 // ── Top-edge resize (mirrors the sidebar's side handle) ──
 const panelEl = ref<HTMLElement | null>(null)
 const isResizing = ref(false)
+/* Which corner (if any) is hovered: lights this panel's own horizontal
+   indicator bar in addition to the hover target */
+const cornerHint = ref<'' | 'left' | 'right'>('')
+
+function setCornerHint(side: 'left' | 'right', active: boolean) {
+  /* While a corner drag is running the corner moves under the cursor, so
+     enter/leave events fire repeatedly; a hint flip would re-render the
+     panels mid-drag and their :style bindings would snap the sizes back —
+     the reported jitter. Freeze the hint during a drag. */
+  if (isResizing.value) return
+  cornerHint.value = active ? side : cornerHint.value === side ? '' : cornerHint.value
+  emit('corner-resize-hint', { side, active })
+}
 
 function onResizeStart(e: MouseEvent) {
   e.preventDefault()
@@ -155,16 +192,34 @@ function onResizeStart(e: MouseEvent) {
 
   window.dispatchEvent(new CustomEvent('split:resize-start'))
 
+  let collapsedDuringDrag = false
+
   function onMouseMove(ev: MouseEvent) {
     if (!isResizing.value) return
+    const raw = startHeight + (startY - ev.clientY)
+    /* Dragged below the collapse point: hide the panel, but keep tracking the
+       drag — pulling back up reopens it at the min height (VS Code-style) */
+    if (raw <= BOTTOM_PANEL_COLLAPSE_AT) {
+      collapsedDuringDrag = true
+      el!.style.height = '0px'
+      return
+    }
+    collapsedDuringDrag = false
     const maxHeight = window.innerHeight - 160
-    const newHeight = Math.min(Math.max(startHeight + (startY - ev.clientY), BOTTOM_PANEL_MIN_HEIGHT), maxHeight)
+    const newHeight = Math.min(Math.max(raw, BOTTOM_PANEL_MIN_HEIGHT), maxHeight)
     el!.style.height = newHeight + 'px'
   }
 
   function onMouseUp() {
     isResizing.value = false
-    uiLayout.setBottomPanelHeight(el!.offsetHeight)
+    if (collapsedDuringDrag) {
+      /* Closed via drag: hide the panel and persist a sane height so the next
+         open doesn't restore 0 */
+      uiLayout.setBottomPanelHeight(BOTTOM_PANEL_MIN_HEIGHT)
+      uiLayout.setBottomPanelVisible(false)
+    } else {
+      uiLayout.setBottomPanelHeight(el!.offsetHeight)
+    }
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
     window.dispatchEvent(new CustomEvent('split:resize-end'))
@@ -172,6 +227,16 @@ function onResizeStart(e: MouseEvent) {
 
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
+}
+
+/* T-junction corner drag: run this panel's own vertical resize and hand the
+   same mousedown to the adjacent side panel (App.vue routes it to the
+   Sidebar / AISidebar exposed startResize), so both borders follow the
+   cursor in one gesture. */
+function onCornerResizeStart(e: MouseEvent, side: 'left' | 'right') {
+  e.preventDefault()
+  onResizeStart(e)
+  emit('corner-resize', { event: e, side })
 }
 
 // ── Tab-strip context menu (move views between sidebar and bottom) ──
@@ -200,7 +265,12 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   background: var(--bg-elevated);
-  border-top: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  /* Continuous-curvature corners (macOS-style squircle); older engines
+     ignore this and fall back to the circular radius */
+  corner-shape: squircle;
+  /* No overflow:hidden: the resize handle sits outside the box in the gutter */
 }
 
 .bottom-panel.resizing {
@@ -209,22 +279,68 @@ onMounted(() => {
 
 .resize-handle {
   position: absolute;
+  /* Sit centered in the 4px gutter above the panel */
   left: 0;
   right: 0;
-  top: 0;
-  height: 0.375rem;
+  top: -0.25rem;
+  height: 0.25rem;
   cursor: row-resize;
   z-index: 10;
   background: transparent;
 }
 
-/* Hover: 0.1875rem accent bar along the top edge */
+/* Hover: 0.1875rem accent bar centered in the gutter */
 .resize-handle:hover::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
+  bottom: 0;
+  margin-block: auto;
+  height: 0.1875rem;
+  background: var(--accent);
+  box-shadow: 0 0 0.375rem var(--accent-glow);
+}
+
+/* T-junction corner grips: 0.75rem squares centered on the crossing of the
+   panel's top gutter and each side panel's gutter. They overlap both linear
+   handles (z-index above them) so the whole crossing area drags BOTH
+   borders — horizontal moves resize the side panel, vertical moves the
+   bottom panel. */
+.resize-corner {
+  position: absolute;
+  top: -0.5rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  z-index: 20;
+  background: transparent;
+  /* Four-direction arrow: the grip moves both borders */
+  cursor: move;
+}
+.resize-corner.left {
+  left: -0.5rem;
+}
+.resize-corner.right {
+  right: -0.5rem;
+}
+/* Hover on the corner lights BOTH dragged edges: this rule shows the bottom
+   panel's top edge; the side panel's edge lights via corner-resize-hint */
+.resize-corner.hint::after {
+  content: '';
+  position: absolute;
+  inset: 0.25rem;
+  background: var(--accent);
+  box-shadow: 0 0 0.375rem var(--accent-glow);
+}
+.bottom-panel.corner-hint .resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  margin-block: auto;
   height: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);

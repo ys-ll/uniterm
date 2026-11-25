@@ -165,7 +165,10 @@ function onResizeStart(e: MouseEvent) {
   display: flex;
   flex-direction: column;
   min-height: 6.25rem;
-  border-top: 1px solid var(--border-subtle);
+  /* Island look: the full-width strip below the file panes is its own panel */
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
   background: var(--bg-elevated);
   flex-shrink: 0;
 }

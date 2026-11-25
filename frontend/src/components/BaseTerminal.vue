@@ -2309,7 +2309,7 @@ function toggleSearchOption(key: 'caseSensitive' | 'regex' | 'wholeWord') {
 function applyXtermTheme(themeName: string) {
   if (!terminal) return
   const theme = resolveXtermBackground(
-    getXtermTheme(resolveTerminalThemeName(themeName, settingsStore.resolvedAppTheme), settingsStore.settings.customTerminalThemes),
+    getXtermTheme(resolveTerminalThemeName(themeName, settingsStore.rawAppTheme), settingsStore.settings.customTerminalThemes),
     localStateStore.state.backgroundEnabled,
     localStateStore.state.backgroundImage
   )
@@ -2360,7 +2360,7 @@ watch(
 
 // Re-apply when the app theme flips so FOLLOW_APP_THEME tracks it live.
 watch(
-  () => settingsStore.resolvedAppTheme,
+  () => settingsStore.rawAppTheme,
   () => applyXtermTheme(settingsStore.settings.terminal.theme || 'dark')
 )
 
