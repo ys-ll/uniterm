@@ -35,6 +35,12 @@ export const useSettingsStore = defineStore('settings', () => {
     // 'dark' and 'deep-blue' are both dark.
     return 'dark'
   })
+  // The app theme choice with 'system' resolved but 'deep-blue' kept distinct —
+  // the terminal's follow-app mapping gives deep-blue its own navy palette.
+  const rawAppTheme = computed<'dark' | 'deep-blue' | 'light'>(() => {
+    if (settings.value.theme === 'system') return systemPrefersDark.value ? 'dark' : 'light'
+    return settings.value.theme
+  })
 
   const activeModel = computed(() =>
     settings.value.ai.models.find(m => m.id === useLocalStateStore().state.ai?.activeModelId) || settings.value.ai.models[0]
@@ -398,6 +404,7 @@ export const useSettingsStore = defineStore('settings', () => {
     refreshAvailableShells,
     theme,
     resolvedAppTheme,
+    rawAppTheme,
     language,
     terminal,
     ai,

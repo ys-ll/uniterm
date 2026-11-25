@@ -1548,10 +1548,8 @@ function doEditConnection(config: ConnectionConfig | null) {
 }
 .start-card.focused {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
 }
 .start-card.selected {
-  border-color: var(--accent);
   background: var(--accent-subtle);
 }
 
@@ -1623,7 +1621,6 @@ function doEditConnection(config: ConnectionConfig | null) {
 .start-quick-card.focused {
   border-style: solid;
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
 }
 .start-quick-card:hover {
   background: var(--accent-subtle);

@@ -777,15 +777,13 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 .tab-item.active {
-  background: var(--bg-hover);
+  background: var(--bg-active);
   color: var(--text-primary);
-  box-shadow: inset 0 0 0 1px var(--accent);
 }
 /* AI-locked tabs are signalled by the tab icon alone: a solid warning-coloured
    icon with a soft glow. No surface tint — low-alpha warning colour over the
    dark background turns muddy (issue #928), and at higher alpha it reads as a
-   flat orange block. The accent ring stays the sole "which tab is selected"
-   signal. */
+   flat orange block. */
 .tab-type-icon.ai-locked-icon {
   color: var(--warning);
 }

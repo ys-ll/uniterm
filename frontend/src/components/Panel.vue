@@ -727,7 +727,6 @@ watch(() => props.panel.outputLog, (val) => {
 }
 .panel-active .panel-header {
   background: var(--bg-elevated);
-  border-bottom-color: var(--accent);
 }
 /* The AI-locked panel header keeps its normal surface (issue #928: an
    alpha-tinted warning background turns muddy on dark themes); the state is

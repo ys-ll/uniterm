@@ -1,5 +1,5 @@
 <template>
-  <div class="panel-grid">
+  <div class="panel-grid" :class="{ single: layout.root.type === 'leaf' }">
     <RenderNode
       :node="layout.root"
       :panel-ids="panelIds"
@@ -45,5 +45,11 @@ defineEmits<{
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+/* Single-panel workspace: the panel fills the tab-area frame, so the leaf's
+   own island border/radius would read as a second frame inside it */
+.panel-grid.single :deep(.leaf-node) {
+  border: none;
+  border-radius: 0;
 }
 </style>

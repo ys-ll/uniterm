@@ -311,8 +311,14 @@ function onResize(payload: { node: any, index: number, delta: number }) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-base);
+  /* Gutters between the workspace islands use the chrome tier, matching the
+     shell gutters outside */
+  background: var(--bg-titlebar);
   position: relative;
+  /* Panels sit flush against the tab-area edge: with the frame hidden
+     (multi-panel workspace) the panels' own borders are the only frame, and
+     the tab-area radius clips the grid's outer corners */
+  padding: 0;
 }
 
 .ws-empty {

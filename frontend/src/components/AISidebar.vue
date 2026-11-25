@@ -1,6 +1,6 @@
 <template>
   <div ref="sidebarEl" class="ai-sidebar" :class="{ collapsed: !aiStore.visible, resizing: isResizing, maximized: isMaximized }" :style="{ width: sidebarWidth + 'px' }">
-    <div class="resize-handle" @mousedown="onResizeStart" />
+    <div class="resize-handle" :class="{ hint: resizeHint }" @mousedown="onResizeStart" />
     <div class="ai-header">
       <span>{{ t('ai.title') }}</span>
       <div class="ai-actions">
@@ -1043,10 +1043,15 @@ const liveCompactionElapsed = computed(() => {
 const thinkingStartLabel = computed(() => formatClock(aiStore.thinkingStartedAt))
 
 const messagesRef = ref<HTMLDivElement>()
-const AI_SIDEBAR_MIN_WIDTH = 300
+const AI_SIDEBAR_MIN_WIDTH = 220
 const AI_SIDEBAR_MAX_WIDTH = 800
+/* Dragging below this hides the panel (VS Code-style); the same drag reopening
+   past it restores the panel at the min width */
+const AI_SIDEBAR_COLLAPSE_AT = 110
 const sidebarWidth = ref(360)
 const isResizing = ref(false)
+/* Lit from App.vue while the bottom panel's T-junction corner is hovered */
+const resizeHint = ref(false)
 const isMaximized = ref(false)
 const preMaxWidth = ref(360)
 
@@ -2094,20 +2099,43 @@ function onResizeStart(e: MouseEvent) {
 
   window.dispatchEvent(new CustomEvent('split:resize-start'))
 
+  let collapsedDuringDrag = false
+
   function onMouseMove(ev: MouseEvent) {
     if (!isResizing.value) return
-    const delta = startX - ev.clientX
-    const newWidth = Math.min(Math.max(startWidth + delta, AI_SIDEBAR_MIN_WIDTH), AI_SIDEBAR_MAX_WIDTH)
+    const raw = startWidth + (startX - ev.clientX)
+    /* Dragged past the collapse point: hide the panel, but keep tracking the
+       drag — pulling back reopens it at the min width */
+    if (raw <= AI_SIDEBAR_COLLAPSE_AT) {
+      collapsedDuringDrag = true
+      if (el) el.style.width = '0px'
+      return
+    }
+    collapsedDuringDrag = false
+    const newWidth = Math.min(Math.max(raw, AI_SIDEBAR_MIN_WIDTH), AI_SIDEBAR_MAX_WIDTH)
     if (el) el.style.width = newWidth + 'px'
+    /* Keep the :style-bound ref in sync: a mid-drag re-render re-applies this
+       binding and would otherwise snap the width back (corner-drag jitter) */
+    sidebarWidth.value = newWidth
   }
 
   function onMouseUp() {
     isResizing.value = false
-    sidebarWidth.value = el.offsetWidth
-    // Skip while maximised — the CSS forces 100% width, so offsetWidth is
-    // the full window width and must not overwrite the persisted value.
-    if (!isMaximized.value) {
-      useLocalStateStore().update({ aiSidebarWidth: sidebarWidth.value })
+    if (collapsedDuringDrag) {
+      /* Closed via drag: flip visibility and persist a sane width so the next
+         open doesn't restore 0 */
+      sidebarWidth.value = AI_SIDEBAR_MIN_WIDTH
+      if (!isMaximized.value) {
+        useLocalStateStore().update({ aiSidebarWidth: sidebarWidth.value })
+      }
+      aiStore.toggle()
+    } else {
+      sidebarWidth.value = el.offsetWidth
+      // Skip while maximised — the CSS forces 100% width, so offsetWidth is
+      // the full window width and must not overwrite the persisted value.
+      if (!isMaximized.value) {
+        useLocalStateStore().update({ aiSidebarWidth: sidebarWidth.value })
+      }
     }
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
@@ -2161,13 +2189,18 @@ onUnmounted(() => {
   messagesObserver?.disconnect()
 })
 
-defineExpose({ focusInput })
+defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolean) => { resizeHint.value = v } })
 </script>
 
 <style scoped>
 .ai-sidebar {
   background: var(--bg-elevated);
-  border-left: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  /* Continuous-curvature corners (macOS-style squircle); older engines
+     ignore this and fall back to the circular radius */
+  corner-shape: squircle;
+  /* No overflow:hidden: the resize handle sits outside the box in the gutter */
   display: flex;
   flex-direction: column;
   position: relative;
@@ -2175,7 +2208,7 @@ defineExpose({ focusInput })
 }
 .ai-sidebar.collapsed {
   width: 0 !important;
-  border-left: none;
+  border: none;
   overflow: hidden;
 }
 .ai-sidebar.maximized {
@@ -2185,7 +2218,8 @@ defineExpose({ focusInput })
   right: 0;
   bottom: 0;
   width: 100% !important;
-  border-left: none;
+  border: none;
+  border-radius: 0;
   z-index: 100;
 }
 .ai-sidebar.resizing {
@@ -2193,10 +2227,11 @@ defineExpose({ focusInput })
 }
 .resize-handle {
   position: absolute;
-  left: 0;
+  /* Sit centered in the 4px gutter to the left of the panel */
+  left: -0.25rem;
   top: 0;
   bottom: 0;
-  width: 0.375rem;
+  width: 0.25rem;
   cursor: col-resize;
   user-select: none;
   -webkit-user-drag: none;
@@ -2205,18 +2240,22 @@ defineExpose({ focusInput })
   transition: background 0.15s ease;
 }
 
-.resize-handle:hover::after {
+.resize-handle:hover::after,
+.resize-handle.hint::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
+  right: 0;
+  margin-inline: auto;
   width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
 
-.resize-handle:hover::before {
+.resize-handle:hover::before,
+.resize-handle.hint::before {
   opacity: 0;
 }
 .ai-header {

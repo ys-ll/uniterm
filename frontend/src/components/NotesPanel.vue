@@ -682,7 +682,6 @@ defineExpose({ flushPending })
 
 .note-item.active {
   background: var(--accent-subtle);
-  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .note-item.active .note-title {

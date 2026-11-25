@@ -842,14 +842,14 @@ watch(() => props.sessionId, async (newId) => {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
   overflow: hidden;
 }
 .redis-resizer {
-  /* Hover area floats over the tree edge (negative margin) so it takes
-     no layout width when idle and never blanks the content side. */
+  /* Occupies the gutter between the two islands */
   width: 0.25rem;
-  margin-left: -0.25rem;
   position: relative;
   z-index: 1;
   cursor: col-resize;
@@ -863,6 +863,8 @@ watch(() => props.sessionId, async (newId) => {
   top: 0;
   bottom: 0;
   left: 0;
+  right: 0;
+  margin-inline: auto;
   width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
@@ -872,6 +874,9 @@ watch(() => props.sessionId, async (newId) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
 }
 .redis-toolbar {
   display: flex;

@@ -23,7 +23,7 @@
     <div class="main-content">
       <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onSidebarConnect" @connect-to-workspace="({ config, workspaceId }: any) => onConnect(config, undefined, undefined, true, workspaceId)" @create-workspace="(configs: any) => onCreateWorkspaceFromConfigs(configs)" @connect-only="onConnectOnly" @open-netscan="openNetscan" />
       <div class="center-column">
-      <div class="tab-area">
+      <div class="tab-area" :class="{ frameless: tabAreaFrameless }">
         <template v-if="activeTab">
           <KeepAlive>
             <TerminalTabContent
@@ -132,7 +132,7 @@
           </KeepAlive>
         </template>
       </div>
-      <BottomPanel @select="onBottomPanelSelect" />
+      <BottomPanel @select="onBottomPanelSelect" @corner-resize="onCornerResize" @corner-resize-hint="onCornerResizeHint" />
       </div>
       <AISidebar ref="aiSidebarRef" @open-settings="openSettings" />
     </div>
@@ -322,6 +322,17 @@ const bgStyle = computed(() => {
 const connectionStore = useConnectionStore()
 const tabStore = useTabStore()
 const activeTab = computed(() => tabStore.activeTab)
+
+/* Tabs whose content draws its own island panels (left tree + right pane,
+   or a multi-panel workspace grid): the tab-area frame would be a second
+   ring around them, so it hides. */
+const FRAMELESS_TAB_TYPES = new Set(['database', 'elasticsearch', 'mongodb', 'redis', 'k8s', 'container', 'sftp'])
+const tabAreaFrameless = computed(() => {
+  const tab = activeTab.value
+  if (!tab) return false
+  if (tab.type === 'workspace') return 'panelIds' in tab && tab.panelIds.length > 1
+  return FRAMELESS_TAB_TYPES.has(tab.type)
+})
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
 
@@ -1186,6 +1197,20 @@ function onToggleBottomPanel() {
 // shared uiLayout store, so both strips highlight the same view.
 function onBottomPanelSelect(view: string) {
   sidebarRef.value?.openTab(view)
+}
+
+/* T-junction corner drag from the bottom panel: the panel runs its own
+   vertical resize, and the same mousedown is routed here to the adjacent
+   side panel's exposed startResize so one gesture moves both borders. */
+function onCornerResize({ event, side }: { event: MouseEvent; side: 'left' | 'right' }) {
+  if (side === 'left') sidebarRef.value?.startResize(event)
+  else aiSidebarRef.value?.startResize(event)
+}
+
+/* Corner hover: light the adjacent side panel's indicator bar as well */
+function onCornerResizeHint({ side, active }: { side: 'left' | 'right'; active: boolean }) {
+  const target = side === 'left' ? sidebarRef.value : aiSidebarRef.value
+  target?.setResizeHint(active)
 }
 
 const actionHandlers: Record<ShortcutAction, () => void> = {
@@ -2076,15 +2101,22 @@ watch(
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: var(--bg-base);
-  border: 1px solid var(--border-subtle);
+  /* The gutters between floating panels show this color — same tier as the
+     title bar so the chrome (bar + gutters) reads as one plane */
+  background: var(--bg-titlebar);
   position: relative;
 }
 .main-content {
   display: flex;
   flex: 1;
   overflow: hidden;
-  gap: 0;
+  /* VS Code-style floating panels: 4px gutters between and around the
+     sidebar / center column / AI sidebar so each reads as its own island.
+     Top gutter is tighter so the title bar doesn't drift too far from
+     the content. */
+  gap: 0.25rem;
+  /* Outer frame margin tighter than the inner gutters */
+  padding: 0 0.125rem 0.125rem;
   position: relative;
   z-index: 1;
 }
@@ -2095,6 +2127,17 @@ watch(
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-base);
+  border-radius: var(--radius-md);
+  /* Continuous-curvature corners (macOS-style squircle); ignored by older
+     engines, which fall back to the circular radius */
+  corner-shape: squircle;
+  border: 1px solid var(--border-subtle);
+}
+/* Multi-panel workspace: the panels carry their own island borders, so the
+   enclosing frame would read as a second ring around them. Border goes away;
+   the tab-area radius still clips the grid's outer corners. */
+.tab-area.frameless {
+  border-color: transparent;
 }
 
 /* Center column between the left sidebar and the AI sidebar: active tab
@@ -2105,6 +2148,8 @@ watch(
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* 4px gutter between the tab area and the docked bottom panel */
+  gap: 0.25rem;
 }
 
 .group-list {

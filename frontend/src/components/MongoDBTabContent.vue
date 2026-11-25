@@ -829,17 +829,17 @@ watch(() => props.sessionId, () => {
 
 .mongo-left {
   flex-shrink: 0;
-  border-right: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .mongo-resizer {
-  /* Hover area floats over the tree edge (negative margin) so it takes
-     no layout width when idle and never blanks the content side. */
+  /* Occupies the gutter between the two islands */
   width: 0.25rem;
-  margin-left: -0.25rem;
   position: relative;
   z-index: 1;
   cursor: col-resize;
@@ -853,6 +853,8 @@ watch(() => props.sessionId, () => {
   top: 0;
   bottom: 0;
   left: 0;
+  right: 0;
+  margin-inline: auto;
   width: 0.1875rem;
   background: var(--accent);
   box-shadow: 0 0 0.375rem var(--accent-glow);
@@ -863,8 +865,10 @@ watch(() => props.sessionId, () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  corner-shape: squircle;
 }
-
 /* ── Search ── */
 .search-wrap {
   display: flex;

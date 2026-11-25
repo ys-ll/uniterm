@@ -5,15 +5,18 @@ import { FOLLOW_APP_THEME } from '../types/settings'
  * Resolve the concrete built-in terminal theme name to render.
  *
  * When the user picks an explicit palette it is returned unchanged; only the
- * special FOLLOW_APP_THEME value is derived from the app theme. `appTheme` here
- * is expected to be already resolved to a concrete light/dark choice.
+ * special FOLLOW_APP_THEME value is derived from the app theme. `appTheme`
+ * here is the raw app theme choice ('system' already resolved): deep-blue
+ * gets its own navy companion palette instead of plain uniterm-dark.
  */
 export function resolveTerminalThemeName(
   terminalTheme: string | undefined,
-  appTheme: 'dark' | 'light'
+  appTheme: 'dark' | 'deep-blue' | 'light'
 ): string {
   if (terminalTheme !== FOLLOW_APP_THEME) return terminalTheme || 'uniterm-dark'
-  return appTheme === 'light' ? 'uniterm-light' : 'uniterm-dark'
+  if (appTheme === 'light') return 'uniterm-light'
+  if (appTheme === 'deep-blue') return 'uniterm-darkblue'
+  return 'uniterm-dark'
 }
 
 /**
