@@ -91,10 +91,13 @@ func (s *SCPSession) Connect(config ConnectionConfig) error {
 		return fmt.Errorf("ssh dial: %w", err)
 	}
 
-	return s.connectClient(client, nil)
+	applyLocalStartDir(&s.localFSOps, config.LocalDir)
+	return s.connectClient(client, nil, strings.TrimSpace(config.Cwd))
 }
 
-// ConnectSSH opens SCP exec channels on an authenticated SSH transport.
+// ConnectSSH opens SCP exec channels on an authenticated SSH transport. The
+// start path comes from the caller (the companion panel passes the terminal's
+// cwd through the frontend), so no config seeding happens here.
 func (s *SCPSession) ConnectSSH(source *SSHSession) error {
 	s.setStatus(StatusConnecting)
 	ref, err := source.acquireFileClient()
@@ -102,10 +105,10 @@ func (s *SCPSession) ConnectSSH(source *SSHSession) error {
 		s.setStatus(StatusError)
 		return err
 	}
-	return s.connectClient(ref.client, ref)
+	return s.connectClient(ref.client, ref, "")
 }
 
-func (s *SCPSession) connectClient(client *ssh.Client, shared *sshClientRef) error {
+func (s *SCPSession) connectClient(client *ssh.Client, shared *sshClientRef, startDir string) error {
 	s.mu.Lock()
 	s.sshClient = client
 	s.sharedClientRef = shared
@@ -119,6 +122,16 @@ func (s *SCPSession) connectClient(client *ssh.Client, shared *sshClientRef) err
 			s.mu.Lock()
 			s.cwd = wd
 			s.mu.Unlock()
+		}
+	}
+	// Seed the remote pane from the connection's start path before reporting
+	// connected: cd + pwd -P resolves ~ and relative paths exactly like
+	// ChangeRemoteDir; failure keeps the login default.
+	if startDir != "" {
+		if out, err := s.runCommand(scpChangeDirCommand(startDir), 15*time.Second); err == nil {
+			if real := lastNonEmptyLine(out); real != "" {
+				s.setCwd(real)
+			}
 		}
 	}
 	s.setStatus(StatusConnected)

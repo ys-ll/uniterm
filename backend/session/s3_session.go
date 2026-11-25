@@ -131,6 +131,12 @@ func (s *S3Session) Connect(config ConnectionConfig) error {
 	s.s3 = s3Client
 	s.bucket = config.S3Bucket
 	s.cwd = "/"
+	// Seed the start path (an object key prefix) and the local pane before
+	// reporting connected, so the first listing resolves against them.
+	if dir := strings.TrimSpace(config.Cwd); dir != "" {
+		s.cwd = path.Clean("/" + strings.TrimPrefix(strings.TrimPrefix(dir, "/"), "~"))
+	}
+	applyLocalStartDir(&s.localFSOps, config.LocalDir)
 	s.setStatus(StatusConnected)
 	return nil
 }

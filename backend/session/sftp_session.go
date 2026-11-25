@@ -79,6 +79,9 @@ func startFileSessionKeepAlive(client *ssh.Client, sess func() SessionStatus) {
 func (s *SFTPSession) Connect(config ConnectionConfig) error {
 	s.setStatus(StatusConnecting)
 	s.title = fmt.Sprintf("%s@%s", config.User, config.Host)
+	// Seed the local pane before dialing: independent of the connection, so
+	// the first listing resolves against it even on a slow handshake.
+	applyLocalStartDir(&s.localFSOps, config.LocalDir)
 
 	authMethods, cleanup, err := buildAuthMethodsWithCleanup(config)
 	if err != nil {
@@ -107,11 +110,13 @@ func (s *SFTPSession) Connect(config ConnectionConfig) error {
 		return fmt.Errorf("ssh dial: %w", err)
 	}
 
-	return s.connectClient(client, nil)
+	return s.connectClient(client, nil, strings.TrimSpace(config.Cwd))
 }
 
 // ConnectSSH opens SFTP on an existing authenticated SSH transport. Closing
-// this session releases only its reference and its SFTP channel.
+// this session releases only its reference and its SFTP channel. The start
+// path comes from the caller (the companion panel passes the terminal's cwd
+// through the frontend), so no config seeding happens here.
 func (s *SFTPSession) ConnectSSH(source *SSHSession) error {
 	s.setStatus(StatusConnecting)
 	ref, err := source.acquireFileClient()
@@ -119,10 +124,10 @@ func (s *SFTPSession) ConnectSSH(source *SSHSession) error {
 		s.setStatus(StatusError)
 		return err
 	}
-	return s.connectClient(ref.client, ref)
+	return s.connectClient(ref.client, ref, "")
 }
 
-func (s *SFTPSession) connectClient(client *ssh.Client, shared *sshClientRef) error {
+func (s *SFTPSession) connectClient(client *ssh.Client, shared *sshClientRef, startDir string) error {
 	sc, err := sftp.NewClient(client, sftpClientOptions()...)
 	if err != nil {
 		// subsystem 启动失败：若是协议流被污染(登录脚本打印)，像 MobaXterm 那样
@@ -151,6 +156,15 @@ func (s *SFTPSession) connectClient(client *ssh.Client, shared *sshClientRef) er
 	s.loadUserGroupMaps()
 	if wd, err := sc.Getwd(); err == nil {
 		s.cwd = wd
+	}
+	// Seed the remote pane from the connection's start path before reporting
+	// connected, so the first empty-path listing resolves against it.
+	// RealPath resolves ~ and relative paths server-side; failure keeps the
+	// login default.
+	if startDir != "" {
+		if real, err := sc.RealPath(startDir); err == nil {
+			s.cwd = real
+		}
 	}
 	s.setStatus(StatusConnected)
 	go func() {

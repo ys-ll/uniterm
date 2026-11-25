@@ -61,8 +61,11 @@ func NewLocalFileSession(id string) *LocalFileSession {
 	}
 }
 
-// Connect resolves the start paths (config.Cwd for both panes when it is an
-// existing directory, home otherwise) and marks the session connected.
+// Connect resolves the start paths (config.Cwd for the right pane,
+// config.LocalDir for the left pane when it is an existing directory, home
+// otherwise) and marks the session connected. Left-pane fallback to Cwd
+// preserves the old behavior for connections saved before LocalDir existed —
+// Cwd used to seed both panes.
 func (s *LocalFileSession) Connect(config ConnectionConfig) error {
 	start := filepath.ToSlash(strings.TrimSpace(config.Cwd))
 	if start != "" && !isLocalFileDir(start) {
@@ -72,7 +75,14 @@ func (s *LocalFileSession) Connect(config ConnectionConfig) error {
 		home, _ := os.UserHomeDir()
 		start = filepath.ToSlash(home)
 	}
-	s.localCwd = filepath.FromSlash(start)
+	// Left pane: config.LocalDir wins; a connection saved before the field
+	// existed falls back to the right pane's start (Cwd used to seed both
+	// panes).
+	local := filepath.ToSlash(strings.TrimSpace(config.LocalDir))
+	if local == "" || !isLocalFileDir(local) {
+		local = start
+	}
+	s.localCwd = filepath.FromSlash(local)
 	s.remote.localCwd = start
 	s.title = config.Name
 	if s.title == "" {
