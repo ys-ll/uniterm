@@ -37,6 +37,7 @@ import Panel from './Panel.vue'
 
 const props = defineProps<{
   tab: TerminalTab
+  mcpSession?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -64,6 +65,7 @@ function onToggleAiLock(panelId: string) {
 }
 
 function onDragOver(e: DragEvent) {
+  if (props.mcpSession) return
   const types = e.dataTransfer?.types ? Array.from(e.dataTransfer.types) : []
   const hasPanel = types.includes('application/panel-id')
   const hasTab = types.includes('application/tab-id')
@@ -115,6 +117,7 @@ function onDragLeave(e: DragEvent) {
 }
 
 function onDrop(e: DragEvent) {
+  if (props.mcpSession) return
   e.preventDefault()
   dragOver.value = false
   dropPos.value = null

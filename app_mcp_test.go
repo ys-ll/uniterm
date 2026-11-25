@@ -1,7 +1,11 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +17,7 @@ import (
 	"github.com/ys-ll/uniterm/backend/mcp"
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/store"
+	"golang.org/x/crypto/ssh"
 )
 
 func TestMCPForegroundDiscoversAllTextTerminals(t *testing.T) {
@@ -50,6 +55,93 @@ func TestMCPForegroundDiscoversAllTextTerminals(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestMCPBackgroundConnectStartsWithoutTerminalView(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.NewSignerFromKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &ssh.ServerConfig{NoClientAuth: true}
+	server.AddHostKey(signer)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		raw, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer raw.Close()
+		conn, channels, requests, err := ssh.NewServerConn(raw, server)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		go ssh.DiscardRequests(requests)
+		for ch := range channels {
+			go func() {
+				c, requests, err := ch.Accept()
+				if err != nil {
+					return
+				}
+				defer c.Close()
+				for req := range requests {
+					_ = req.Reply(true, nil)
+					if req.Type == "exec" {
+						_, _ = io.WriteString(c, "fixture output\n")
+						_, _ = c.SendRequest("exit-status", false, ssh.Marshal(struct{ Code uint32 }{0}))
+						return
+					}
+				}
+			}()
+		}
+	}()
+
+	connections, err := store.NewConnectionStore(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connections.SetPasswordStore(stubPasswordStore{})
+	if err := connections.Save(session.ConnectionStoreData{Connections: []session.ConnectionConfig{{
+		ID: "fixture", Type: "ssh", Host: "127.0.0.1", Port: ln.Addr().(*net.TCPAddr).Port,
+		User: "test", AuthType: "password", Password: "fixture",
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{sessionManager: session.NewSessionManager(), connectionStore: connections}
+	t.Cleanup(a.sessionManager.CloseAll)
+	id, err := a.mcpConnect("fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, ok := a.sessionManager.Get(id)
+	if !ok {
+		t.Fatal("background SSH session missing")
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if s.Status() == session.StatusConnected {
+			exec, ok := a.mcpSessionExec(id)
+			if !ok {
+				t.Fatal("background SSH executor missing")
+			}
+			stdout, _, code, _, err := exec.MCPExec("fixture", 2000, 3000, 1024)
+			if err != nil || code != 0 || string(stdout) != "fixture output\n" {
+				t.Fatalf("background exec output = %q, code = %d, error = %v", stdout, code, err)
+			}
+			return
+		}
+	}
+	t.Fatalf("background session did not connect without a terminal view: %s", s.Status())
 }
 
 func TestMcpNotifyStrings(t *testing.T) {

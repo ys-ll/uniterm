@@ -7,6 +7,8 @@ import { t } from '../i18n'
 
 const tabState = reactive<{
   tabs: Tab[]
+  mcpTabs: Map<string, TerminalTab>
+  previousTabId: string | null
   activeTabId: string | null
   // Id of the tab currently being dragged (set at dragstart, cleared at
   // dragend). dataTransfer.getData is unavailable outside the drop event, so
@@ -26,6 +28,8 @@ const tabState = reactive<{
   renamingTabId: string | null
 }>({
   tabs: [],
+  mcpTabs: new Map<string, TerminalTab>(),
+  previousTabId: null,
   activeTabId: null,
   draggingTabId: null,
   draggingPanelId: null,
@@ -52,12 +56,14 @@ function generateWorkspaceName(existingTabs: Tab[]): string {
 
 export const useTabStore = defineStore('tab', () => {
   const tabs = computed(() => tabState.tabs)
+  const mcpTabs = computed(() => [...tabState.mcpTabs.values()])
   const activeTabId = computed(() => tabState.activeTabId)
   const draggingTabId = computed(() => tabState.draggingTabId)
   const draggingPanelId = computed(() => tabState.draggingPanelId)
   const renamingTabId = computed(() => tabState.renamingTabId)
+  const activeMcpTab = computed(() => tabState.mcpTabs.get(tabState.activeTabId ?? ''))
   const activeTab = computed(() =>
-    tabState.tabs.find(t => t.id === tabState.activeTabId) || null
+    activeMcpTab.value ?? tabState.tabs.find(t => t.id === tabState.activeTabId) ?? null
   )
   const aiLockedPanelId = computed(() => {
     const ids = [...tabState.aiLockedPanelIds]
@@ -190,6 +196,43 @@ export const useTabStore = defineStore('tab', () => {
     }
     tabState.tabs.splice(insertIndexAfterTab(afterTabId), 0, tab)
     tabState.activeTabId = tab.id
+    return tab
+  }
+
+  // MCP sessions live outside the normal tab list, so they do not participate
+  // in bulk tab actions, drag-and-drop, number shortcuts, or startup restore.
+  function createMcpTab(name: string, panelId: string): TerminalTab {
+    const tab: TerminalTab = { type: 'terminal', id: genId('term-tab'), panelId, name }
+    tabState.mcpTabs.set(tab.id, tab)
+    return tab
+  }
+
+  function showMcpTab(id: string) {
+    if (!tabState.mcpTabs.has(id)) return
+    if (!activeMcpTab.value) tabState.previousTabId = tabState.activeTabId
+    setActiveTab(id)
+  }
+
+  function hideMcpTab(id: string): boolean {
+    if (!tabState.mcpTabs.has(id)) return false
+    if (tabState.activeTabId === id) {
+      const previous = tabState.tabs.find(tab => tab.id === tabState.previousTabId)
+      const fallback = previous ?? tabState.tabs[tabState.tabs.length - 1] ?? createStartTab()
+      setActiveTab(fallback.id)
+      tabState.previousTabId = null
+    }
+    return true
+  }
+
+  function removeMcpTab(id: string): TerminalTab | undefined {
+    const tab = tabState.mcpTabs.get(id)
+    if (!tab) return
+    hideMcpTab(id)
+    tabState.mcpTabs.delete(id)
+    tabState.aiLockedPanelIds.delete(tab.panelId)
+    tabState.broadcastPanelIds.delete(tab.panelId)
+    delete tabState.tabNotifications[id]
+    delete tabState.tabProgress[id]
     return tab
   }
 
@@ -339,6 +382,10 @@ export const useTabStore = defineStore('tab', () => {
   }
 
   function nextTab() {
+    if (activeMcpTab.value) {
+      hideMcpTab(activeMcpTab.value.id)
+      return
+    }
     const idx = tabState.tabs.findIndex(t => t.id === tabState.activeTabId)
     if (idx < 0) return
     const next = tabState.tabs[(idx + 1) % tabState.tabs.length]
@@ -346,6 +393,10 @@ export const useTabStore = defineStore('tab', () => {
   }
 
   function prevTab() {
+    if (activeMcpTab.value) {
+      hideMcpTab(activeMcpTab.value.id)
+      return
+    }
     const idx = tabState.tabs.findIndex(t => t.id === tabState.activeTabId)
     if (idx < 0) return
     const next = tabState.tabs[(idx - 1 + tabState.tabs.length) % tabState.tabs.length]
@@ -353,7 +404,7 @@ export const useTabStore = defineStore('tab', () => {
   }
 
   function getActivePanelId(): string | null {
-    const t = tabState.tabs.find(t => t.id === tabState.activeTabId)
+    const t = activeTab.value
     if (!t) return null
     if (t.type === 'workspace') return t.activePanelId || t.panelIds[0] || null
     if ('panelId' in t) return (t as any).panelId as string
@@ -873,6 +924,12 @@ export const useTabStore = defineStore('tab', () => {
 
   return {
     tabs,
+    mcpTabs,
+    activeMcpTab,
+    createMcpTab,
+    showMcpTab,
+    hideMcpTab,
+    removeMcpTab,
     activeTabId,
     draggingTabId,
     draggingPanelId,
