@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -75,6 +76,13 @@ func (s *SMBSession) Connect(config ConnectionConfig) error {
 	// will auto-navigate into it after the initial listing.
 	s.conn = smbConn
 	s.cwd = "/"
+	// Seed the start path (a share-rooted "/share/dir" path) and the local
+	// pane before reporting connected; a relative or Windows-style path keeps
+	// the share-list default.
+	if dir := strings.TrimSpace(config.Cwd); strings.HasPrefix(dir, "/") {
+		s.cwd = path.Clean(dir)
+	}
+	applyLocalStartDir(&s.localFSOps, config.LocalDir)
 	s.setStatus(StatusConnected)
 	go s.startKeepAlive()
 	return nil

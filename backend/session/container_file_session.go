@@ -98,6 +98,18 @@ func (s *ContainerFileSession) Connect(config ConnectionConfig) error {
 		return fmt.Errorf("container is not browsable: %w", err)
 	}
 	s.setStatus(StatusConnected)
+	// Seed the start path via cd + pwd -P (resolves ~ and relative paths
+	// exactly like ChangeRemoteDir) and the local pane; failure keeps the
+	// container default. Must run after the connected status so runCommand's
+	// requireConnected guard passes.
+	if dir := strings.TrimSpace(config.Cwd); dir != "" {
+		if out, err := s.runCommand("cd "+shellEscape(dir)+" 2>/dev/null && pwd -P", 15*time.Second); err == nil {
+			if real := strings.TrimSpace(out); real != "" {
+				s.setCwd(real)
+			}
+		}
+	}
+	applyLocalStartDir(&s.localFSOps, config.LocalDir)
 	return nil
 }
 

@@ -20,6 +20,21 @@ func newLocalFSOps() localFSOps {
 	return localFSOps{localCwd: homeDir}
 }
 
+// applyLocalStartDir seeds a file session's local pane with the connection's
+// local start path (config.LocalDir). An empty or non-existent path keeps the
+// home-directory default. Call before the session reports connected so the
+// first listing already resolves against it.
+func applyLocalStartDir(ops *localFSOps, dir string) {
+	d := strings.TrimSpace(dir)
+	if d == "" {
+		return
+	}
+	if fi, err := os.Stat(d); err != nil || !fi.IsDir() {
+		return
+	}
+	ops.localCwd = d
+}
+
 func (o *localFSOps) ListLocal(dir string) (FileListResult, error) {
 	if dir == "" {
 		dir = o.localCwd

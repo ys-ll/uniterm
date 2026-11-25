@@ -156,6 +156,11 @@ type ConnectionConfig struct {
 	ShellArgs string `json:"shellArgs,omitempty"`
 	// Working directory for local terminal (defaults to user home directory if empty)
 	Cwd string `json:"cwd,omitempty"`
+	// LocalDir seeds a file session's local pane start directory. Empty keeps
+	// the local home directory. For local-file connections saved before the
+	// field existed the left pane falls back to Cwd, which used to seed both
+	// panes.
+	LocalDir string `json:"localDir,omitempty"`
 	// Serial port configuration
 	SerialPort     string  `json:"serialPort,omitempty"`
 	SerialBaudRate int     `json:"serialBaudRate,omitempty"`

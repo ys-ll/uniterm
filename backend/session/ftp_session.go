@@ -161,6 +161,23 @@ func (s *FTPSession) Connect(config ConnectionConfig) error {
 	s.mu.Lock()
 	s.cwd = "/"
 	s.mu.Unlock()
+	// Seed the start path from the connection config before reporting
+	// connected: CWD resolves ~ and relative paths server-side; failure
+	// keeps the login default. The local pane is seeded independently.
+	if dir := strings.TrimSpace(config.Cwd); dir != "" {
+		if err := conn.ChangeDir(dir); err == nil {
+			// Query the server-resolved directory so the session cwd stays
+			// absolute even when the start path was relative.
+			s.mu.Lock()
+			if wd, werr := conn.CurrentDir(); werr == nil && wd != "" {
+				s.cwd = path.Clean(wd)
+			} else {
+				s.cwd = path.Clean(dir)
+			}
+			s.mu.Unlock()
+		}
+	}
+	applyLocalStartDir(&s.localFSOps, config.LocalDir)
 	s.encName = encName
 	s.enc = enc
 	s.rawNames = sync.Map{} // fresh connection, no names seen yet

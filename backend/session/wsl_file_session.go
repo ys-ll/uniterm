@@ -183,6 +183,7 @@ func (s *WSLFileSession) Connect(config ConnectionConfig) error {
 	} else {
 		s.cwd = s.resolveHome(ctx, distro)
 	}
+	applyLocalStartDir(&s.localFSOps, config.LocalDir)
 	s.setStatus(StatusConnected)
 	return nil
 }

@@ -79,6 +79,8 @@ export interface ConnectionConfig {
   shellArgs?: string
   // Working directory for local terminal (defaults to user home)
   cwd?: string
+  // File-panel local pane start directory (defaults to the local home)
+  localDir?: string
   // Serial port
   serialPort?: string
   serialBaudRate?: number

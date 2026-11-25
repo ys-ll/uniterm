@@ -51,7 +51,7 @@
                 </el-button>
               </div>
             </el-form-item>
-            <!-- ── Local/WSL file browser: distro + start path ── -->
+            <!-- ── Local/WSL file browser: distro ── -->
             <template v-if="form.type === 'local-file' || form.type === 'wsl-file'">
               <el-form-item v-if="form.type === 'wsl-file'" :label="t('conn.wslDistro')" required>
                 <el-select v-model="form.shellPath" filterable allow-create clearable>
@@ -62,9 +62,6 @@
                     :value="sh.value"
                   />
                 </el-select>
-              </el-form-item>
-              <el-form-item :label="t('conn.startPath')">
-                <el-input v-model="form.cwd" :placeholder="t('conn.startPathPlaceholder')" clearable />
               </el-form-item>
             </template>
             <el-form-item v-if="form.type === 'redis'" :label="t('conn.redisMode')">
@@ -425,6 +422,18 @@
                 <el-form-item v-if="form.type === 'local' || form.type === 'wsl'" :label="t('conn.workingDir')">
                   <el-input v-model="form.cwd" :placeholder="t('conn.workingDirPlaceholder')" clearable />
                 </el-form-item>
+                <!-- File-panel start paths: the local pane (left) and the remote
+                     pane (right). Empty keeps the respective home default;
+                     opening the panel from a terminal still lands at the shell's
+                     cwd. -->
+                <template v-if="hasFileStartPaths">
+                  <el-form-item :label="t('conn.localStartPath')">
+                    <el-input v-model="form.localDir" :placeholder="t('conn.localStartPathPlaceholder')" clearable />
+                  </el-form-item>
+                  <el-form-item :label="t('conn.remoteStartPath')">
+                    <el-input v-model="form.cwd" :placeholder="t('conn.remoteStartPathPlaceholder')" clearable />
+                  </el-form-item>
+                </template>
                 <el-form-item v-if="isSSHAlgoType" :label="t('conn.sshAlgoMode')">
                   <el-radio-group v-model="sshAlgoMode">
                     <el-radio-button value="compatible">{{ t('conn.sshAlgoModeCompatible') }}</el-radio-button>
@@ -1200,6 +1209,7 @@ const form = reactive<ConnectionConfig>({
   shellPath: '',
   shellArgs: '',
   cwd: '',
+  localDir: '',
   smbDomain: 'WORKGROUP',
   smbShare: '',
   s3Region: 'us-east-1',
@@ -1223,6 +1233,12 @@ const form = reactive<ConnectionConfig>({
 // sshAlgorithms. undefined = compatible (the built-in full set); custom
 // mode opens the algorithm editor to fill the four preference lists.
 const isSSHAlgoType = computed(() => ['ssh', 'scp', 'sftp', 'mosh', 'x11-desktop'].includes(form.type))
+
+// Connection types whose companion file panel has both a local pane and a
+// remote pane (the sftp-family panel renders both regardless of the wire
+// protocol behind it). These get the local/remote start-path fields.
+const hasFileStartPaths = computed(() =>
+  ['ssh', 'scp', 'sftp', 'ftp', 's3', 'smb', 'webdav', 'container', 'local-file', 'wsl-file'].includes(form.type))
 
 // Identity (密钥库) auth extends beyond the SSH family (issues #1389/#1440):
 // every protocol that authenticates with a username+password pair can
@@ -1256,7 +1272,8 @@ const advGroupNetwork = computed(() =>
   showProxy.value || showTunnel.value
 )
 const advGroupProtocol = computed(() =>
-  ['database', 'mongodb', 'redis', 'elasticsearch', 'ftp', 'vnc', 'telnet', 'mosh', 'rdp', 'local', 'wsl'].includes(form.type) ||
+  ['database', 'mongodb', 'redis', 'elasticsearch', 'ftp', 'vnc', 'telnet', 'mosh', 'rdp', 'local', 'wsl',
+   's3', 'smb', 'webdav', 'container', 'local-file', 'wsl-file'].includes(form.type) ||
   isSSHAlgoType.value
 )
 const sshAlgoDialogVisible = ref(false)
@@ -1654,6 +1671,7 @@ function resetForm() {
   form.shellPath = ''
   form.shellArgs = ''
   form.cwd = ''
+  form.localDir = ''
   form.serialPort = ''
   form.serialBaudRate = 115200
   form.serialDataBits = 8
@@ -1934,15 +1952,21 @@ function normalizeForm(): ConnectionConfig {
   } else {
     normalized.postLoginScript = ''
   }
-  // shellArgs/cwd only apply to local/wsl terminals; clear them when the
-  // connection is switched to another type so stale values never persist
-  // (same semantics as the key-field cleanup above). The local-file/wsl-file
-  // browsers keep cwd (it is their start path) but never run a shell.
-  if (normalized.type === 'local-file' || normalized.type === 'wsl-file') {
+  // shellArgs only applies to local/wsl terminals; the start paths apply to
+  // file-panel types (cwd = remote pane, localDir = local pane) and to
+  // local/wsl terminals (cwd = working directory). Clear whichever group the
+  // selected type does not use so stale values never persist (same semantics
+  // as the key-field cleanup above).
+  if (hasFileStartPaths.value) {
     normalized.shellArgs = ''
+    if (normalized.cwd) normalized.cwd = normalized.cwd.trim()
+    if (normalized.localDir) normalized.localDir = normalized.localDir.trim()
   } else if (normalized.type !== 'local' && normalized.type !== 'wsl') {
     normalized.shellArgs = ''
     normalized.cwd = ''
+    normalized.localDir = ''
+  } else {
+    normalized.localDir = ''
   }
   // mosh options only apply to mosh connections; clear them when the
   // connection is switched to another type so stale values never persist
