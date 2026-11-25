@@ -334,7 +334,7 @@ func (a *App) chatCompletionAnthropic(apiKey, baseURL, model string, reqBody map
 				currentBlock = block
 				a.emit("ai:block_start", map[string]interface{}{
 					"index":         currentBlockIndex,
-					"content_block": block,
+					"content_block": snapshotJSONMap(block),
 				})
 			}
 
@@ -893,7 +893,7 @@ func (a *App) chatCompletionOpenAI(apiKey, baseURL, model string, reqBody map[st
 				// F-320: typed payload.
 				a.emit("ai:block_start", aiBlockStartEvent{
 					Index:        currentBlockIndex,
-					ContentBlock: currentBlock,
+					ContentBlock: snapshotJSONMap(currentBlock),
 				})
 			}
 			currentTextBuf.WriteString(delta.Content)
@@ -1317,7 +1317,7 @@ func (a *App) chatCompletionResponses(apiKey, baseURL, model string, reqBody map
 				// F-320: typed payload.
 				a.emit("ai:block_start", aiBlockStartEvent{
 					Index:        nextBlockIndex,
-					ContentBlock: block,
+					ContentBlock: snapshotJSONMap(block),
 				})
 				nextBlockIndex++
 			case "reasoning":
@@ -2702,4 +2702,43 @@ func (a *App) MCPClientStatuses() []mcpclient.ConnStatus {
 		return nil
 	}
 	return mgr.Statuses(configs)
+}
+
+// --- AI event payload snapshots ---
+//
+// Wails v3 serializes event payloads asynchronously: emit() hands the
+// payload to the runtime, which marshals it to JSON on a mailbox
+// goroutine at an arbitrary later time (CustomEvent.ToJSON in the
+// DispatchWailsEvent path). The SSE stream parsers keep accumulating
+// into their block maps after emitting ai:block_start, so handing the
+// live map to emit raced the serialization goroutine and crashed the
+// whole app with "fatal error: concurrent map iteration and map write"
+// while an AI session was streaming. Payload maps handed to emit must
+// be snapshots (deep copies) that are never mutated afterwards.
+
+// snapshotJSONMap returns a deep copy of a JSON-shaped map so it can be
+// handed to emit while the producer keeps mutating the original.
+func snapshotJSONMap(m map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		out[k] = snapshotJSONValue(v)
+	}
+	return out
+}
+
+// snapshotJSONValue deep-copies JSON-shaped values (maps, slices) and
+// passes JSON scalars through - they are immutable.
+func snapshotJSONValue(v any) any {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		return snapshotJSONMap(t)
+	case []interface{}:
+		out := make([]interface{}, len(t))
+		for i, e := range t {
+			out[i] = snapshotJSONValue(e)
+		}
+		return out
+	default:
+		return v
+	}
 }
