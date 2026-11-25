@@ -40,7 +40,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	} else {
 		mcp.AddTool(srv, &mcp.Tool{
 			Name:        "connect",
-			Description: "Open a visible SSH terminal from a saved connectionId in list_connections.",
+			Description: "Open a background SSH session from a saved connectionId in list_connections. The user can view the terminal in the MCP sessions menu. Wait for connected status in list_sessions before executing.",
 		}, s.toolConnect)
 	}
 

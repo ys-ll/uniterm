@@ -31,6 +31,38 @@
       />
     </div>
 
+    <button
+      v-if="mcpSessions.length"
+      class="header-btn mcp-sessions-btn"
+      :class="{ active: !!tabStore.activeMcpTab }"
+      :aria-expanded="mcpSessionsVisible"
+      :title="tabStore.activeMcpTab?.name || t('mcp.sessions.title')"
+      @click.stop="mcpSessionsMenu?.toggle($event.currentTarget as HTMLElement)"
+    >
+      {{ t('mcp.sessions.title') }} ({{ mcpSessions.length }})
+    </button>
+    <Menu ref="mcpSessionsMenu" v-model:visible="mcpSessionsVisible" align="end">
+      <MenuSubmenu
+        v-for="{ tab, status } in mcpSessions"
+        :key="tab.id"
+        :label="`${tab.name} · ${t('mcp.sessions.' + status)}`"
+      >
+        <MenuItem v-if="tab.id === tabStore.activeTabId" @click="tabStore.hideMcpTab(tab.id); mcpSessionsVisible = false">
+          {{ t('mcp.sessions.hide') }}
+        </MenuItem>
+        <MenuItem v-else @click="tabStore.showMcpTab(tab.id); mcpSessionsVisible = false">
+          {{ t('mcp.sessions.show') }}
+        </MenuItem>
+        <MenuItem
+          :class="{ disabled: status === 'connecting' }"
+          :aria-disabled="status === 'connecting'"
+          @click="disconnectMcpSession(tab.id, status)"
+        >
+          {{ status === 'connected' || status === 'connecting' ? t('mcp.sessions.disconnect') : t('tab.close') }}
+        </MenuItem>
+      </MenuSubmenu>
+    </Menu>
+
     <!-- Bottom panel toggle (left of the AI button); hidden in narrow
          layout, where the bottom panel's views merge into the sidebar. -->
     <button
@@ -224,6 +256,13 @@ const { t } = useI18n()
 const tabStore = useTabStore()
 const panelStore = usePanelStore()
 const sessionStore = useSessionStore()
+const mcpSessionsMenu = ref<InstanceType<typeof Menu> | null>(null)
+const mcpSessionsVisible = ref(false)
+const mcpSessions = computed(() => tabStore.mcpTabs.map(tab => {
+  const sessionId = panelStore.getPanel(tab.panelId)?.sessionId
+  const status = sessionId ? sessionStore.getStatus(sessionId) : 'disconnected'
+  return { tab, status }
+}))
 const settingsStore = useSettingsStore()
 const localStateStore = useLocalStateStore()
 // Window frame is fixed at startup (Wails limitation): the OS title bar only
@@ -400,10 +439,17 @@ const emit = defineEmits<{
   'open-new-connection': []
   'close-tab': [id: string]
   'close-tab-batch': [ids: string[]]
+  'disconnect-mcp-session': [id: string]
   'toggle-ai-lock': [panelId: string]
   'tab-dragstart': [e: DragEvent, tabId: string]
   'new-local-terminal': []
 }>()
+
+function disconnectMcpSession(id: string, status: string) {
+  if (status === 'connecting') return
+  mcpSessionsVisible.value = false
+  emit('disconnect-mcp-session', id)
+}
 
 const platform = ref(detectPlatformSync())
 const isMaximised = ref(false)
@@ -633,6 +679,12 @@ onUnmounted(() => {
 
 .header-btn .el-icon {
   font-size: 0.875rem;
+}
+
+.mcp-sessions-btn {
+  width: auto;
+  padding-inline: 0.5rem;
+  white-space: nowrap;
 }
 
 .app-header :deep(.window-controls) {

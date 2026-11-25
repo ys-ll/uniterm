@@ -15,6 +15,7 @@
       @open-new-connection="onNewConnectionFromStart"
       @close-tab="closeTab"
       @close-tab-batch="closeTabBatch"
+      @disconnect-mcp-session="disconnectMcpSession"
       @toggle-ai-lock="onToggleAiLock"
       @toggle-bottom-panel="onToggleBottomPanel"
       @tab-dragstart="onTabDragStart"
@@ -30,6 +31,7 @@
               v-if="activeTab.type === 'terminal'"
               :key="activeTab.id"
               :tab="activeTab"
+              :mcp-session="!!tabStore.activeMcpTab"
               @close="closeTab"
             />
             <SettingsTabContent
@@ -576,13 +578,22 @@ function onMcpApprovalResolve(approved: boolean, reason: string) {
   if (req) ResolveMCPApproval(req.id, approved, reason).catch(() => {})
 }
 
-// MCP-created sessions follow the same terminal mounting and sizing flow as UI sessions.
-async function onMcpSessionCreated(payload: { sessionId: string; type: string; name?: string; host?: string; config: ConnectionConfig }) {
+async function onMcpSessionCreated(payload: { sessionId: string; type: string; name?: string; host?: string; config: ConnectionConfig; background?: boolean }) {
   const cfg = payload.config
   const panel = panelStore.createPanel(cfg, payload.type as PanelType)
   const title = payload.name || payload.host || payload.type
   panelStore.updateTitle(panel.id, title)
   panelStore.bindSession(panel.id, payload.sessionId)
+  if (payload.background) {
+    // The backend has already started this connection. Preserve any status
+    // or output that arrived before the creation event.
+    if (!sessionStore.sessions.has(payload.sessionId)) sessionStore.initSession(payload.sessionId)
+    const tab = tabStore.createMcpTab(panel.title, panel.id)
+    panelStore.movePanelToTab(panel.id, tab.id)
+    return
+  }
+
+  // Foreground MCP sessions use the same sizing flow as ordinary terminals.
   sessionStore.initSession(payload.sessionId)
   sessionStore.updateStatus(payload.sessionId, 'connecting')
   const tab = tabStore.activeTab?.type === 'start'
@@ -1387,6 +1398,7 @@ function openLocalServices() {
 }
 
 async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
+  if (tabStore.hideMcpTab(tabId)) return
   // Close session before removing panel to clean up Go-side resources
   const tab = tabStore.tabs.find(t => t.id === tabId)
   if (tab?.locked) return
@@ -1523,6 +1535,34 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
       tabStore.createStartTab()
     }
   })
+}
+
+async function disconnectMcpSession(tabId: string) {
+  const tab = tabStore.mcpTabs.find(tab => tab.id === tabId)
+  if (!tab) return
+  const sessionId = panelStore.getPanel(tab.panelId)?.sessionId
+  const status = sessionId ? sessionStore.getStatus(sessionId) : 'disconnected'
+  if (status === 'connecting') return
+  if (status === 'connected') {
+    try {
+      await ElMessageBox.confirm(t('mcp.sessions.disconnectConfirm'), t('mcp.sessions.disconnect'), {
+        confirmButtonText: t('mcp.sessions.disconnect'),
+        cancelButtonText: t('common.cancel'),
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
+  if (panelStore.getPanel(tab.panelId)?.sessionId !== sessionId || !tabStore.removeMcpTab(tabId)) return
+  if (sessionId) await CloseSession(sessionId).catch(() => {})
+  await companionStore.disposeForPanel(tab.panelId).catch(() => {})
+  if (sessionId) {
+    unregisterTransferRoute(sessionId)
+    sessionStore.removeSession(sessionId)
+  }
+  panelStore.removeTransferTasks(tab.panelId)
+  panelStore.removePanel(tab.panelId)
 }
 
 // Batch close (close left/right/others). Consolidate the "has connected
