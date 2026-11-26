@@ -734,6 +734,8 @@
   "importExport.importPassword": "インポートパスワード",
   "importExport.chooseFile": "ファイルを選択...",
   "importExport.dbeaverPathHint": "空欄でDBeaverワークスペースを自動検出、または data-sources.json / フォルダを選択",
+  "importExport.finalshellPathHint": "空欄で conn ディレクトリを自動検出（~/.finalshell または %LOCALAPPDATA%）",
+  "importExport.chooseDirectory": "ディレクトリを選択",
   "importExport.importedCount": "{count} 件の接続をインポートしました",
   "importExport.exported": "正常にエクスポートしました",
   "settings.sync": "クラウド同期",

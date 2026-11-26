@@ -734,6 +734,8 @@
   "importExport.importPassword": "Пароль импорта",
   "importExport.chooseFile": "Выбрать файл...",
   "importExport.dbeaverPathHint": "Оставьте пустым для автоопределения workspace DBeaver или выберите data-sources.json / папку",
+  "importExport.finalshellPathHint": "Оставьте пустым для автоматического поиска каталога conn (~/.finalshell или %LOCALAPPDATA%)",
+  "importExport.chooseDirectory": "Выбрать каталог",
   "importExport.importedCount": "Импортировано подключений: {count}",
   "importExport.exported": "Успешно экспортировано",
   "settings.sync": "Облачная синхронизация",

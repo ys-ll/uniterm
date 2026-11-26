@@ -758,6 +758,8 @@
   "importExport.importPassword": "导入密码",
   "importExport.chooseFile": "选择文件...",
   "importExport.dbeaverPathHint": "留空自动检测 DBeaver 工作区，或选择 data-sources.json / 文件夹",
+  "importExport.finalshellPathHint": "留空自动探测 conn 目录（~/.finalshell 或 %LOCALAPPDATA%）",
+  "importExport.chooseDirectory": "选择目录",
   "importExport.importedCount": "导入 {count} 个连接",
   "importExport.exported": "导出成功",
   "settings.sync": "云同步",
