@@ -54,6 +54,7 @@ type SessionClaims struct {
 	Role     string `json:"r"`
 	Iat      int64  `json:"iat,omitempty"`
 	Exp      int64  `json:"exp"`
+	Epoch    string `json:"epoch,omitempty"`
 }
 
 // WorkerInstance tracks a per-user headless `uniterm-server` worker process.
@@ -92,6 +93,7 @@ type MultiUserGateway struct {
 	usersFile         string
 	workerBinary      string
 	jwtSecret         []byte
+	sessionEpoch      string
 	workerIdleTimeout time.Duration
 	baseWorkerPort    int
 
@@ -176,6 +178,7 @@ func NewMultiUserGateway(dataRoot, workerBinary string, idleTimeout time.Duratio
 		usersFile:         filepath.Join(gatewayDir, "users.json"),
 		workerBinary:      workerBinary,
 		jwtSecret:         secret,
+		sessionEpoch:      newTransferID(),
 		workerIdleTimeout: idleTimeout,
 		baseWorkerPort:    19000,
 		users:             make(map[string]UserAccount),
@@ -215,6 +218,7 @@ func (gw *MultiUserGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 3. Verify authenticated user session
 	claims, err := gw.authenticateRequest(r)
 	if err != nil {
+		clearSessionCookie(w)
 		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/wails/") {
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
@@ -1003,6 +1007,9 @@ func (gw *MultiUserGateway) authenticateRequest(r *http.Request) (*SessionClaims
 	if err != nil {
 		return nil, err
 	}
+	if claims.Epoch == "" || subtle.ConstantTimeCompare([]byte(claims.Epoch), []byte(gw.sessionEpoch)) != 1 {
+		return nil, errors.New("session belongs to a previous gateway process")
+	}
 	gw.usersMu.RLock()
 	user, exists := gw.users[claims.Username]
 	gw.usersMu.RUnlock()
@@ -1132,6 +1139,7 @@ func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) 
 		Role:     user.Role,
 		Iat:      time.Now().Unix(),
 		Exp:      time.Now().Add(24 * time.Hour).Unix(),
+		Epoch:    gw.sessionEpoch,
 	})
 
 	http.SetCookie(w, &http.Cookie{
@@ -1161,18 +1169,24 @@ func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) 
 }
 
 func (gw *MultiUserGateway) handleLogout(w http.ResponseWriter, r *http.Request) {
+	clearSessionCookie(w)
+	if r.Method == http.MethodGet {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	writeGatewayJSON(w, http.StatusOK, map[string]any{"status": "logged_out"})
+}
+
+func clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
 		MaxAge:   -1,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   os.Getenv("UNITERM_COOKIE_SECURE") == "true",
 	})
-	if r.Method == http.MethodGet {
-		http.Redirect(w, r, "/login", http.StatusFound)
-		return
-	}
-	writeGatewayJSON(w, http.StatusOK, map[string]any{"status": "logged_out"})
 }
 
 func (gw *MultiUserGateway) handleChangePassword(w http.ResponseWriter, r *http.Request, claims *SessionClaims) {
