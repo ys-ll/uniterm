@@ -1275,6 +1275,7 @@
   "db.categoryNoSQL": "NoSQL Databases",
   "conn.categoryOther": "Other",
   "db.databases": "Databases",
+  "db.dm": "DM",
   "db.serviceName": "Service Name",
   "db.serviceNamePlaceholder": "Service name, e.g. FREEPDB1",
   "db.serviceNameRequired": "Oracle requires a service name",

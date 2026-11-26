@@ -104,7 +104,7 @@ func NewDBWithDial(dbType, dsn string, dialFunc DialContextFunc) (*sql.DB, error
 	if err != nil {
 		return nil, err
 	}
-	configureDBPool(db)
+	configureDBPool(db, dbDriverName(dbType))
 	return db, nil
 }
 
@@ -117,11 +117,18 @@ func openDB(dbType, dsn string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", dbType, err)
 	}
-	configureDBPool(db)
+	configureDBPool(db, p.DriverName())
 	return db, nil
 }
 
-func configureDBPool(db *sql.DB) {
+// trackDBDriver records db's driver name at open time (see dbDrivers).
+func trackDBDriver(db *sql.DB, name string) {
+	dbDrivers.Store(db, name)
+}
+
+// configureDBPool applies the shared pool limits and records the driver name.
+func configureDBPool(db *sql.DB, driver string) {
+	trackDBDriver(db, driver)
 	db.SetMaxOpenConns(20)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
@@ -180,9 +187,46 @@ func openOracleWithDial(dsn string, dialFunc DialContextFunc) (*sql.DB, error) {
 	return sql.OpenDB(conn), nil
 }
 
+// dbCtx returns the execution context for queries on db. The dm driver
+// nil-derefs when a parameterized query runs with a deadline context
+// (gitee.com/travelliu/dm v1.8.11192), so dm gets a bare background context;
+// the driver is not context-aware anyway and ConnMaxLifetime still bounds
+// stalled connections.
+func dbCtx(db *sql.DB, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if driverNameOf(db) == "dm" {
+		return context.Background(), func() {}
+	}
+	return context.WithTimeout(context.Background(), timeout)
+}
+
+// dbDrivers maps each open *sql.DB to its driver name; database/sql does not
+// expose the driver name on the handle. Written once at open time.
+var dbDrivers sync.Map
+
+// driverNameOf returns the recorded driver name for db, or "" if unknown.
+func driverNameOf(db *sql.DB) string {
+	if v, ok := dbDrivers.Load(db); ok {
+		return v.(string)
+	}
+	return ""
+}
+
+// dbDriverName maps a database type to the driver name sql.Open will use.
+func dbDriverName(dbType string) string {
+	switch dbType {
+	case "postgres", "kingbase":
+		return "pgx"
+	default:
+		if p, err := NewProvider(dbType); err == nil {
+			return p.DriverName()
+		}
+		return dbType
+	}
+}
+
 // queryStrings executes a SQL query and returns all rows as []map[string]string.
 func queryStrings(db *sql.DB, query string, args ...any) ([]map[string]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), schemaTimeout)
+	ctx, cancel := dbCtx(db, schemaTimeout)
 	defer cancel()
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -218,7 +262,7 @@ func queryStrings(db *sql.DB, query string, args ...any) ([]map[string]string, e
 // queryAny is like queryStrings but preserves nil values for proper NULL handling.
 // Returns rows, column names in SQL order, and error.
 func queryAny(db *sql.DB, query string, args ...any) ([]map[string]any, []string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), schemaTimeout)
+	ctx, cancel := dbCtx(db, schemaTimeout)
 	defer cancel()
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -299,6 +343,9 @@ func scanToAnyCol(v any, guid bool) any {
 	if v == nil {
 		return nil
 	}
+	if s, ok := dmClobText(v); ok {
+		return s
+	}
 	switch s := v.(type) {
 	case []byte:
 		return formatBytes(s, guid)
@@ -315,6 +362,9 @@ func scanToString(v any) string {
 func scanToStringCol(v any, guid bool) string {
 	if v == nil {
 		return ""
+	}
+	if s, ok := dmClobText(v); ok {
+		return s
 	}
 	switch x := v.(type) {
 	case []byte:

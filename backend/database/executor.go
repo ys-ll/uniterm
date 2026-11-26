@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"strings"
@@ -41,7 +40,7 @@ func ExecuteQuery(p Provider, db *sql.DB, dbName, sqlStr string) (*QueryResult, 
 }
 
 func executeQueryArgs(p Provider, db *sql.DB, dbName, sqlStr string, args []any) (*QueryResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	ctx, cancel := dbCtx(db, queryTimeout)
 	defer cancel()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -97,7 +96,7 @@ func executeQueryArgs(p Provider, db *sql.DB, dbName, sqlStr string, args []any)
 }
 
 func ExecuteStatement(p Provider, db *sql.DB, dbName, sqlStr string) (*ExecResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	ctx, cancel := dbCtx(db, queryTimeout)
 	defer cancel()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -142,7 +141,7 @@ func ExecuteScript(p Provider, db *sql.DB, dbName, script string) (*ScriptResult
 	stmts := SplitScript(script)
 	res := &ScriptResult{}
 
-	ctx, cancel := context.WithTimeout(context.Background(), scriptTimeout)
+	ctx, cancel := dbCtx(db, scriptTimeout)
 	defer cancel()
 
 	conn, err := db.Conn(ctx)
@@ -157,8 +156,8 @@ func ExecuteScript(p Provider, db *sql.DB, dbName, script string) (*ScriptResult
 
 	for _, st := range stmts {
 		// per-statement deadline so one runaway statement cannot consume the
-		// whole script budget
-		sctx, scancel := context.WithTimeout(ctx, queryTimeout)
+		// whole script budget (background context on dm — see dbCtx)
+		sctx, scancel := dbCtx(db, queryTimeout)
 		r, err := conn.ExecContext(sctx, st.SQL)
 		scancel()
 		if err != nil {

@@ -1251,6 +1251,7 @@
   "db.categoryNoSQL": "NoSQLデータベース",
   "conn.categoryOther": "その他",
   "db.databases": "データベース",
+  "db.dm": "DM",
   "db.serviceName": "サービス名",
   "db.serviceNamePlaceholder": "サービス名（例: FREEPDB1）",
   "db.serviceNameRequired": "Oracle ではサービス名が必須です",

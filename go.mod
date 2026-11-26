@@ -41,6 +41,7 @@ require (
 	github.com/unixshells/mosh-go v0.5.2
 	github.com/wailsapp/wails/v3 v3.1.0
 	github.com/xanzy/ssh-agent v0.3.3
+	github.com/ys-ll/dm v1.8.11192-fork.2
 	github.com/zalando/go-keyring v0.2.8
 	go.bug.st/serial v1.7.1
 	go.mongodb.org/mongo-driver v1.17.9

@@ -80,6 +80,7 @@ export const CONNECTION_TYPES: ConnectionTypeInfo[] = [
   { type: 'database', dbType: 'sqlserver', label: 'SQL Server', icon: Database, category: 'sql', defaultPort: 1433, connectMenuKey: 'db.connectDB' },
   { type: 'database', dbType: 'sqlite', label: 'SQLite', icon: Database, category: 'sql', connectMenuKey: 'db.connectDB' },
   { type: 'database', dbType: 'rqlite', label: 'rqlite', icon: Database, category: 'sql', defaultPort: 4001, connectMenuKey: 'db.connectDB' },
+  { type: 'database', dbType: 'dm', label: 'DM', labelKey: 'db.dm', icon: Database, category: 'sql', defaultPort: 5236, connectMenuKey: 'db.connectDB' },
   // NoSQL: standalone connection types
   { type: 'redis', label: 'Redis', icon: DatabaseZap, category: 'nosql', defaultPort: 6379, connectMenuKey: 'sidebar.connectRedis' },
   { type: 'mongodb', label: 'MongoDB', icon: Layers, category: 'nosql', defaultPort: 27017, connectMenuKey: 'sidebar.connectMongodb' },

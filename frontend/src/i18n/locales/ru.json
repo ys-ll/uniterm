@@ -1251,6 +1251,7 @@
   "db.categoryNoSQL": "NoSQL-базы данных",
   "conn.categoryOther": "Другое",
   "db.databases": "Базы данных",
+  "db.dm": "DM",
   "db.serviceName": "Имя службы",
   "db.serviceNamePlaceholder": "Имя службы, напр. FREEPDB1",
   "db.serviceNameRequired": "Oracle требует указания имени службы",

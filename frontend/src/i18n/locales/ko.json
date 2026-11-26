@@ -1251,6 +1251,7 @@
   "db.categoryNoSQL": "NoSQL 데이터베이스",
   "conn.categoryOther": "기타",
   "db.databases": "데이터베이스",
+  "db.dm": "DM",
   "db.serviceName": "서비스 이름",
   "db.serviceNamePlaceholder": "서비스 이름 (예: FREEPDB1)",
   "db.serviceNameRequired": "Oracle에는 서비스 이름이 필요합니다",
