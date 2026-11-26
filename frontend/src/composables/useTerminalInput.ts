@@ -11,6 +11,7 @@ export interface UseTerminalInputOptions {
   sessionId: string | null | undefined
   onHistoryExtract?: (command: string) => void
   onResetSuppress?: () => void
+  onLineResync?: () => void
   enableHistory?: boolean
 }
 
@@ -35,6 +36,12 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
   let inAlternateScreen = false
   let isPasswordPrompt = false
   let cursorPosRAF: number | null = null
+
+  // Set when Tab is let through to the shell. The shell's completion echo
+  // never passes through handleInput, so without a resync the local line model
+  // would stay at the pre-Tab keystrokes. handleSessionData consumes the flag.
+  let pendingTabResync = false
+  let tabResyncTimer: ReturnType<typeof setTimeout> | null = null
 
   function stripAnsi(str: string): string {
     return str
@@ -172,6 +179,7 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
         }
         lineChars.value = []
         cursorIndex.value = 0
+        pendingTabResync = false
         // Reset suggestion suppress on new command
         if (options.onResetSuppress) {
           options.onResetSuppress()
@@ -260,16 +268,53 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
     })
   }
 
+  // Re-read the input line from the terminal buffer after a shell completion
+  // echo. getCurrentCommandFromTerminal parses the prompt line the same way
+  // the Enter history capture does; returning null (prompt not recognised,
+  // multi-line input) keeps the current estimate — no worse than before.
+  function syncFromTerminal() {
+    if (isPasswordPrompt) return
+    const command = getCurrentCommandFromTerminal()
+    if (command === null) return
+    lineChars.value = Array.from(command)
+    cursorIndex.value = command.length
+    updateToken()
+  }
+
+  // Arm the post-Tab resync. The echo may arrive split across several chunks
+  // and always after this point, so each chunk re-arms a short timer; when it
+  // finally fires, xterm has applied the writes and the buffer holds the
+  // completed line. onLineResync lets the caller refresh the inline hint.
+  function noteTabPress() {
+    if (!tracksShellInput || inAlternateScreen) return
+    pendingTabResync = true
+    if (tabResyncTimer !== null) clearTimeout(tabResyncTimer)
+  }
+
   function handleSessionData(data: string) {
     if (!tracksShellInput) return
 
     // Detect alternate screen buffer enter/exit (vim, k9s, less, etc.)
     if (data.includes('\x1b[?1049h') || data.includes('\x1b[?47h')) {
       inAlternateScreen = true
+      pendingTabResync = false
       return
     }
     if (data.includes('\x1b[?1049l') || data.includes('\x1b[?47l')) {
       inAlternateScreen = false
+    }
+
+    if (pendingTabResync && !inAlternateScreen) {
+      // Each arriving chunk re-arms the timer — completion echoes can arrive
+      // split across several writes, and the buffer is only complete once the
+      // stream has gone quiet.
+      if (tabResyncTimer !== null) clearTimeout(tabResyncTimer)
+      tabResyncTimer = setTimeout(() => {
+        tabResyncTimer = null
+        pendingTabResync = false
+        syncFromTerminal()
+        options.onLineResync?.()
+      }, 50)
     }
   }
 
@@ -277,6 +322,11 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
     lineChars.value = []
     cursorIndex.value = 0
     currentToken.value = ''
+    pendingTabResync = false
+    if (tabResyncTimer !== null) {
+      clearTimeout(tabResyncTimer)
+      tabResyncTimer = null
+    }
   }
 
   function isInAlternateScreen(): boolean {
@@ -295,6 +345,7 @@ export function useTerminalInput(terminal: Terminal | null, options: UseTerminal
     isAtLineEnd,
     handleInput,
     handleSessionData,
+    noteTabPress,
     clearBuffer,
     isInAlternateScreen,
     isPasswordMode,

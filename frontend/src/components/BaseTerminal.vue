@@ -748,9 +748,10 @@ function refreshGhostText() {
 }
 
 // The popup keeps its pre-hint behaviour: it opens on its own when items
-// arrive. The inline hint runs alongside it (see ghostSuggestion), and Tab is
-// likewise untouched — it applies a popup selection when the user has
-// navigated to one, and reaches the shell's own completion otherwise.
+// arrive. The inline hint runs alongside it (see ghostSuggestion). Tab only
+// applies a popup selection the user has explicitly navigated to; otherwise
+// it reaches the shell's own completion, whose echo is re-read into the line
+// model so the hint matches the post-completion text (see noteTabPress).
 
 // Suggestions land 150ms after the last keystroke; the hint must follow them.
 // close() assigns a fresh empty array, so this clears the hint too.
@@ -1446,6 +1447,9 @@ onMounted(() => {
       onResetSuppress: () => {
         suggestions.resetSuppress()
       },
+      onLineResync: () => {
+        refreshGhostText()
+      },
     })
     suggestions.loadHistory()
     // The login shell's history is this machine's, so it only makes sense for
@@ -1595,9 +1599,7 @@ onMounted(() => {
         // Right arrow at end of line accepts the inline hint, fish-style. The
         // hint only shows while the popup is closed, so this never races the
         // list; readline does nothing for → at end of line, so swallowing the
-        // key costs bash/zsh nothing either. Tab stays the shell's: it applies
-        // a popup selection when one is navigated to (below) and otherwise
-        // reaches the shell's own completion untouched.
+        // key costs bash/zsh nothing either.
         if (data === '\x1b[C') {
           const ghost = ghostSuggestion()
           if (ghost) {
@@ -1626,6 +1628,16 @@ onMounted(() => {
             suggestions.close()
             return
           }
+        }
+
+        // Tab always reaches the shell's own completion. Its echo never passes
+        // through handleInput, so the local lineBuffer would stay at the
+        // pre-Tab keystrokes and the inline hint would keep matching the
+        // un-completed input. noteTabPress arms a resync: once the completion
+        // echo arrives, syncFromTerminal re-reads the real line from the
+        // terminal buffer so hint and token match the completed text.
+        if (data === '\t' && terminalInput) {
+          terminalInput.noteTabPress()
         }
 
         // Defer suggestion update/close so SessionWrite is not blocked
@@ -2197,6 +2209,9 @@ watch(() => props.sessionId, (newId, oldId) => {
         },
         onResetSuppress: () => {
           suggestions.resetSuppress()
+        },
+        onLineResync: () => {
+          refreshGhostText()
         },
       })
       suggestions.loadHistory()
