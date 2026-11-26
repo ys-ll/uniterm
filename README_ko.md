@@ -357,6 +357,10 @@ uniTerm이 도움이 되었다면 ⭐ Star를 눌러 주세요 — 프로젝트�
     <td align="center"><a href="https://github.com/rsipka">@rsipka</a></td>
     <td align="center"><a href="https://github.com/caibingxin666">@caibingxin666</a></td>
     <td align="center"><a href="https://github.com/zcy85611">@zcy85611</a></td>
+    <td align="center"><a href="https://github.com/AuroraLZDF">@AuroraLZDF</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/guberm">@guberm</a></td>
   </tr>
 </table>
 
