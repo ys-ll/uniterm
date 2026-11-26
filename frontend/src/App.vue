@@ -8,6 +8,7 @@
       @toggle-sidebar="sidebarVisible = !sidebarVisible"
       @open-settings="openSettings"
       @open-netscan="openNetscan"
+      @open-tools="openTools"
       @open-packetcap="openPacketcap"
       @open-firewall="openFirewall"
       @open-local-services="openLocalServices"
@@ -35,6 +36,9 @@
             />
             <SettingsTabContent
               v-else-if="activeTab.type === 'settings'"
+            />
+            <ToolsTabContent
+              v-else-if="activeTab.type === 'tools'"
             />
             <WorkspaceContent
               v-else-if="activeTab.type === 'workspace'"
@@ -202,6 +206,7 @@ import { isMobilePlatform } from './utils/platform'
 import { startAndroidKeepAlive, stopAndroidKeepAlive } from './utils/androidKeepAlive'
 import { writeClipboard } from './composables/useClipboardWrite'
 import SettingsTabContent from './components/SettingsTabContent.vue'
+import ToolsTabContent from './components/ToolsTabContent.vue'
 import NetworkScanTabContent from './components/netscan/NetworkScanTabContent.vue'
 import PacketCaptureTabContent from './components/packetcap/PacketCaptureTabContent.vue'
 import FirewallTabContent from './components/firewall/FirewallTabContent.vue'
@@ -1368,6 +1373,19 @@ function openSettings(category?: string) {
   }
 }
 
+function openTools() {
+  // Check if tools tab already exists
+  const existingTab = tabStore.tabs.find(t => t.type === 'tools')
+  if (existingTab) {
+    tabStore.setActiveTab(existingTab.id)
+  } else {
+    const panel = panelStore.createPanel(null, 'tools')
+    panelStore.updateTitle(panel.id, t('tools.title'))
+    const tab = tabStore.createTab('tools', t('tools.title'), panel.id)
+    panelStore.movePanelToTab(panel.id, tab.id)
+  }
+}
+
 function openNetscan() {
   netscanVisible.value = true
 }
@@ -1574,7 +1592,7 @@ async function closeTabBatch(tabIds: string[]) {
   if (!targets.length) return
 
   const connectedCount = targets.reduce((n, tab) => {
-    if (tab.type === 'settings' || tab.type === 'start' || tab.type === 'netscan') return n
+    if (tab.type === 'settings' || tab.type === 'tools' || tab.type === 'start' || tab.type === 'netscan') return n
     const panelIds = tab.type === 'workspace' ? tab.panelIds : 'panelId' in tab ? [tab.panelId] : []
     const hit = panelIds.some(pid => {
       const p = panelStore.getPanel(pid)

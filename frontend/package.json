@@ -47,6 +47,7 @@
     "@xterm/xterm": "https://github.com/ys-ll/xterm.js/releases/download/v6.0.0-uniterm.1/xterm-xterm-6.0.0-uniterm.1.tgz",
     "@ys-ll/ironrdp-wasm": "https://github.com/ys-ll/ironrdp-wasm/releases/download/v0.5.7/ys-ll-ironrdp-wasm-0.5.7.tgz",
     "codemirror": "^6.0.2",
+    "cronstrue": "^3.46.0",
     "element-plus": "^2.5.0",
     "js-yaml": "^5.2.1",
     "lz-string": "^1.5.0",

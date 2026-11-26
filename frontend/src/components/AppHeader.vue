@@ -174,6 +174,9 @@
           <MenuItem @click="openCategory('tunnels')">{{ t('settings.tunnels') }}</MenuItem>
         </MenuSubmenu>
 
+        <!-- 开发者工具箱：JSON 格式化 / 哈希与编码 -->
+        <MenuItem @click="openTools">{{ t('tools.title') }}</MenuItem>
+
         <!-- AI 子菜单（与设置页 AI 分组一致） -->
         <MenuSubmenu :label="t('menu.ai')">
           <MenuItem @click="openCategory('ai')">{{ t('settings.ai') }}</MenuItem>
@@ -350,6 +353,11 @@ function openNetscan() {
   closeSettingsMenu()
 }
 
+function openTools() {
+  emit('open-tools')
+  closeSettingsMenu()
+}
+
 function openPacketcap() {
   emit('open-packetcap')
   closeSettingsMenu()
@@ -398,8 +406,8 @@ function menuShortcut(action: ShortcutAction): string {
 }
 
 const hasActiveConnections = computed(() =>
-  mcpSessions.value.some(({ status }) => status === 'connected') || tabStore.tabs.some(t => {
-    if (t.type === 'start' || t.type === 'settings' || t.type === 'netscan') return false
+  tabStore.tabs.some(t => {
+    if (t.type === 'start' || t.type === 'settings' || t.type === 'tools' || t.type === 'netscan') return false
     const panelIds = t.type === 'workspace' ? t.panelIds : 'panelId' in t ? [t.panelId] : []
     return panelIds.some(pid => {
       const p = panelStore.getPanel(pid)
@@ -428,6 +436,7 @@ const emit = defineEmits<{
   'toggle-sidebar': []
   'open-settings': [category?: string]
   'open-netscan': []
+  'open-tools': []
   'open-packetcap': []
   'open-firewall': []
   'open-local-services': []
