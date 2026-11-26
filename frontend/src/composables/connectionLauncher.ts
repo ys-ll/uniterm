@@ -14,7 +14,7 @@ import { useConnectionStore } from '../stores/connectionStore'
 import { usePanelStore } from '../stores/panelStore'
 import { useTabStore } from '../stores/tabStore'
 import { useSessionStore } from '../stores/sessionStore'
-import { fileTransferProto } from '../utils/fileTransferUtils'
+import { fileTransferProto, fileTransferDisabled } from '../utils/fileTransferUtils'
 import { parseWslFromShell } from '../utils/shellLabel'
 import { t } from '../i18n'
 import { msg } from '../services/message'
@@ -88,8 +88,11 @@ export async function launchConnection(config: ConnectionConfig, opts: LaunchOpt
 // Open the protocol-agnostic file browser for a config — the SSH companion
 // (SFTP/SCP per the connection's fileTransferProto preference) and the
 // app:connect-sftp window event all land here. Unlike launchConnection this
-// forces the SFTP spec regardless of config.type.
+// forces the SFTP spec regardless of config.type. A connection with file
+// transfer disabled ('none') never opens a browser — the entry points are
+// hidden, this guards the window-event path.
 export async function launchFileBrowser(config: ConnectionConfig, opts: LaunchOptions = {}) {
+  if (fileTransferDisabled(config)) return
   const persist = opts.persist ?? true
   if (persist) persistConnection(config)
   await runSpec('sftp', config, SPECS.sftp, opts)

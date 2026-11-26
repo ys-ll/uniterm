@@ -110,7 +110,7 @@
 
       <!-- ④ 连接功能（SSH） -->
       <MenuDivider />
-      <MenuSubmenu v-if="isSsh" :label="t('terminal.transfer')">
+      <MenuSubmenu v-if="isSsh && connectFileMenuKey(panel?.config)" :label="t('terminal.transfer')">
         <MenuItem @click="openSftp">{{ t(connectFileMenuKey(panel?.config)) }}</MenuItem>
         <MenuItem @click="uploadFileRz">{{ t('terminal.uploadFileRz') }}</MenuItem>
       </MenuSubmenu>
