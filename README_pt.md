@@ -361,6 +361,7 @@ Agradecemos às seguintes pessoas por contribuírem com código e melhorias, e a
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/guberm">@guberm</a></td>
+    <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
   </tr>
 </table>
 
