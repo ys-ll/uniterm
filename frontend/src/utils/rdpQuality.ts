@@ -28,8 +28,25 @@ export function normalizeRdpQuality(value: unknown): RdpQuality {
   return value === 'high' || value === 'balanced' || value === 'low' ? value : DEFAULT_RDP_QUALITY
 }
 
-// Protocol values negotiated by the WASM client for the tier. Only tiers
-// other than the default need to be sent — 'high' equals the engine default.
+// Protocol values negotiated by the WASM client for the tier. `rdpQualityProfile`
+// is the single source of truth for the masks.
 export function rdpQualityProfile(quality: RdpQuality): { connectionType: number; performanceFlags: number } {
   return { connectionType: CONNECTION_TYPES[quality], performanceFlags: PERF_FLAGS[quality] }
+}
+
+export interface RdpQualityExtension {
+  name: 'connection_type' | 'performance_flags'
+  value: number
+}
+
+// Extensions sent to the engine for the selected tier. Every tier is sent,
+// including the default `balanced`: the engine falls back to its own LAN/high
+// defaults when these are omitted, so the UI tier would silently not apply.
+// Unknown values normalize to the default tier instead of throwing.
+export function qualityExtensions(quality: unknown): RdpQualityExtension[] {
+  const profile = rdpQualityProfile(normalizeRdpQuality(quality))
+  return [
+    { name: 'connection_type', value: profile.connectionType },
+    { name: 'performance_flags', value: profile.performanceFlags },
+  ]
 }
