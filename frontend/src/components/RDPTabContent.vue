@@ -175,7 +175,7 @@ import { RdpClipboardSync, RdpInputQueue } from '../utils/rdpClipboard'
 import { RdpFileTransfer } from '../utils/rdpFileTransfer'
 import { adaptiveRdpSize, rdpPointerPosition } from '../utils/rdpGeometry'
 import type { RdpDesktopSize } from '../utils/rdpGeometry'
-import { DEFAULT_RDP_QUALITY, normalizeRdpQuality, rdpQualityProfile } from '../utils/rdpQuality'
+import { normalizeRdpQuality, qualityExtensions } from '../utils/rdpQuality'
 import type { RdpQuality } from '../utils/rdpQuality'
 import { RDP_RESOLUTION_PRESETS, resolutionSentinels, seedResolutionChoice } from '../utils/rdpResolutions'
 import type { RdpResolutionChoice } from '../utils/rdpResolutions'
@@ -472,12 +472,11 @@ async function startClient(proxyUrl: string, desktopSizeOverride?: RdpDesktopSiz
     builder.extension(new mod.Extension('autologon', !!effectivePassword.value))
     // Low-bandwidth tiers negotiate a smaller connection_type and strip
     // server-side graphics features (wallpaper, theming, animations). The
-    // default tier equals the engine's built-in values, so it is not sent —
-    // connections keep their current behavior on older WASM builds too.
-    if (activeQuality.value !== DEFAULT_RDP_QUALITY) {
-      const profile = rdpQualityProfile(activeQuality.value)
-      builder.extension(new mod.Extension('connection_type', profile.connectionType))
-      builder.extension(new mod.Extension('performance_flags', profile.performanceFlags))
+    // selected tier is always sent, including the default `balanced`: the
+    // engine's built-in values are LAN/high, so omitting it would silently
+    // keep the server defaults instead of the tier shown in the UI.
+    for (const ext of qualityExtensions(activeQuality.value)) {
+      builder.extension(new mod.Extension(ext.name, ext.value))
     }
     sessionQuality.value = activeQuality.value
     sessionResolution.value = activeResolution.value
