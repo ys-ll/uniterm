@@ -770,7 +770,7 @@
       >
         {{ t('conn.testConnection') }}
       </el-button>
-      <el-button v-if="!isEdit" @click="onConnectOnly">{{ t('conn.connectOnly') }}</el-button>
+      <el-button v-if="!isEdit && form.type !== 'container'" @click="onConnectOnly">{{ t('conn.connectOnly') }}</el-button>
       <el-button @click="onSave">{{ t('conn.saveOnly') }}</el-button>
       <el-button type="primary" @click="onConnect">{{ t('conn.saveConnect') }}</el-button>
     </template>
