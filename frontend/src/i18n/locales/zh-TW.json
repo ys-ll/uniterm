@@ -758,6 +758,8 @@
   "importExport.importPassword": "匯入密碼",
   "importExport.chooseFile": "選擇檔案...",
   "importExport.dbeaverPathHint": "留空自動偵測 DBeaver 工作區，或選擇 data-sources.json / 資料夾",
+  "importExport.finalshellPathHint": "留空自動探測 conn 目錄（~/.finalshell 或 %LOCALAPPDATA%）",
+  "importExport.chooseDirectory": "選擇目錄",
   "importExport.importedCount": "已匯入 {count} 個連線",
   "importExport.exported": "匯出成功",
   "settings.sync": "雲端同步",

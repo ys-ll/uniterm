@@ -730,6 +730,8 @@
   "importExport.importPassword": "Mật khẩu nhập",
   "importExport.chooseFile": "Chọn tệp...",
   "importExport.dbeaverPathHint": "Để trống để tự động phát hiện workspace DBeaver, hoặc chọn data-sources.json / thư mục chứa nó",
+  "importExport.finalshellPathHint": "Để trống để tự động tìm thư mục conn (~/.finalshell hoặc %LOCALAPPDATA%)",
+  "importExport.chooseDirectory": "Chọn thư mục",
   "importExport.importedCount": "Đã nhập {count} kết nối",
   "importExport.exported": "Xuất thành công",
   "settings.sync": "Đồng bộ đám mây",

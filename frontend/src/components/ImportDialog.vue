@@ -9,19 +9,20 @@
       <el-form-item :label="t('importExport.importType')">
         <el-select v-model="format" style="width:100%">
           <el-option label="uniTerm (.utm)" value="uniterm" />
+          <el-option label="DBeaver (workspace)" value="dbeaver" />
+          <el-option label="FinalShell (conn)" value="finalshell" />
           <el-option label="MobaXterm (.mxtsessions)" value="mobaxterm" />
           <el-option label="mRemoteNG (confCons.xml)" value="mremoteng" />
+          <el-option label="Navicat (.ncx)" value="navicat" />
           <el-option label="OpenSSH config (~/.ssh/config)" value="openssh" />
           <el-option label="Remote Desktop Manager (.rdm)" value="rdm" />
           <el-option label="SecureCRT (.xml)" value="securecrt" />
+          <el-option label="virt-viewer (.vv)" value="virtviewer" />
           <el-option label="WindTerm (.sessions)" value="windterm" />
           <el-option label="Xshell (.xts)" value="xshell" />
-          <el-option label="DBeaver (workspace)" value="dbeaver" />
-          <el-option label="Navicat (.ncx)" value="navicat" />
-          <el-option label="virt-viewer (.vv)" value="virtviewer" />
         </el-select>
       </el-form-item>
-      <el-form-item v-if="format !== 'openssh' && format !== 'dbeaver'" :label="t('importExport.file')">
+      <el-form-item v-if="format !== 'openssh' && format !== 'dbeaver' && format !== 'finalshell'" :label="t('importExport.file')">
         <div style="display:flex;gap:0.5rem;width:100%">
           <el-input v-model="srcPath" readonly :placeholder="t('importExport.chooseFile')" style="flex:1" />
           <el-button @click="pickFile">{{ t('importExport.chooseFile') }}</el-button>
@@ -33,13 +34,19 @@
           <el-button @click="pickDBeaverDir">{{ t('importExport.chooseFile') }}</el-button>
         </div>
       </el-form-item>
+      <el-form-item v-if="format === 'finalshell'" :label="t('importExport.file')">
+        <div style="display:flex;gap:0.5rem;width:100%">
+          <el-input v-model="srcPath" readonly :placeholder="t('importExport.finalshellPathHint')" style="flex:1" />
+          <el-button @click="pickFinalShellDir">{{ t('importExport.chooseDirectory') }}</el-button>
+        </div>
+      </el-form-item>
       <el-form-item v-if="format === 'uniterm' || format === 'windterm' || format === 'mremoteng'" :label="t('importExport.importPassword')">
         <el-input v-model="password" type="password" show-password />
       </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="onCancel">{{ t('common.cancel') }}</el-button>
-      <el-button type="primary" :loading="importing" :disabled="!srcPath && format !== 'openssh' && format !== 'dbeaver'" @click="onImport">{{ t('importExport.import') }}</el-button>
+      <el-button type="primary" :loading="importing" :disabled="!srcPath && format !== 'openssh' && format !== 'dbeaver' && format !== 'finalshell'" @click="onImport">{{ t('importExport.import') }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -104,11 +111,23 @@ async function pickDBeaverDir() {
   if (p) srcPath.value = p
 }
 
+async function pickFinalShellDir() {
+  // Same web-mode limitation as DBeaver: a browser cannot hand over a
+  // server-side directory path, so FinalShell import is desktop-only.
+  if (await isWebServerMode()) {
+    msg.warning(t('web.dirPickerUnavailable'))
+    return
+  }
+  const p = await OpenDirectoryDialog()
+  if (p) srcPath.value = p
+}
+
 async function onImport() {
   importing.value = true
   try {
-    // DBeaver with an empty path means "auto-detect the default workspace".
-    const path = (format.value === 'dbeaver' && !srcPath.value) ? '' : srcPath.value
+    // DBeaver with an empty path means "auto-detect the default workspace";
+    // FinalShell likewise auto-detects its conn directory.
+    const path = ((format.value === 'dbeaver' || format.value === 'finalshell') && !srcPath.value) ? '' : srcPath.value
     const result = await ParseImportFile(format.value, path,
       (format.value === 'uniterm' || format.value === 'windterm' || format.value === 'mremoteng') ? password.value : '')
     await ApplyImport({ groups: result.groups || [], connections: result.connections || [] } as any)

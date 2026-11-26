@@ -734,6 +734,8 @@
   "importExport.importPassword": "Importpasswort",
   "importExport.chooseFile": "Datei auswählen...",
   "importExport.dbeaverPathHint": "Leer lassen, um den DBeaver-Workspace automatisch zu finden, oder data-sources.json / Ordner wählen",
+  "importExport.finalshellPathHint": "Leer lassen, um das conn-Verzeichnis automatisch zu finden (~/.finalshell oder %LOCALAPPDATA%)",
+  "importExport.chooseDirectory": "Verzeichnis wählen",
   "importExport.importedCount": "{count} Verbindungen importiert",
   "importExport.exported": "Erfolgreich exportiert",
   "settings.sync": "Cloud-Sync",

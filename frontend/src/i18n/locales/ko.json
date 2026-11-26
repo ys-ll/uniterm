@@ -734,6 +734,8 @@
   "importExport.importPassword": "가져오기 비밀번호",
   "importExport.chooseFile": "파일 선택...",
   "importExport.dbeaverPathHint": "비우면 DBeaver 워크스페이스를 자동 감지하거나 data-sources.json / 폴더를 선택하세요",
+  "importExport.finalshellPathHint": "비워 두면 conn 디렉터리를 자동으로 찾습니다 (~/.finalshell 또는 %LOCALAPPDATA%)",
+  "importExport.chooseDirectory": "디렉터리 선택",
   "importExport.importedCount": "{count}개 연결을 가져왔습니다",
   "importExport.exported": "내보내기 완료",
   "settings.sync": "클라우드 동기화",
