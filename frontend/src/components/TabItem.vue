@@ -139,7 +139,7 @@
       <!-- ③ 连接功能（ssh / rdp） -->
       <MenuDivider />
       <MenuItem v-if="tab.type === 'rdp' || tab.type === 'vnc' || tab.type === 'spice'" @click="enterDesktopFullScreen">{{ t('remoteDesktop.fullscreen') }}</MenuItem>
-      <MenuSubmenu v-if="isSsh" :label="t('terminal.transfer')">
+      <MenuSubmenu v-if="isSsh && fileMenuKey" :label="t('terminal.transfer')">
         <MenuItem @click="openSftp">{{ t(fileMenuKey) }}</MenuItem>
         <MenuItem @click="uploadFileRz">{{ t('terminal.uploadFileRz') }}</MenuItem>
       </MenuSubmenu>

@@ -2,16 +2,31 @@
 // SFTP/SCP connections, transfer menus). Protocol-related helpers that are
 // used across components/stores live here.
 
+export type FileTransferProto = 'sftp' | 'scp' | 'none'
+
 // Effective file-transfer protocol of a connection. Only SSH connections carry
 // the choice; anything else (and legacy configs without the field) is SFTP.
-export function fileTransferProto(config?: { type?: string; fileTransferProto?: 'sftp' | 'scp' } | null): 'sftp' | 'scp' {
-  return config?.type === 'ssh' && config?.fileTransferProto === 'scp' ? 'scp' : 'sftp'
+// 'none' disables the companion file panel entirely (hosts without any file
+// transfer service, e.g. switches — issue #1624).
+export function fileTransferProto(config?: { type?: string; fileTransferProto?: FileTransferProto } | null): FileTransferProto {
+  if (config?.type !== 'ssh') return 'sftp'
+  return config.fileTransferProto === 'scp' || config.fileTransferProto === 'none' ? config.fileTransferProto : 'sftp'
+}
+
+// True when the connection's companion file sidebar is explicitly disabled
+// ('none'): no companion session, no directory probing/cwd-hook injection, and
+// the file-transfer menu entries are hidden.
+export function fileTransferDisabled(config?: { type?: string; fileTransferProto?: FileTransferProto } | null): boolean {
+  return fileTransferProto(config) === 'none'
 }
 
 // i18n key for the "connect SFTP / connect SCP" context-menu item of an SSH
-// connection, matching its configured file-transfer protocol.
-export function connectFileMenuKey(config?: { type?: string; fileTransferProto?: 'sftp' | 'scp' } | null): string {
-  return fileTransferProto(config) === 'scp' ? 'sidebar.connectScp' : 'sidebar.connectSftp'
+// connection, matching its configured file-transfer protocol. Empty when the
+// file transfer is disabled ('none') and the menu entry must not render.
+export function connectFileMenuKey(config?: { type?: string; fileTransferProto?: FileTransferProto } | null): string {
+  const proto = fileTransferProto(config)
+  if (proto === 'none') return ''
+  return proto === 'scp' ? 'sidebar.connectScp' : 'sidebar.connectSftp'
 }
 
 // True when the connection's remote filesystem can create symbolic links

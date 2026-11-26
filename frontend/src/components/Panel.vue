@@ -124,7 +124,7 @@
 
             <!-- ③ 连接功能（ssh） -->
             <MenuDivider />
-            <MenuSubmenu v-if="panel.type === 'ssh'" :label="t('terminal.transfer')">
+            <MenuSubmenu v-if="panel.type === 'ssh' && connectFileMenuKey(panel.config)" :label="t('terminal.transfer')">
               <MenuItem @click="connectSftp(); moreMenuVisible = false">{{ t(connectFileMenuKey(panel.config)) }}</MenuItem>
               <MenuItem @click="uploadFileRz(); moreMenuVisible = false">{{ t('terminal.uploadFileRz') }}</MenuItem>
             </MenuSubmenu>

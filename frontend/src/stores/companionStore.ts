@@ -278,8 +278,10 @@ export const useCompanionStore = defineStore('companion', () => {
         return info.id
       }
       // Honor the connection's file-transfer protocol preference: 'scp' for
-      // hosts without an SFTP subsystem, 'sftp' (default) otherwise.
+      // hosts without an SFTP subsystem, 'sftp' (default) otherwise. 'none'
+      // disables the companion file panel entirely — no session, no probing.
       const proto = fileTransferProto(config)
+      if (proto === 'none') return null
       config.type = proto
       const info = await CreateSession(proto, config)
       entries.value = {

@@ -5,8 +5,9 @@
       <MenuItem iconic :icon="Plus" @click="onCreateWorkspace">{{ t('workspace.newWorkspace') }}</MenuItem>
       <MenuItem v-for="w in workspaceTabs" :key="w.id" @click="onConnectToWorkspace(w.id)">{{ w.name }}</MenuItem>
     </MenuSubmenu>
-    <!-- Companion views: session type is not derivable from config.type -->
-    <MenuItem v-if="config?.type === 'ssh'" @click="onConnectClick($event, 'file')">{{ t(connectFileMenuKey(config)) }}</MenuItem>
+    <!-- Companion views: session type is not derivable from config.type.
+         Hidden when the connection disables file transfer ('none'). -->
+    <MenuItem v-if="config?.type === 'ssh' && connectFileMenuKey(config)" @click="onConnectClick($event, 'file')">{{ t(connectFileMenuKey(config)) }}</MenuItem>
     <MenuItem v-if="config?.type === 'wsl'" @click="onConnectClick($event, 'wsl-file')">{{ t('sidebar.connectWslFile') }}</MenuItem>
     <MenuItem v-if="config?.type === 'ssh'" @click="onConnectClick($event, 'monitor')">{{ t('sidebar.connectMonitor') }}</MenuItem>
     <MenuItem v-if="config && canLocate" @click="locateSession">{{ t('sidebar.locateSession') }}</MenuItem>

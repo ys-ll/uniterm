@@ -44,8 +44,9 @@ export interface ConnectionConfig {
   proxyId?: string // reference to a saved outbound proxy (SOCKS5/HTTP)
   // File-transfer protocol for the SSH companion file panel / "connect SFTP/SCP"
   // actions. Undefined/'sftp' = SFTP (default); 'scp' for hosts without an
-  // SFTP subsystem.
-  fileTransferProto?: 'sftp' | 'scp'
+  // SFTP subsystem; 'none' disables the companion file panel entirely (no
+  // session, no directory probing) for hosts without any file transfer.
+  fileTransferProto?: 'sftp' | 'scp' | 'none'
   groupId?: string
   // RDP-specific
   // Desktop size, or a sentinel: -1 = follow the primary monitor

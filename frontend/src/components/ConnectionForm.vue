@@ -509,9 +509,10 @@
                     <el-radio-group v-model="form.fileTransferProto">
                       <el-radio-button value="sftp">SFTP</el-radio-button>
                       <el-radio-button value="scp">SCP</el-radio-button>
+                      <el-radio-button value="none">{{ t('conn.fileTransferProtoNone') }}</el-radio-button>
                     </el-radio-group>
                   </el-form-item>
-                  <el-form-item v-if="form.type === 'ssh' || form.type === 'sftp' || form.type === 'scp'" :label="t('conn.sftpMaxConcurrency')">
+                  <el-form-item v-if="(form.type === 'ssh' && form.fileTransferProto !== 'none') || form.type === 'sftp' || form.type === 'scp'" :label="t('conn.sftpMaxConcurrency')">
                     <el-input-number v-model="form.sftpMaxConcurrency" :min="0" :max="20" controls-position="right" style="width: 8rem" />
                   </el-form-item>
                 </div>
@@ -1195,7 +1196,7 @@ const form = reactive<ConnectionConfig>({
   postLoginScript: '',
   postLoginExpectSteps: [],
   sftpMaxConcurrency: 5,
-  fileTransferProto: 'sftp' as 'sftp' | 'scp',
+  fileTransferProto: 'sftp' as 'sftp' | 'scp' | 'none',
   x11Forwarding: false,
   agentForwarding: false,
   ftpEncryption: 'none',
