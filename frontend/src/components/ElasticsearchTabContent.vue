@@ -808,11 +808,13 @@ function onResizeStart(e: MouseEvent) {
 .health-dot.close, .health-dot.closed { background: var(--text-disabled); }
 
 .es-main {
+  background: var(--bg-titlebar);
   display: flex;
   flex: 1;
   min-height: 0;
 }
 .es-left {
+  background: var(--bg-base);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-subtle);
@@ -921,7 +923,8 @@ function onResizeStart(e: MouseEvent) {
   position: relative;
   z-index: 1;
   cursor: col-resize;
-  background: transparent;
+  /* The resizer IS the gutter — tint it with the chrome tier */
+  background: var(--bg-titlebar);
   flex-shrink: 0;
 }
 .es-resizer:hover::after,
@@ -937,6 +940,7 @@ function onResizeStart(e: MouseEvent) {
 }
 
 .es-right {
+  background: var(--bg-base);
   flex: 1;
   display: flex;
   flex-direction: column;

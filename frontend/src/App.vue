@@ -2128,6 +2128,8 @@ watch(
   /* Remove the border entirely: transparent-color kept a 1px empty ring
      around self-framing views (workspace/sftp/db/container/...) */
   border: none;
+  /* Keep the plain content floor here — only the gutter elements themselves
+     are tinted chrome (see the per-view gutter rules) */
 }
 
 /* Center column between the left sidebar and the AI sidebar: active tab

@@ -14,11 +14,10 @@
       @close="onClose"
     />
 
-    <!-- Connections button (icon only, leftmost) -->
-    <button class="header-btn" :class="{ active: sidebarVisible }" @click="emit('toggle-sidebar')" :title="t('sidebar.locSidebar') + shortcutSuffix('toggleSidebar')">
-      <el-icon><PanelLeft :size="'0.875rem'" /></el-icon>
-    </button>
-
+    <!-- Brand mark anchors the tab strip; the panel toggles share the right side. -->
+    <div v-if="showBrandMark" class="brand-mark" role="img" aria-label="uniTerm" title="uniTerm">
+      <img src="/favicon.png" alt="" draggable="false" />
+    </div>
 
     <!-- Tabs list -->
     <div class="header-tabs">
@@ -63,27 +62,32 @@
       </MenuSubmenu>
     </Menu>
 
-    <!-- Bottom panel toggle (left of the AI button); hidden in narrow
-         layout, where the bottom panel's views merge into the sidebar. -->
-    <button
-      v-if="!uiLayout.narrowLayout"
-      class="header-btn"
-      :class="{ active: bottomPanelShown }"
-      @click="emit('toggle-bottom-panel')"
-      :title="t('sidebar.locBottom')"
-    >
-      <el-icon><PanelBottom :size="'0.875rem'" /></el-icon>
-    </button>
+    <div class="panel-toggles">
+      <button class="header-btn" @click="emit('toggle-sidebar')" :title="t('sidebar.locSidebar') + shortcutSuffix('toggleSidebar')" :aria-label="t('sidebar.locSidebar')" :aria-pressed="!!sidebarVisible">
+        <PanelToggleIcon side="left" :active="!!sidebarVisible" />
+      </button>
 
-    <!-- AI button -->
-    <button class="header-btn" :class="{ active: aiStore.visible }" @click="emit('toggle-ai')" :title="t('header.ai') + shortcutSuffix('focusAI')">
-      <el-icon><Bot :size="'0.875rem'" /></el-icon>
-    </button>
+      <!-- In narrow layout these views merge into the left sidebar. -->
+      <button
+        v-if="!uiLayout.narrowLayout"
+        class="header-btn"
+        @click="emit('toggle-bottom-panel')"
+        :title="t('sidebar.locBottom')"
+        :aria-label="t('sidebar.locBottom')"
+        :aria-pressed="bottomPanelShown"
+      >
+        <PanelToggleIcon side="bottom" :active="bottomPanelShown" />
+      </button>
+
+      <button class="header-btn" @click="emit('toggle-ai')" :title="t('header.ai') + shortcutSuffix('focusAI')" :aria-label="t('header.ai')" :aria-pressed="aiStore.visible">
+        <PanelToggleIcon side="right" :active="aiStore.visible" />
+      </button>
+    </div>
 
     <!-- Settings button opens a dropdown menu with common settings items -->
     <div class="settings-wrap">
       <button ref="settingsBtnRef" class="header-btn" @click.stop="toggleSettingsMenu" :title="t('header.menu')">
-        <el-icon><MenuIcon :size="'0.875rem'" /></el-icon>
+        <el-icon><MenuIcon class="header-icon" /></el-icon>
       </button>
 
       <!-- Settings dropdown (theme / language / ai / identities / proxies / settings / check update) -->
@@ -221,7 +225,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, h } from 'vue'
-import { Menu as MenuIcon, PanelLeft, PanelBottom, Bot } from '@lucide/vue'
+import { Menu as MenuIcon } from '@lucide/vue'
 import { ElMessageBox, ElCheckbox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { useTabStore } from '../stores/tabStore'
@@ -238,6 +242,7 @@ import { LANGUAGE_OPTIONS, TERMINAL_THEMES, FOLLOW_APP_THEME } from '../types/se
 import type { AppSettings, ShortcutAction } from '../types/settings'
 import { detectPlatformSync, isMobilePlatform } from '../utils/platform'
 import WindowControls from './WindowControls.vue'
+import PanelToggleIcon from './icons/PanelToggleIcon.vue'
 import TabsList from './TabsList.vue'
 import ImportDialog from './ImportDialog.vue'
 import ExportDialog from './ExportDialog.vue'
@@ -410,8 +415,7 @@ const hasActiveConnections = computed(() =>
 const uiLayout = useUiLayoutStore()
 const bottomPanelShown = computed(() => uiLayout.bottomPanelVisible)
 
-// Sidebar/AI/bottom-panel toggle buttons mirror their panel's open state
-// with the shared .header-btn.active pressed style.
+// Sidebar/AI/bottom-panel toggle icons fill the corresponding region when open.
 defineProps<{
   sidebarVisible?: boolean
 }>()
@@ -460,6 +464,14 @@ const showWindowControls = computed(
     !(systemTitleBarAtStartup.value ?? localStateStore.state.systemTitleBar) &&
     !isMobilePlatform(platform.value) &&
     !webServerMode.value
+)
+
+// The OS title bar already carries the app icon. Wait for the persisted frame
+// choice so the custom logo cannot flash briefly over a native title bar.
+const showBrandMark = computed(() =>
+  platform.value !== 'darwin' &&
+  localStateStore.loaded &&
+  !(systemTitleBarAtStartup.value ?? localStateStore.state.systemTitleBar)
 )
 
 async function updateMaximisedState() {
@@ -621,12 +633,46 @@ onUnmounted(() => {
   align-items: center;
 }
 
+.brand-mark {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  position: relative;
+  margin-right: 0.25rem;
+}
+
+.brand-mark img {
+  width: 1.75rem;
+  height: 1.75rem;
+  max-width: none;
+  max-height: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.app-header.platform-darwin :deep(.window-controls.mac) {
+  margin-right: 0.75rem;
+}
+
+.panel-toggles {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  flex-shrink: 0;
+  margin-left: 0.375rem;
+}
+
 .header-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 1.75rem;
-  padding: 0.3125rem 0.5rem;
+  padding: 0.3125rem 0.375rem;
   font-family: var(--font-ui);
   font-size: 0.75rem;
   font-weight: 500;
@@ -645,8 +691,8 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-/* Open-panel state: color the icon only — no pressed background. Hover
-   still shows the standard hover surface on top of it. */
+/* Other active header actions use an accent icon; panel toggles indicate
+   their state by filling the corresponding region of their icon. */
 .header-btn.active {
   background: transparent;
   color: var(--accent);
@@ -669,6 +715,11 @@ onUnmounted(() => {
 
 .header-btn .el-icon {
   font-size: 0.875rem;
+}
+
+.header-btn :deep(.header-icon) {
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .mcp-sessions-btn {
