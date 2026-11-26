@@ -72,7 +72,16 @@
         :filters="col.filterable ? enumFilters(col) : undefined"
         :filter-method="col.filterable ? (val, row) => cellText(col.value(row, usageOf(row))) === val : undefined"
       >
-        <template #default="{ row }">{{ cellText(col.value(row, usageOf(row))) }}</template>
+        <template #default="{ row }">
+          <template v-if="resourceKey === 'ingresses' && col.header === 'Rules'">
+            <div v-for="rule in ingressRuleLinks(row)" :key="rule.text" class="ingress-rule">
+              <a v-if="rule.url" :href="rule.url" :title="rule.text" @click.stop.prevent="openIngress(rule.url)">{{ rule.text }}</a>
+              <span v-else>{{ rule.text }}</span>
+            </div>
+            <span v-if="!ingressRuleLinks(row).length">—</span>
+          </template>
+          <template v-else>{{ cellText(col.value(row, usageOf(row))) }}</template>
+        </template>
       </el-table-column>
 
       <el-table-column v-if="actionColWidth" :label="t('k8s.actions')" :width="uiPx(actionColWidth)" fixed="right" class-name="k8s-action-cell">
@@ -115,7 +124,8 @@ import {
 import { useK8sStore } from '../stores/k8sStore'
 import { useI18n } from '../i18n'
 import K8sCreateDialog from './K8sCreateDialog.vue'
-import { getResource, age, type ColoredCell } from '../services/k8sResources'
+import { getResource, age, ingressRuleLinks, type ColoredCell } from '../services/k8sResources'
+import { openExternalUrl } from '../services/webSftpBridge'
 import { fetchPodMetrics, fetchNodeMetrics, type Usage } from '../services/k8sMetrics'
 import { requestJSON } from '../services/k8sClient'
 import { crdListPath, evalJsonPath } from '../services/k8sCrd'
@@ -212,6 +222,11 @@ const titleLabel = computed(() =>
   props.frame.kind === 'custom' ? props.frame.crd.kind : (desc.value?.label || resourceKey.value))
 const displayCount = computed(() =>
   props.frame.kind === 'custom' ? crdFiltered.value.length : filtered.value.length)
+
+async function openIngress(url: string) {
+  try { await openExternalUrl(url) }
+  catch (e: any) { ElMessage.error(String(e?.message || e)) }
+}
 
 function cellText(v: string | number | ColoredCell): string {
   if (v == null) return ''
@@ -547,6 +562,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.ingress-rule { overflow-wrap: anywhere; white-space: normal; }
+.ingress-rule a { color: var(--accent); }
+.ingress-rule a:hover { text-decoration: underline; }
+
 .k8s-list-wrap {
   flex: 1;
   display: flex;
