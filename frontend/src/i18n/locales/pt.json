@@ -1247,6 +1247,7 @@
   "db.categoryNoSQL": "Bancos de dados NoSQL",
   "conn.categoryOther": "Outro",
   "db.databases": "Bancos de dados",
+  "db.dm": "DM",
   "db.serviceName": "Nome do serviço",
   "db.serviceNamePlaceholder": "Nome do serviço, ex.: FREEPDB1",
   "db.serviceNameRequired": "O Oracle exige um nome de serviço",

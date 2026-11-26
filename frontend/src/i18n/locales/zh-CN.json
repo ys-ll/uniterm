@@ -1275,6 +1275,7 @@
   "db.categoryNoSQL": "NoSQL数据库",
   "conn.categoryOther": "其他",
   "db.databases": "数据库",
+  "db.dm": "达梦",
   "db.serviceName": "服务名",
   "db.serviceNamePlaceholder": "服务名，如 FREEPDB1",
   "db.serviceNameRequired": "Oracle 必须填写服务名",

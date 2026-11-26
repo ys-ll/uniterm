@@ -1247,6 +1247,7 @@
   "db.categoryNoSQL": "Cơ sở dữ liệu NoSQL",
   "conn.categoryOther": "Khác",
   "db.databases": "Các cơ sở dữ liệu",
+  "db.dm": "DM",
   "db.serviceName": "Tên dịch vụ",
   "db.serviceNamePlaceholder": "Tên dịch vụ, vd: FREEPDB1",
   "db.serviceNameRequired": "Oracle yêu cầu tên dịch vụ",

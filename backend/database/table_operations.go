@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"database/sql"
 	"encoding/csv"
 	"errors"
@@ -89,6 +88,8 @@ func textCast(driver, quotedColumn string) string {
 		return "CAST(" + quotedColumn + " AS NVARCHAR(MAX))"
 	case "oracle":
 		return "CAST(" + quotedColumn + " AS VARCHAR2(4000))"
+	case "dm":
+		return "CAST(" + quotedColumn + " AS VARCHAR(4000))"
 	default:
 		return "CAST(" + quotedColumn + " AS TEXT)"
 	}
@@ -297,7 +298,7 @@ func UpdateRowsAtomic(p Provider, db *sql.DB, dbName, tableName string, updates 
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := dbCtx(db, 2*time.Minute)
 	defer cancel()
 	conn, err := db.Conn(ctx)
 	if err != nil {
@@ -398,7 +399,7 @@ func ImportCSV(p Provider, db *sql.DB, dbName, tableName, path string, mapping [
 		placeholders[i] = placeholder(p.DriverName(), i+1)
 	}
 	query := "INSERT INTO " + p.QualifyTable(tableName) + " (" + strings.Join(quoted, ", ") + ") VALUES (" + strings.Join(placeholders, ", ") + ")"
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := dbCtx(db, 10*time.Minute)
 	defer cancel()
 	conn, err := db.Conn(ctx)
 	if err != nil {

@@ -34,6 +34,9 @@ var dbeaverConnType = map[string]connTarget{
 	"mssql":         {Type: "database", DBType: "sqlserver", Port: 1433},
 	"sqlserver":     {Type: "database", DBType: "sqlserver", Port: 1433},
 	"oracle":        {Type: "database", DBType: "oracle", Port: 1521},
+	"dm":            {Type: "database", DBType: "dm", Port: 5236},
+	// KingbaseES speaks the standard PG wire protocol; no dedicated dbType.
+	"kingbase":      {Type: "database", DBType: "postgres", Port: 54321},
 	"sqlite":        {Type: "database", DBType: "sqlite"},
 	"redis":         {Type: "redis", Port: 6379},
 	"mongodb":       {Type: "mongodb", Port: 27017},
