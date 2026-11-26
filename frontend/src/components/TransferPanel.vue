@@ -6,7 +6,7 @@
     :style="resizable && !collapsed && height != null ? { height: height + 'px' } : undefined"
   >
     <div v-if="resizable && !collapsed" class="transfer-panel-resize" @mousedown.prevent="onResizeStart" />
-    <div class="transfer-panel-head">
+    <div class="transfer-panel-head" @click="onHeadClick">
       <div class="transfer-panel-actions">
         <!-- Collapse toggle: pinned far left; collapsing hides ONLY the task
              list — this button bar stays so the panel can be re-expanded. -->
@@ -126,6 +126,13 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const panelRef = ref<HTMLElement | null>(null)
 
+/* Clicking anywhere on the title bar toggles collapse — same as the chevron
+   button. Clicks on real controls (buttons etc.) keep their own action. */
+function onHeadClick(e: MouseEvent) {
+  if ((e.target as HTMLElement).closest('button, a, input, [role="button"]')) return
+  emit('update:collapsed', !props.collapsed)
+}
+
 // Which tasks have their per-file detail expanded (directory transfers).
 const expanded = reactive<Record<string, boolean>>({})
 
@@ -192,6 +199,8 @@ function onResizeStart(e: MouseEvent) {
   padding: 0.375rem 0.5rem 0.25rem;
   font-size: 0.75rem;
   font-weight: 600;
+  /* The whole bar toggles collapse */
+  cursor: pointer;
   color: var(--text-secondary);
   flex-shrink: 0;
 }

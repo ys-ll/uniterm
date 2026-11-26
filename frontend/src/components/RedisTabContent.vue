@@ -834,11 +834,16 @@ watch(() => props.sessionId, async (newId) => {
   overflow: hidden;
 }
 .redis-main {
+  /* Chrome tier behind the islands: shows through their rounded corners */
+  background: var(--bg-titlebar);
+
   flex: 1;
   display: flex;
   overflow: hidden;
 }
 .redis-left {
+  background: var(--bg-base);
+
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -852,7 +857,8 @@ watch(() => props.sessionId, async (newId) => {
   position: relative;
   z-index: 1;
   cursor: col-resize;
-  background: transparent;
+  /* The resizer IS the gutter — tint it with the chrome tier */
+  background: var(--bg-titlebar);
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
@@ -870,6 +876,8 @@ watch(() => props.sessionId, async (newId) => {
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
 .redis-right {
+  background: var(--bg-base);
+
   flex: 1;
   display: flex;
   flex-direction: column;

@@ -2265,6 +2265,10 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   font-weight: 600;
   color: var(--text-primary);
 }
+/* Nudge the title text right so it doesn't sit flush against the edge */
+.ai-header > span:first-of-type {
+  margin-left: 0.375rem;
+}
 .ai-actions {
   display: flex;
   gap: 0.125rem;
@@ -2488,20 +2492,31 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   50% { opacity: 0.5; }
 }
 .ai-input {
-  padding: 0.625rem 0.375rem;
+  /* Margin (not padding) so the element box hugs the tag strip + input frame
+     exactly and the focus glow traces that border, no gap around it */
+  margin: 0.75rem 0.625rem;
   flex-shrink: 0;
   position: relative;
+  border-radius: var(--radius-sm);
+}
+/* Focus glow wraps the tag strip + input frame as one unit */
+.ai-input:focus-within {
+  box-shadow: 0 0 0 0.1875rem var(--accent-glow);
 }
 .input-container {
   border: 1px solid var(--border-subtle);
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  background: var(--bg-elevated);
+  /* Match the plain input background (--bg-base) so the composer reads the
+     same as every other input field */
+  background: var(--bg-base);
   transition: border-color 0.15s ease;
   position: relative;
 }
 .input-container:focus-within {
   border-color: var(--accent);
-  border-top-color: var(--accent);
+  /* The shared edge with the tag strip stays neutral — only the outer frame
+     lights up on focus */
+  border-top-color: var(--border-subtle);
 }
 /* Hover feedback while an OS file drag is over the composer */
 .ai-drop-overlay {
@@ -2592,8 +2607,7 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
   display: none;
 }
 .ai-editable {
-  /* Horizontal padding matches the sidebar's toolbar rows. */
-  padding: 0.75rem 0.375rem;
+  padding: 0.75rem 0.625rem;
   font-size: 0.75rem;
   font-family: var(--font-ui);
   color: var(--text-primary);
@@ -2766,7 +2780,14 @@ defineExpose({ focusInput, startResize: onResizeStart, setResizeHint: (v: boolea
 .ai-panel-tags {
   padding: 0.25rem 0.75rem;
   background: var(--bg-overlay);
+  /* Top/left/right frame matching the composer below; the shared edge stays
+     seamless and the whole strip+composer lights up together on focus */
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.ai-input:focus-within .ai-panel-tags {
+  border-color: var(--accent);
 }
 .panel-tags-list {
   display: flex;

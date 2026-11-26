@@ -408,11 +408,16 @@ onBeforeUnmount(() => {
   position: relative;
 }
 .db-main {
+  /* Chrome tier behind the islands: shows through their rounded corners */
+  background: var(--bg-titlebar);
+
   flex: 1;
   display: flex;
   overflow: hidden;
 }
 .db-left {
+  background: var(--bg-base);
+
   flex-shrink: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -424,7 +429,8 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   cursor: col-resize;
-  background: transparent;
+  /* The resizer IS the gutter — tint it with the chrome tier */
+  background: var(--bg-titlebar);
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
@@ -440,6 +446,8 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0.375rem var(--accent-glow);
 }
 .db-right {
+  background: var(--bg-base);
+
   flex: 1;
   display: flex;
   flex-direction: column;

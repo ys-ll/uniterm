@@ -822,12 +822,17 @@ watch(() => props.sessionId, () => {
 
 /* ── Main layout ── */
 .mongo-main {
+  /* Chrome tier behind the islands: shows through their rounded corners */
+  background: var(--bg-titlebar);
+
   flex: 1;
   display: flex;
   overflow: hidden;
 }
 
 .mongo-left {
+  background: var(--bg-base);
+
   flex-shrink: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -842,7 +847,8 @@ watch(() => props.sessionId, () => {
   position: relative;
   z-index: 1;
   cursor: col-resize;
-  background: transparent;
+  /* The resizer IS the gutter — tint it with the chrome tier */
+  background: var(--bg-titlebar);
   flex-shrink: 0;
   transition: background 0.15s ease;
 }
@@ -861,6 +867,8 @@ watch(() => props.sessionId, () => {
 }
 
 .mongo-right {
+  background: var(--bg-base);
+
   flex: 1;
   display: flex;
   flex-direction: column;

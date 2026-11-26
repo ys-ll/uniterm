@@ -55,14 +55,6 @@
         >
           <Radio :size="'0.875rem'" />
         </button>
-        <button
-          class="panel-ai-lock"
-          :class="{ locked: isAILocked }"
-          @click.stop="emit('toggleAiLock', panel.id)"
-          :title="isAILocked ? t('terminal.aiLockedToPanel') : t('terminal.lockAIToPanel')"
-        >
-          <Sparkles :size="'0.875rem'" />
-        </button>
         <div class="panel-more-wrapper">
           <button
             class="panel-more"
@@ -162,7 +154,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onMounted, onUnmounted, inject } from 'vue'
-import { Radio, Sparkles, MoreHorizontal, X, SquareTerminal, Laptop, LaptopMinimal, Cable, Terminal, Zap, Maximize2, Minimize2 } from '@lucide/vue'
+import { Radio, MoreHorizontal, X, SquareTerminal, Laptop, LaptopMinimal, Cable, Terminal, Zap, Maximize2, Minimize2 } from '@lucide/vue'
 import BaseTerminal from './BaseTerminal.vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
@@ -743,7 +735,7 @@ watch(() => props.panel.outputLog, (val) => {
 }
 /* The AI-locked panel header keeps its normal surface (issue #928: an
    alpha-tinted warning background turns muddy on dark themes); the state is
-   carried by the Sparkles button below, which lights up solid amber. */
+   carried by the title-bar type icon, which lights up solid amber. */
 .panel-title {
   font-size: 0.75rem;
   color: var(--text-secondary);
@@ -839,25 +831,6 @@ watch(() => props.panel.outputLog, (val) => {
 .broadcast-icon {
   display: inline-block;
   line-height: 1;
-}
-.panel-ai-lock {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  padding: 0.125rem 0.25rem;
-  border-radius: var(--radius-sm);
-  display: inline-flex;
-  align-items: center;
-}
-.ai-lock-icon {
-  display: block;
-}
-.panel-ai-lock:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-.panel-ai-lock.locked {
-  color: var(--warning);
 }
 .panel-duplicate {
   background: none;

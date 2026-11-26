@@ -689,6 +689,7 @@ async function onDropRemote(e: DragEvent) {
   overflow: hidden;
   /* Gutter between the file panes and the transfer panel below */
   gap: 0.25rem;
+  background: var(--bg-titlebar);
 }
 .panes-area {
   flex: 1;
@@ -696,6 +697,8 @@ async function onDropRemote(e: DragEvent) {
   overflow: hidden;
   /* Gutter between the local and remote islands */
   gap: 0.25rem;
+  /* Only the gutter shows the chrome tier; the panes stay on the content floor */
+  background: var(--bg-titlebar);
 }
 .local-pane, .remote-pane {
   flex: 1;
@@ -705,6 +708,7 @@ async function onDropRemote(e: DragEvent) {
   /* Island look, matching the shell's floating panels */
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+  background: var(--bg-base);
   position: relative;
 }
 .drop-overlay {
