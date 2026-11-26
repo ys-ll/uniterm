@@ -4,17 +4,17 @@
       <span class="pane-label">{{ t('tools.uuidV4') }}</span>
       <div class="toolbar-actions">
         <el-input-number v-model="uuidCount" :min="1" :max="50" size="small" style="width: 6.5rem" />
-        <button class="tools-btn" @click="generateUuids">{{ t('tools.generate') }}</button>
+        <el-button size="small" @click="generateUuids">{{ t('tools.generate') }}</el-button>
       </div>
     </div>
     <div class="hash-list">
       <div v-for="(id, i) in uuids" :key="`${id}-${i}`" class="hash-row">
         <span class="hash-value">{{ id }}</span>
-        <button class="tools-btn small" @click="copy(id)">{{ t('tools.copy') }}</button>
+        <el-button size="small" @click="copy(id)">{{ t('tools.copy') }}</el-button>
       </div>
     </div>
     <div v-if="uuids.length > 1" class="toolbar-actions">
-      <button class="tools-btn small" @click="copy(uuids.join('\n'))">{{ t('tools.copyAll') }}</button>
+      <el-button size="small" @click="copy(uuids.join('\n'))">{{ t('tools.copyAll') }}</el-button>
     </div>
 
     <div class="pane-toolbar">
@@ -22,7 +22,7 @@
       <div class="toolbar-actions">
         <el-input-number v-model="randLen" :min="4" :max="256" size="small" style="width: 6.5rem" />
         <el-input-number v-model="randCount" :min="1" :max="50" size="small" style="width: 6.5rem" />
-        <button class="tools-btn" @click="generateRandom">{{ t('tools.generate') }}</button>
+        <el-button size="small" @click="generateRandom">{{ t('tools.generate') }}</el-button>
       </div>
     </div>
     <div class="toolbar-actions">
@@ -34,11 +34,11 @@
     <div class="hash-list">
       <div v-for="(s, i) in randomStrings" :key="`${s}-${i}`" class="hash-row">
         <span class="hash-value">{{ s }}</span>
-        <button class="tools-btn small" @click="copy(s)">{{ t('tools.copy') }}</button>
+        <el-button size="small" @click="copy(s)">{{ t('tools.copy') }}</el-button>
       </div>
     </div>
     <div v-if="randomStrings.length > 1" class="toolbar-actions">
-      <button class="tools-btn small" @click="copy(randomStrings.join('\n'))">{{ t('tools.copyAll') }}</button>
+      <el-button size="small" @click="copy(randomStrings.join('\n'))">{{ t('tools.copyAll') }}</el-button>
     </div>
   </div>
 </template>

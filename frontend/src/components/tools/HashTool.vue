@@ -15,7 +15,7 @@
       <div v-for="row in hashRows" :key="row.key" class="hash-row">
         <span class="hash-name">{{ row.label }}</span>
         <span class="hash-value">{{ row.value }}</span>
-        <button class="tools-btn small" :disabled="!row.value" @click="copy(row.value)">{{ t('tools.copy') }}</button>
+        <el-button size="small" :disabled="!row.value" @click="copy(row.value)">{{ t('tools.copy') }}</el-button>
       </div>
     </div>
 
@@ -32,7 +32,7 @@
     </div>
     <div class="hash-row single">
       <span class="hash-value" :class="{ 'is-error': encodeError }">{{ encodeError || encodeResult || '—' }}</span>
-      <button class="tools-btn small" :disabled="!encodeResult" @click="copy(encodeResult)">{{ t('tools.copy') }}</button>
+      <el-button size="small" :disabled="!encodeResult" @click="copy(encodeResult)">{{ t('tools.copy') }}</el-button>
     </div>
   </div>
 </template>

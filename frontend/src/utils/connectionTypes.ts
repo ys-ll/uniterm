@@ -14,7 +14,7 @@ import {
   Activity, AppWindow, ArrowLeftRight, Box, Boxes, Cable, Cloud, Database, DatabaseSearch,
   DatabaseZap, FileBox, FileUp, Folder, FolderOpen, FolderUp, Folders, Globe, HardDrive, Laptop,
   LaptopMinimal, LayoutDashboard, Layers, Monitor, MonitorCloud, MonitorSmartphone,
-  MoreHorizontal, Settings, ShipWheel, SquarePlus, SquareTerminal, Terminal, Zap,
+  MoreHorizontal, Settings, ShipWheel, SquarePlus, SquareTerminal, Terminal, Wrench, Zap,
 } from '@lucide/vue'
 
 export type ConnectionCategory = 'terminal' | 'filetransfer' | 'remote' | 'sql' | 'nosql' | 'container' | 'other'
@@ -97,6 +97,7 @@ export const CONNECTION_TYPES: ConnectionTypeInfo[] = [
   { type: 'workspace', label: 'Workspace', icon: LayoutDashboard, category: 'other', formHidden: true, connectMenuKey: 'workspace.openSaved' },
   { type: 'settings', label: 'Settings', icon: Settings, category: 'other', formHidden: true },
   { type: 'netscan', label: 'Network Scan', icon: Activity, category: 'other', formHidden: true },
+  { type: 'tools', label: 'Tools', icon: Wrench, category: 'other', formHidden: true },
   { type: 'start', label: 'Start', icon: SquarePlus, category: 'other', formHidden: true },
 ]
 

@@ -22,7 +22,7 @@
     </div>
     <div class="hash-row single">
       <span class="hash-value">{{ urlResult || '—' }}</span>
-      <button class="tools-btn small" :disabled="!urlResult" @click="copy(urlResult)">{{ t('tools.copy') }}</button>
+      <el-button size="small" :disabled="!urlResult" @click="copy(urlResult)">{{ t('tools.copy') }}</el-button>
     </div>
 
     <template v-if="urlParts">

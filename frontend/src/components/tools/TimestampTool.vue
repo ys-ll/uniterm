@@ -16,7 +16,7 @@
         <div v-for="row in rows" :key="row.name" class="hash-row">
           <span class="hash-name">{{ row.name }}</span>
           <span class="hash-value">{{ row.value }}</span>
-          <button class="tools-btn small" @click="copy(row.value)">{{ t('tools.copy') }}</button>
+          <el-button size="small" @click="copy(row.value)">{{ t('tools.copy') }}</el-button>
         </div>
       </div>
     </template>

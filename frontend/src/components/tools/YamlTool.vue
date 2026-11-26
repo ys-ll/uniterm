@@ -18,7 +18,7 @@
     <template v-else-if="output">
       <div class="pane-subtoolbar">
         <span>{{ t('tools.output') }}</span>
-        <button class="tools-btn" @click="copy(output)">{{ t('tools.copy') }}</button>
+        <el-button size="small" @click="copy(output)">{{ t('tools.copy') }}</el-button>
       </div>
       <pre class="json-output" v-html="highlightedOutput"></pre>
     </template>

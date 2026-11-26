@@ -8,8 +8,8 @@
         <el-radio-button value="min">{{ t('tools.minify') }}</el-radio-button>
       </el-radio-group>
       <div class="toolbar-actions">
-        <button class="tools-btn" :disabled="!jsonInput.trim()" @click="onFormatJSON">{{ t('tools.format') }}</button>
-        <button class="tools-btn" :disabled="!jsonInput.trim()" @click="onPasteAndFormat">{{ t('tools.pasteAndFormat') }}</button>
+        <el-button size="small" :disabled="!jsonInput.trim()" @click="onFormatJSON">{{ t('tools.format') }}</el-button>
+        <el-button size="small" :disabled="!jsonInput.trim()" @click="onPasteAndFormat">{{ t('tools.pasteAndFormat') }}</el-button>
       </div>
     </div>
     <el-input
@@ -24,7 +24,7 @@
     <template v-else-if="jsonOutput">
       <div class="pane-subtoolbar">
         <span>{{ t('tools.output') }}</span>
-        <button class="tools-btn" @click="copy(jsonOutput)">{{ t('tools.copy') }}</button>
+        <el-button size="small" @click="copy(jsonOutput)">{{ t('tools.copy') }}</el-button>
       </div>
       <pre class="json-output" v-html="highlightedJson"></pre>
     </template>
