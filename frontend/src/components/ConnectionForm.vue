@@ -1449,6 +1449,10 @@ watch(() => props.editConfig, (config) => {
     hydrating.value = true
     Object.assign(form, { ...config, postLoginExpectSteps: cloneExpectSteps(config.postLoginExpectSteps || []) })
     if (!form.termType) form.termType = 'xterm-256color'
+    // Configs saved before the auth-type radio covered the identity-capable
+    // types (rdp/telnet/ftp/...) carry authType: "" — the backends treat empty
+    // as password, so backfill it to keep the radio and password field shown.
+    if (!form.authType) form.authType = 'password'
     // Backfill legacy ES auth: older versions stored the auth type in a dedicated
     // `esAuthType` ('basic'|'apikey') and the key in `esApiKey`. Both now live in
     // the shared `authType` ('password'|'apikey') and `password` fields.
