@@ -2,7 +2,12 @@ import { chat, AVAILABLE_TOOLS, ChatCancelledError, ChatTimeoutError, captureCha
 import { prepareAgentContext } from './contextCompaction'
 import { executeCommand, startCommand, captureTerminal, collectOutput, sendTerminalKey, interruptJob } from './terminalAgent'
 import type { ExecuteResult } from './terminalAgent'
-import { assessLocalRisk } from './localRisk'
+import {
+  assessLocalRisk,
+  commandEchoesObservedOutput,
+  noteObservedOutput,
+  resetObservedOutput,
+} from './localRisk'
 import { useAIStore } from '../stores/aiStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTabStore } from '../stores/tabStore'
@@ -114,14 +119,19 @@ export function getRisk(tu: { name: string; input: Record<string, unknown> }): R
   return RISK_RANK[localRisk] > RISK_RANK[modelRisk] ? localRisk : modelRisk
 }
 
-function shouldConfirm(risk: RiskLevel): boolean {
+// `echoed` means the command was observed in untrusted tool output (terminal,
+// skill file, MCP result). Such a command always requires the normal
+// confirmation dialog in Confirm modes, regardless of its declared/local risk.
+// This only ever adds confirmation: bypass stays bypass, confirm_all is
+// already true, and getRisk() is untouched.
+function shouldConfirm(risk: RiskLevel, echoed = false): boolean {
   const store = useAIStore()
   switch (store.mode) {
     case 'confirm_all': return true
-    case 'confirm_write': return risk !== 'read'
-    case 'confirm_dangerous': return risk === 'dangerous'
+    case 'confirm_write': return echoed || risk !== 'read'
+    case 'confirm_dangerous': return echoed || risk === 'dangerous'
     case 'bypass': return false
-    default: return risk !== 'read'
+    default: return echoed || risk !== 'read'
   }
 }
 
@@ -497,6 +507,12 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     store.clearPendingQuestion()
   }
 
+  // A new user turn opens a fresh provenance window: output observed during
+  // the previous turn must not keep gating commands in this one.
+  if (userInput || (skillName && skillBody) || commandBody || attachments?.length) {
+    resetObservedOutput()
+  }
+
   store.resetStop()
   store.isRunning = true
   store.status = 'thinking'
@@ -637,6 +653,9 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
     // real user turns; reset turnCount so the new instruction regains its full
     // autonomous-turn budget.
     if (store.queuedMessages.length > 0) {
+      // Each drained message is a real user turn, so it starts a new
+      // provenance window just like a fresh runAgent call.
+      resetObservedOutput()
       const drained = store.queuedMessages.splice(0)
       drained.forEach((q, i) => {
         let header = ''
@@ -849,8 +868,9 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       const headLines = validated.head_lines
       const tailLines = validated.tail_lines
       const risk = getRisk(tu)
+      const echoed = commandEchoesObservedOutput(command)
 
-      if (shouldConfirm(risk)) {
+      if (shouldConfirm(risk, echoed)) {
         store.setPendingCommand({
           messageId: assistantMsg.id,
           toolId: tu.id,
@@ -891,6 +911,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
           cleanupStreamListeners()
           return
         }
+        noteObservedOutput(result.output, command)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -915,8 +936,9 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       }
       const command = validated.command
       const risk = getRisk(tu)
+      const echoed = commandEchoesObservedOutput(command)
 
-      if (shouldConfirm(risk)) {
+      if (shouldConfirm(risk, echoed)) {
         store.setPendingCommand({
           messageId: assistantMsg.id,
           toolId: tu.id,
@@ -944,6 +966,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.status = 'executing'
         const panelTitle = validated.panel
         const result = await startCommand(command, panelTitle)
+        noteObservedOutput(result.output, command)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -964,6 +987,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         store.status = 'executing'
         const panelTitle = tu.input.panel as string | undefined
         const result = await captureTerminal(tailLines, panelTitle)
+        noteObservedOutput(result.output)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -998,6 +1022,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
           cleanupStreamListeners()
           return
         }
+        noteObservedOutput(result.output)
         const status = result.completed ? '[COMMAND COMPLETED]' : '[COMMAND COMPLETION UNCONFIRMED]'
         store.addMessage({
           id: `msg-${Date.now()}`,
@@ -1033,6 +1058,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
           sendEnter,
           panelTitle
         )
+        noteObservedOutput(result.output)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -1056,6 +1082,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
         // never prints, so the watcher alone would hold the lock until the TTL.
         await interruptJob(panelTitle)
         const result = await sendTerminalKey(undefined, 'ctrl_c', true, panelTitle)
+        noteObservedOutput(result.output)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -1155,6 +1182,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
           files.references.length ? `\n\nREFERENCES:\n${files.references.map((f: string) => `- ${f}`).join('\n')}` : '',
           files.scripts.length ? `\n\nSCRIPTS:\n${files.scripts.map((f: string) => `- ${f}`).join('\n')}` : '',
         ].join('')
+        noteObservedOutput(manifest)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -1181,6 +1209,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       const path = validated.path
       try {
         const content = await GetSkillFile(name, path)
+        noteObservedOutput(content)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -1200,6 +1229,7 @@ export async function runAgent(userInput: string, skillName?: string, skillBody?
       // are passed through as the model supplied them; no terminal/risk gating.
       try {
         const result = await callRemoteMCPTool(tu.name, tu.input as Record<string, unknown>)
+        noteObservedOutput(result)
         store.addMessage({
           id: `msg-${Date.now()}`,
           role: 'tool',
@@ -1258,6 +1288,7 @@ export async function approveTool(_messageId: string) {
   try {
     if (cmd.toolName === 'start_command') {
       const result = await startCommand(cmd.command, cmd.panel)
+      noteObservedOutput(result.output, cmd.command)
       store.addMessage({
         id: `msg-${Date.now()}`,
         role: 'tool',
@@ -1273,6 +1304,7 @@ export async function approveTool(_messageId: string) {
         () => store.stopRequested,
         cmd.panel
       )
+      noteObservedOutput(result.output, cmd.command)
       store.addMessage({
         id: `msg-${Date.now()}`,
         role: 'tool',
