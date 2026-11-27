@@ -278,10 +278,12 @@ github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 h1:ilQV1hzziu+LLM3zU
 github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78/go.mod h1:aL8wCCfTfSfmXjznFBSZNN13rSJjlIOI1fUNAtF7rmI=
 github.com/ys-ll/crypto v0.57.1-0.20260922023551-18e0be45963e h1:Q3sa/5WcZnIiEcjy+3ex/p+Y+fQpN4DNnm+QwJjdYYQ=
 github.com/ys-ll/crypto v0.57.1-0.20260922023551-18e0be45963e/go.mod h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=
-github.com/ys-ll/dm v1.8.11192-fork.2 h1:1YZcTuW/MOBZv/VW7Dq43ubyjKwdV8S367Ns3hUXYdg=
+github.com/ys-ll/dm v1.8.11192-fork.2 h1:0OdvNqVjtZXa6p/SslaS6NgzguoEg48fqZaJMh1QhQo=
 github.com/ys-ll/dm v1.8.11192-fork.2/go.mod h1:jEjyjURtJqYAZ8Vu7GBhebjjNL4Vz6PMxphlNjlxIGE=
 github.com/ys-ll/ftp v0.2.1-uniterm.1 h1:FT+2PNmY/vWtNpnBFGFgR5D34X0fkmiUH65L586vdPs=
 github.com/ys-ll/ftp v0.2.1-uniterm.1/go.mod h1:gXSIr1pA9NhynDNigiFHs4+yL7o7I6bGF9Za9wi9tcE=
+github.com/ys-ll/go-gbase8s v1.0.2 h1:DhuyQnSXxeu/lRjKvDuyfmPeJl6NJh5iWH/klYQDptg=
+github.com/ys-ll/go-gbase8s v1.0.2/go.mod h1:o0ydPUBUfx59EF83De6cIt+2IlLGfrl21hVVP+wOCd4=
 github.com/ys-ll/mosh-go v0.0.0-20260702130124-e17b92cd9dab h1:Ru8ctnV5xIDpn1oozOXHizeEtwAU/vSCNaND+i7J0ck=
 github.com/ys-ll/mosh-go v0.0.0-20260702130124-e17b92cd9dab/go.mod h1:HZno4DV/XO+yAZ6lC3EmzMk0whPxrfgY5uix7jcUFps=
 github.com/ys-ll/simples3 v0.0.0-20260930081831-3357c14e91bd h1:mQdfvq8qbgcTt6e3cTa/wWZ4sUTHpdYXOeOraV/VtK0=

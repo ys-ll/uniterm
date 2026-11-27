@@ -92,6 +92,10 @@ func textCast(driver, quotedColumn string) string {
 		return "CAST(" + quotedColumn + " AS VARCHAR2(4000))"
 	case "dm":
 		return "CAST(" + quotedColumn + " AS VARCHAR(4000))"
+	case "gbase8s":
+		// Informix: plain VARCHAR in a CAST needs a length and truncates at
+		// it; LVARCHAR has no such cap.
+		return "CAST(" + quotedColumn + " AS LVARCHAR)"
 	default:
 		return "CAST(" + quotedColumn + " AS TEXT)"
 	}

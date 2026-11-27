@@ -8,6 +8,7 @@ go 1.26.2
 godebug x509negativeserial=1
 
 require (
+	gitee.com/GBase8s/go-gbase8s v0.0.0-00010101000000-000000000000
 	github.com/ClickHouse/clickhouse-go/v2 v2.51.0
 	github.com/FZambia/sentinel v1.1.1
 	github.com/UserExistsError/conpty v0.1.4
@@ -154,3 +155,7 @@ replace golang.org/x/crypto => github.com/ys-ll/crypto v0.57.1-0.20260922023551-
 replace github.com/wailsapp/wails/v3 => github.com/ys-ll/wails/v3 v3.0.0-20261127025700-34c7a5e9a4dd
 
 replace github.com/refraction-networking/utls => github.com/ys-ll/utls v1.8.3-0.20261118030304-dc4119e680f1
+
+// Verbatim mirror of gitee.com/GBase8s/go-gbase8s at v1.0.2 (GRSL license,
+// unmodified fork); upstream sync is manual.
+replace gitee.com/GBase8s/go-gbase8s => github.com/ys-ll/go-gbase8s v1.0.2

@@ -1305,6 +1305,7 @@ const defaultParamsHint = computed(() => {
     case 'mysql': return `${t('db.paramsDefault')}: charset=utf8mb4`
     case 'postgres': return `${t('db.paramsDefault')}: sslmode=disable`
     case 'sqlserver': return `${t('db.paramsDefault')}: encrypt=disable`
+    case 'gbase8s': return `${t('db.paramsExample')}: GBASEDBTSERVER=<服务名>`
     case 'sqlite': return `${t('db.paramsExample')}: journal_mode=WAL`
     default: return ''
   }
