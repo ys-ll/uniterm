@@ -1546,7 +1546,7 @@
   "conn.x11Forwarding": "X11 轉發",
   "conn.agentForwarding": "SSH Agent 轉發",
   "conn.agentForwardingDesc": "將本機 SSH Agent 提供給遠端主機，僅在可信伺服器上啟用",
-  "quickCommands.quickCommandsTab": "快捷命令",
+  "quickCommands.quickCommandsTab": "命令",
   "quickCommands.historyTab": "歷史命令",
   "quickCommands.saveAs": "儲存為快捷命令",
   "quickCommands.addGroup": "新增群組",
@@ -2521,7 +2521,7 @@
   "batch.selectAll": "全選",
   "sidebar.locSidebar": "左邊欄",
   "sidebar.locBottom": "下邊欄",
-  "sidebar.bottomPanelEmpty": "選擇在此處展示的面板",
+  "sidebar.locRight": "右邊欄",
   "sidebar.moveTo": "移動到",
   "sidebar.panelsMenu": "面板",
   "sidebar.sidebarEmpty": "選擇在此處展示的面板",
@@ -2635,5 +2635,9 @@
   "tools.yaml": "YAML ↔ JSON",
   "tools.yamlToJson": "YAML → JSON",
   "tools.jsonToYaml": "JSON → YAML",
-  "tools.yamlInputPlaceholder": "貼上 YAML…"
+  "tools.yamlInputPlaceholder": "貼上 YAML…",
+  "sidebar.tabNames": "標籤名稱",
+  "sidebar.tabNamesNone": "全部隱藏",
+  "sidebar.tabNamesActive": "目前標籤顯示",
+  "sidebar.tabNamesAll": "全部顯示"
 }

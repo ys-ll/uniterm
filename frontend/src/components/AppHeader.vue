@@ -63,7 +63,7 @@
     </Menu>
 
     <div class="panel-toggles">
-      <button class="header-btn" @click="emit('toggle-sidebar')" :title="t('sidebar.locSidebar') + shortcutSuffix('toggleSidebar')" :aria-label="t('sidebar.locSidebar')" :aria-pressed="!!sidebarVisible">
+      <button class="header-btn" @click="emit('toggle-sidebar')" :title="t('sidebar.locSidebar')" :aria-label="t('sidebar.locSidebar')" :aria-pressed="!!sidebarVisible">
         <PanelToggleIcon side="left" :active="!!sidebarVisible" />
       </button>
 
@@ -79,8 +79,17 @@
         <PanelToggleIcon side="bottom" :active="bottomPanelShown" />
       </button>
 
-      <button class="header-btn" @click="emit('toggle-ai')" :title="t('header.ai') + shortcutSuffix('focusAI')" :aria-label="t('header.ai')" :aria-pressed="aiStore.visible">
-        <PanelToggleIcon side="right" :active="aiStore.visible" />
+      <!-- Right rail toggle: shows/hides the whole dock (like the left
+           sidebar and bottom panel buttons), not a single panel's. -->
+      <button
+        v-if="!uiLayout.narrowLayout"
+        class="header-btn"
+        @click="emit('toggle-right-panel')"
+        :title="t('sidebar.locRight')"
+        :aria-label="t('sidebar.locRight')"
+        :aria-pressed="rightPanelShown"
+      >
+        <PanelToggleIcon side="right" :active="rightPanelShown" />
       </button>
     </div>
 
@@ -237,7 +246,6 @@ import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { formatKeyBinding } from '../composables/useKeyboardShortcuts'
 import { isWebServerMode } from '../services/webSftpBridge'
-import { useAIStore } from '../stores/aiStore'
 import { useLocalStateStore } from '../stores/localStateStore'
 import { useUiLayoutStore } from '../stores/uiLayoutStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
@@ -385,17 +393,6 @@ function checkUpdate() {
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
 
-// " (Ctrl+Shift+K)" suffix for a shortcut action's tooltip, '' when unset.
-// Reactive via settingsStore, so tooltips update when the user rebinds keys.
-// '' on mobile too — no hardware keyboard, so the hint is meaningless.
-function shortcutSuffix(action: 'focusAI' | 'toggleSidebar'): string {
-  if (isMobilePlatform(platform.value)) return ''
-  const b = settingsStore.settings.keyboard[action]
-  if (!b) return ''
-  const key = formatKeyBinding(b, isMac)
-  return key ? ` (${key})` : ''
-}
-
 // Right-aligned keybinding hint for a menu item, '' when unset. Reactive via
 // settingsStore, so hints follow the user's rebinds.
 function menuShortcut(action: ShortcutAction): string {
@@ -422,16 +419,15 @@ const hasActiveConnections = computed(() =>
 // the layout store (no prop drilling).
 const uiLayout = useUiLayoutStore()
 const bottomPanelShown = computed(() => uiLayout.bottomPanelVisible)
+const rightPanelShown = computed(() => uiLayout.rightPanelVisible)
 
-// Sidebar/AI/bottom-panel toggle icons fill the corresponding region when open.
+// Sidebar/right-rail/bottom-panel toggle icons fill the corresponding region when open.
 defineProps<{
   sidebarVisible?: boolean
 }>()
 
-const aiStore = useAIStore()
-
 const emit = defineEmits<{
-  'toggle-ai': []
+  'toggle-right-panel': []
   'toggle-bottom-panel': []
   'toggle-sidebar': []
   'open-settings': [category?: string]

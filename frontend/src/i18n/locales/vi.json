@@ -1518,7 +1518,7 @@
   "conn.x11Forwarding": "Chuyển tiếp X11",
   "conn.agentForwarding": "Chuyển tiếp SSH Agent",
   "conn.agentForwardingDesc": "Phơi bày SSH agent cục bộ của bản cho máy chủ từ xa; chỉ dùng với máy chủ đáng tin cậy",
-  "quickCommands.quickCommandsTab": "Lệnh nhanh",
+  "quickCommands.quickCommandsTab": "Lệnh",
   "quickCommands.historyTab": "Lịch sử",
   "quickCommands.saveAs": "Lưu thành lệnh nhanh",
   "quickCommands.addGroup": "Thêm nhóm",
@@ -2496,7 +2496,7 @@
   "batch.selectAll": "Chọn tất cả",
   "sidebar.locSidebar": "Thanh bên trái",
   "sidebar.locBottom": "Panel dưới",
-  "sidebar.bottomPanelEmpty": "Chọn panel hiển thị ở đây",
+  "sidebar.locRight": "Thanh bên phải",
   "sidebar.moveTo": "Di chuyển đến",
   "sidebar.panelsMenu": "Bảng điều khiển",
   "sidebar.sidebarEmpty": "Chọn panel hiển thị ở đây",
@@ -2610,5 +2610,9 @@
   "tools.yaml": "YAML ↔ JSON",
   "tools.yamlToJson": "YAML → JSON",
   "tools.jsonToYaml": "JSON → YAML",
-  "tools.yamlInputPlaceholder": "Dán YAML..."
+  "tools.yamlInputPlaceholder": "Dán YAML...",
+  "sidebar.tabNames": "Tên tab",
+  "sidebar.tabNamesNone": "Ẩn tất cả",
+  "sidebar.tabNamesActive": "Chỉ tab hoạt động",
+  "sidebar.tabNamesAll": "Hiển thị tất cả"
 }

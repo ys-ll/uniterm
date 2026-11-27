@@ -14,6 +14,10 @@ type LocalState struct {
 	// Bottom panel (docked panel under the tab area) visibility. Local-only
 	// UI state, never synced.
 	BottomPanelVisible bool `json:"bottomPanelVisible"`
+	// PanelTabLabels controls the dock-strip tabs' text labels: "" or
+	// "active" (default) shows the active tab's panel name, "all" labels
+	// every tab, "none" is icon-only. Local-only UI preference, never synced.
+	PanelTabLabels string `json:"panelTabLabels"`
 	// Sidebar widths in px. Local-only UI state, never synced; 0 means an
 	// older config without the key and keeps the component default.
 	SidebarWidth      int      `json:"sidebarWidth"`

@@ -1522,7 +1522,7 @@
   "conn.telnetSendModeLine": "줄 단위",
   "conn.localEcho": "로컬 에코",
   "conn.newlineMode": "줄바꿈 모드",
-  "quickCommands.quickCommandsTab": "빠른 명령",
+  "quickCommands.quickCommandsTab": "명령",
   "quickCommands.historyTab": "명령 기록",
   "quickCommands.saveAs": "빠른 명령으로 저장",
   "quickCommands.addGroup": "그룹 추가",
@@ -2500,7 +2500,7 @@
   "batch.selectAll": "모두 선택",
   "sidebar.locSidebar": "왼쪽 사이드바",
   "sidebar.locBottom": "하단 패널",
-  "sidebar.bottomPanelEmpty": "여기에 표시할 패널 선택",
+  "sidebar.locRight": "오른쪽 사이드바",
   "sidebar.moveTo": "이동",
   "sidebar.panelsMenu": "패널",
   "sidebar.sidebarEmpty": "여기에 표시할 패널 선택",
@@ -2614,5 +2614,9 @@
   "tools.yaml": "YAML ↔ JSON",
   "tools.yamlToJson": "YAML → JSON",
   "tools.jsonToYaml": "JSON → YAML",
-  "tools.yamlInputPlaceholder": "YAML 붙여넣기..."
+  "tools.yamlInputPlaceholder": "YAML 붙여넣기...",
+  "sidebar.tabNames": "탭 이름",
+  "sidebar.tabNamesNone": "모두 숨기기",
+  "sidebar.tabNamesActive": "활성 탭만",
+  "sidebar.tabNamesAll": "모두 표시"
 }

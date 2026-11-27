@@ -25,7 +25,7 @@
         iconic
         :icon="currentLocation === loc ? Check : undefined"
         @click="moveTo(loc)"
-      >{{ t(loc === 'sidebar' ? 'sidebar.locSidebar' : 'sidebar.locBottom') }}</MenuItem>
+      >{{ t(LOCATION_LABELS[loc]) }}</MenuItem>
     </MenuSubmenu>
     <MenuItem iconic @click="hidePanel">{{ t('sidebar.hidePanel') }}</MenuItem>
   </Menu>
@@ -52,7 +52,13 @@ const props = defineProps<{
 const { t } = useI18n()
 const uiLayout = useUiLayoutStore()
 
-const DOCKS: PanelLocation[] = ['sidebar', 'bottom']
+const DOCKS: PanelLocation[] = ['sidebar', 'right', 'bottom']
+
+const LOCATION_LABELS: Record<PanelLocation, string> = {
+  sidebar: 'sidebar.locSidebar',
+  right: 'sidebar.locRight',
+  bottom: 'sidebar.locBottom',
+}
 
 const visible = ref(false)
 const menuRef = ref<InstanceType<typeof Menu> | null>(null)

@@ -17,7 +17,7 @@
           iconic
           :icon="currentLocation === loc ? Check : undefined"
           @click="moveTo(loc)"
-        >{{ t(loc === 'sidebar' ? 'sidebar.locSidebar' : 'sidebar.locBottom') }}</MenuItem>
+        >{{ t(LOCATION_LABELS[loc]) }}</MenuItem>
       </MenuSubmenu>
       <MenuDivider v-if="!uiLayout.narrowLayout" />
     </template>
@@ -31,6 +31,17 @@
         :icon="tabVisible(tab.key) ? Check : undefined"
         @click="onTabVisibilityClick(tab.key)"
       >{{ t(tab.labelKey) }}</MenuItem>
+    </MenuSubmenu>
+    <!-- Tab-name display mode: icon-only / active tab only / all tabs
+         (device-local preference). -->
+    <MenuSubmenu :label="t('sidebar.tabNames')">
+      <MenuItem
+        v-for="mode in TAB_NAME_MODES"
+        :key="mode.value"
+        iconic
+        :icon="uiLayout.panelTabLabels === mode.value ? Check : undefined"
+        @click="uiLayout.setPanelTabLabels(mode.value)"
+      >{{ t(mode.labelKey) }}</MenuItem>
     </MenuSubmenu>
   </Menu>
 </template>
@@ -51,7 +62,20 @@ const { t } = useI18n()
 const uiLayout = useUiLayoutStore()
 const settingsStore = useSettingsStore()
 
-const DOCKS: PanelLocation[] = ['sidebar', 'bottom']
+const DOCKS: PanelLocation[] = ['sidebar', 'right', 'bottom']
+
+// Tab-name display modes (device-local uiLayout preference).
+const TAB_NAME_MODES: { value: 'none' | 'active' | 'all'; labelKey: string }[] = [
+  { value: 'none', labelKey: 'sidebar.tabNamesNone' },
+  { value: 'active', labelKey: 'sidebar.tabNamesActive' },
+  { value: 'all', labelKey: 'sidebar.tabNamesAll' },
+]
+
+const LOCATION_LABELS: Record<PanelLocation, string> = {
+  sidebar: 'sidebar.locSidebar',
+  right: 'sidebar.locRight',
+  bottom: 'sidebar.locBottom',
+}
 
 const visible = ref(false)
 const menuRef = ref<InstanceType<typeof Menu> | null>(null)

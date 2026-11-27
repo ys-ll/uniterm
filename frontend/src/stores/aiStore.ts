@@ -1,13 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import type { AIAttachment, AIMessage, AIContextSummary, ExecutionMode, AISession, AIAgentStatus } from '../types/ai'
 import { activeHistory } from '../services/aiContext'
 import { SaveAISessions, LoadAISessions } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { buildUserContent, redactAttachmentsForLog } from '../services/attachments'
-import { useLocalStateStore } from './localStateStore'
 import { useTabStore } from './tabStore'
 import { usePanelStore } from './panelStore'
-import { isMobilePlatform } from '../utils/platform'
 import { t } from '../i18n'
 
 /**
@@ -216,19 +214,6 @@ export const useAIStore = defineStore('ai', () => {
     queuedMessages.value = []
   }
 
-  async function saveVisible() {
-    try {
-      useLocalStateStore().update({ aiSidebarVisible: visible.value })
-    } catch {
-      // ignore save errors
-    }
-  }
-
-  // Auto-persist AI sidebar visibility whenever it changes
-  watch(visible, () => {
-    saveVisible()
-  })
-
   function setDebugInfo(request: unknown, error: string) {
     try {
       // Attachment bytes are stripped before the request is dumped: the debug
@@ -358,17 +343,9 @@ export const useAIStore = defineStore('ai', () => {
     currentSessionId.value = null
     initialized.value = true
 
-    // Load sidebar visibility from local state
-    try {
-      const ls = useLocalStateStore()
-      if (!ls.loaded) await ls.init()
-      // Mobile always starts with the AI sidebar closed (see App.vue).
-      visible.value = isMobilePlatform()
-        ? false
-        : (ls.state.aiSidebarVisible ?? false)
-    } catch {
-      // keep default
-    }
+    // Sidebar visibility used to be restored here from LocalState; since the
+    // AI panel became a regular dockable view (uiLayout), the on-screen
+    // state lives in the dock layout and is mirrored INTO visible by App.vue.
 
     // Restore current session or create a new one
     if (currentSessionId.value) {

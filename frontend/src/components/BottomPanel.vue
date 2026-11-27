@@ -19,7 +19,7 @@
         :key="key"
         class="bottom-panel-tab"
         :class="{ active: uiLayout.bottomActiveView === key, 'drop-before': dropIndicator?.key === key && dropIndicator?.position === 'before', 'drop-after': dropIndicator?.key === key && dropIndicator?.position === 'after' }"
-        :title="t(tabTitleKey(key))"
+        :title="tabTooltip(key)"
         draggable="true"
         @dragstart="onDragStart($event, key)"
         @dragend="onDragEnd"
@@ -47,7 +47,7 @@
       <!-- Empty panel: the toggle button opens it even with nothing docked;
            offer one-click docking for the views living in the sidebar. -->
       <div v-if="bottomTabKeys.length === 0" class="bottom-panel-empty">
-        <div class="empty-hint">{{ t('sidebar.bottomPanelEmpty') }}</div>
+        <div class="empty-hint">{{ t('sidebar.sidebarEmpty') }}</div>
         <div class="empty-actions">
           <button
             v-for="key in dockableViews"
@@ -68,7 +68,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { X, Network, FolderTree, Activity, ArrowRightLeft, Zap, Clock, Palette, Send, NotebookPen } from '@lucide/vue'
+import { X, Network, FolderTree, Activity, ArrowRightLeft, Zap, Clock, Palette, Send, NotebookPen, Sparkles } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { useUiLayoutStore, BOTTOM_PANEL_MIN_HEIGHT, type SidebarView } from '../stores/uiLayoutStore'
 /* Dragging the panel height below this hides it (VS Code-style); the same drag
@@ -77,6 +77,7 @@ const BOTTOM_PANEL_COLLAPSE_AT = 60
 import { useSettingsStore } from '../stores/settingsStore'
 import { SIDEBAR_TAB_DEFAULTS, SIDEBAR_TAB_ORDER } from '../types/settings'
 import { usePanelStripDrag } from '../composables/usePanelStripDrag'
+import { shortcutSuffix, PANEL_VIEW_ACTIONS } from '../composables/shortcutHint'
 import PanelStripMenu from './PanelStripMenu.vue'
 import PanelTitleBar from './PanelTitleBar.vue'
 
@@ -98,6 +99,7 @@ const TAB_ICONS: Record<string, any> = {
   personalization: Palette,
   commandSend: Send,
   notes: NotebookPen,
+  ai: Sparkles,
 }
 
 function tabVisible(key: string): boolean {
@@ -126,6 +128,13 @@ const dockableViews = computed(() =>
 function tabTitleKey(key: string): string {
   const entry = SIDEBAR_TAB_ORDER.find(tab => tab.key === key)
   return entry ? entry.labelKey : key
+}
+
+// Tab tooltip: panel name plus the bound toggle shortcut, e.g. "Send (Alt+S)".
+// '' suffix when unbound / on mobile.
+function tabTooltip(key: string): string {
+  const action = PANEL_VIEW_ACTIONS[key]
+  return t(tabTitleKey(key)) + (action ? shortcutSuffix(action) : '')
 }
 
 // ── Tab-strip drag & drop (reorder / move between sidebar and bottom) ──

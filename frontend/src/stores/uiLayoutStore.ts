@@ -4,11 +4,11 @@ import { useLocalStateStore } from './localStateStore'
 import { useSettingsStore } from './settingsStore'
 import { PANEL_LOCATION_DEFAULTS, SIDEBAR_TAB_ORDER } from '../types/settings'
 
-// Dock position of a sidebar view: left sidebar or the bottom panel.
-export type PanelLocation = 'sidebar' | 'bottom'
+// Dock position of a sidebar view: left sidebar, right rail or bottom panel.
+export type PanelLocation = 'sidebar' | 'right' | 'bottom'
 
-// Views that can live in either the left sidebar or the bottom panel. The
-// view set mirrors SIDEBAR_TAB_ORDER in types/settings.ts.
+// Views that can live in any of the docks. The view set mirrors
+// SIDEBAR_TAB_ORDER in types/settings.ts.
 export type SidebarView =
   | 'connections'
   | 'quickCommands'
@@ -19,8 +19,11 @@ export type SidebarView =
   | 'tunnels'
   | 'commandSend'
   | 'notes'
+  | 'ai'
 
 export const BOTTOM_PANEL_MIN_HEIGHT = 120
+
+export const RIGHT_PANEL_MIN_WIDTH = 240
 
 // Below this window width the layout switches to "narrow" mode: the bottom
 // panel is hidden and its views display inside the left sidebar instead
@@ -37,24 +40,43 @@ export const useUiLayoutStore = defineStore('uiLayout', () => {
   const settingsStore = useSettingsStore()
   const localState = useLocalStateStore()
 
-  // Each dock keeps its OWN active view, so the left sidebar and the bottom
-  // panel can show content simultaneously (like VS Code's sidebar + panel).
+  // Each dock keeps its OWN active view, so the docks can show content
+  // simultaneously (like VS Code's sidebar + panel + secondary sidebar).
   const sidebarActiveView = ref<SidebarView>('connections')
   const bottomActiveView = ref<SidebarView | null>(null)
-  // View id currently being dragged between the two strips (null otherwise).
+  const rightActiveView = ref<SidebarView | null>('ai')
+  // View id currently being dragged between the strips (null otherwise).
   // Lets a hidden dock reveal itself as a drop target while dragging.
   const draggingPanel = ref<string | null>(null)
-  // True once BottomPanel has mounted and #bottom-panel-body exists in the
-  // DOM. Teleports into it must wait for this — Sidebar mounts BEFORE the
-  // bottom panel, and a Teleport whose target is missing at mount stays
-  // broken for its whole lifetime (null-anchor crashes on later patches).
+  // True once BottomPanel/RightPanel have mounted and their body targets
+  // exist in the DOM. Teleports into them must wait for this — Sidebar
+  // mounts BEFORE the dock hosts, and a Teleport whose target is missing at
+  // mount stays broken for its whole lifetime (null-anchor crashes on later
+  // patches).
   const bottomPanelBodyReady = ref(false)
+  const rightPanelBodyReady = ref(false)
 
-  // Bottom panel visibility/height: device-local (never synced).
+  // Bottom panel visibility/height and right rail visibility/width:
+  // device-local (never synced). The rail reuses the AI sidebar's
+  // aiSidebarVisible/aiSidebarWidth local-state fields (aiSidebarVisible
+  // tracked the old AI sidebar's open state, so existing devices keep
+  // whatever they last had; fresh devices start with the rail closed).
   const bottomPanelVisible = computed(() => localState.state.bottomPanelVisible ?? true)
   const bottomPanelHeight = computed(() => {
     const h = localState.state.bottomPanelHeight
     return h > 0 ? h : 220
+  })
+  const rightPanelVisible = computed(() => localState.state.aiSidebarVisible ?? false)
+  const rightPanelWidth = computed(() => {
+    const w = localState.state.aiSidebarWidth
+    return w > 0 ? w : 360
+  })
+  // Dock-strip tab label mode: 'active' (default — only the active tab
+  // shows its panel name), 'all' or 'none'. Device-local preference,
+  // switched from the strips' context menu.
+  const panelTabLabels = computed<'active' | 'all' | 'none'>(() => {
+    const v = localState.state.panelTabLabels
+    return v === 'all' || v === 'none' ? v : 'active'
   })
 
   // Dock positions and tab order: synced settings (AppSettings).
@@ -64,10 +86,13 @@ export const useUiLayoutStore = defineStore('uiLayout', () => {
   }))
   const panelOrder = computed<string[]>(() => settingsStore.settings.panelOrder || [])
 
-  // Number of views currently docked to the bottom panel (header button
-  // active state; the panel itself hides when its last tab leaves).
+  // Number of views currently docked to the bottom panel / right rail (the
+  // dock itself hides when its last tab leaves).
   const bottomTabCount = computed(() =>
     Object.values(panelLocations.value).filter(loc => loc === 'bottom').length
+  )
+  const rightTabCount = computed(() =>
+    Object.values(panelLocations.value).filter(loc => loc === 'right').length
   )
 
   // All views in persisted order (missing ids append in SIDEBAR_TAB_ORDER
@@ -101,9 +126,39 @@ export const useUiLayoutStore = defineStore('uiLayout', () => {
   // dock's active view is this view.
   function isViewActive(view: SidebarView): boolean {
     if (settingsStore.settings.sidebarTabs?.[view] === false) return false
-    return effectiveLocation(view) === 'bottom'
-      ? bottomActiveView.value === view
-      : sidebarActiveView.value === view
+    const loc = effectiveLocation(view)
+    const active = loc === 'bottom'
+      ? bottomActiveView.value
+      : loc === 'right'
+        ? rightActiveView.value
+        : sidebarActiveView.value
+    return active === view
+  }
+
+  // Whether the AI assistant is currently on screen (its tab visible, its
+  // dock open and showing it) — drives the header's AI toggle button state.
+  const aiShown = computed(() => {
+    if (settingsStore.settings.sidebarTabs?.['ai'] === false) return false
+    const loc = effectiveLocation('ai')
+    if (loc === 'bottom') return bottomPanelVisible.value && bottomActiveView.value === 'ai'
+    if (loc === 'right') return rightPanelVisible.value && rightActiveView.value === 'ai'
+    return sidebarActiveView.value === 'ai'
+  })
+
+  // Bring a view on screen in its current dock: mark it visible, make it the
+  // dock's active tab and open the dock. The inverse of hiding it.
+  function showView(view: SidebarView) {
+    setViewVisible(view, true)
+    const loc = effectiveLocation(view)
+    if (loc === 'bottom') {
+      bottomActiveView.value = view
+      localState.update({ bottomPanelVisible: true })
+    } else if (loc === 'right') {
+      rightActiveView.value = view
+      localState.update({ aiSidebarVisible: true })
+    } else {
+      sidebarActiveView.value = view
+    }
   }
 
   // Move a view to a dock at the given index within that dock's tab subset
@@ -142,23 +197,36 @@ export const useUiLayoutStore = defineStore('uiLayout', () => {
 
     settingsStore.settings.panelLocations = { ...panelLocations.value, [view]: location }
     if (location !== prevLocation) {
+      // Activate the view in its new dock and open that dock.
       if (location === 'bottom') {
         bottomActiveView.value = view as SidebarView
         localState.update({ bottomPanelVisible: true })
-        if (sidebarActiveView.value === view) sidebarActiveView.value = 'connections'
+      } else if (location === 'right') {
+        rightActiveView.value = view as SidebarView
+        localState.update({ aiSidebarVisible: true })
       } else {
         sidebarActiveView.value = view as SidebarView
+      }
+      // Park the old dock's active view on a remaining tab, and close the
+      // dock when its last tab just left.
+      if (prevLocation === 'sidebar') {
+        if (sidebarActiveView.value === view) sidebarActiveView.value = 'connections'
+      } else if (prevLocation === 'bottom') {
         if (bottomActiveView.value === view) bottomActiveView.value = null
         if (bottomTabCount.value === 0) localState.update({ bottomPanelVisible: false })
+      } else if (prevLocation === 'right') {
+        if (rightActiveView.value === view) rightActiveView.value = null
+        if (rightTabCount.value === 0) localState.update({ aiSidebarVisible: false })
       }
     }
     settingsStore.save()
   }
 
-  // Context-menu toggle: move a view to the other dock (appending at the
-  // end of the target dock) and show it there.
+  // Context-menu toggle: move a view to the next dock in cycle order
+  // (appending at the end of the target dock) and show it there.
   function togglePanelLocation(view: string) {
-    movePanel(view, panelLocation(view) === 'bottom' ? 'sidebar' : 'bottom', Number.MAX_SAFE_INTEGER)
+    const next: Record<PanelLocation, PanelLocation> = { sidebar: 'bottom', bottom: 'right', right: 'sidebar' }
+    movePanel(view, next[panelLocation(view)], Number.MAX_SAFE_INTEGER)
   }
 
   // Show/hide a view's tab everywhere (AppSettings.sidebarTabs). Hiding the
@@ -177,6 +245,7 @@ export const useUiLayoutStore = defineStore('uiLayout', () => {
       }
       if (sidebarActiveView.value === view) sidebarActiveView.value = fallback('sidebar') ?? 'connections'
       if (bottomActiveView.value === view) bottomActiveView.value = fallback('bottom')
+      if (rightActiveView.value === view) rightActiveView.value = fallback('right')
     }
   }
 
@@ -188,6 +257,18 @@ export const useUiLayoutStore = defineStore('uiLayout', () => {
     localState.update({ bottomPanelHeight: Math.round(Math.max(BOTTOM_PANEL_MIN_HEIGHT, h)) })
   }
 
+  function setRightPanelVisible(v: boolean) {
+    localState.update({ aiSidebarVisible: v })
+  }
+
+  function setRightPanelWidth(w: number) {
+    localState.update({ aiSidebarWidth: Math.round(Math.max(RIGHT_PANEL_MIN_WIDTH, w)) })
+  }
+
+  function setPanelTabLabels(v: 'active' | 'all' | 'none') {
+    localState.update({ panelTabLabels: v })
+  }
+
   async function init() {
     // Hydrate the device-local bottom-panel fields (settings load on their
     // own through settingsStore).
@@ -197,23 +278,34 @@ export const useUiLayoutStore = defineStore('uiLayout', () => {
   return {
     sidebarActiveView,
     bottomActiveView,
+    rightActiveView,
     draggingPanel,
     bottomPanelBodyReady,
+    rightPanelBodyReady,
     bottomPanelVisible,
     bottomPanelHeight,
+    rightPanelVisible,
+    rightPanelWidth,
+    panelTabLabels,
     narrowLayout,
     panelLocations,
     panelOrder,
     bottomTabCount,
+    rightTabCount,
     orderedViews,
     init,
     panelLocation,
     effectiveLocation,
     isViewActive,
+    aiShown,
+    showView,
     movePanel,
     togglePanelLocation,
     setViewVisible,
     setBottomPanelVisible,
     setBottomPanelHeight,
+    setRightPanelVisible,
+    setRightPanelWidth,
+    setPanelTabLabels,
   }
 })

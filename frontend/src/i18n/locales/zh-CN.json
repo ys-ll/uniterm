@@ -1547,7 +1547,7 @@
   "conn.x11Forwarding": "X11 转发",
   "conn.agentForwarding": "SSH Agent 转发",
   "conn.agentForwardingDesc": "将本机 SSH Agent 提供给远端主机，仅在可信服务器上启用",
-  "quickCommands.quickCommandsTab": "快捷命令",
+  "quickCommands.quickCommandsTab": "命令",
   "quickCommands.historyTab": "历史命令",
   "quickCommands.saveAs": "保存为快捷命令",
   "quickCommands.addGroup": "添加分组",
@@ -2523,7 +2523,7 @@
   "batch.selectAll": "全选",
   "sidebar.locSidebar": "左边栏",
   "sidebar.locBottom": "下边栏",
-  "sidebar.bottomPanelEmpty": "选择在此处展示的面板",
+  "sidebar.locRight": "右边栏",
   "sidebar.moveTo": "移动到",
   "sidebar.panelsMenu": "面板",
   "sidebar.sidebarEmpty": "选择在此处展示的面板",
@@ -2662,5 +2662,9 @@
   "tools.yaml": "YAML ↔ JSON",
   "tools.yamlToJson": "YAML → JSON",
   "tools.jsonToYaml": "JSON → YAML",
-  "tools.yamlInputPlaceholder": "粘贴 YAML…"
+  "tools.yamlInputPlaceholder": "粘贴 YAML…",
+  "sidebar.tabNames": "标签名称",
+  "sidebar.tabNamesNone": "全部隐藏",
+  "sidebar.tabNamesActive": "当前标签显示",
+  "sidebar.tabNamesAll": "全部显示"
 }
