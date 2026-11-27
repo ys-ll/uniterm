@@ -922,6 +922,7 @@
   "conn.rdpQualityBalanced": "Equilibrada",
   "conn.rdpQualityLow": "Baixa largura de banda",
   "sidebar.connectRDP": "Conectar RDP",
+  "sidebar.openInMstsc": "Abrir com a Área de Trabalho Remota do Windows",
   "sidebar.connectVNC": "Conectar VNC",
   "sidebar.connectSPICE": "Conectar SPICE",
   "sidebar.connectX11Desktop": "Conectar área de trabalho X11",

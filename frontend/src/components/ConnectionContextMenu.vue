@@ -10,6 +10,8 @@
     <MenuItem v-if="config?.type === 'ssh' && connectFileMenuKey(config)" @click="onConnectClick($event, 'file')">{{ t(connectFileMenuKey(config)) }}</MenuItem>
     <MenuItem v-if="config?.type === 'wsl'" @click="onConnectClick($event, 'wsl-file')">{{ t('sidebar.connectWslFile') }}</MenuItem>
     <MenuItem v-if="config?.type === 'ssh'" @click="onConnectClick($event, 'monitor')">{{ t('sidebar.connectMonitor') }}</MenuItem>
+    <!-- Launch the OS-native mstsc client instead of the built-in RDP one (#1520). -->
+    <MenuItem v-if="config?.type === 'rdp' && isWindows" @click="onLaunchMstsc">{{ t('sidebar.openInMstsc') }}</MenuItem>
     <MenuItem v-if="config && canLocate" @click="locateSession">{{ t('sidebar.locateSession') }}</MenuItem>
     <MenuItem v-if="canBatchExecute" @click="onBatchExecute">{{ t('sidebar.batchExecute') }}</MenuItem>
     <MenuItem v-if="canViewTotpCode" @click="onViewTotpCode">{{ t('conn.totpViewCode') }}</MenuItem>
@@ -39,8 +41,8 @@
 // Owns all type metadata (registry labels, companion items, workspace
 // submenu), favorite state and duplicate/delete flows; parents only wire the
 // connect routing and the edit/group dialogs.
-import { computed, ref } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@lucide/vue'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
@@ -58,6 +60,7 @@ import { useTabStore } from '../stores/tabStore'
 import { useConnectionStore } from '../stores/connectionStore'
 import { isWorkspaceHostType } from '../composables/createWorkspace'
 import { openWorkspaceNameDialog } from '../composables/workspaceNameDialog'
+import { GetPlatform, LaunchMstsc } from '../../bindings/github.com/ys-ll/uniterm/app'
 
 // kind selects a companion view (file browser / monitor / WSL files) whose
 // session type is not derivable from config.type.
@@ -90,6 +93,12 @@ const connectionStore = useConnectionStore()
 
 const menuRef = ref<InstanceType<typeof Menu> | null>(null)
 defineExpose({ openAt: (x: number, y: number, data?: unknown) => menuRef.value?.openAt(x, y, data) })
+
+// mstsc only exists on Windows; the item is hidden on every other platform.
+const isWindows = ref(false)
+onMounted(() => {
+  GetPlatform().then(p => { isWindows.value = p === 'windows' })
+})
 
 const visible = computed({
   get: () => props.visible,
@@ -158,6 +167,20 @@ function close() {
 function onConnectClick(event: MouseEvent, kind?: ConnectKind) {
   close()
   emit('connect', props.targets, kind, event)
+}
+
+// Open the right-clicked RDP connection in the Windows Remote Desktop client.
+// The backend pre-fills address/username/domain; mstsc prompts for the
+// password itself, so no credential ever leaves through this path.
+async function onLaunchMstsc() {
+  close()
+  const c = props.config
+  if (!c) return
+  try {
+    await LaunchMstsc(c)
+  } catch (err) {
+    ElMessage.error(String(err))
+  }
 }
 
 function onConnectToWorkspace(workspaceId: string) {

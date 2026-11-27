@@ -950,6 +950,7 @@
   "conn.rdpQualityBalanced": "Balanced",
   "conn.rdpQualityLow": "Low bandwidth",
   "sidebar.connectRDP": "Connect RDP",
+  "sidebar.openInMstsc": "Open with Windows Remote Desktop",
   "sidebar.connectVNC": "Connect VNC",
   "sidebar.connectSPICE": "Connect SPICE",
   "sidebar.connectX11Desktop": "Connect X11 Desktop",
