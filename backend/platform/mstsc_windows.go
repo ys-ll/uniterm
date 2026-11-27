@@ -56,7 +56,9 @@ func LaunchMstsc(opts MstscOptions) error {
 		return err
 	}
 
+	// No HideConsoleWindow here: it sets STARTUPINFO SW_HIDE, which mstsc
+	// honors and keeps its remote-desktop window invisible after connecting.
+	// As a GUI program mstsc never opens a console window anyway.
 	cmd := exec.Command("mstsc.exe", path)
-	HideConsoleWindow(cmd)
 	return cmd.Start()
 }
