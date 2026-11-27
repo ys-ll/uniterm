@@ -83,7 +83,7 @@ export const CONNECTION_TYPES: ConnectionTypeInfo[] = [
   { type: 'database', dbType: 'sqlserver', label: 'SQL Server', icon: Database, category: 'sql', defaultPort: 1433, connectMenuKey: 'db.connectDB', formPinned: true },
   { type: 'database', dbType: 'sqlite', label: 'SQLite', icon: Database, category: 'sql', connectMenuKey: 'db.connectDB', formPinned: true },
   { type: 'database', dbType: 'rqlite', label: 'rqlite', icon: Database, category: 'sql', defaultPort: 4001, connectMenuKey: 'db.connectDB' },
-  { type: 'database', dbType: 'dm', label: 'DM', labelKey: 'db.dm', icon: Database, category: 'sql', defaultPort: 5236, connectMenuKey: 'db.connectDB', formPinned: true },
+  { type: 'database', dbType: 'dm', label: 'DM', labelKey: 'db.dm', icon: Database, category: 'sql', defaultPort: 5236, connectMenuKey: 'db.connectDB' },
   { type: 'database', dbType: 'mariadb', label: 'MariaDB', icon: Database, category: 'sql', defaultPort: 3306, connectMenuKey: 'db.connectDB' },
   { type: 'database', dbType: 'tidb', label: 'TiDB', icon: Database, category: 'sql', defaultPort: 4000, connectMenuKey: 'db.connectDB' },
   { type: 'database', dbType: 'oceanbase', label: 'OceanBase', icon: Database, category: 'sql', defaultPort: 2881, connectMenuKey: 'db.connectDB' },
@@ -96,6 +96,7 @@ export const CONNECTION_TYPES: ConnectionTypeInfo[] = [
   { type: 'database', dbType: 'opengauss', label: 'openGauss', icon: Database, category: 'sql', defaultPort: 5432, connectMenuKey: 'db.connectDB' },
   { type: 'database', dbType: 'cockroachdb', label: 'CockroachDB', icon: Database, category: 'sql', defaultPort: 26257, connectMenuKey: 'db.connectDB' },
   { type: 'database', dbType: 'yugabytedb', label: 'YugabyteDB', icon: Database, category: 'sql', defaultPort: 5433, connectMenuKey: 'db.connectDB' },
+  { type: 'database', dbType: 'clickhouse', label: 'ClickHouse', icon: Database, category: 'sql', defaultPort: 9000, connectMenuKey: 'db.connectDB', formPinned: true },
   // NoSQL: standalone connection types
   { type: 'redis', label: 'Redis', icon: DatabaseZap, category: 'nosql', defaultPort: 6379, connectMenuKey: 'sidebar.connectRedis' },
   { type: 'mongodb', label: 'MongoDB', icon: Layers, category: 'nosql', defaultPort: 27017, connectMenuKey: 'sidebar.connectMongodb' },

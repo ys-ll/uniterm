@@ -987,18 +987,22 @@ function requiresDbName(dbType?: string): boolean {
 
 // ── SQL category's collapsed pinned row ──
 // Collapsed shows only the pinned SQL types; the toggle at the row's end
-// expands the full grid. The last pinned slot is a mirror: every time the
-// row collapses it takes on the selected non-pinned SQL type, so the current
-// selection always stays visible once the extra rows are hidden. The mirror
-// keeps its captured type across expand/collapse cycles — it never reverts
-// to the default (DM) on its own. Expanded state lives for the session only.
+// expands the full grid. The last pinned slot (ClickHouse) is a mirror:
+// every time the row collapses it takes on the selected non-pinned SQL
+// type, so the current selection always stays visible once the extra rows
+// are hidden. The mirror keeps its captured type across expand/collapse
+// cycles — it never reverts to the default (ClickHouse) on its own.
+// Expanded state lives for the session only.
 const sqlTypesExpanded = ref(false)
 
 const sqlPinnedSubTypes = computed(() =>
   (allSubTypes.value.sql || []).filter(st => st.pinned)
 )
 
-// null → the mirror slot shows its default (DM).
+// The pinned type whose slot doubles as the dynamic mirror.
+const SQL_MIRROR_DEFAULT = 'clickhouse'
+
+// null → the mirror slot shows its default (ClickHouse).
 const sqlMirrorDbType = ref<string | null>(null)
 
 // Capture the selected SQL type into the mirror slot: a non-pinned type
@@ -1029,7 +1033,7 @@ const sqlPinnedRow = computed(() => {
   const row = sqlPinnedSubTypes.value.slice()
   const mirrorDbType = sqlMirrorDbType.value
   if (!mirrorDbType || row.some(st => st.dbType === mirrorDbType)) return row
-  const mirrorIdx = row.findIndex(st => st.dbType === 'dm')
+  const mirrorIdx = row.findIndex(st => st.dbType === SQL_MIRROR_DEFAULT)
   const match = (allSubTypes.value.sql || []).find(st => st.dbType === mirrorDbType)
   if (mirrorIdx >= 0 && match) row[mirrorIdx] = match
   return row
