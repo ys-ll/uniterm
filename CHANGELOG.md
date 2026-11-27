@@ -1,5 +1,104 @@
 # Changelog
 
+## v1.13.0-alpha
+
+### What's Changed
+
+**New Features**
+
+- UI: a brand-new interface style — the whole app adopts floating rounded panels with a softer, modern palette; panels, tabs, sidebar dividers, header toggles and the four-way splitter are all redrawn.
+- UI: a customizable right panel — a new dockable right rail is added, and any panel (including the AI assistant) can dock freely into the left, right or bottom dock areas via tab drag / drop or the move-to menu, each dock keeping its own tabs and size.
+- Database: Dameng DM8 support — schema browsing, table data with paging and editing, export and DDL, backed by a pure-Go driver.
+- Tools: a new toolbox tab with everyday converters — JSON format, hash, URL, JWT, timestamp, cron, UUID, regex and YAML. (@AuroraLZDF)
+
+**Improvements**
+
+- Database grid: multi-cell selection by dragging (plus Ctrl / Shift modes and full row / column ranges) with TSV copy, a long-text cell editor with syntax highlight and search, and a context menu for copy / edit / set-null.
+- Database: the Redis client switched from go-redis to redigo.
+- Import: FinalShell connection directory import — config folders are scanned and entries become connections.
+- Files: optional local and remote start paths per connection — file panels open at the configured directories instead of home.
+- SSH: the file-transfer protocol gains a "disabled" option — no companion session, no directory probing, the file sidebar shows a static notice.
+- Kubernetes: ingress rule URLs are derived and clickable from the resource list. (@it-linnan)
+- RDP: connections can be opened in the Windows Remote Desktop client (mstsc) from the context menu — address, port, username and domain are pre-filled (Windows only).
+- Remote desktop: a send-keys menu for system-reserved shortcuts (Ctrl+Alt+Del and friends) on RDP / VNC / SPICE sessions.
+- SSH: the current TOTP code is now visible — live in the connection form and from the connection right-click menu, with a countdown and one-click copy, for authenticator binding on a bastion's web console. (@surenwuyuwuqiu)
+
+**Bug Fixes**
+
+- Startup: the launch black / white flash is gone — the first frame uses a single theme source, and non-critical init (shell probe, update check) no longer competes with first paint.
+- Gateway: the web session cookie is browser-scoped.
+- Gateway: sessions require re-authentication after an app restart — cookies issued before a restart no longer work. (@AnxysUaen)
+- ZMODEM: large sz downloads no longer fail mid-transfer with moving CRC errors (oversized event payloads are coalesced instead of swept), and a download whose target file is transiently locked retries instead of aborting.
+- TFTP: transfers with clients that don't negotiate blksize now use RFC 1350 512-byte blocks — network devices (e.g. Huawei) no longer stop after exactly 512 bytes; the WRQ / OACK handshake is hardened and transient UDP errors are retried. (@etanman)
+- FTP: directory entries whose names carry column-padding spaces parse correctly.
+- RDP: the selected quality tier is always sent to the server, fixing rendering quality. (@zielony360)
+- RDP: sessions to Windows Server 2012 hosts now render correctly — the client was missing EGFX graphics channel support.
+- Terminal: the line model resyncs after shell Tab completion.
+- Terminal: local shell output works again on macOS. (@surenwuyuwuqiu)
+- AI: a race on the block map no longer crashes the chat mid-stream. (@guberm)
+- Database: PostgreSQL row CRUD handles schema-qualified table names. (@surenwuyuwuqiu)
+- Terminal: the MobaXterm Default palette matches the official colors. (@etanman)
+- Notes / editor: the notes editor and the code editor default to line wrapping, and notes preview styles match the AI typography.
+- Connections: an empty auth type defaults to password when editing.
+- Connections: container connections wait for the save to finish before opening and no longer offer connect-only. (@AnxysUaen)
+- Sync: the sync base path is prefilled with the real default — leaving it empty no longer silently targets the server root (WebDAV mkdir 403).
+- Android: the status-bar padding is painted with the app theme color — no more black bars around light themes.
+
+**Notes**
+
+- As this open-source software has not purchased a code-signing certificate, the unsigned executable may trigger false positives in some antivirus engines (e.g. Windows Defender). This is a known issue with Go/Wails applications (see [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)). You can add an exclusion rule in your antivirus to allow it. Please download only from the official open-source channels — GitHub and Gitee. If you are still concerned about malware, you can download the source code and build and run it locally yourself.
+- Android app: since version 1.11.0, the Android app uses a new application ID based on the uniterm domain (`net.uniterm.app`) — if a version before 1.11.0 is installed, uninstall it first before installing the new version.
+
+Thanks to @AuroraLZDF, @it-linnan, @surenwuyuwuqiu, @AnxysUaen, @etanman, @zielony360 and @guberm for their contributions to this release.
+
+### 更新内容
+
+**新功能**
+
+- 界面：全新界面风格——整个应用改用浮动圆角面板与更柔和的现代配色；面板、标签页、边栏分隔线、头部开关与四向分割线全部重绘。
+- 界面：新增右侧面板自定义停靠功能——任意面板（含 AI 面板）均可通过标签拖拽或「移动到」菜单自由停靠到左、右、下三处面板停靠区，每个停靠区独立管理标签与尺寸。
+- 数据库：新增达梦 DM8 支持——schema 浏览、表数据分页与编辑、导出与 DDL，基于纯 Go 驱动实现。
+- 工具箱：新增工具箱标签页，内置常用转换器——JSON 格式化、哈希、URL、JWT、时间戳、cron、UUID、正则和 YAML。(@AuroraLZDF)
+
+**改进**
+
+- 数据库表格：支持拖拽多选单元格（另支持 Ctrl / Shift 组合与整行 / 整列选择），选区可 TSV 复制；新增带语法高亮与搜索的长文本单元格编辑器，以及复制 / 编辑 / 置空等右键菜单。
+- 数据库：Redis 客户端由 go-redis 切换为 redigo。
+- 导入：支持导入 FinalShell 连接配置目录，自动扫描并转换为连接。
+- 文件：连接可配置本地 / 远程起始路径——文件面板打开时直接定位到配置目录而非家目录。
+- SSH：文件传输协议新增「禁用」选项——不再创建伴随会话、不做目录探测，文件侧栏显示静态提示。
+- Kubernetes：资源列表中的 Ingress 规则 URL 自动推导并可点击打开。(@it-linnan)
+- RDP：连接右键菜单支持用 Windows 远程桌面客户端（mstsc）打开——自动预填地址、端口、用户名和域名（仅 Windows）。
+- 远程桌面：RDP / VNC / SPICE 会话新增按键发送菜单，可发送 Ctrl+Alt+Del 等系统保留快捷键。
+- SSH：新增当前 TOTP 验证码展示——连接编辑表单内实时显示，连接右键菜单也能随时打开，带倒计时与一键复制，方便在堡垒机 Web 页面完成验证器绑定。(@surenwuyuwuqiu)
+
+**问题修复**
+
+- 启动：启动时的黑 / 白屏闪烁不再出现——首帧统一主题来源，非关键初始化（shell 探测、更新检查）不再与首帧渲染抢占资源。
+- 网关：Web 会话 Cookie 改为浏览器维度隔离。
+- 网关：应用重启后会话需重新认证——重启前签发的 Cookie 不再有效。(@AnxysUaen)
+- ZMODEM：大文件 sz 下载不再中途中断并报 CRC 错误（超大事件载荷改为合并发送、不再被超时清扫），目标文件被临时占用时下载会重试而非直接失败。
+- TFTP：对不协商 blksize 的客户端改用 RFC 1350 规定的 512 字节块——网络设备（如华为）传输不再恰好停在 512 字节；加固 WRQ / OACK 握手，瞬时 UDP 错误会自动重试。(@etanman)
+- FTP：LIST 解析结果中名字带对齐空格的目录项可正确识别。
+- RDP：画质档位始终发送到服务端，修复渲染质量问题。(@zielony360)
+- RDP：连接 Windows Server 2012 主机可正常显示画面——客户端此前缺少 EGFX 图形通道支持。
+- 终端：shell Tab 补全后行模型重新同步。
+- 终端：macOS 本地终端输出恢复正常。(@surenwuyuwuqiu)
+- AI：修复块映射竞态导致的对话中途崩溃。(@guberm)
+- 数据库：PostgreSQL 行级增删改支持带 schema 前缀的表名。(@surenwuyuwuqiu)
+- 终端：MobaXterm Default 配色与官方颜色对齐。(@etanman)
+- 笔记 / 编辑器：笔记编辑器与代码编辑器默认开启自动换行，笔记预览样式与 AI 排版一致。
+- 连接：编辑时认证方式为空默认按密码处理。
+- 连接：容器连接等待保存完成后再打开，且不再显示仅连接选项。(@AnxysUaen)
+- 同步：同步基础路径预填真实默认值——留空不再静默指向服务器根目录（WebDAV mkdir 403）。
+- Android：状态栏留白区域按应用主题色绘制，浅色主题下不再出现黑色边条。
+
+**说明**
+
+- 本软件未购买代码签名证书，未签名的可执行文件可能被部分杀毒引擎（如 Windows Defender）误报。这是 Go/Wails 应用的已知问题（见 [wailsapp/wails#3308](https://github.com/wailsapp/wails/issues/3308)）。可在杀毒软件中添加排除规则放行；请务必从官方开源渠道——GitHub 和 Gitee——下载。如仍有顾虑，可自行下载源码本地构建运行。
+
+感谢 @AuroraLZDF、@it-linnan、@surenwuyuwuqiu、@AnxysUaen、@etanman、@zielony360、@guberm 对本版本发布的贡献。
+
 ## v1.12.4
 
 ### What's Changed
@@ -11,7 +110,6 @@
 - Notes: a dockable notes panel with free-form category tags and a Markdown editor / preview; notes join the cloud-sync exchange.
 - Import: Devolutions Remote Desktop Manager (.rdm) exports — folders map to groups, SSH / Telnet / RDP entries become connections with their credentials, and SSH gateway entries become jump hosts; secrets protected by RDM's SafePassword scheme are reported as warnings. (@rsipka)
 - Files: new "local file" and "WSL file" connection types — a dual-pane browser over the local filesystem with cross-pane copy / move wired into the transfer panel's progress and conflict handling, and the WSL file browser with a distro picker and start path; the file sidebar now also works with local terminals, with directory tracking for PowerShell, git-bash and more.
-- SSH: the current TOTP code is now visible — live in the connection form (even before the host is saved) and from the connection right-click menu, with a countdown and one-click copy, so authenticator binding on a bastion's web console is possible. (#1583)
 
 **Improvements**
 
@@ -73,7 +171,6 @@ Thanks to @etanman, @surenwuyuwuqiu, @rsipka, @caibingxin666, @chenxiaoqiang and
 - 笔记：新增可停靠的笔记面板，支持自由分类标签与 Markdown 编辑 / 预览；笔记纳入云同步。
 - 导入：支持导入 Devolutions Remote Desktop Manager（.rdm）导出——文件夹映射为分组，SSH / Telnet / RDP 条目连同凭据转为连接，SSH 网关条目转为跳板机；受 RDM SafePassword 保护的密文无法导入，会在结果中以警告列出。(@rsipka)
 - 文件：新增「本地文件」和「WSL 文件」连接类型——本地文件系统的双栏浏览器，跨栏复制 / 移动接入传输面板的进度与冲突处理，WSL 文件浏览器可选发行版与起始路径；文件侧栏额外支持本地终端，PowerShell、git-bash 等本地终端的目录跟踪现已可用。
-- SSH：新增当前 TOTP 验证码展示——连接编辑表单内实时显示（保存前也可查看），连接右键菜单也能随时打开，带 30 秒倒计时与一键复制，方便在堡垒机 Web 页面完成验证器绑定。(#1583)
 
 **改进**
 

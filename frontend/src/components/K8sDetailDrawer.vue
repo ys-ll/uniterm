@@ -18,7 +18,59 @@
           <div class="detail-section-title">{{ sec.label }}</div>
           <div v-for="f in sec.fields" :key="f.label" class="detail-row">
             <span class="detail-label">{{ f.label }}</span>
-            <span class="detail-value">{{ fieldText(f) }}</span>
+            <div v-if="resourceKey === 'ingresses' && f.label === 'Rules'" class="detail-value ingress-detail-table">
+              <table v-if="ingressRoutes.length">
+                <thead><tr><th>Host</th><th>Path</th><th>Path Type</th><th>Backend</th><th>Port</th></tr></thead>
+                <tbody>
+                  <tr v-for="(route, index) in ingressRoutes" :key="index">
+                    <td>{{ route.host }}</td><td>{{ route.path }}</td><td>{{ route.pathType }}</td><td>{{ route.backend }}</td><td>{{ route.port }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <span v-else>—</span>
+            </div>
+            <div v-else-if="resourceKey === 'ingresses' && f.label === 'TLS'" class="detail-value ingress-detail-table">
+              <table v-if="target?.spec?.tls?.length">
+                <thead><tr><th>Hosts</th><th>Secret</th></tr></thead>
+                <tbody>
+                  <tr v-for="(tls, index) in target.spec.tls" :key="index">
+                    <td>{{ (tls.hosts || []).join(', ') || '—' }}</td><td>{{ tls.secretName || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <span v-else>—</span>
+            </div>
+            <div v-else-if="f.label === 'Labels'" class="detail-value k8s-labels">
+              <span v-for="(value, key) in target?.metadata?.labels || {}" :key="key" class="k8s-label-chip">{{ key }}={{ value }}</span>
+              <span v-if="!Object.keys(target?.metadata?.labels || {}).length">—</span>
+            </div>
+            <div v-else-if="f.label === 'Annotations'" class="detail-value k8s-annotations">
+              <div v-for="[key, value] in annotationEntries" :key="key" class="k8s-annotation">
+                <div class="k8s-annotation-key">{{ key }}</div>
+                <details v-if="value.length > 160 || value.includes('\n')">
+                  <summary>{{ value.slice(0, 100) }}{{ value.length > 100 ? '…' : '' }}</summary>
+                  <pre>{{ value }}</pre>
+                </details>
+                <div v-else class="k8s-annotation-value">{{ value }}</div>
+              </div>
+              <span v-if="!annotationEntries.length">—</span>
+            </div>
+            <div v-else-if="f.label === 'Conditions'" class="detail-value k8s-conditions">
+              <div v-for="(condition, index) in target?.status?.conditions || []" :key="condition.type || index" class="k8s-condition">
+                <div class="k8s-condition-header">
+                  <strong>{{ condition.type || '—' }}</strong>
+                  <span :class="['k8s-condition-status', conditionTone(condition)]">
+                    {{ conditionTone(condition) === 'ok' ? '✓' : conditionTone(condition) === 'warn' ? '!' : '·' }}
+                    {{ condition.status || '—' }}
+                  </span>
+                </div>
+                <div v-if="condition.reason" class="k8s-condition-reason">{{ condition.reason }}</div>
+                <div v-if="condition.message" class="k8s-condition-message">{{ condition.message }}</div>
+                <div v-if="condition.lastTransitionTime" class="k8s-condition-time">{{ condition.lastTransitionTime }}</div>
+              </div>
+              <span v-if="!target?.status?.conditions?.length">—</span>
+            </div>
+            <span v-else class="detail-value">{{ fieldText(f) }}</span>
           </div>
         </div>
         <!-- Pod events (async) -->
@@ -181,17 +233,26 @@ onBeforeUnmount(() => {
   document.removeEventListener('copy', onDetailCopy, true)
 })
 
-// Drawer width (draggable). Defaults widen for logs mode; not persisted.
+// Drawer width (draggable). Remember explicit user resizing across sessions.
 // Max width tracks the actual parent container (not the window) so the drawer
 // never extends past the container's left edge on any screen size.
 const drawerEl = ref<HTMLElement | null>(null)
-const drawerWidth = ref(420)
+const DRAWER_WIDTH_KEY = 'uniterm:k8s-detail-width'
+function readDrawerWidth() {
+  try {
+    const saved = Number(localStorage.getItem(DRAWER_WIDTH_KEY))
+    if (Number.isFinite(saved) && saved >= 320) return saved
+  } catch { /* storage may be unavailable */ }
+  return 640
+}
+let preferredDrawerWidth = readDrawerWidth()
+const drawerWidth = ref(preferredDrawerWidth)
 function maxDrawerWidth() {
   const parent = drawerEl.value?.parentElement
   return parent ? Math.max(320, parent.clientWidth - 40) : window.innerWidth - 120
 }
 watch(() => props.mode, (m) => {
-  if (m === 'logs' && drawerWidth.value < 640) drawerWidth.value = Math.min(640, maxDrawerWidth())
+  if (m) drawerWidth.value = Math.min(preferredDrawerWidth, Math.max(320, maxDrawerWidth()))
 })
 let resizeStartX = 0
 let resizeStartW = 0
@@ -202,6 +263,9 @@ function onResizeMove(e: MouseEvent) {
 function onResizeEnd() {
   document.removeEventListener('mousemove', onResizeMove)
   document.removeEventListener('mouseup', onResizeEnd)
+  if (drawerWidth.value === resizeStartW) return
+  preferredDrawerWidth = drawerWidth.value
+  try { localStorage.setItem(DRAWER_WIDTH_KEY, String(preferredDrawerWidth)) } catch { /* storage may be unavailable */ }
 }
 function onResizeStart(e: MouseEvent) {
   // Block the mousedown default action so the drag cannot promote into a text
@@ -233,11 +297,61 @@ const headerTitle = computed(() => {
   return `${o.kind || getResource(props.resourceKey)?.kind || '?'} / ${o.metadata?.namespace || 'cluster'} / ${o.metadata?.name || ''}`
 })
 
-const sections = computed<DetailSection[]>(() => {
+const baseSections = computed<DetailSection[]>(() => {
   const desc = getResource(props.resourceKey)
   if (desc?.detailSections?.length) return desc.detailSections
   return genericDetailSections()
 })
+
+// Show both service and resource backends, including the default backend.
+const ingressRoutes = computed(() => {
+  const routes: { host: string; path: string; pathType: string; backend: string; port: string }[] = []
+  const spec = props.target?.spec
+  function append(host: string, path: string, pathType: string, backend: any) {
+    const service = backend?.service
+    const resource = backend?.resource
+    routes.push({
+      host, path, pathType,
+      backend: service?.name || (resource?.name ? [resource.apiGroup, resource.kind, resource.name].filter(Boolean).join('/') : '—'),
+      port: String(service?.port?.number ?? service?.port?.name ?? '—'),
+    })
+  }
+  for (const rule of spec?.rules || []) {
+    for (const path of rule.http?.paths || []) {
+      append(rule.host || '*', path.path || '/', path.pathType || '—', path.backend)
+    }
+  }
+  if (spec?.defaultBackend) append('*', '—', 'Default backend', spec.defaultBackend)
+  return routes
+})
+
+const annotationEntries = computed(() => Object.entries((props.target?.metadata?.annotations || {}) as Record<string, string>))
+
+// A resource may expose conditions even when its descriptor has no explicit field.
+const sections = computed<DetailSection[]>(() => {
+  const metadata = props.target?.metadata
+  const existing = baseSections.value.map(sec => ({
+    ...sec,
+    fields: sec.fields.filter(field => {
+      if (field.label === 'Labels') return Object.keys(metadata?.labels || {}).length > 0
+      if (field.label === 'Annotations') return Object.keys(metadata?.annotations || {}).length > 0
+      if (field.label === 'Owner') return (metadata?.ownerReferences || []).length > 0
+      return true
+    }),
+  })).filter(sec => sec.fields.length > 0)
+  if (!props.target?.status?.conditions?.length || existing.some(sec => sec.fields.some(f => f.label === 'Conditions'))) return existing
+  return [...existing, { label: 'Conditions', fields: [{ label: 'Conditions', value: () => '' }] }]
+})
+
+// Only known condition types have a success/warning interpretation.
+const positiveConditions = new Set(['Ready', 'ContainersReady', 'Initialized', 'PodScheduled', 'Available', 'Complete', 'Established', 'NamesAccepted', 'Accepted', 'Programmed', 'ResolvedRefs', 'Succeeded'])
+const negativeConditions = new Set(['MemoryPressure', 'DiskPressure', 'PIDPressure', 'NetworkUnavailable', 'ReplicaFailure', 'Degraded'])
+function conditionTone(condition: { type?: string; status?: string }): 'ok' | 'warn' | 'neutral' {
+  if (condition.status !== 'True' && condition.status !== 'False') return 'neutral'
+  if (positiveConditions.has(condition.type || '')) return condition.status === 'True' ? 'ok' : 'warn'
+  if (negativeConditions.has(condition.type || '')) return condition.status === 'False' ? 'ok' : 'warn'
+  return 'neutral'
+}
 
 function fieldText(f: any): string {
   if (!props.target) return ''
@@ -370,7 +484,11 @@ watch(() => [props.mode, props.target], () => {
   }
 })
 
-onBeforeUnmount(stopLogs)
+onBeforeUnmount(() => {
+  stopLogs()
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
+})
 </script>
 
 <style scoped>
@@ -386,6 +504,30 @@ onBeforeUnmount(stopLogs)
 }
 .detail-body :deep(.cm-content) { user-select: text; -webkit-user-select: text; }
 .detail-body :deep(.el-button) { user-select: none; -webkit-user-select: none; }
+
+.detail-value.ingress-detail-table { min-width: 0; overflow-x: auto; white-space: normal; word-break: normal; }
+.ingress-detail-table table { border-collapse: collapse; width: 100%; text-align: left; }
+.ingress-detail-table th, .ingress-detail-table td { padding: 0.375rem; border-bottom: 1px solid var(--border-subtle); vertical-align: top; overflow-wrap: anywhere; }
+.ingress-detail-table th { color: var(--text-muted); font-weight: 500; }
+
+.detail-value.k8s-labels { display: flex; flex-wrap: wrap; gap: 0.375rem; min-width: 0; }
+.k8s-label-chip { max-width: 100%; padding: 0.2rem 0.375rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-hover); overflow-wrap: anywhere; word-break: normal; }
+
+.detail-value.k8s-annotations { min-width: 0; word-break: normal; }
+.k8s-annotation + .k8s-annotation { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-subtle); }
+.k8s-annotation-key { color: var(--text-muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+.k8s-annotation-value, .k8s-annotation summary { overflow-wrap: anywhere; white-space: pre-wrap; }
+.k8s-annotation summary { cursor: pointer; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k8s-annotation pre { margin: 0.25rem 0 0; max-height: 16rem; overflow: auto; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.detail-value.k8s-conditions { min-width: 0; word-break: normal; overflow-wrap: anywhere; }
+.k8s-condition + .k8s-condition { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-subtle); }
+.k8s-condition-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.25rem; }
+.k8s-condition-status.ok { color: var(--el-color-success, #67c23a); }
+.k8s-condition-status.warn { color: var(--el-color-warning, #e6a23c); }
+.k8s-condition-status.neutral, .k8s-condition-time { color: var(--text-muted); }
+.k8s-condition-reason, .k8s-condition-time { font-size: 0.75rem; }
+.k8s-condition-message { white-space: pre-wrap; }
 
 /* Copied verbatim from MonitorTabContent.vue */
 .detail-drawer-backdrop {
