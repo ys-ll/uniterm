@@ -926,6 +926,7 @@
   "conn.rdpQualityBalanced": "균형",
   "conn.rdpQualityLow": "저대역폭",
   "sidebar.connectRDP": "RDP 연결",
+  "sidebar.openInMstsc": "Windows 원격 데스크톱으로 열기",
   "sidebar.connectVNC": "VNC 연결",
   "sidebar.connectSPICE": "SPICE 연결",
   "sidebar.connectX11Desktop": "X11 Desktop 연결",

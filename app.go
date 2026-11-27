@@ -2623,6 +2623,22 @@ func (a *App) OpenPathInExplorer(path string) error {
 	}
 }
 
+// LaunchMstsc opens the given RDP connection in the Windows Remote Desktop
+// client (mstsc.exe) instead of the built-in RDP client. Windows-only;
+// other platforms return an error.
+func (a *App) LaunchMstsc(config session.ConnectionConfig) error {
+	if config.Type != "rdp" {
+		return fmt.Errorf("not an RDP connection")
+	}
+	return platform.LaunchMstsc(platform.MstscOptions{
+		Host:   config.Host,
+		Port:   config.Port,
+		User:   config.User,
+		Domain: config.RdpDomain,
+		Admin:  config.RdpAdminSession,
+	})
+}
+
 type DataDirInfo struct {
 	DataDir  string `json:"dataDir"`
 	Type     string `json:"type"`

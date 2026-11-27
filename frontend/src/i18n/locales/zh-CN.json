@@ -950,6 +950,7 @@
   "conn.rdpQualityBalanced": "平衡",
   "conn.rdpQualityLow": "低带宽",
   "sidebar.connectRDP": "连接 RDP",
+  "sidebar.openInMstsc": "使用 Windows 远程桌面连接",
   "sidebar.connectVNC": "连接 VNC",
   "sidebar.connectSPICE": "连接 SPICE",
   "sidebar.connectX11Desktop": "连接 X11 Desktop",

@@ -922,6 +922,7 @@
   "conn.rdpQualityBalanced": "Cân bằng",
   "conn.rdpQualityLow": "Băng thông thấp",
   "sidebar.connectRDP": "Kết nối RDP",
+  "sidebar.openInMstsc": "Mở bằng Remote Desktop của Windows",
   "sidebar.connectVNC": "Kết nối VNC",
   "sidebar.connectSPICE": "Kết nối SPICE",
   "sidebar.connectX11Desktop": "Kết nối Desktop X11",

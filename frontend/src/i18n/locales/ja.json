@@ -926,6 +926,7 @@
   "conn.rdpQualityBalanced": "バランス",
   "conn.rdpQualityLow": "低帯域",
   "sidebar.connectRDP": "RDP で接続",
+  "sidebar.openInMstsc": "Windows リモートデスクトップで開く",
   "sidebar.connectVNC": "VNC で接続",
   "sidebar.connectSPICE": "SPICE で接続",
   "sidebar.connectX11Desktop": "X11 Desktop で接続",

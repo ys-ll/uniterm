@@ -926,6 +926,7 @@
   "conn.rdpQualityBalanced": "Ausgewogen",
   "conn.rdpQualityLow": "Geringe Bandbreite",
   "sidebar.connectRDP": "RDP verbinden",
+  "sidebar.openInMstsc": "Mit Windows-Remotedesktop öffnen",
   "sidebar.connectVNC": "VNC verbinden",
   "sidebar.connectSPICE": "SPICE verbinden",
   "sidebar.connectX11Desktop": "X11 Desktop verbinden",

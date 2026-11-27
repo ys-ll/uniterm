@@ -926,6 +926,7 @@
   "conn.rdpQualityBalanced": "Сбалансированное",
   "conn.rdpQualityLow": "Низкая полоса",
   "sidebar.connectRDP": "Подключиться по RDP",
+  "sidebar.openInMstsc": "Открыть через удалённый рабочий стол Windows",
   "sidebar.connectVNC": "Подключиться по VNC",
   "sidebar.connectSPICE": "Подключиться по SPICE",
   "sidebar.connectX11Desktop": "Подключиться к X11 Desktop",
