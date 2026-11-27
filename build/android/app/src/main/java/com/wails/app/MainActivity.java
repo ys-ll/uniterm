@@ -41,7 +41,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import org.json.JSONObject;
@@ -106,6 +108,12 @@ public class MainActivity extends AppCompatActivity {
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
 
+    // Background drawn behind the system-bar/cutout inset padding. The frontend
+    // pushes its actual theme color once loaded (issue #1599); until then a
+    // night-mode-aware resource provides a close default.
+    private View container;
+    private int barBackgroundColor;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -115,7 +123,7 @@ public class MainActivity extends AppCompatActivity {
         // under the status/nav bars and the app's own title bar becomes
         // untouchable. Convert system-bar, display-cutout and IME insets into
         // container padding so the web content starts below them.
-        View container = findViewById(R.id.main_container);
+        container = findViewById(R.id.main_container);
         ViewCompat.setOnApplyWindowInsetsListener(container, (v, windowInsets) -> {
             Insets bars = windowInsets.getInsets(
                     WindowInsetsCompat.Type.systemBars()
@@ -125,6 +133,13 @@ public class MainActivity extends AppCompatActivity {
                     Math.max(bars.bottom, ime.bottom));
             return WindowInsetsCompat.CONSUMED;
         });
+
+        // Follow the system dark mode until the frontend reports its actual
+        // theme color via wails.setSystemBarBackground().
+        barBackgroundColor = androidx.core.content.ContextCompat.getColor(
+                this, R.color.system_bar_background);
+        container.setBackgroundColor(barBackgroundColor);
+        applySystemBarIconAppearance();
 
         // Initialize the native Go library
         bridge = new WailsBridge(this);
@@ -304,6 +319,32 @@ public class MainActivity extends AppCompatActivity {
                 decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
             }
         }
+    }
+
+    /**
+     * Paint the system-bar/cutout inset padding with the frontend's theme
+     * background color (issue #1599). json: {"color":"#RRGGBB"} — the resolved
+     * --bg-titlebar of the active frontend theme. Also switches the status-bar
+     * icons to dark when the background is light so they stay visible.
+     */
+    public void applySystemBarBackground(String json) {
+        try {
+            String color = new JSONObject(json).optString("color", "");
+            if (color.isEmpty()) return;
+            barBackgroundColor = Color.parseColor(color);
+            if (container != null) container.setBackgroundColor(barBackgroundColor);
+            applySystemBarIconAppearance();
+        } catch (Exception e) {
+            Log.e(TAG, "applySystemBarBackground failed", e);
+        }
+    }
+
+    /** Dark status-bar icons on light backgrounds, light icons on dark ones. */
+    private void applySystemBarIconAppearance() {
+        WindowInsetsControllerCompat controller =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        double luminance = androidx.core.graphics.ColorUtils.calculateLuminance(barBackgroundColor);
+        controller.setAppearanceLightStatusBars(luminance > 0.5);
     }
 
     @SuppressLint("SetJavaScriptEnabled")

@@ -479,6 +479,18 @@ public class WailsBridge {
     }
 
     /**
+     * Paint the system-bar/cutout inset padding with the frontend's theme
+     * background color. json: {"color":"#RRGGBB"} (issue #1599).
+     */
+    public void setSystemBarBackground(final String json) {
+        mainHandler.post(() -> {
+            if (activity instanceof MainActivity) {
+                ((MainActivity) activity).applySystemBarBackground(json);
+            }
+        });
+    }
+
+    /**
      * Toggle the camera flash (torch). Emits "common:torch" with the resulting
      * state and availability.
      */

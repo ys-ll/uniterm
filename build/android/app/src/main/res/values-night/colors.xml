@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-mode default for the system-bar padding background; the frontend
+         overrides this with its actual theme color once loaded (issue #1599). -->
+    <color name="system_bar_background">#101010</color>
+</resources>

@@ -243,7 +243,7 @@ import { useUiLayoutStore } from '../stores/uiLayoutStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { LANGUAGE_OPTIONS, TERMINAL_THEMES, FOLLOW_APP_THEME } from '../types/settings'
 import type { AppSettings, ShortcutAction } from '../types/settings'
-import { detectPlatformSync, isMobilePlatform } from '../utils/platform'
+import { detectPlatformSync, isMobilePlatform, isPhoneLayout } from '../utils/platform'
 import WindowControls from './WindowControls.vue'
 import PanelToggleIcon from './icons/PanelToggleIcon.vue'
 import TabsList from './TabsList.vue'
@@ -477,9 +477,11 @@ const showWindowControls = computed(
 
 // The OS title bar already carries the app icon. Wait for the persisted frame
 // choice so the custom logo cannot flash briefly over a native title bar.
+// Phone layouts hide it too: the strip is narrow there and the tabs need the room.
 const showBrandMark = computed(() =>
   platform.value !== 'darwin' &&
   localStateStore.loaded &&
+  !isPhoneLayout.value &&
   !(systemTitleBarAtStartup.value ?? localStateStore.state.systemTitleBar)
 )
 

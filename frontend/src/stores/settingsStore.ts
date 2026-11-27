@@ -8,6 +8,7 @@ import { setLocale } from '../i18n'
 import { useAIConfigStore } from './aiConfigStore'
 import { useLocalStateStore } from './localStateStore'
 import { deferToIdle } from '../utils/deferToIdle'
+import { setAndroidSystemBarBackground } from '../utils/androidSystemBars'
 
 // Module-level un-subscriber for the cross-window store:settings:changed listener.
 // Tracked at module scope so re-imports under HMR can detach the previous
@@ -108,6 +109,11 @@ export const useSettingsStore = defineStore('settings', () => {
       theme = prefersDark ? 'dark' : 'light'
     }
     document.documentElement.dataset.theme = theme
+    // On Android, paint the system-bar/cutout padding with the theme's
+    // chrome background so the bars around the app don't stay the hard-coded
+    // default color (issue #1599). No-op on desktop builds.
+    const barBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-titlebar').trim()
+    if (barBg) setAndroidSystemBarBackground(barBg)
     // Cache the resolved theme for the pre-paint script in index.html (issue
     // #1135): it applies this before the first paint so the window doesn't
     // flash the dark no-[data-theme] default while settings load.

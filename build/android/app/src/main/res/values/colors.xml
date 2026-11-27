@@ -3,6 +3,10 @@
     <color name="wails_blue">#3574D4</color>
     <color name="wails_blue_dark">#2C5FB8</color>
     <color name="wails_background">#1B2636</color>
+    <!-- Background behind the system-bar/cutout inset padding (issue #1599).
+         Follows system dark mode until the frontend reports its theme color;
+         light here, overridden dark in values-night. -->
+    <color name="system_bar_background">#FFFFFF</color>
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
 </resources>
