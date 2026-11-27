@@ -38,6 +38,15 @@ func (a *App) CreateSession(sessionType string, config session.ConnectionConfig)
 	if serverMode && (sessionType == "local" || sessionType == "local-file") {
 		return nil, fmt.Errorf("local terminals are disabled in server mode")
 	}
+	// SQLite uses config.Host as a worker-local database file; confine it
+	// before the session manager opens it.
+	if sessionType == "database" && config.DBType == "sqlite" {
+		host, err := a.confineSQLiteHost(config.Host)
+		if err != nil {
+			return nil, err
+		}
+		config.Host = host
+	}
 	log.Writef("[CreateSession] type=%s, dbType=%s, host=%s, port=%d, user=%s, dbName=%s, name=%s",
 		sessionType, config.DBType, config.Host, config.Port, config.User, config.DBName, config.Name)
 	// 容器文件会话：通道由 container.Manager 解析（App 层拦截，不走
@@ -725,6 +734,10 @@ func (a *App) SessionWriteBinary(sessionID string, base64Data string) error {
 }
 
 func (a *App) ReadFileBase64(path string) (string, error) {
+	path, err := a.confineLocalPath(path)
+	if err != nil {
+		return "", err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("read file: %w", err)
@@ -733,6 +746,10 @@ func (a *App) ReadFileBase64(path string) (string, error) {
 }
 
 func (a *App) FileSize(path string) (int64, error) {
+	path, err := a.confineLocalPath(path)
+	if err != nil {
+		return 0, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return 0, fmt.Errorf("stat file: %w", err)
@@ -751,6 +768,10 @@ func (a *App) ReadFileChunkBase64(path string, offset int64, length int64) (stri
 		return "", fmt.Errorf("length must be positive")
 	}
 
+	path, err := a.confineLocalPath(path)
+	if err != nil {
+		return "", err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("open file: %w", err)
@@ -780,6 +801,10 @@ func (a *App) ReadFileChunkBase64(path string, offset int64, length int64) (stri
 }
 
 func (a *App) WriteFileBase64(path string, base64Data string) error {
+	path, err := a.confineLocalPath(path)
+	if err != nil {
+		return err
+	}
 	data, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
 		return fmt.Errorf("decode base64: %w", err)
@@ -788,6 +813,10 @@ func (a *App) WriteFileBase64(path string, base64Data string) error {
 }
 
 func (a *App) AppendFileBase64(path string, base64Data string, offset int64) error {
+	path, err := a.confineLocalPath(path)
+	if err != nil {
+		return err
+	}
 	data, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
 		return fmt.Errorf("decode base64: %w", err)
@@ -1218,6 +1247,13 @@ func (a *App) EnableSessionOutputLog(panelID, dir string) (string, error) {
 		a.sessionLogSettingsMu.RLock()
 		dir = a.customLogDir
 		a.sessionLogSettingsMu.RUnlock()
+	}
+	if dir != "" {
+		confined, err := a.confineLocalPath(dir)
+		if err != nil {
+			return "", err
+		}
+		dir = confined
 	}
 	name, host, protocol := a.panelLogTitle(panelID)
 	a.sessionLogSettingsMu.RLock()

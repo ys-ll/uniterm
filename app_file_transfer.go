@@ -122,6 +122,21 @@ func (a *App) SftpListLocal(sessionID, dir string) (session.FileListResult, erro
 	if err != nil {
 		return session.FileListResult{}, err
 	}
+	// The local pane's initial listing sends "". Base behavior resolves it to
+	// the session's home in ListLocal; resolve it before confinement so server
+	// mode can allow the tenant home while still rejecting empty paths in every
+	// other confined method.
+	if serverMode && strings.TrimSpace(dir) == "" {
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			return session.FileListResult{}, homeErr
+		}
+		dir = home
+	}
+	dir, err = a.confineLocalPath(dir)
+	if err != nil {
+		return session.FileListResult{}, err
+	}
 	return fs.ListLocal(dir)
 }
 
@@ -135,6 +150,10 @@ func (a *App) SftpChangeRemoteDir(sessionID, dir string) (session.FileListResult
 
 func (a *App) SftpChangeLocalDir(sessionID, dir string) (session.FileListResult, error) {
 	fs, err := a.getSftp(sessionID)
+	if err != nil {
+		return session.FileListResult{}, err
+	}
+	dir, err = a.confineLocalPath(dir)
 	if err != nil {
 		return session.FileListResult{}, err
 	}
@@ -201,11 +220,23 @@ func (a *App) SftpLocalRemove(sessionID, path string, recursive bool) error {
 	if err != nil {
 		return err
 	}
+	path, err = a.confineLocalPath(path)
+	if err != nil {
+		return err
+	}
 	return fs.LocalRemove(path, recursive)
 }
 
 func (a *App) SftpLocalRename(sessionID, oldPath, newPath string) error {
 	fs, err := a.getSftp(sessionID)
+	if err != nil {
+		return err
+	}
+	oldPath, err = a.confineLocalPath(oldPath)
+	if err != nil {
+		return err
+	}
+	newPath, err = a.confineLocalPath(newPath)
 	if err != nil {
 		return err
 	}
@@ -217,11 +248,19 @@ func (a *App) SftpLocalMkdir(sessionID, dir string) error {
 	if err != nil {
 		return err
 	}
+	dir, err = a.confineLocalPath(dir)
+	if err != nil {
+		return err
+	}
 	return fs.LocalMkdir(dir)
 }
 
 func (a *App) SftpLocalGetContent(sessionID, localPath string) (string, error) {
 	fs, err := a.getSftp(sessionID)
+	if err != nil {
+		return "", err
+	}
+	localPath, err = a.confineLocalPath(localPath)
 	if err != nil {
 		return "", err
 	}
@@ -234,6 +273,10 @@ func (a *App) SftpLocalGetContent(sessionID, localPath string) (string, error) {
 
 func (a *App) SftpLocalPutContent(sessionID, localPath, contentBase64, encoding string) error {
 	fs, err := a.getSftp(sessionID)
+	if err != nil {
+		return err
+	}
+	localPath, err = a.confineLocalPath(localPath)
 	if err != nil {
 		return err
 	}
@@ -254,6 +297,14 @@ func (a *App) SftpLocalCopy(sessionID, oldPath, newPath string) error {
 	if err != nil {
 		return err
 	}
+	oldPath, err = a.confineLocalPath(oldPath)
+	if err != nil {
+		return err
+	}
+	newPath, err = a.confineLocalPath(newPath)
+	if err != nil {
+		return err
+	}
 	return fs.LocalCopy(oldPath, newPath)
 }
 
@@ -262,11 +313,23 @@ func (a *App) SftpLocalMove(sessionID, oldPath, newPath string) error {
 	if err != nil {
 		return err
 	}
+	oldPath, err = a.confineLocalPath(oldPath)
+	if err != nil {
+		return err
+	}
+	newPath, err = a.confineLocalPath(newPath)
+	if err != nil {
+		return err
+	}
 	return fs.LocalMove(oldPath, newPath)
 }
 
 func (a *App) SftpGet(sessionID, remotePath, localPath string, recursive bool) (string, error) {
 	fs, err := a.getSftp(sessionID)
+	if err != nil {
+		return "", err
+	}
+	localPath, err = a.confineLocalPath(localPath)
 	if err != nil {
 		return "", err
 	}
@@ -298,6 +361,10 @@ func (a *App) SftpResumeTransfer(sessionID, taskID string) error {
 }
 
 func (a *App) SftpPut(sessionID, localPath, remotePath string, recursive bool) (string, error) {
+	localPath, err := a.confineLocalPath(localPath)
+	if err != nil {
+		return "", err
+	}
 	// Auto-detect directories so drag-dropping a folder works even when
 	// the caller passes recursive=false (single-file upload API).
 	if !recursive {

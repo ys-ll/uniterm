@@ -9,10 +9,12 @@ import {
   ReadFileChunkBase64,
   OpenDirectoryDialog,
   OpenMultipleFilesDialog,
+  GetSaveTempPath,
   FrontendLog,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { Events } from '@wailsio/runtime'
 import { useZmodemStore } from '../stores/zmodemStore'
+import { isWebServerMode, pickBrowserFiles, stageLocalFilesInBrowser } from './webSftpBridge'
 import { queuedSessionWrite } from './sessionWriter'
 
 const dialogLocks = new Set<string>()
@@ -30,6 +32,46 @@ const END_MODE_ATTEMPTS = 3
 const PEER_ABORT_BEFORE_OFFER = 'peer_aborted_before_offer'
 const CAN = 0x18
 const PEER_ABORT_CAN_COUNT = 5
+/**
+ * Web server mode has no native multi-file dialog. Pick files in the browser
+ * and stage them under the tenant's /api/web staging root, then hand the
+ * staged worker paths to the existing size/chunk readers (which confine every
+ * local path server-side). Desktop keeps the native dialog.
+ */
+export interface ZmodemUploadFile {
+  path: string
+  name?: string
+}
+
+export async function pickZmodemUploadPaths(): Promise<ZmodemUploadFile[]> {
+  if (await isWebServerMode()) {
+    const files = await pickBrowserFiles({ multiple: true })
+    const stagedFiles: ZmodemUploadFile[] = []
+    for (const file of files) {
+      const staged = await stageLocalFilesInBrowser(file)
+      stagedFiles.push({ path: staged.stagedPath, name: staged.fileName })
+    }
+    return stagedFiles
+  }
+  const paths: string[] = await OpenMultipleFilesDialog()
+  return paths.map((path: string) => ({ path }))
+}
+
+/**
+ * Web server mode cannot ask the browser for a server-side directory. Received
+ * ZMODEM files are staged under the tenant's /api/web staging save directory,
+ * which is an allowed confinement root; desktop keeps the directory dialog.
+ */
+export async function zmodemWebDownloadDir(): Promise<string> {
+  if (!(await isWebServerMode())) {
+    return ''
+  }
+  const staged = await GetSaveTempPath('zmodem-download.bin')
+  const sep = staged.includes('\\') ? '\\' : '/'
+  const idx = staged.lastIndexOf(sep)
+  return idx > 0 ? staged.slice(0, idx) : ''
+}
+
 const CANCEL_SEQUENCE = new Uint8Array([
   CAN, CAN, CAN, CAN, CAN, CAN, CAN, CAN, CAN, CAN,
   0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
@@ -453,10 +495,10 @@ export function startZmodemService(options: ZmodemServiceOptions) {
         if (zsession.type === 'send') {
           const store = useZmodemStore()
           const pendingPaths = store.getPendingUploadFiles(sessionId)
-          const paths: string[] = pendingPaths && pendingPaths.length > 0
-            ? pendingPaths
+          const paths: ZmodemUploadFile[] = pendingPaths && pendingPaths.length > 0
+            ? pendingPaths.map(path => ({ path }))
             : await abortable(
-              OpenMultipleFilesDialog().catch((err: unknown) => dialogCancelToEmpty<string[]>(err, [])),
+              pickZmodemUploadPaths().catch((err: unknown) => dialogCancelToEmpty<ZmodemUploadFile[]>(err, [])),
               abortCtl,
             )
           if (paths.length === 0) {
@@ -469,17 +511,26 @@ export function startZmodemService(options: ZmodemServiceOptions) {
           await finishTransfer(result.files, result.hint)
         } else {
           let saveDirPromise: Promise<string> | null = null
-          const getSaveDir = () => {
-            if (!saveDirPromise) {
-              const configuredDir = options.getDefaultDownloadDir?.() || ''
-              saveDirPromise = configuredDir.trim()
-                ? Promise.resolve(configuredDir)
-                : abortable(
-                  OpenDirectoryDialog().catch((err: unknown) => dialogCancelToEmpty<string>(err, '')),
-                  abortCtl,
-                )
+          const getSaveDir = (): Promise<string> => {
+            if (saveDirPromise) {
+              return saveDirPromise
             }
-            return saveDirPromise
+            const promise: Promise<string> = (async (): Promise<string> => {
+              const configuredDir = options.getDefaultDownloadDir?.() || ''
+              if (configuredDir.trim()) {
+                return configuredDir
+              }
+              const webDir = await zmodemWebDownloadDir()
+              if (webDir) {
+                return webDir
+              }
+              return abortable(
+                OpenDirectoryDialog().catch((err: unknown) => dialogCancelToEmpty<string>(err, '')),
+                abortCtl,
+              )
+            })()
+            saveDirPromise = promise
+            return promise
           }
           watchdog.start()
           const files = await handleReceive(
@@ -585,7 +636,7 @@ export function startZmodemService(options: ZmodemServiceOptions) {
 async function handleSend(
   zsession: import('zmodem.js/src/zmodem_browser').Session,
   sessionId: string,
-  paths: string[],
+  paths: ZmodemUploadFile[],
   drainWrites: () => Promise<void>,
   isAborted: () => boolean,
   abortCtl: TransferControl,
@@ -595,8 +646,9 @@ async function handleSend(
   const files: string[] = []
   for (let i = 0; i < paths.length; i++) {
     if (isAborted()) throw new Error('aborted')
-    const path = paths[i]
-    const filename = path.split(/[\\/]/).pop() || 'unknown'
+    const entry = paths[i]
+    const path = entry.path
+    const filename = entry.name || path.split(/[\\/]/).pop() || 'unknown'
     const transferId = `${sessionId}-up-${i}`
     const fileSize = Number(await watchdog.race<number>(FileSize(path)))
     store.addTransfer(sessionId, {

@@ -24,6 +24,14 @@ import (
 // TestConnection returns a short human-readable description on success, or a
 // readable error (never echoing the password) on failure.
 func (a *App) TestConnection(config session.ConnectionConfig) (string, error) {
+	// SQLite carries a worker-local file in Host; confine it before any probe.
+	if config.DBType == "sqlite" {
+		host, err := a.confineSQLiteHost(config.Host)
+		if err != nil {
+			return "", err
+		}
+		config.Host = host
+	}
 	// Resolve identity / proxy references for the protocols that consume them
 	// (ssh-family). No-ops when not configured.
 	mc, err := a.materializeIdentity(config)
@@ -63,6 +71,11 @@ func (a *App) TestConnection(config session.ConnectionConfig) (string, error) {
 func (a *App) testContainerConnection(config session.ConnectionConfig) (string, error) {
 	if a.connectionStore == nil {
 		return "", fmt.Errorf("connection store not initialized")
+	}
+	// A local probe runs the worker's container CLI, so it follows the same
+	// transport rule as ContainerConnect. SSH probes are unaffected.
+	if err := a.checkContainerTransport(config.ContainerTransport); err != nil {
+		return "", err
 	}
 	rt := container.Runtime(config.ContainerRuntime)
 
@@ -142,7 +155,7 @@ func (a *App) testK8sConnection(config session.ConnectionConfig) (string, error)
 	if sourceIsPath {
 		source = config.K8sConfigPath
 	}
-	raw, err := readKubeconfigSource(source, sourceIsPath)
+	raw, err := a.readKubeconfigSource(source, sourceIsPath)
 	if err != nil {
 		return "", err
 	}

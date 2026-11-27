@@ -33,11 +33,19 @@ func (a *App) RecorderStart(sessionID string, width int, height int, title strin
 // No-op (returns nil) if the path is not an open recording — the frontend
 // data path must not error when a recording was stopped concurrently.
 func (a *App) RecorderWriteData(filePath string, data string) error {
+	filePath, err := a.confineLocalPath(filePath)
+	if err != nil {
+		return err
+	}
 	return recorderInst().WriteRecordingData(filePath, data)
 }
 
 // RecorderStop flushes and closes the recording at filePath. Idempotent.
 func (a *App) RecorderStop(filePath string) error {
+	filePath, err := a.confineLocalPath(filePath)
+	if err != nil {
+		return err
+	}
 	return recorderInst().StopRecording(filePath)
 }
 
@@ -55,12 +63,20 @@ func (a *App) RecorderList() ([]recorder.RecordingInfo, error) {
 // RecorderDelete removes a cast file from disk. If the recording is open it
 // is stopped first.
 func (a *App) RecorderDelete(filePath string) error {
+	filePath, err := a.confineLocalPath(filePath)
+	if err != nil {
+		return err
+	}
 	return recorderInst().DeleteRecording(filePath)
 }
 
 // RecorderGetContent reads the entire cast file as a string. The frontend
 // player parses the header + data rows to drive xterm.js replay.
 func (a *App) RecorderGetContent(filePath string) (string, error) {
+	filePath, err := a.confineLocalPath(filePath)
+	if err != nil {
+		return "", err
+	}
 	return recorderInst().GetRecordingContent(filePath)
 }
 
