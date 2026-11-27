@@ -54,18 +54,20 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
-  async function save() {
+  async function save(): Promise<boolean> {
     try {
       await SaveConnections({
         groups: groups.value,
         connections: connections.value
       } as any)
+      return true
     } catch (e) {
       // A failed save must be loud: the entry is already in the in-memory
       // list, and a silent failure makes it look saved until the next reload
       // drops it (the server-mode wiring regression in issue #1423).
       console.error('Failed to save connections:', e)
       msg.error(backendErrorText(e) || String(e))
+      return false
     }
   }
 
@@ -75,18 +77,19 @@ export const useConnectionStore = defineStore('connection', () => {
       config.id = `conn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     }
     if (connections.value.some(c => c.id === config.id)) {
-      return
+      return true
     }
     connections.value.push(config)
-    await save()
+    return save()
   }
 
   async function update(id: string, config: Partial<ConnectionConfig>) {
     const idx = connections.value.findIndex(c => c.id === id)
     if (idx >= 0) {
       connections.value[idx] = { ...connections.value[idx], ...config }
-      await save()
+      return save()
     }
+    return false
   }
 
   async function remove(id: string) {

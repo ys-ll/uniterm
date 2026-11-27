@@ -58,19 +58,19 @@ export interface LaunchOptions {
 
 // Shared persistence bookkeeping for the save / connect / connect-only entry
 // points (mirrors the former onConnect prelude).
-export function persistConnection(config: ConnectionConfig, wasEdit = false) {
+export async function persistConnection(config: ConnectionConfig, wasEdit = false) {
   const connectionStore = useConnectionStore()
   if (wasEdit) {
-    connectionStore.update(config.id, config)
+    return connectionStore.update(config.id, config)
   } else {
-    connectionStore.add(config)
+    return connectionStore.add(config)
   }
 }
 
 export async function launchConnection(config: ConnectionConfig, opts: LaunchOptions = {}) {
   const persist = opts.persist ?? true
-  if (persist) {
-    persistConnection(config, opts.wasEdit ?? false)
+  if (persist && !(await persistConnection(config, opts.wasEdit ?? false))) {
+    return
   } else if (!config.id) {
     // Give the transient session a stable id for panel/tab wiring even
     // though it will not be persisted to the connection list.

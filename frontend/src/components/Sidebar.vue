@@ -1805,12 +1805,11 @@ function onSave(config: ConnectionConfig) {
   editConfig.value = undefined
 }
 
-function onConnectFromForm(config: ConnectionConfig) {
-  if (editConfig.value?.id) {
-    connectionStore.update(config.id, config)
-  } else {
-    connectionStore.add(config)
-  }
+async function onConnectFromForm(config: ConnectionConfig) {
+  const saved = editConfig.value?.id
+    ? await connectionStore.update(config.id, config)
+    : await connectionStore.add(config)
+  if (!saved) return
   showForm.value = false
   editConfig.value = undefined
   emit('connect', config)
