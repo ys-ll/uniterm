@@ -214,6 +214,7 @@ const SPECS: Record<string, ConnectSpec> = {
   redis: { panelType: 'database', initSession: true, title: dbTitle, onError: dbOnError },
   mongodb: { panelType: 'database', initSession: true, title: dbTitle, onError: dbOnError },
   elasticsearch: { panelType: 'database', initSession: true, title: dbTitle, onError: dbOnError },
+  opensearch: { panelType: 'database', initSession: true, title: dbTitle, onError: dbOnError },
   k8s: {
     componentSession: true,
     needsCredentials: false,

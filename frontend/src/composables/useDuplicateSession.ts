@@ -28,7 +28,7 @@ function resolveSessionType(tabType: string, config: any): string {
 // Tab kinds whose duplicates are plain tab-shaped (session already bound by
 // the shared flow). Terminal tabs are special (workspace embedding + PTY size
 // wait) and keep their own branch.
-const TAB_BACKED_DUPLICATE_TYPES = ['sftp', 'database', 'mongodb', 'redis', 'elasticsearch']
+const TAB_BACKED_DUPLICATE_TYPES = ['sftp', 'database', 'mongodb', 'redis', 'elasticsearch', 'opensearch']
 
 /**
  * Duplicate a session/tab. Shared by the tab context menu ("复制会话") and the

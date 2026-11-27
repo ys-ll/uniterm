@@ -97,7 +97,7 @@
               :session-id="getPanelSessionId(activeTab.panelId) || ''"
             />
             <ElasticsearchTabContent
-              v-else-if="activeTab.type === 'elasticsearch'"
+              v-else-if="activeTab.type === 'elasticsearch' || activeTab.type === 'opensearch'"
               :key="activeTab.id"
               :session-id="getPanelSessionId(activeTab.panelId) || ''"
             />
@@ -337,7 +337,7 @@ const activeTab = computed(() => tabStore.activeTab)
 /* Tabs whose content draws its own island panels (left tree + right pane,
    or a multi-panel workspace grid): the tab-area frame would be a second
    ring around them, so it hides. */
-const FRAMELESS_TAB_TYPES = new Set(['database', 'elasticsearch', 'mongodb', 'redis', 'k8s', 'container', 'sftp'])
+const FRAMELESS_TAB_TYPES = new Set(['database', 'elasticsearch', 'opensearch', 'mongodb', 'redis', 'k8s', 'container', 'sftp'])
 const tabAreaFrameless = computed(() => {
   const tab = activeTab.value
   if (!tab) return false
@@ -1519,7 +1519,7 @@ async function closeTab(tabId: string, opts: { skipConfirm?: boolean } = {}) {
     }
   }
   // Close redis session
-  if (tab && (tab.type === 'redis' || tab.type === 'mongodb' || tab.type === 'elasticsearch')) {
+  if (tab && (tab.type === 'redis' || tab.type === 'mongodb' || tab.type === 'elasticsearch' || tab.type === 'opensearch')) {
     const p = panelStore.getPanel(tab.panelId)
     if (p?.sessionId) {
       try { await CloseSession(p.sessionId) } catch (_) {}
@@ -1883,7 +1883,7 @@ async function reconnectDatabasePanel(panel: { id: string; sessionId: string | n
   if (!cfg) return
   // Standalone NoSQL types carry their session type in config.type; the SQL
   // family stays on the generic 'database' session.
-  const sessionType = cfg.type === 'redis' || cfg.type === 'mongodb' || cfg.type === 'elasticsearch'
+  const sessionType = cfg.type === 'redis' || cfg.type === 'mongodb' || cfg.type === 'elasticsearch' || cfg.type === 'opensearch'
     ? cfg.type
     : 'database'
   try {
@@ -1930,7 +1930,7 @@ async function reconnectSftpPanel(panel: { id: string; sessionId: string | null;
 
 // Panel kinds whose sessions are created in connectionLauncher's database
 // family spec (shared 'database' panel type + own session kind).
-const DB_FAMILY_PANEL_TYPES = ['database', 'redis', 'mongodb', 'elasticsearch']
+const DB_FAMILY_PANEL_TYPES = ['database', 'redis', 'mongodb', 'elasticsearch', 'opensearch']
 
 function onPanelReconnectEvent(e: Event) {
   const panelId = (e as CustomEvent)?.detail?.panelId

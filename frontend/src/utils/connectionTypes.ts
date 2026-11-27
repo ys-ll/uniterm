@@ -101,6 +101,7 @@ export const CONNECTION_TYPES: ConnectionTypeInfo[] = [
   { type: 'redis', label: 'Redis', icon: DatabaseZap, category: 'nosql', defaultPort: 6379, connectMenuKey: 'sidebar.connectRedis' },
   { type: 'mongodb', label: 'MongoDB', icon: Layers, category: 'nosql', defaultPort: 27017, connectMenuKey: 'sidebar.connectMongodb' },
   { type: 'elasticsearch', label: 'Elasticsearch', icon: DatabaseSearch, category: 'nosql', defaultPort: 9200, connectMenuKey: 'sidebar.connectElasticsearch' },
+  { type: 'opensearch', label: 'OpenSearch', icon: DatabaseSearch, category: 'nosql', defaultPort: 9200, connectMenuKey: 'sidebar.connectElasticsearch' },
   // Containers
   { type: 'k8s', label: 'Kubernetes', icon: ShipWheel, category: 'container', connectMenuKey: 'sidebar.connectK8s' },
   { type: 'container', containerRuntime: 'docker', label: 'Docker', icon: Boxes, category: 'container', connectMenuKey: 'sidebar.connectContainer' },

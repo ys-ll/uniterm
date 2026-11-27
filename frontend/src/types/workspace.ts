@@ -100,7 +100,7 @@ export interface VNCTab {
 }
 
 export interface DBTab {
-  type: 'database' | 'mongodb' | 'redis' | 'elasticsearch'
+  type: 'database' | 'mongodb' | 'redis' | 'elasticsearch' | 'opensearch'
   id: string
   panelId: string
   name: string

@@ -28,7 +28,7 @@ export interface GroupedConnections {
 // Applied on load and on add so imports/synced stores are covered too.
 export function migrateLegacyDatabaseTypes(connections: ConnectionConfig[]): ConnectionConfig[] {
   for (const c of connections) {
-    if (c.type === 'database' && (c.dbType === 'redis' || c.dbType === 'mongodb' || c.dbType === 'elasticsearch')) {
+    if (c.type === 'database' && (c.dbType === 'redis' || c.dbType === 'mongodb' || c.dbType === 'elasticsearch' || c.dbType === 'opensearch')) {
       c.type = c.dbType
       delete c.dbType
     }

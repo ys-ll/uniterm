@@ -62,6 +62,9 @@ func ProbeConnection(config ConnectionConfig) (string, error) {
 		return probeMongo(config)
 	case "elasticsearch":
 		return probeElasticsearch(config)
+	case "opensearch":
+		// OpenSearch shares the Elasticsearch REST API surface.
+		return probeElasticsearch(config)
 	case "database":
 		// redis/mongodb/elasticsearch are stored as type "database" with a
 		// dbType discriminator (mirroring the SQL family). Route them to their
