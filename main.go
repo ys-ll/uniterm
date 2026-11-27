@@ -97,6 +97,17 @@ func sweepLegacyWebview2Dirs() {
 // server, which bypasses this middleware entirely.
 func indexNoCache(initialTheme string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Dev builds: "/" must fall through to the asset server's dev proxy
+		// so the webview loads the vite dev server's live index.html. Serving
+		// the embedded build-time index here would pin the hashed bundles of
+		// the dev build — and every asset request then resolves against vite,
+		// which lacks those files and SPA-falls-back to HTML (strict MIME
+		// errors, black screen). The theme injection below only matters for
+		// the embedded document anyway; the dev index reads its fallbacks.
+		if devBuild {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("Pragma", "no-cache")
