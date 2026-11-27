@@ -12,6 +12,7 @@ import (
 
 	mssql "github.com/microsoft/go-mssqldb"
 	"github.com/microsoft/go-mssqldb/msdsn"
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/go-sql-driver/mysql"
 	pgx "github.com/jackc/pgx/v5"
 	pgxstdlib "github.com/jackc/pgx/v5/stdlib"
@@ -101,6 +102,8 @@ func NewDBWithDial(dbType, dsn string, dialFunc DialContextFunc) (*sql.DB, error
 		db, err = openSQLServerWithDial(dsn, dialFunc)
 	case "oracle":
 		db, err = openOracleWithDial(dsn, dialFunc)
+	case "clickhouse":
+		db, err = openClickHouseWithDial(dsn, dialFunc)
 	default:
 		db, err = openDB(dbType, dsn)
 	}
@@ -188,6 +191,17 @@ func openOracleWithDial(dsn string, dialFunc DialContextFunc) (*sql.DB, error) {
 	}
 	oc.Dialer(dialFunc)
 	return sql.OpenDB(conn), nil
+}
+
+func openClickHouseWithDial(dsn string, dialFunc DialContextFunc) (*sql.DB, error) {
+	cfg, err := clickhouse.ParseDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open clickhouse: %w", err)
+	}
+	cfg.DialContext = func(ctx context.Context, addr string) (net.Conn, error) {
+		return dialFunc(ctx, "tcp", addr)
+	}
+	return clickhouse.OpenDB(cfg), nil
 }
 
 // dbCtx returns the execution context for queries on db. The dm driver

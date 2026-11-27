@@ -38,6 +38,13 @@ var dbeaverConnType = map[string]connTarget{
 	"dm":            {Type: "database", DBType: "dm", Port: 5236},
 	// KingbaseES speaks the standard PG wire protocol.
 	"kingbase":      {Type: "database", DBType: "kingbase", Port: 54321},
+	"opengauss":     {Type: "database", DBType: "opengauss", Port: 5432},
+	"cockroach":     {Type: "database", DBType: "cockroachdb", Port: 26257},
+	// The native wire protocol listens on 9000; a DBeaver-side port of 8123
+	// (its HTTP interface) is imported as-is and needs adjusting by hand.
+	"clickhouse":    {Type: "database", DBType: "clickhouse", Port: 9000},
+	// OceanBase's MySQL mode; the Oracle mode is not supported.
+	"oceanbase":     {Type: "database", DBType: "oceanbase", Port: 2881},
 	"sqlite":        {Type: "database", DBType: "sqlite"},
 	"redis":         {Type: "redis", Port: 6379},
 	"mongodb":       {Type: "mongodb", Port: 27017},

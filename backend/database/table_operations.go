@@ -84,6 +84,8 @@ func textCast(driver, quotedColumn string) string {
 	switch driver {
 	case "mysql":
 		return "CAST(" + quotedColumn + " AS CHAR)"
+	case "clickhouse":
+		return "CAST(" + quotedColumn + " AS String)"
 	case "sqlserver":
 		return "CAST(" + quotedColumn + " AS NVARCHAR(MAX))"
 	case "oracle":
@@ -95,10 +97,26 @@ func textCast(driver, quotedColumn string) string {
 	}
 }
 
-func likeLiteral(s string) string {
-	s = strings.ReplaceAll(s, "!", "!!")
-	s = strings.ReplaceAll(s, "%", "!%")
-	return strings.ReplaceAll(s, "_", "!_")
+// likeEscapeChar returns the LIKE escape character for a driver. ClickHouse
+// supports no ESCAPE clause and always treats a backslash as the escape
+// character.
+func likeEscapeChar(driver string) string {
+	if driver == "clickhouse" {
+		return "\\"
+	}
+	return "!"
+}
+
+// hasEscapeClause reports whether the driver accepts an explicit ESCAPE
+// suffix on LIKE.
+func hasEscapeClause(driver string) bool {
+	return driver != "clickhouse"
+}
+
+func likeLiteral(s, esc string) string {
+	s = strings.ReplaceAll(s, esc, esc+esc)
+	s = strings.ReplaceAll(s, "%", esc+"%")
+	return strings.ReplaceAll(s, "_", esc+"_")
 }
 
 func buildBrowseSQL(p Provider, tableName string, cols map[string]bool, opts BrowseOptions) (string, []any, error) {
@@ -121,14 +139,19 @@ func buildBrowseSQL(p Provider, tableName string, cols map[string]bool, opts Bro
 			args = append(args, f.Value)
 			predicates = append(predicates, col+" = "+placeholder(p.DriverName(), len(args)))
 		case "contains", "startsWith":
-			value := likeLiteral(f.Value)
+			esc := likeEscapeChar(p.DriverName())
+			value := likeLiteral(f.Value, esc)
 			if f.Op == "contains" {
 				value = "%" + value + "%"
 			} else {
 				value += "%"
 			}
 			args = append(args, value)
-			predicates = append(predicates, "LOWER("+textCast(p.DriverName(), col)+") LIKE LOWER("+placeholder(p.DriverName(), len(args))+") ESCAPE '!'")
+			escape := ""
+			if hasEscapeClause(p.DriverName()) {
+				escape = " ESCAPE '!'"
+			}
+			predicates = append(predicates, "LOWER("+textCast(p.DriverName(), col)+") LIKE LOWER("+placeholder(p.DriverName(), len(args))+")"+escape)
 		default:
 			return "", nil, fmt.Errorf("unsupported filter operator %q", f.Op)
 		}
