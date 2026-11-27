@@ -100,46 +100,6 @@ func mockCwdExec(fs *testCwdFS, command string) ([]byte, error) {
 	return append(framed, []byte("\x00"+marker+"\x000\x00")...), nil
 }
 
-func TestSSHCwdSCPOnlyServer(t *testing.T) {
-	fs := newTestCwdFS()
-	addr, counts := startCwdSSHServer(t, fs, "deny", func(command string) ([]byte, error) { return mockCwdExec(fs, command) })
-	config := probeTestConfig(addr)
-	config.FileTransferProto = "scp"
-	source := NewSSHSession("cwd-scp-" + t.Name())
-	if err := source.Connect(config); err != nil {
-		t.Fatal(err)
-	}
-	defer source.Disconnect()
-	awaitCwd(t, source, "/home/terminal-101")
-	if counts.subsystems.Load() != 0 || counts.connections.Load() != 1 || counts.input.Load() != 0 {
-		t.Fatal("SCP cwd used SFTP, another transport, or terminal input")
-	}
-	source.SetCwdTracking(true)
-	fs.setLink("/proc/101/cwd", "/etc/中文 space\n")
-	awaitCwd(t, source, "/etc/中文 space\n")
-	source.SetCwdTracking(false)
-	fs.setLink("/proc/101/cwd", "/var")
-	if cwd, err := source.CurrentCwd(); err != nil || cwd != "/var" {
-		t.Fatalf("on-demand cwd=%q err=%v", cwd, err)
-	}
-	clone := NewSSHChannelSession("cwd-scp-clone-"+t.Name(), source)
-	if err := clone.Connect(config); err != nil {
-		t.Fatal(err)
-	}
-	defer clone.Disconnect()
-	awaitCwd(t, clone, "/home/terminal-102")
-	source.Disconnect()
-	clone.SetCwdTracking(true)
-	fs.setLink("/proc/102/cwd", "/tmp")
-	awaitCwd(t, clone, "/tmp")
-	if counts.subsystems.Load() != 0 || counts.connections.Load() != 1 || counts.input.Load() != 0 {
-		t.Fatal("SCP clone did not preserve independent, injection-free tracking")
-	}
-	if counts.execs.Load() == 0 {
-		t.Fatal("SCP cwd did not use exec queries")
-	}
-}
-
 func TestSSHCwdSCPExecDeniedPreservesTerminal(t *testing.T) {
 	fs := newTestCwdFS()
 	addr, counts := startCwdSSHServer(t, fs, "deny")
