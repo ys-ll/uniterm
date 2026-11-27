@@ -432,6 +432,9 @@ func TestShellHistoryPathFollowsShell(t *testing.T) {
 	t.Setenv("HISTFILE", "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// os.UserHomeDir reads USERPROFILE on Windows; set both so the override
+	// works on every platform.
+	t.Setenv("USERPROFILE", home)
 
 	t.Setenv("SHELL", "/bin/zsh")
 	if got, want := shellHistoryPath(), filepath.Join(home, ".zsh_history"); got != want {

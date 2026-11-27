@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/mcp"
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/store"
@@ -62,6 +63,9 @@ func TestMCPBackgroundConnectStartsWithoutTerminalView(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	// The app log resolves under this test's HOME and is kept open by the
+	// logger; close it before TempDir removal (Windows locks open files).
+	t.Cleanup(log.Close)
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)

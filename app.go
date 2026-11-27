@@ -987,7 +987,9 @@ func (a *App) shutdown() {
 	// "window goes black, then exits" transition. Hiding the window makes that
 	// teardown invisible, so the close feels immediate. Hide() is thread-safe and
 	// dispatches to the UI thread like the rest of shutdown().
-	a.window.Hide()
+	if a.window != nil {
+		a.window.Hide()
+	}
 
 	// Release the WebView2 COM controller while still on the UI thread and the
 	// message loop is alive. This gracefully closes the WebView2 control and
@@ -1033,6 +1035,9 @@ func (a *App) shutdown() {
 	if a.terminalHistoryStore != nil {
 		_ = a.terminalHistoryStore.Close()
 	}
+	// Release the log handle so external cleanup (and tests removing their
+	// temp data dir) can delete the file on production-data cleanup paths.
+	log.Close()
 	os.RemoveAll(a.webviewDataPath)
 }
 
