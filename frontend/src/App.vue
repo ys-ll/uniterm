@@ -251,6 +251,7 @@ import { useSessionStore } from './stores/sessionStore'
 import { useAIStore } from './stores/aiStore'
 import { useCompanionStore } from './stores/companionStore'
 import { useSettingsStore } from './stores/settingsStore'
+import { deferToIdle } from './utils/deferToIdle'
 import { useQuickCommandStore } from './stores/quickCommandStore'
 import { useNotesStore } from './stores/notesStore'
 import { useSkillStore } from './stores/skillStore'
@@ -952,7 +953,10 @@ function onPlatformSystemShortcut(e: KeyboardEvent) {
 onMounted(async () => {
   connectionStore.load()
   aiStore.init()
-  updateCheck.initAutoCheck()
+  // Update check does an IPC roundtrip (GetAppInfo/isWebServerMode) and
+  // schedules network requests — nothing on screen depends on it, so keep it
+  // off the startup critical path.
+  deferToIdle(() => updateCheck.initAutoCheck())
 
   // Load local-only state (sidebar visibility, background image, etc.)
   await localStateStore.init()
@@ -993,10 +997,6 @@ onMounted(async () => {
     }
   )
   installTabSnapshotSaver()
-  // Pre-load noVNC so VNC tab switches don't pay the dynamic import cost.
-  import('@novnc/novnc').then((m: any) => {
-    ;(window as any).__novnc_RFB = m.default || m
-  }).catch(() => {})
   window.addEventListener('input:contextmenu', onInputContextMenu)
   // Capture phase: xterm v6's viewport stopPropagation()s wheel events it
   // scrolls, but bails on defaultPrevented — so we must preempt it.

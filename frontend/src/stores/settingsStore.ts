@@ -7,6 +7,7 @@ import { Events } from '@wailsio/runtime'
 import { setLocale } from '../i18n'
 import { useAIConfigStore } from './aiConfigStore'
 import { useLocalStateStore } from './localStateStore'
+import { deferToIdle } from '../utils/deferToIdle'
 
 // Module-level un-subscriber for the cross-window store:settings:changed listener.
 // Tracked at module scope so re-imports under HMR can detach the previous
@@ -157,11 +158,17 @@ export const useSettingsStore = defineStore('settings', () => {
     }
     lastSavedAiJson = JSON.stringify(settings.value.ai)
     applyUiFontSize()
-    try {
-      availableShells.value = await GetAvailableShells()
-    } catch {
-      availableShells.value = []
-    }
+    // The shell probe enumerates installed shells (slow IPC: process
+    // spawning on the Go side) and is only needed by the settings UI and the
+    // "+" button — keep it off the startup critical path so first paint and
+    // the remaining init IPCs are not delayed behind it. Consumers read the
+    // reactive availableShells and already handle the empty (not-yet-loaded)
+    // state.
+    deferToIdle(() => {
+      GetAvailableShells()
+        .then(shells => { availableShells.value = shells })
+        .catch(() => { availableShells.value = [] })
+    })
     // Push the persisted log directory override to the backend so
     // logs enabled before the user opens the settings tab already
     // respect it. Fire-and-forget; the backend has a safe empty fallback.
