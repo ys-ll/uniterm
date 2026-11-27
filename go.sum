@@ -273,8 +273,8 @@ github.com/ys-ll/simples3 v0.0.0-20260930081831-3357c14e91bd h1:mQdfvq8qbgcTt6e3
 github.com/ys-ll/simples3 v0.0.0-20260930081831-3357c14e91bd/go.mod h1:c2xW30bukipkBlWNnXG1wDjq3gykQ6ww2AB/9NHMLMY=
 github.com/ys-ll/utls v1.8.3-0.20261118030304-dc4119e680f1 h1:Q2RZPdf4dxuxKCfx2QltGBadTJ5/Mv13CeiSHsRkp/A=
 github.com/ys-ll/utls v1.8.3-0.20261118030304-dc4119e680f1/go.mod h1:jkSOEkLqn+S/jtpEHPOsVv/4V4EVnelwbMQl4vCWXAM=
-github.com/ys-ll/wails/v3 v3.0.0-20261112023043-1143f7a41423 h1:j9ePe/q6HERNaqCRY+bxoMmbTA4EKS/THNZ4o2ebxgA=
-github.com/ys-ll/wails/v3 v3.0.0-20261112023043-1143f7a41423/go.mod h1:tzDY3W1jzN3ksSqfGalTt7K3PwnGfIqtl+IgIXlXz0I=
+github.com/ys-ll/wails/v3 v3.0.0-20261127025700-34c7a5e9a4dd h1:OniGqsB0ABaXMO2YfyALZBHHiHoD7+ZeUKRNT3krLws=
+github.com/ys-ll/wails/v3 v3.0.0-20261127025700-34c7a5e9a4dd/go.mod h1:tzDY3W1jzN3ksSqfGalTt7K3PwnGfIqtl+IgIXlXz0I=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=
 github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=

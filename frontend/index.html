@@ -15,17 +15,23 @@
       // Apply the persisted app theme before first paint (issue #1135):
       // without this the first frame renders the dark no-[data-theme]
       // default and flashes black on light themes, because applyTheme() only
-      // runs after the settings IPC and the slow shell probe. Mirrors
-      // resolveInitialTheme in src/utils/initialTheme.ts — keep in sync.
-      var cachedTheme = null
-      try {
-        cachedTheme = localStorage.getItem('appTheme')
-      } catch {
-        // storage unavailable
+      // runs after the settings IPC and the slow shell probe. The Go side
+      // injects window.__initialTheme into index.html (see indexNoCache in
+      // main.go) from the same persisted settings that colour the native
+      // window frame — that is the primary source. Mirrors resolveInitialTheme
+      // in src/utils/initialTheme.ts — keep in sync.
+      var theme = window.__initialTheme
+      if (theme !== 'dark' && theme !== 'light' && theme !== 'deep-blue') {
+        var cachedTheme = null
+        try {
+          cachedTheme = localStorage.getItem('appTheme')
+        } catch {
+          // storage unavailable
+        }
+        theme = cachedTheme === 'dark' || cachedTheme === 'light' || cachedTheme === 'deep-blue'
+          ? cachedTheme
+          : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
       }
-      var theme = cachedTheme === 'dark' || cachedTheme === 'light' || cachedTheme === 'deep-blue'
-        ? cachedTheme
-        : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
       document.documentElement.dataset.theme = theme
       // Apply the persisted UI font baseline before first paint (falls back
       // to the platform default); the settings store re-applies the loaded
