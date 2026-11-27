@@ -2027,6 +2027,10 @@ func (a *App) ImportSkillFromDir(srcDir string) (string, error) {
 	if a.skillsStore == nil {
 		return "", fmt.Errorf("skills store not initialized")
 	}
+	srcDir, err := a.confineLocalPath(srcDir)
+	if err != nil {
+		return "", err
+	}
 	name, err := a.skillsStore.ImportFromDir(srcDir)
 	if err == nil {
 		a.triggerAutoSync()
@@ -2037,6 +2041,10 @@ func (a *App) ImportSkillFromDir(srcDir string) (string, error) {
 func (a *App) ImportSkillFromZip(zipPath string) (string, error) {
 	if a.skillsStore == nil {
 		return "", fmt.Errorf("skills store not initialized")
+	}
+	zipPath, err := a.confineLocalPath(zipPath)
+	if err != nil {
+		return "", err
 	}
 	name, err := a.skillsStore.ImportFromZip(zipPath)
 	if err == nil {
@@ -2504,6 +2512,10 @@ func (a *App) ReadLocalAttachmentFile(path string) (LocalAttachmentFile, error) 
 	if path == "" {
 		return LocalAttachmentFile{}, errAttachmentInvalid
 	}
+	path, err := a.confineLocalPath(path)
+	if err != nil {
+		return LocalAttachmentFile{}, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return LocalAttachmentFile{}, err
@@ -2550,6 +2562,10 @@ func (a *App) ensureMCPClient() *mcpclient.Manager {
 // StartMCPClient loads persisted external servers and connects the enabled
 // ones. Called after stores are ready (alongside StartMCP).
 func (a *App) StartMCPClient() {
+	if !serverMCPClientProcessEnabled() {
+		log.Writef("[serverpolicy] MCP client auto-connect skipped: mcpClientProcess is denied")
+		return
+	}
 	if a.dataDir == "" {
 		return
 	}
@@ -2571,6 +2587,9 @@ func (a *App) StartMCPClient() {
 // the next ensureMCPClient picks the new config up from disk.
 func (a *App) reloadMCPClientsAfterSync() {
 	a.emit("store:mcpClients:changed", nil)
+	if !serverMCPClientProcessEnabled() {
+		return
+	}
 	if a.mcpClient == nil {
 		return
 	}
@@ -2637,6 +2656,11 @@ func (a *App) saveMCPClient(cfg store.MCPClientConfig, originalName string) erro
 		return err
 	}
 	a.triggerAutoSync()
+	if !serverMCPClientProcessEnabled() {
+		// Config management stays allowed; only the process/dial side is
+		// gated, so a saved stdio server must not start here.
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	mgr.Reload(ctx)
@@ -2660,6 +2684,9 @@ func (a *App) RemoveMCPClient(name string) error {
 		return err
 	}
 	a.triggerAutoSync()
+	if !serverMCPClientProcessEnabled() {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	mgr.Reload(ctx)
@@ -2669,6 +2696,9 @@ func (a *App) RemoveMCPClient(name string) error {
 // TestMCPClient dials a candidate config once, lists its tools, and closes —
 // used by the settings "test" button without persisting first.
 func (a *App) TestMCPClient(cfg store.MCPClientConfig) ([]mcpclient.DiscoveredTool, error) {
+	if !serverMCPClientProcessEnabled() {
+		return nil, fmt.Errorf("blocked by server policy: mcpClientProcess is disabled (set mcpClientProcess:true and iAcceptRisk:true)")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	return a.ensureMCPClient().TestConnection(ctx, cfg)
@@ -2685,6 +2715,9 @@ func (a *App) ListMCPTools() ([]mcpclient.DiscoveredTool, error) {
 
 // CallMCPTool invokes an external tool by its qualified name and returns text.
 func (a *App) CallMCPTool(qualified string, args map[string]any) (string, error) {
+	if !serverMCPClientProcessEnabled() {
+		return "", fmt.Errorf("blocked by server policy: mcpClientProcess is disabled (set mcpClientProcess:true and iAcceptRisk:true)")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	return a.ensureMCPClient().CallTool(ctx, qualified, args)

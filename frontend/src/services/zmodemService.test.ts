@@ -5,6 +5,10 @@ const {
   mockFileSize,
   mockOpenDirectoryDialog,
   mockOpenMultipleFilesDialog,
+  mockGetSaveTempPath,
+  mockIsWebServerMode,
+  mockPickBrowserFiles,
+  mockStageLocalFilesInBrowser,
   mockSessionEndZmodem,
   mockSessionEndZmodemWithTrailing,
   mockSessionStartZmodem,
@@ -25,6 +29,10 @@ const {
     mockFileSize: vi.fn().mockResolvedValue(3),
     mockOpenDirectoryDialog: vi.fn().mockResolvedValue('C:\\Downloads'),
     mockOpenMultipleFilesDialog: vi.fn().mockResolvedValue([]),
+    mockGetSaveTempPath: vi.fn().mockResolvedValue('/home/u/.cache/uniterm-web-staging/save/1_z.bin'),
+    mockIsWebServerMode: vi.fn().mockResolvedValue(false),
+    mockPickBrowserFiles: vi.fn().mockResolvedValue([]),
+    mockStageLocalFilesInBrowser: vi.fn().mockResolvedValue({ status: 'ok', stagedPath: '/home/u/.cache/uniterm-web-staging/staged.bin', fileName: 'staged.bin', size: 3 }),
     mockSessionEndZmodem: vi.fn().mockResolvedValue(undefined),
     mockSessionEndZmodemWithTrailing: vi.fn().mockResolvedValue(undefined),
     mockSessionStartZmodem: vi.fn().mockResolvedValue(undefined),
@@ -65,6 +73,7 @@ vi.mock('../../bindings/github.com/ys-ll/uniterm/app', () => ({
   FileSize: mockFileSize,
   OpenDirectoryDialog: mockOpenDirectoryDialog,
   OpenMultipleFilesDialog: mockOpenMultipleFilesDialog,
+  GetSaveTempPath: mockGetSaveTempPath,
   ReadFileChunkBase64: mockReadFileChunkBase64,
   SessionEndZmodem: mockSessionEndZmodem,
   SessionEndZmodemWithTrailing: mockSessionEndZmodemWithTrailing,
@@ -85,7 +94,13 @@ vi.mock('../stores/zmodemStore', () => ({
   useZmodemStore: vi.fn(() => mockStore),
 }))
 
-import { startZmodemService } from './zmodemService'
+vi.mock('./webSftpBridge', () => ({
+  isWebServerMode: mockIsWebServerMode,
+  pickBrowserFiles: mockPickBrowserFiles,
+  stageLocalFilesInBrowser: mockStageLocalFilesInBrowser,
+}))
+
+import { pickZmodemUploadPaths, startZmodemService, zmodemWebDownloadDir } from './zmodemService'
 
 const BATCH = 64 * 1024
 
@@ -164,6 +179,10 @@ describe('startZmodemService', () => {
     runtimeState.consumeError = null
     mockOpenDirectoryDialog.mockResolvedValue('C:\\Downloads')
     mockOpenMultipleFilesDialog.mockResolvedValue([])
+    mockGetSaveTempPath.mockResolvedValue('/home/u/.cache/uniterm-web-staging/save/1_z.bin')
+    mockIsWebServerMode.mockResolvedValue(false)
+    mockPickBrowserFiles.mockResolvedValue([])
+    mockStageLocalFilesInBrowser.mockResolvedValue({ status: 'ok', stagedPath: '/home/u/.cache/uniterm-web-staging/staged.bin' })
     mockAppendFileBase64.mockResolvedValue(undefined)
     mockSessionWriteBinary.mockResolvedValue(undefined)
     mockSessionStartZmodem.mockResolvedValue(undefined)
@@ -992,5 +1011,63 @@ describe('startZmodemService', () => {
 
     expect(onError).toHaveBeenCalledWith('Unsafe ZMODEM filename: "..\\\\evil.txt"')
     expect(mockAppendFileBase64).not.toHaveBeenCalled()
+  })
+})
+
+
+describe('zmodem web server mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    sentryInstances.length = 0
+    runtimeState.binaryHandler = null
+    runtimeState.consumeError = null
+    mockIsWebServerMode.mockResolvedValue(true)
+    mockPickBrowserFiles.mockResolvedValue([])
+    mockStageLocalFilesInBrowser.mockResolvedValue({ status: 'ok', stagedPath: '/home/u/.cache/uniterm-web-staging/staged.bin', fileName: 'staged.bin', size: 3 })
+    mockGetSaveTempPath.mockResolvedValue('/home/u/.cache/uniterm-web-staging/save/1_z.bin')
+    mockFileSize.mockResolvedValue(3)
+    mockReadFileChunkBase64.mockResolvedValue('AQID')
+    mockOpenMultipleFilesDialog.mockResolvedValue([])
+    mockOpenDirectoryDialog.mockResolvedValue('C:\\Downloads')
+    mockStore.getPendingUploadFiles.mockReturnValue(undefined)
+  })
+
+  it('stages browser-picked files instead of opening the native multi-file dialog', async () => {
+    mockPickBrowserFiles.mockResolvedValue([{ name: 'a.txt' } as unknown as File])
+    mockStageLocalFilesInBrowser.mockResolvedValue({ status: 'ok', stagedPath: '/home/u/.cache/uniterm-web-staging/keep/a.txt', fileName: 'a.txt', size: 3 })
+
+    const paths = await pickZmodemUploadPaths()
+    expect(paths).toEqual([{ path: '/home/u/.cache/uniterm-web-staging/keep/a.txt', name: 'a.txt' }])
+    expect(mockOpenMultipleFilesDialog).not.toHaveBeenCalled()
+  })
+
+  it('uses the staging save directory instead of the native directory dialog', async () => {
+    const dir = await zmodemWebDownloadDir()
+    expect(dir).toBe('/home/u/.cache/uniterm-web-staging/save')
+    expect(mockOpenDirectoryDialog).not.toHaveBeenCalled()
+  })
+
+  it('routes a detected rz upload through the staged path in web mode', async () => {
+    vi.useFakeTimers()
+    const u = makeUpload()
+    mockPickBrowserFiles.mockResolvedValue([{ name: 'a.txt' } as unknown as File])
+    mockStageLocalFilesInBrowser.mockResolvedValue({ status: 'ok', stagedPath: '/home/u/.cache/uniterm-web-staging/a.txt', fileName: 'a.txt', size: 3 })
+
+    startZmodemService({ sessionId: 's-web' })
+    sentryInstances[0].on_detect({ confirm: () => u.zsession })
+    await sleepTicks()
+    await vi.advanceTimersByTimeAsync(1500)
+    vi.useRealTimers()
+
+    expect(mockOpenMultipleFilesDialog).not.toHaveBeenCalled()
+    expect(mockFileSize).toHaveBeenCalledWith('/home/u/.cache/uniterm-web-staging/a.txt')
+  })
+
+  it('keeps the native dialog on desktop', async () => {
+    mockIsWebServerMode.mockResolvedValue(false)
+    mockOpenMultipleFilesDialog.mockResolvedValue(['C:\\a.txt'])
+    const paths = await pickZmodemUploadPaths()
+    expect(paths).toEqual([{ path: 'C:\\a.txt' }])
+    expect(mockPickBrowserFiles).not.toHaveBeenCalled()
   })
 })

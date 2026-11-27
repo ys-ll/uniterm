@@ -788,7 +788,7 @@
                 clearable
               >
                 <template #append>
-                  <el-tooltip :content="t('settings.browse')" placement="top">
+                  <el-tooltip v-if="!webServerMode" :content="t('settings.browse')" placement="top">
                     <el-button :aria-label="t('settings.browse')" @click="pickZmodemDownloadDir">
                       <el-icon><FolderOpen :size="'1rem'" /></el-icon>
                     </el-button>
@@ -825,7 +825,7 @@
                 clearable
               >
                 <template #append>
-                  <el-tooltip :content="t('settings.browse')" placement="top">
+                  <el-tooltip v-if="!webServerMode" :content="t('settings.browse')" placement="top">
                     <el-button :aria-label="t('settings.browse')" @click="pickLogDir">
                       <el-icon><FolderOpen :size="'1rem'" /></el-icon>
                     </el-button>
@@ -2538,6 +2538,12 @@ const defaultLogDir = ref('')
 const defaultWordSeparator = '\\ :;~`!@#$%^&*()=+|[]{}\'",<>?'
 
 async function pickLogDir() {
+  // Web server mode cannot return a server-side directory from the browser;
+  // the path field stays editable but the native picker is hidden.
+  if (webServerMode.value) {
+    msg.info(t('web.dirPickerUnavailable'))
+    return
+  }
   try {
     const chosen = await OpenDirectoryDialog()
     if (chosen) {
@@ -2550,6 +2556,10 @@ async function pickLogDir() {
 }
 
 async function pickZmodemDownloadDir() {
+  if (webServerMode.value) {
+    msg.info(t('web.dirPickerUnavailable'))
+    return
+  }
   try {
     const chosen = await OpenDirectoryDialog()
     if (chosen) {

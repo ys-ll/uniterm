@@ -1132,6 +1132,10 @@ func (a *App) ExportConnections(destPath, password string) error {
 	if a.connectionStore == nil {
 		return fmt.Errorf("connection store not initialized")
 	}
+	destPath, err := a.confineLocalPath(destPath)
+	if err != nil {
+		return err
+	}
 	data, err := a.connectionStore.Load()
 	if err != nil {
 		return err
@@ -1182,6 +1186,10 @@ func (a *App) ExportConnectionsData(password string) (string, error) {
 // ParseImportFile parses a third-party or own-format file into an ImportResult
 // with regenerated ids. It does not write to the store.
 func (a *App) ParseImportFile(format, srcPath, password string) (*importer.ImportResult, error) {
+	srcPath, err := a.confineLocalPath(srcPath)
+	if err != nil {
+		return nil, err
+	}
 	return importer.Parse(format, srcPath, importer.ParseOptions{Password: password})
 }
 
@@ -1639,6 +1647,10 @@ var allowedBgExt = map[string]string{
 // directory as a single fixed file (overwriting any previous one) and
 // returns the stored file name. It does NOT touch local_state.json.
 func (a *App) SetBackgroundImage(srcPath string) (string, error) {
+	srcPath, err := a.confineLocalPath(srcPath)
+	if err != nil {
+		return "", err
+	}
 	ext := strings.ToLower(filepath.Ext(srcPath))
 	if _, ok := allowedBgExt[ext]; !ok {
 		return "", fmt.Errorf("unsupported image type: %s", ext)
@@ -2433,6 +2445,20 @@ func (a *App) GetSaveTempPath(fileName string) (string, error) {
 	name := filepath.Base(strings.ReplaceAll(fileName, "\\", "/"))
 	if name == "" || name == "." || name == ".." {
 		name = "export.bin"
+	}
+	if serverMode {
+		// Server mode: the only writable staging area a tenant gets is the
+		// /api/web staging root, so exports/zmodem downloads land there and are
+		// confined by the same roots as every other tenant path.
+		staging, err := serverStagingDir()
+		if err != nil {
+			return "", err
+		}
+		dir := filepath.Join(staging, "save")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return "", err
+		}
+		return filepath.Join(dir, fmt.Sprintf("%d_%s", time.Now().UnixNano(), name)), nil
 	}
 	dir := filepath.Join(os.TempDir(), "save")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -3484,6 +3510,14 @@ func (a *App) autotestUpdate() {
 // TestConnection returns a short human-readable description on success, or a
 // readable error (never echoing the password) on failure.
 func (a *App) TestConnection(config session.ConnectionConfig) (string, error) {
+	// SQLite carries a worker-local file in Host; confine it before any probe.
+	if config.DBType == "sqlite" {
+		host, err := a.confineSQLiteHost(config.Host)
+		if err != nil {
+			return "", err
+		}
+		config.Host = host
+	}
 	// Resolve identity / proxy references for the protocols that consume them
 	// (ssh-family). No-ops when not configured.
 	mc, err := a.materializeIdentity(config)
@@ -3523,6 +3557,11 @@ func (a *App) TestConnection(config session.ConnectionConfig) (string, error) {
 func (a *App) testContainerConnection(config session.ConnectionConfig) (string, error) {
 	if a.connectionStore == nil {
 		return "", fmt.Errorf("connection store not initialized")
+	}
+	// A local probe runs the worker's container CLI, so it follows the same
+	// transport rule as ContainerConnect. SSH probes are unaffected.
+	if err := a.checkContainerTransport(config.ContainerTransport); err != nil {
+		return "", err
 	}
 	rt := container.Runtime(config.ContainerRuntime)
 
@@ -3602,7 +3641,7 @@ func (a *App) testK8sConnection(config session.ConnectionConfig) (string, error)
 	if sourceIsPath {
 		source = config.K8sConfigPath
 	}
-	raw, err := readKubeconfigSource(source, sourceIsPath)
+	raw, err := a.readKubeconfigSource(source, sourceIsPath)
 	if err != nil {
 		return "", err
 	}

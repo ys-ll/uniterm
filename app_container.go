@@ -21,7 +21,7 @@ type K8sContextInfo = k8s.ContextInfo
 // K8sListContexts 解析给定 kubeconfig 内容并返回 context 列表。
 // source 为文件路径或 YAML 内联字符串；根据 sourceIsPath 区分。
 func (a *App) K8sListContexts(source string, sourceIsPath bool) ([]K8sContextInfo, error) {
-	raw, err := readKubeconfigSource(source, sourceIsPath)
+	raw, err := a.readKubeconfigSource(source, sourceIsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (a *App) K8sListContexts(source string, sourceIsPath bool) ([]K8sContextInf
 // 无隧道时 proxyID 非空则把到 apiserver 的拨号路由经 SOCKS5/HTTP 代理。
 func (a *App) K8sConnect(source string, sourceIsPath bool, contextName string,
 	proxyID, tunnelSSHConnID, tunnelSSHUser, tunnelSSHPassword string) (string, error) {
-	raw, err := readKubeconfigSource(source, sourceIsPath)
+	raw, err := a.readKubeconfigSource(source, sourceIsPath)
 	if err != nil {
 		return "", err
 	}
@@ -175,7 +175,7 @@ func (a *App) K8sExecSession(connID, namespace, pod, container string) (*session
 	return &session.SessionInfo{ID: id, Type: "container-exec", Title: pod, Status: session.StatusConnected}, nil
 }
 
-func readKubeconfigSource(source string, sourceIsPath bool) ([]byte, error) {
+func (a *App) readKubeconfigSource(source string, sourceIsPath bool) ([]byte, error) {
 	if !sourceIsPath {
 		return []byte(source), nil
 	}
@@ -185,7 +185,14 @@ func readKubeconfigSource(source string, sourceIsPath bool) ([]byte, error) {
 			source = filepath.Join(home, source[1:])
 		}
 	}
-	return os.ReadFile(source)
+	// Server mode: a path-form kubeconfig is a tenant local file, so it must
+	// stay inside the tenant roots. Inline YAML (sourceIsPath=false) is not
+	// touched. Desktop confinement is a no-op.
+	confined, err := a.confineLocalPath(source)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(confined)
 }
 
 // k8sContextServerAddr resolves the apiserver host:port of a context. The
@@ -231,6 +238,12 @@ func (a *App) ContainerConnect(connectionID, sshUser, sshPassword, tunnelUser, t
 	}
 	if cfg.Type != "container" {
 		return fmt.Errorf("connection %s is not a container connection", connectionID)
+	}
+	// Transport guard: the worker-local engine is denied unless the operator
+	// enabled workerDocker with iAcceptRisk. The discriminator is
+	// ContainerTransport only; sshUser is optional credential completion.
+	if err := a.checkContainerTransport(cfg.ContainerTransport); err != nil {
+		return err
 	}
 	rt := container.Runtime(cfg.ContainerRuntime)
 
@@ -487,6 +500,25 @@ func (a *App) createContainerFileSession(config session.ConnectionConfig) (*sess
 	if a.containerManager == nil {
 		return nil, fmt.Errorf("container manager not initialized")
 	}
+	// Same transport rule as ContainerConnect. The frontend normally forwards
+	// the connection config, but a caller can omit ContainerTransport, so fall
+	// back to the stored connection before deciding. A container-file session
+	// can only use an established provider below, and a local provider can only
+	// have been established through the guarded ContainerConnect path.
+	transport := config.ContainerTransport
+	if transport == "" && a.connectionStore != nil {
+		if data, err := a.connectionStore.Load(); err == nil {
+			for _, c := range data.Connections {
+				if c.ID == config.ID {
+					transport = c.ContainerTransport
+					break
+				}
+			}
+		}
+	}
+	if err := a.checkContainerTransport(transport); err != nil {
+		return nil, err
+	}
 	// 按 connID 分发：容器连接走 docker exec/cp，k8s 连接走 exec WebSocket
 	//（k8s 复用 config.ID 作为 k8s 连接 key，config.ContainerID 为 Pod 名）
 	id := uuid.New().String()
@@ -536,6 +568,10 @@ func (a *App) ContainerCancelImageOperation(operationID string) {
 }
 
 func (a *App) ContainerLoadImage(operationID, archivePath string) (string, error) {
+	archivePath, err := a.confineLocalPath(archivePath)
+	if err != nil {
+		return "", err
+	}
 	return a.containerManager.LoadImageFile(operationID, archivePath)
 }
 

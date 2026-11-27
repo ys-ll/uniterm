@@ -305,10 +305,18 @@ func (a *App) DBUpdateRowsAtomic(sessionID, dbName, tableName string, updates []
 }
 
 func (a *App) DBPreviewCSV(path string) (*database.CSVPreview, error) {
+	path, err := a.confineLocalPath(path)
+	if err != nil {
+		return nil, err
+	}
 	return database.PreviewCSV(path)
 }
 
 func (a *App) DBImportCSV(sessionID, dbName, tableName, path string, mapping []database.CSVColumnMapping) (int, error) {
+	path, err := a.confineLocalPath(path)
+	if err != nil {
+		return 0, err
+	}
 	ds, p, err := a.dbProvider(sessionID)
 	if err != nil {
 		return 0, err

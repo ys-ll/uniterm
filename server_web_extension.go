@@ -840,6 +840,9 @@ func (s *WebStreamService) handleCredentialsStatus(w http.ResponseWriter, _ *htt
 // store must be unlocked: the gateway only offers password change from an
 // active, unlocked browser session.
 func (s *WebStreamService) handleCredentialsRekey(w http.ResponseWriter, r *http.Request) {
+	if !s.requireWorkerAdmin(w, r) {
+		return
+	}
 	var req struct {
 		OldPassword string `json:"oldPassword"`
 		NewPassword string `json:"newPassword"`
@@ -860,12 +863,35 @@ func (s *WebStreamService) handleCredentialsRekey(w http.ResponseWriter, r *http
 // password reset). The gateway invokes it as part of an admin password
 // reset: the login password and the master password are one and the same in
 // server mode, so resetting the login password destroys the data key.
-func (s *WebStreamService) handleCredentialsReset(w http.ResponseWriter, _ *http.Request) {
+func (s *WebStreamService) handleCredentialsReset(w http.ResponseWriter, r *http.Request) {
+	if !s.requireWorkerAdmin(w, r) {
+		return
+	}
 	if err := s.unitermApp.ResetCredentials(); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+}
+
+// workerAdminHeader carries a per-worker secret that only the gateway sets on
+// its own internal calls. The gateway's tenant proxy deletes any client-supplied
+// copy and only injects the tenant-facing worker token, so a same-origin tenant
+// request cannot reach the permanently denied credential-admin methods.
+const workerAdminHeader = "X-Uniterm-Worker-Admin-Token"
+
+func (s *WebStreamService) requireWorkerAdmin(w http.ResponseWriter, r *http.Request) bool {
+	want := os.Getenv("UNITERM_WORKER_ADMIN_TOKEN")
+	if want == "" {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "admin credential routes are disabled: UNITERM_WORKER_ADMIN_TOKEN is not set"})
+		return false
+	}
+	got := r.Header.Get(workerAdminHeader)
+	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "admin credential routes require the gateway admin token"})
+		return false
+	}
+	return true
 }
 
 func formatContentDisposition(fileName string) string {
