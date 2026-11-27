@@ -28,15 +28,16 @@ var dbeaverAesKey, _ = hex.DecodeString("babb4a9f774ab853c96c2d653dfe544a")
 // targets (config type + dbType + default port).
 var dbeaverConnType = map[string]connTarget{
 	"mysql":         {Type: "database", DBType: "mysql", Port: 3306},
-	"mariadb":       {Type: "database", DBType: "mysql", Port: 3306},
+	"mariadb":       {Type: "database", DBType: "mariadb", Port: 3306},
 	"postgresql":    {Type: "database", DBType: "postgres", Port: 5432},
 	"postgres":      {Type: "database", DBType: "postgres", Port: 5432},
+	"greenplum":     {Type: "database", DBType: "greenplum", Port: 5432},
 	"mssql":         {Type: "database", DBType: "sqlserver", Port: 1433},
 	"sqlserver":     {Type: "database", DBType: "sqlserver", Port: 1433},
 	"oracle":        {Type: "database", DBType: "oracle", Port: 1521},
 	"dm":            {Type: "database", DBType: "dm", Port: 5236},
-	// KingbaseES speaks the standard PG wire protocol; no dedicated dbType.
-	"kingbase":      {Type: "database", DBType: "postgres", Port: 54321},
+	// KingbaseES speaks the standard PG wire protocol.
+	"kingbase":      {Type: "database", DBType: "kingbase", Port: 54321},
 	"sqlite":        {Type: "database", DBType: "sqlite"},
 	"redis":         {Type: "redis", Port: 6379},
 	"mongodb":       {Type: "mongodb", Port: 27017},

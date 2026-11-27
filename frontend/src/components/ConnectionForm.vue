@@ -17,8 +17,11 @@
 
       <!-- Right content: sub-type grid + form -->
       <div class="conn-main">
-        <!-- Sub-type icon grid -->
-        <div class="subtype-grid">
+        <!-- Sub-type icon grid. Other categories lay out every entry directly.
+             The SQL category pins one row — 5 fixed databases, a live mirror
+             slot, and the toggle fixed at the row's right edge — and expanded,
+             the remaining types flow alphabetically on their own rows below. -->
+        <div v-if="category !== 'sql'" class="subtype-grid">
           <button
             v-for="st in currentSubTypes"
             :key="st.type + (st.dbType || '') + (st.containerRuntime || '')"
@@ -30,6 +33,63 @@
             <span>{{ st.label }}</span>
           </button>
         </div>
+        <template v-else>
+          <!-- SQL block: pinned row + (expanded) filterable extra rows. The
+               block wrapper carries the full-width divider, and the expanded
+               area renders as a form row with its own field label. -->
+          <div class="sql-types-block">
+            <div class="subtype-grid">
+              <button
+                v-for="st in sqlPinnedRow"
+                :key="st.type + (st.dbType || '') + (st.containerRuntime || '')"
+                class="subtype-btn"
+                :class="{ active: isSubTypeActive(st) }"
+                @click="selectType(st)"
+              >
+                <component :is="st.icon" :size="'1.125rem'" />
+                <span>{{ st.label }}</span>
+              </button>
+              <button
+                class="subtype-btn more-toggle"
+                :class="{ active: sqlTypesExpanded }"
+                @click="onToggleSqlExpanded"
+              >
+                <component :is="sqlTypesExpanded ? ChevronUp : ChevronDown" :size="'1.125rem'" />
+                <span>{{ sqlTypesExpanded ? t('conn.fewerDbTypes') : t('conn.moreDbTypes') }}</span>
+              </button>
+            </div>
+            <!-- Same key/value structure and styling as the form items below;
+                 label-width/label-position are set explicitly since this sits
+                 outside el-form. -->
+            <el-form-item
+              v-if="sqlTypesExpanded"
+              label-width="6.5rem"
+              label-position="right"
+              :label="t('conn.dbTypeLabel')"
+              class="subtype-more-item"
+            >
+              <el-input
+                v-model="sqlTypeFilter"
+                class="subtype-more-filter"
+                clearable
+                :placeholder="t('conn.searchDbTypes')"
+              />
+              <div v-if="sqlMoreSubTypes.length > 0" class="subtype-grid subtype-grid-more">
+                <button
+                  v-for="st in sqlMoreSubTypes"
+                  :key="'more-' + st.type + (st.dbType || '') + (st.containerRuntime || '')"
+                  class="subtype-btn"
+                  :class="{ active: isSubTypeActive(st) }"
+                  @click="selectType(st)"
+                >
+                  <component :is="st.icon" :size="'1.125rem'" />
+                  <span>{{ st.label }}</span>
+                </button>
+              </div>
+              <div v-else class="subtype-more-empty">{{ t('conn.noMatchingDbTypes') }}</div>
+            </el-form-item>
+          </div>
+        </template>
 
         <!-- Form fields -->
         <div class="conn-fields">
@@ -215,7 +275,7 @@
                 </div>
               </el-form-item>
             </template>
-            <el-form-item v-if="(form.type === 'database' && form.dbType !== 'rqlite' && form.dbType !== 'sqlite' && form.dbType !== 'redis' && form.dbType !== 'elasticsearch') || form.type === 'mongodb'" :label="form.type === 'database' && form.dbType === 'oracle' ? t('db.serviceName') : t('db.databases')" :required="form.dbType === 'postgres' || (form.type === 'database' && form.dbType === 'oracle')">
+            <el-form-item v-if="(form.type === 'database' && form.dbType !== 'rqlite' && form.dbType !== 'sqlite' && form.dbType !== 'redis' && form.dbType !== 'elasticsearch') || form.type === 'mongodb'" :label="form.type === 'database' && form.dbType === 'oracle' ? t('db.serviceName') : t('db.databases')" :required="requiresDbName(form.dbType) || (form.type === 'database' && form.dbType === 'oracle')">
               <el-input v-model="form.dbName" :placeholder="form.type === 'database' && form.dbType === 'oracle' ? t('db.serviceNamePlaceholder') : t('db.databases')" />
             </el-form-item>
             <el-form-item v-if="form.type === 'local' || form.type === 'wsl'" :label="t('conn.shell')">
@@ -823,7 +883,7 @@ import type { ConnectionConfig, PostLoginExpectStep, SSHAlgoConfig } from '../ty
 import { OpenFileDialog, OpenFileDialogFiltered, OpenPrivateKeyFile, OpenKubeconfigFile, GetPlatform, ListSerialPorts, TestConnection, GetDefaultSSHKeyPaths } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { ElInput } from 'element-plus'
 import { msg } from '../services/message'
-import { Plus, Trash2, ChevronRight, FolderOpen, Eye, EyeOff, RefreshCw, CircleCheck, CircleX, KeyRound } from '@lucide/vue'
+import { Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, FolderOpen, Eye, EyeOff, RefreshCw, CircleCheck, CircleX, KeyRound } from '@lucide/vue'
 import { listContexts } from '../services/k8sClient'
 import SyntaxEditor from './SyntaxEditor.vue'
 import type { K8sContextInfo } from '../types/k8s'
@@ -885,6 +945,7 @@ interface SubTypeInfo {
   containerRuntime?: string
   label: string
   icon: any
+  pinned?: boolean
 }
 
 // Category sidebar and subtype cards derive from the connectionTypes registry.
@@ -909,12 +970,86 @@ const allSubTypes = computed((): Record<string, SubTypeInfo[]> => {
       containerRuntime: info.containerRuntime,
       label: connectionTypeFormLabel(info, t),
       icon: info.icon,
+      pinned: !!info.formPinned,
     })
   }
   return groups
 })
 
 const currentSubTypes = computed(() => allSubTypes.value[category.value] || allSubTypes.value.terminal)
+
+// PostgreSQL-family dbTypes bind a connection to a single database, so the
+// database field is required just like plain PostgreSQL.
+const pgFamilyDbTypes = ['postgres', 'kingbase', 'opengauss']
+function requiresDbName(dbType?: string): boolean {
+  return !!dbType && pgFamilyDbTypes.includes(dbType)
+}
+
+// ── SQL category's collapsed pinned row ──
+// Collapsed shows only the pinned SQL types; the toggle at the row's end
+// expands the full grid. The last pinned slot is a mirror: every time the
+// row collapses it takes on the selected non-pinned SQL type, so the current
+// selection always stays visible once the extra rows are hidden. The mirror
+// keeps its captured type across expand/collapse cycles — it never reverts
+// to the default (DM) on its own. Expanded state lives for the session only.
+const sqlTypesExpanded = ref(false)
+
+const sqlPinnedSubTypes = computed(() =>
+  (allSubTypes.value.sql || []).filter(st => st.pinned)
+)
+
+// null → the mirror slot shows its default (DM).
+const sqlMirrorDbType = ref<string | null>(null)
+
+// Capture the selected SQL type into the mirror slot: a non-pinned type
+// takes the slot over; a pinned selection clears it back to its default (DM).
+// Called when the pinned row collapses and when the dialog opens (edit load)
+// — never a reactive watcher, since `form` is declared further down in setup
+// and any watch getter would hit the temporal dead zone at registration.
+function captureSqlMirror() {
+  const selectedDbType = form.type === 'database' ? form.dbType : undefined
+  if (selectedDbType && !sqlPinnedSubTypes.value.some(st => st.dbType === selectedDbType)) {
+    sqlMirrorDbType.value = selectedDbType
+  } else {
+    sqlMirrorDbType.value = null
+  }
+}
+
+function onToggleSqlExpanded() {
+  if (sqlTypesExpanded.value) {
+    sqlTypesExpanded.value = false
+    sqlTypeFilter.value = ''
+    captureSqlMirror()
+  } else {
+    sqlTypesExpanded.value = true
+  }
+}
+
+const sqlPinnedRow = computed(() => {
+  const row = sqlPinnedSubTypes.value.slice()
+  const mirrorDbType = sqlMirrorDbType.value
+  if (!mirrorDbType || row.some(st => st.dbType === mirrorDbType)) return row
+  const mirrorIdx = row.findIndex(st => st.dbType === 'dm')
+  const match = (allSubTypes.value.sql || []).find(st => st.dbType === mirrorDbType)
+  if (mirrorIdx >= 0 && match) row[mirrorIdx] = match
+  return row
+})
+
+// Extra SQL types shown below the pinned row while expanded, alphabetically
+// sorted so the grown family stays scannable, narrowed by the filter input.
+// Types already visible in the pinned row (including the live mirror slot)
+// are not repeated.
+const sqlTypeFilter = ref('')
+
+const sqlMoreSubTypes = computed(() => {
+  if (category.value !== 'sql' || !sqlTypesExpanded.value) return []
+  const shown = new Set(sqlPinnedRow.value.map(st => st.dbType))
+  const q = sqlTypeFilter.value.trim().toLowerCase()
+  return currentSubTypes.value
+    .filter(st => !shown.has(st.dbType))
+    .filter(st => q === '' || st.label.toLowerCase().includes(q) || (st.dbType || '').toLowerCase().includes(q))
+    .sort((a, b) => a.label.localeCompare(b.label))
+})
 
 function isSubTypeActive(st: SubTypeInfo): boolean {
   if (st.dbType) {
@@ -935,6 +1070,12 @@ function selectType(st: SubTypeInfo) {
     form.containerRuntime = st.containerRuntime as 'docker' | 'podman' | 'nerdctl' | 'wslc'
   } else {
     form.type = st.type
+  }
+  // Picking a type from the expanded extra rows is done: collapse back to the
+  // pinned row and let the mirror slot take over the selection.
+  if (category.value === 'sql' && sqlTypesExpanded.value) {
+    sqlTypesExpanded.value = false
+    captureSqlMirror()
   }
 }
 
@@ -1087,6 +1228,13 @@ watch(visible, (val) => {
 })
 
 function onDialogOpened() {
+  // Every open starts collapsed: the SQL extra-types grid never carries over
+  // from a previous dialog session.
+  sqlTypesExpanded.value = false
+  sqlTypeFilter.value = ''
+  // Sync the mirror slot with a loaded non-pinned SQL type (edit) so the
+  // collapsed row always shows the current selection.
+  captureSqlMirror()
   // New connections: focus the host field by default. The dialog's @opened
   // event fires after the open transition, so the host input is mounted.
   if (!isEdit.value) {
@@ -2002,7 +2150,7 @@ function normalizeForm(): ConnectionConfig {
     if (!normalized.user?.trim()) throw new Error('S3: Access Key is required')
     if (!normalized.password?.trim()) throw new Error('S3: Secret Key is required')
   }
-  if (normalized.type === 'database' && normalized.dbType === 'postgres' && !normalized.dbName?.trim()) {
+  if (normalized.type === 'database' && requiresDbName(normalized.dbType) && !normalized.dbName?.trim()) {
     throw new Error(t('db.pgDbNameRequired'))
   }
   if (normalized.type === 'database' && normalized.dbType === 'oracle' && !normalized.dbName?.trim()) {
@@ -2311,6 +2459,57 @@ function onConnect() {
   color: var(--on-accent);
   border-color: var(--accent-glow);
   box-shadow: 0 0 0 1px var(--accent-glow), 0 0.125rem 0.5rem var(--accent-glow);
+}
+
+/* The SQL expand/collapse toggle is the last button of the pinned first
+   row, centered together with it; the extra types form their own rows
+   below. The block wrapper carries the divider so it always spans the full
+   column width, whatever the expanded rows' indent is. */
+.sql-types-block {
+  padding-bottom: 0.875rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sql-types-block .subtype-grid {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+/* While expanded the pinned row is followed by the extra-types form row:
+   put the divider back between the two, with the same spacing the plain
+   grid's bottom divider has. */
+.sql-types-block .subtype-grid:has(+ .el-form-item) {
+  padding-bottom: 0.875rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Expanded extra types reuse el-form-item (same key/value styling as the
+   fields below). The el-input is inline by default in form items, so force
+   the stacked layout: filter on top, list under it. */
+.subtype-more-item .el-form-item__content {
+  display: block;
+}
+
+.subtype-more-filter {
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.subtype-grid-more {
+  justify-content: flex-start;
+  max-height: 7.25rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.subtype-more-empty {
+  padding: 0.25rem 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: left;
 }
 
 .subtype-btn span {

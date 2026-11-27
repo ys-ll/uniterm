@@ -90,9 +90,12 @@ func NewDBWithDial(dbType, dsn string, dialFunc DialContextFunc) (*sql.DB, error
 		err error
 	)
 	switch dbType {
-	case "postgres":
+	// The MySQL-family and PostgreSQL-family dbTypes all reuse their family's
+	// dial injection point; only genuinely different drivers get their own
+	// branch.
+	case "postgres", "kingbase", "opengauss", "greenplum", "gbase8c", "cockroachdb", "yugabytedb":
 		db, err = openPostgresWithDial(dsn, dialFunc)
-	case "mysql":
+	case "mysql", "mariadb", "tidb", "oceanbase", "doris", "starrocks", "gbase8a":
 		db, err = openMySQLWithDial(dsn, dialFunc)
 	case "sqlserver":
 		db, err = openSQLServerWithDial(dsn, dialFunc)
@@ -214,7 +217,7 @@ func driverNameOf(db *sql.DB) string {
 // dbDriverName maps a database type to the driver name sql.Open will use.
 func dbDriverName(dbType string) string {
 	switch dbType {
-	case "postgres", "kingbase":
+	case "postgres", "kingbase", "opengauss", "greenplum", "gbase8c", "cockroachdb", "yugabytedb":
 		return "pgx"
 	default:
 		if p, err := NewProvider(dbType); err == nil {
