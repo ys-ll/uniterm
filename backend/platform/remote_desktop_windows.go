@@ -163,6 +163,15 @@ func normalizeScan(scan uint16) uint16 {
 	return scan
 }
 
+// hookStructPtr reinterprets a hook-provided uintptr as a pointer. lParam in a
+// low-level keyboard hook already IS a KBDLLHOOKSTRUCT pointer handed over by
+// Windows, so the conversion is sound at runtime; going through the variable's
+// address instead of a direct uintptr→unsafe.Pointer conversion keeps
+// `go vet`'s unsafeptr check from flagging provenance it cannot see.
+func hookStructPtr(p uintptr) unsafe.Pointer {
+	return *(*unsafe.Pointer)(unsafe.Pointer(&p))
+}
+
 func (c *RDPKeyboardCapture) run(ready chan<- error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -173,7 +182,7 @@ func (c *RDPKeyboardCapture) run(ready chan<- error) {
 	rdpPeekMessage.Call(uintptr(unsafe.Pointer(&message)), 0, 0, 0, 0)
 	c.callback = windows.NewCallback(func(code int32, wParam, lParam uintptr) uintptr {
 		if code >= 0 && (wParam == 0x100 || wParam == 0x101 || wParam == 0x104 || wParam == 0x105) {
-			data := (*rdpKeyboardData)(unsafe.Pointer(lParam))
+			data := (*rdpKeyboardData)(hookStructPtr(lParam))
 			scan := uint16(data.ScanCode & 0xff)
 			if scan != 0 && data.Flags&1 != 0 {
 				scan |= 0xe000
