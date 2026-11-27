@@ -1142,6 +1142,9 @@ func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) 
 		Epoch:    gw.sessionEpoch,
 	})
 
+	// No MaxAge: this is a browser-session cookie, so closing the browser
+	// ends the session. The 24h token expiry above stays as a backstop for
+	// cookies captured before the browser was closed.
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
@@ -1149,7 +1152,6 @@ func (gw *MultiUserGateway) handleLogin(w http.ResponseWriter, r *http.Request) 
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Secure:   os.Getenv("UNITERM_COOKIE_SECURE") == "true",
-		MaxAge:   86400,
 	})
 
 	writeGatewayJSON(w, http.StatusOK, map[string]any{
