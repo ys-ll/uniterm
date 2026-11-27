@@ -361,22 +361,6 @@ body {
   -webkit-user-select: none;
 }
 
-/* The dark themes lift the top of the shell slightly. The light theme keeps
-   its white base throughout so it stays lighter than the title bar. The
-   :not() arm covers the first paint before applyTheme() sets data-theme. */
-html:not([data-theme]) body,
-[data-theme="dark"] body {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 40%, var(--bg-base)) 0%, var(--bg-base) 100%);
-}
-
-[data-theme="deep-blue"] body {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 40%, var(--bg-base)) 0%, var(--bg-base) 100%);
-}
-
-[data-theme="light"] body {
-  background: var(--bg-base);
-}
-
 /* Scrollbar - minimal */
 ::-webkit-scrollbar {
   width: 0.5rem;
