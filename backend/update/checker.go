@@ -3,9 +3,11 @@ package update
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -214,6 +216,89 @@ func sourceAPIURL(source string) string {
 	return "https://api.github.com/repos/ys-ll/uniterm/releases/latest"
 }
 
+// updateAPIBase returns the configured self-hosted/test API base scheme and
+// hostname. Only the explicitly configured host may use plain HTTP; every
+// official URL must stay HTTPS.
+func updateAPIBase() (scheme, host string) {
+	base := os.Getenv("UNITERM_UPDATE_API_BASE")
+	if base == "" {
+		return "", ""
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", ""
+	}
+	return strings.ToLower(u.Scheme), strings.ToLower(u.Hostname())
+}
+
+// configuredHostAllowsScheme reports whether the URL host is the explicitly
+// configured update API base host and its scheme is acceptable for that
+// override (HTTPS always; plain HTTP only when the operator configured an
+// HTTP base, which is how the local end-to-end autotest and self-hosted
+// mirrors run).
+func configuredHostAllowsScheme(scheme, host string) bool {
+	baseScheme, baseHost := updateAPIBase()
+	if baseHost == "" || host != baseHost {
+		return false
+	}
+	return scheme == "https" || (baseScheme == "http" && scheme == "http")
+}
+
+const (
+	githubDownloadPrefix = "/ys-ll/uniterm/releases/download/"
+	giteeDownloadPrefix  = "/ys-l/uniterm/releases/download/"
+)
+
+// allowedDownloadURL validates a candidate's first network hop: HTTPS (or the
+// explicitly configured UNITERM_UPDATE_API_BASE host), and either an official
+// release-download path or the configured API base host.
+func allowedDownloadURL(raw string) error {
+	return validateUpdateURL(raw, true)
+}
+
+// allowedRedirectURL validates every redirect hop. The official asset CDNs and
+// the configured API base host are permitted; the first-hop path rule is not
+// repeated because CDN paths are opaque.
+func allowedRedirectURL(raw string) error {
+	return validateUpdateURL(raw, false)
+}
+
+func validateUpdateURL(raw string, firstHop bool) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("invalid update URL %q: %w", raw, err)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("update URL %q has no host", raw)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	host := strings.ToLower(u.Hostname())
+	if configuredHostAllowsScheme(scheme, host) {
+		return nil
+	}
+	if scheme != "https" {
+		return fmt.Errorf("update URL %q is not HTTPS", raw)
+	}
+	if firstHop {
+		switch host {
+		case "github.com":
+			if strings.HasPrefix(u.Path, githubDownloadPrefix) {
+				return nil
+			}
+		case "gitee.com":
+			if strings.HasPrefix(u.Path, giteeDownloadPrefix) {
+				return nil
+			}
+		}
+		return fmt.Errorf("update URL %q is not an official release download", raw)
+	}
+	switch host {
+	case "release-assets.githubusercontent.com", "objects.githubusercontent.com", "foruda.gitee.com", "gitee.com":
+		return nil
+	}
+	return fmt.Errorf("update redirect to %q is not an official host", raw)
+}
+
 // sourceReleaseURL returns the human-facing release page for a source.
 func sourceReleaseURL(source string) string {
 	if source == "gitee" {
@@ -290,38 +375,75 @@ func otherSource(source string) string {
 	return "gitee"
 }
 
-// fetchChecksums downloads checksums.txt from the given release (if present)
-// and parses it into name → sha256. Returns an empty map when unavailable.
-func fetchChecksums(rel *release) map[string]string {
+// fetchChecksums downloads checksums.txt from the given release and parses it
+// into name → sha256. An absent checksums.txt asset returns an empty map with
+// no error; a present-but-unusable checksums.txt returns an error so the
+// caller can fall back to the mirror and ultimately fail closed.
+func fetchChecksums(rel *release) (map[string]string, error) {
+	var asset *releaseAsset
+	for i := range rel.Assets {
+		if rel.Assets[i].Name == "checksums.txt" {
+			asset = &rel.Assets[i]
+			break
+		}
+	}
+	if asset == nil {
+		return map[string]string{}, nil
+	}
+	if err := allowedDownloadURL(asset.BrowserDownloadURL); err != nil {
+		return nil, fmt.Errorf("checksums.txt: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	for _, a := range rel.Assets {
-		if a.Name != "checksums.txt" {
-			continue
-		}
-		req, err := http.NewRequestWithContext(ctx, "GET", a.BrowserDownloadURL, nil)
-		if err != nil {
-			continue
-		}
-		req.Header.Set("User-Agent", "uniTerm")
-		resp, err := downloadHTTPClient().Do(req)
-		if err != nil || resp.StatusCode != http.StatusOK {
-			if resp != nil {
-				resp.Body.Close()
-			}
-			log.Writef("[update] checksums fetch failed: %v", err)
-			continue
-		}
-		data, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			continue
-		}
-		sums := parseChecksums(data)
-		log.Writef("[update] parsed %d checksums", len(sums))
+	req, err := http.NewRequestWithContext(ctx, "GET", asset.BrowserDownloadURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("checksums.txt request: %w", err)
+	}
+	req.Header.Set("User-Agent", "uniTerm")
+	resp, err := downloadHTTPClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("checksums.txt fetch: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("checksums.txt fetch: unexpected status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("checksums.txt read: %w", err)
+	}
+	sums := parseChecksums(data)
+	if len(sums) == 0 {
+		return nil, errors.New("checksums.txt is empty or malformed")
+	}
+	log.Writef("[update] parsed %d checksums", len(sums))
+	return sums, nil
+}
+
+// checksumsFor prefers the primary release's checksums.txt and falls back to
+// the mirror when the primary is absent, empty, or failed to download. A
+// release with no usable checksums anywhere yields an empty map, which the
+// downloader later rejects because every candidate lacks a SHA256.
+func checksumsFor(primary, mirror *release) map[string]string {
+	sums, err := fetchChecksums(primary)
+	if err == nil && len(sums) > 0 {
 		return sums
 	}
-	return map[string]string{}
+	if err != nil {
+		log.Writef("[update] primary checksums unavailable: %v", err)
+	}
+	if mirror != nil {
+		mirrorSums, mirrorErr := fetchChecksums(mirror)
+		if mirrorErr == nil && len(mirrorSums) > 0 {
+			log.Writef("[update] using mirror checksums")
+			return mirrorSums
+		}
+		if mirrorErr != nil {
+			log.Writef("[update] mirror checksums unavailable: %v", mirrorErr)
+		}
+	}
+	return sums
 }
 
 // classifyAsset buckets an asset name by its update payload kind. Any .zip is
@@ -458,14 +580,10 @@ func Check(currentVersion, source string) (*UpdateInfo, error) {
 		log.Writef("[update] %s release fetch still in flight; continuing without it", other)
 	}
 
-	// Checksums: prefer the primary source's checksums.txt, fall back to the
-	// mirror's. Either may be absent on older releases.
-	sums := fetchChecksums(primary)
-	if len(sums) == 0 {
-		if rel2, ok := rels[otherSource(source)]; ok {
-			sums = fetchChecksums(rel2)
-		}
-	}
+	// Checksums: prefer the primary source's checksums.txt; fall back to the
+	// mirror when it is absent or failed. An update with no usable checksums
+	// still yields candidates, but the downloader rejects them as fail-closed.
+	sums := checksumsFor(primary, rels[otherSource(source)])
 
 	result.Assets = candidatesFor(runtime.GOOS, runtime.GOARCH, DetectChannel(), source, rels, sums)
 	log.Writef("[update] %d candidate asset(s) for channel %s", len(result.Assets), DetectChannel())

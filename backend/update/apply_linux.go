@@ -19,7 +19,7 @@ func (m *Manager) applyPlatform(pend *PendingUpdate, onProgress func(Progress)) 
 	if isSystemPackage(pend.Kind) {
 		return installSystemPackage(pend, onProgress)
 	}
-	return applyBinary(pend.NewBinary, onProgress)
+	return applyBinary(pend.NewBinary, pend.NewBinarySHA256, onProgress)
 }
 
 // packageInstallCommand returns the privileged command line that installs pkg
@@ -70,6 +70,21 @@ func manualInstallHint(kind, pkg string) string {
 func installSystemPackage(pend *PendingUpdate, onProgress func(Progress)) error {
 	if onProgress != nil {
 		onProgress(Progress{Phase: "applying", Total: -1})
+	}
+	// Re-hash the staged package right before the privileged install: the
+	// archive hash is the authenticity anchor, and this catches tampering with
+	// the staged file between download and pkexec.
+	want := strings.TrimSpace(pend.Asset.SHA256)
+	if want == "" {
+		return fmt.Errorf("refusing to install %s: no sha256 checksum recorded; install the update manually with: %s", pend.FilePath, manualInstallHint(pend.Kind, pend.FilePath))
+	}
+	got, err := sha256File(pend.FilePath)
+	if err != nil {
+		return fmt.Errorf("hash staged package: %w", err)
+	}
+	if !strings.EqualFold(got, want) {
+		log.Writef("[update] staged package sha256 mismatch: got %s want %s", got, want)
+		return fmt.Errorf("staged package changed after download (sha256 mismatch); install the update manually with: %s", manualInstallHint(pend.Kind, pend.FilePath))
 	}
 	argv, err := packageInstallCommand(pend.Kind, pend.FilePath, exec.LookPath)
 	if err != nil {

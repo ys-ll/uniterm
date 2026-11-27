@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -74,5 +75,31 @@ func TestPackageStageDirReadable(t *testing.T) {
 	}
 	if fi.Mode().Perm() != 0755 {
 		t.Errorf("stage dir mode = %v, want 0755 so the package manager can read it", fi.Mode().Perm())
+	}
+}
+
+func TestInstallSystemPackageRejectsTamperedStagedFile(t *testing.T) {
+	dir := t.TempDir()
+	pkg := filepath.Join(dir, "uniterm-linux-amd64-v9.9.9.deb")
+	if err := os.WriteFile(pkg, []byte("original-package"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	pend := &PendingUpdate{
+		Kind:     "deb",
+		FilePath: pkg,
+		Asset:    UpdateAsset{Name: filepath.Base(pkg), SHA256: sha256Hex([]byte("different-package"))},
+	}
+	if err := installSystemPackage(pend, nil); err == nil {
+		t.Fatal("installSystemPackage accepted a staged package changed after download")
+	} else if !strings.Contains(err.Error(), "sha256 mismatch") {
+		t.Errorf("want sha256 mismatch, got: %v", err)
+	}
+
+	pend.Asset.SHA256 = ""
+	if err := installSystemPackage(pend, nil); err == nil {
+		t.Fatal("installSystemPackage accepted a package without a recorded checksum")
+	} else if !strings.Contains(strings.ToLower(err.Error()), "sha256") {
+		t.Errorf("want a missing-checksum error, got: %v", err)
 	}
 }
