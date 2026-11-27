@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -238,7 +239,11 @@ func TestSkillsStore_ExportPlain_CarriesNestedFiles(t *testing.T) {
 		t.Fatalf("references/notes.md not carried: %+v", byPath)
 	}
 	script, ok := byPath["scripts/run.sh"]
-	if !ok || script.Mode&0100 == 0 {
+	if !ok {
+		t.Fatalf("scripts/run.sh not carried: %+v", byPath)
+	}
+	// Windows filesystems carry no exec bit, so the exported mode is 666 there.
+	if runtime.GOOS != "windows" && script.Mode&0100 == 0 {
 		t.Fatalf("scripts/run.sh missing exec bit: mode %o", script.Mode)
 	}
 	if md, ok := byPath["SKILL.md"]; !ok || !strings.Contains(string(md.Content), "name: alpha") {

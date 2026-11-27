@@ -1,11 +1,135 @@
 package session
 
 import (
-	"bytes"
-	"sync"
+"bytes"
+	"net"
+"sync"
 	"testing"
 	"time"
 )
+
+func TestEffectiveTermType(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty falls back to default", "", DefaultTermType},
+		{"valid passthrough xterm", "xterm", "xterm"},
+		{"valid passthrough vt100", "vt100", "vt100"},
+		{"valid passthrough vt320", "vt320", "vt320"},
+		{"invalid value falls back to default", "foo-bar", DefaultTermType},
+		{"injection attempt falls back to default", "xterm; rm -rf /", DefaultTermType},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := EffectiveTermType(tc.in); got != tc.want {
+				t.Fatalf("EffectiveTermType(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExplicitTermType(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty means no explicit choice", "", ""},
+		{"valid explicit value", "vt100", "vt100"},
+		{"invalid value is ignored", "foo-bar", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ExplicitTermType(tc.in); got != tc.want {
+				t.Fatalf("ExplicitTermType(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// ttypeReply runs handleSubNegotiation against a TTYPE SEND subnegotiation and
+// returns the IS reply the session writes back.
+func ttypeReply(t *testing.T, termType string) []byte {
+	t.Helper()
+
+	s := NewTelnetSession("test")
+	s.termType = termType
+
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	s.conn = client
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		buf := []byte{telnetIAC, telnetSB, telnetOptTerminalType, telnetTTYPESend, telnetIAC, telnetSE}
+		s.handleSubNegotiation(buf, 0)
+	}()
+
+	server.SetReadDeadline(time.Now().Add(2 * time.Second))
+	reply := make([]byte, 64)
+	n, err := server.Read(reply)
+	if err != nil {
+		t.Fatalf("read TTYPE reply: %v", err)
+	}
+	<-done
+	return reply[:n]
+}
+
+func TestTelnetTTYPEUsesConfiguredTermType(t *testing.T) {
+	reply := ttypeReply(t, "vt100")
+	want := append([]byte{telnetIAC, telnetSB, telnetOptTerminalType, telnetTTYPEIs}, []byte("vt100")...)
+	want = append(want, telnetIAC, telnetSE)
+	if string(reply) != string(want) {
+		t.Fatalf("TTYPE reply = % x, want % x", reply, want)
+	}
+}
+
+func TestTelnetTTYPEDefaultTermType(t *testing.T) {
+	reply := ttypeReply(t, DefaultTermType)
+	want := append(append([]byte{telnetIAC, telnetSB, telnetOptTerminalType, telnetTTYPEIs}, DefaultTermType...), telnetIAC, telnetSE)
+	if string(reply) != string(want) {
+		t.Fatalf("TTYPE reply = % x, want default term %s", reply, DefaultTermType)
+	}
+}
+
+
+func TestTapRemovalKeepsOtherObservers(t *testing.T) {
+	s := &baseSession{}
+	var data, status [3]int
+	d0 := s.AddDataTap(func([]byte) { data[0]++ })
+	d1 := s.AddDataTap(func([]byte) { data[1]++ })
+	d2 := s.AddDataTap(func([]byte) { data[2]++ })
+	s0 := s.AddStatusTap(func(SessionStatus) { status[0]++ })
+	s1 := s.AddStatusTap(func(SessionStatus) { status[1]++ })
+	s2 := s.AddStatusTap(func(SessionStatus) { status[2]++ })
+	d0()
+	d1()
+	s0()
+	s1()
+	s.emitData([]byte("test"))
+	s.setStatus(StatusConnected)
+	if data != [3]int{0, 0, 1} || status != [3]int{0, 0, 1} {
+		t.Fatalf("wrong observers removed: data=%v status=%v", data, status)
+	}
+	// Reuse slots, then invoke an old unsubscribe again.
+	n := 0
+	s.AddDataTap(func([]byte) { n++ })
+	s.AddStatusTap(func(SessionStatus) { n++ })
+	d0()
+	s0()
+	d2()
+	s2()
+	s.emitData([]byte("again"))
+	s.setStatus(StatusConnected)
+	if n != 2 || data[2] != 1 || status[2] != 1 {
+		t.Fatalf("unsubscribe removed a reused slot: n=%d data=%v status=%v", n, data, status)
+	}
+}
+
 
 // Tests for the async, bounded emit path (issue #1053): a flood of terminal
 // output must never block the session's readLoop against the synchronous

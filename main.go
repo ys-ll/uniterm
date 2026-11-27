@@ -29,6 +29,20 @@ var Version = "dev"
 // user-data folder (webview2DataPath below).
 var devBuild = Version == "dev"
 
+// singleInstanceID is the single-instance lock key for the GUI. Dev builds
+// (Version left at "dev", i.e. wails3 dev / plain go build) lock under a
+// distinct ID so they never contend with an installed release binary holding
+// the release lock — with the shared release ID the dev process would detect
+// the release instance on startup, notify it and exit before wails3 dev
+// could attach. Release builds get a real version via -ldflags and share the
+// release lock so a second launch just focuses the existing window.
+var singleInstanceID = func() string {
+	if devBuild {
+		return "uniterm-gui-dev"
+	}
+	return "uniterm-gui"
+}()
+
 // webview2DataPath returns the fixed WebView2 user-data folder:
 // %LOCALAPPDATA%\uniTerm\webview2, with a "-dev" suffix on dev builds. The
 // suffix keeps dev and release instances from contending for the same

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	goruntime "runtime"
 	"runtime/debug"
 	"strconv"
@@ -21,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ys-ll/uniterm/backend/log"
 	"github.com/ys-ll/uniterm/backend/mcp"
+	"github.com/ys-ll/uniterm/backend/recorder"
 	"github.com/ys-ll/uniterm/backend/session"
 	"github.com/ys-ll/uniterm/backend/store"
 )
@@ -1457,4 +1460,207 @@ func isTransientFileLockError(err error) bool {
 		return errno == 32 || errno == 33
 	}
 	return false
+}
+// app_recorder.go exposes the terminal recorder (asciinema cast v2) as Wails
+// bindings. The frontend terminalRecorder.ts service calls these to start
+// recording a session, stream session:data into the cast file, and later
+// list/delete/play back recordings.
+//
+// All methods delegate to the process-wide recorder.Recorder singleton
+// (recorder.New()), so no App field is required. The singleton pattern keeps
+// the hot data path (RecorderWriteData) lock-free at the App layer.
+
+// recorderInst returns the shared Recorder. Constructed lazily on first call
+// so apps that never record pay zero cost.
+func recorderInst() *recorder.Recorder {
+	return recorder.New()
+}
+
+// RecorderStart creates a new cast v2 file under <home>/Documents/uniTerm/records/
+// and writes the JSON header. Returns the absolute file path the frontend should
+// pass to subsequent RecorderWriteData / RecorderStop calls.
+func (a *App) RecorderStart(sessionID string, width int, height int, title string) (string, error) {
+	return recorderInst().StartRecording(sessionID, width, height, title)
+}
+
+// RecorderWriteData appends one `[elapsed, "o", data]` row to the cast file
+// at filePath. Called from the terminal session:data hook in BaseTerminal.vue.
+// No-op (returns nil) if the path is not an open recording — the frontend
+// data path must not error when a recording was stopped concurrently.
+func (a *App) RecorderWriteData(filePath string, data string) error {
+	return recorderInst().WriteRecordingData(filePath, data)
+}
+
+// RecorderStop flushes and closes the recording at filePath. Idempotent.
+func (a *App) RecorderStop(filePath string) error {
+	return recorderInst().StopRecording(filePath)
+}
+
+// RecorderIsRecording reports whether filePath is currently being recorded.
+func (a *App) RecorderIsRecording(filePath string) bool {
+	return recorderInst().IsRecording(filePath)
+}
+
+// RecorderList returns metadata for every .cast file in the records
+// directory, newest first.
+func (a *App) RecorderList() ([]recorder.RecordingInfo, error) {
+	return recorderInst().ListRecordings()
+}
+
+// RecorderDelete removes a cast file from disk. If the recording is open it
+// is stopped first.
+func (a *App) RecorderDelete(filePath string) error {
+	return recorderInst().DeleteRecording(filePath)
+}
+
+// RecorderGetContent reads the entire cast file as a string. The frontend
+// player parses the header + data rows to drive xterm.js replay.
+func (a *App) RecorderGetContent(filePath string) (string, error) {
+	return recorderInst().GetRecordingContent(filePath)
+}
+
+// RecorderOpenDir opens the records directory in the OS file manager.
+func (a *App) RecorderOpenDir() error {
+	dir := recorderInst().RecordsDir()
+	if dir == "" {
+		return fmt.Errorf("recorder: records directory unavailable")
+	}
+	return a.OpenPathInExplorer(dir)
+}
+
+// Newest entries only. Shell history files grow without bound and the whole
+// list is held in memory and scanned per keystroke.
+const shellHistoryLimit = 1000
+
+// shellHistoryTailBytes caps how much of the history file is read. The whole
+// file is never loaded: a multi-hundred-megabyte ~/.bash_history would
+// otherwise cause a memory spike for data the limit above throws away anyway.
+// parseShellHistory only needs the newest commands, which live at the end.
+const shellHistoryTailBytes = 4 << 20 // 4 MiB
+
+// zsh with EXTENDED_HISTORY writes ": <started>:<elapsed>;<command>".
+var zshTimestampPrefix = regexp.MustCompile(`^: \d+:\d*;`)
+
+// shellHistoryPath locates the history file for the user's login shell, or ""
+// when there is nothing sensible to read.
+func shellHistoryPath() string {
+	if histFile := os.Getenv("HISTFILE"); histFile != "" {
+		return histFile
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	switch shell := os.Getenv("SHELL"); {
+	case strings.Contains(shell, "zsh"):
+		return filepath.Join(home, ".zsh_history")
+	case strings.Contains(shell, "bash"):
+		return filepath.Join(home, ".bash_history")
+	}
+	// Unknown or unset SHELL: take whichever file exists, zsh first since it is
+	// the macOS default. fish is deliberately not handled — its history is YAML
+	// rather than one command per line and needs its own parser.
+	for _, name := range []string{".zsh_history", ".bash_history"} {
+		path := filepath.Join(home, name)
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
+// parseShellHistory returns commands newest first, de-duplicated, capped at
+// limit. Invalid UTF-8 is dropped rather than rejected: history files
+// accumulate whatever was typed, including broken encodings, and one bad byte
+// should not cost the user the whole file.
+func parseShellHistory(raw string, limit int) []string {
+	lines := strings.Split(strings.ToValidUTF8(raw, ""), "\n")
+
+	commands := make([]string, 0, len(lines))
+	var pending []string
+	for _, line := range lines {
+		if len(pending) == 0 {
+			line = zshTimestampPrefix.ReplaceAllString(line, "")
+			// bash writes "#<epoch>" comment lines when HISTTIMEFORMAT is set.
+			if strings.HasPrefix(line, "#") {
+				continue
+			}
+		}
+		// A trailing backslash encodes a newline inside the command.
+		if strings.HasSuffix(line, `\`) {
+			pending = append(pending, strings.TrimSuffix(line, `\`))
+			continue
+		}
+		pending = append(pending, line)
+		command := strings.TrimSpace(strings.Join(pending, "\n"))
+		pending = nil
+
+		// Genuinely multi-line commands (loops, heredocs) cannot be offered as
+		// a single-line completion. A trailing newline alone trims away above,
+		// so this only drops the ones that really span lines.
+		if command == "" || strings.Contains(command, "\n") {
+			continue
+		}
+		commands = append(commands, command)
+	}
+
+	// Newest first, keeping the most recent occurrence of a repeated command.
+	seen := make(map[string]struct{}, len(commands))
+	recent := make([]string, 0, limit)
+	for i := len(commands) - 1; i >= 0 && len(recent) < limit; i-- {
+		if _, dup := seen[commands[i]]; dup {
+			continue
+		}
+		seen[commands[i]] = struct{}{}
+		recent = append(recent, commands[i])
+	}
+	return recent
+}
+
+// readShellHistoryTail reads at most limit bytes from the end of path and
+// reports whether the read was truncated. When the file is larger than the
+// limit the first (partial) line is dropped — the read starts mid-entry, so
+// that line is truncated garbage.
+func readShellHistoryTail(path string, limit int64) ([]byte, bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, false, err
+	}
+	if info.Size() <= limit {
+		raw, err := os.ReadFile(path)
+		return raw, false, err
+	}
+	if _, err := file.Seek(info.Size()-limit, 0); err != nil {
+		return nil, false, err
+	}
+	raw := make([]byte, limit)
+	n, err := io.ReadFull(file, raw)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return nil, false, err
+	}
+	raw = raw[:n]
+	if _, rest, found := bytes.Cut(raw, []byte("\n")); found {
+		return rest, true, nil
+	}
+	return raw, true, nil
+}
+
+// LoadShellHistory returns the local login shell's history, newest first.
+// A missing or unreadable file is not an error — it just means there is
+// nothing extra to suggest.
+func (a *App) LoadShellHistory() ([]string, error) {
+	path := shellHistoryPath()
+	if path == "" {
+		return []string{}, nil
+	}
+	raw, _, err := readShellHistoryTail(path, shellHistoryTailBytes)
+	if err != nil {
+		return []string{}, nil
+	}
+	return parseShellHistory(string(raw), shellHistoryLimit), nil
 }

@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +18,7 @@ import (
 	"github.com/ys-ll/uniterm/backend/store"
 	unitsync "github.com/ys-ll/uniterm/backend/sync"
 	"sync"
+	"golang.org/x/crypto/ssh"
 	"testing"
 	"time"
 )
@@ -677,5 +681,563 @@ func TestWindowGeometryVisible_PartialOverlap(t *testing.T) {
 func TestWindowGeometryVisible_NoScreens(t *testing.T) {
 	if !windowGeometryVisible(5000, 5000, 1200, 800, nil) {
 		t.Error("nil screen list reported invisible; want old behavior preserved")
+	}
+}
+func TestExpandDialogDir(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home directory")
+	}
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "a.txt")
+	if err := os.WriteFile(file, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"tilde", "~", home},
+		{"existing absolute dir", tmp, tmp},
+		{"missing dir", filepath.Join(tmp, "nope"), ""},
+		{"file is not a dir", file, ""},
+		{"relative is rejected", "some/dir", ""},
+		{"tilde to missing dir", "~/definitely-not-a-real-dir-9f3a", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := expandDialogDir(tt.in); got != tt.want {
+				t.Errorf("expandDialogDir(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// resolveDialogDir must never hand the picker a path it will silently ignore:
+// the first existing candidate wins and everything else lands on home.
+func TestResolveDialogDir(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home directory")
+	}
+	tmp := t.TempDir()
+	missing := filepath.Join(tmp, "nope")
+
+	if got := resolveDialogDir(); got != home {
+		t.Errorf("no candidates = %q, want home %q", got, home)
+	}
+	if got := resolveDialogDir(missing); got != home {
+		t.Errorf("missing candidate = %q, want home %q", got, home)
+	}
+	if got := resolveDialogDir(missing, tmp); got != tmp {
+		t.Errorf("fallback candidate = %q, want %q", got, tmp)
+	}
+	if got := resolveDialogDir(tmp, home); got != tmp {
+		t.Errorf("first candidate should win, got %q, want %q", got, tmp)
+	}
+}
+
+func TestHasHiddenSegment(t *testing.T) {
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"/Users/han", false},
+		{"/Users/han/.ssh", true},
+		{"/Users/han/.kube/cache", true},
+		{"/Users/han/Documents", false},
+		{"", false},
+		{"/", false},
+		// A trailing "." segment is the current directory, not a hidden name.
+		{"/Users/han/.", false},
+	}
+	for _, tt := range tests {
+		if got := hasHiddenSegment(tt.in); got != tt.want {
+			t.Errorf("hasHiddenSegment(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestFirstArg(t *testing.T) {
+	if got := firstArg(nil); got != "" {
+		t.Errorf("firstArg(nil) = %q, want empty", got)
+	}
+	if got := firstArg([]string{"~/.ssh"}); got != "~/.ssh" {
+		t.Errorf("firstArg = %q, want ~/.ssh", got)
+	}
+	if got := firstArg([]string{"a", "b"}); got != "a" {
+		t.Errorf("firstArg = %q, want a", got)
+	}
+}
+// TestWithExitCredOverride locks the override semantics: inline user/password
+// fill only the exit connection's EMPTY fields, never overwrite saved values,
+// and are not applied to non-exit hops. Empty inline credentials return the
+// resolver untouched.
+func TestWithExitCredOverride(t *testing.T) {
+	conns := map[string]session.ConnectionConfig{
+		"exit": {ID: "exit", Host: "h1", User: "exit-user", Password: ""},
+		"mid":  {ID: "mid", Host: "h2", User: "", Password: ""},
+	}
+	base := func(id string) (session.ConnectionConfig, bool) {
+		c, ok := conns[id]
+		return c, ok
+	}
+
+	// Empty inline credentials: resolver returned as-is.
+	if got := withExitCredOverride(base, "exit", "", ""); got == nil {
+		t.Fatal("empty override: expected the original resolver back")
+	}
+
+	resolve := withExitCredOverride(base, "exit", "inline-user", "inline-pw")
+
+	// Exit hop: empty password filled, saved user kept.
+	c, ok := resolve("exit")
+	if !ok || c.User != "exit-user" || c.Password != "inline-pw" {
+		t.Fatalf("exit hop: got user=%q password=%q ok=%v", c.User, c.Password, ok)
+	}
+
+	// Non-exit hop: untouched.
+	c, ok = resolve("mid")
+	if !ok || c.User != "" || c.Password != "" {
+		t.Fatalf("non-exit hop: got user=%q password=%q ok=%v", c.User, c.Password, ok)
+	}
+
+	// Unknown id still reports not-found.
+	if _, ok = resolve("nope"); ok {
+		t.Fatal("unknown id: expected not found")
+	}
+}
+
+// TestApp_StartTunnel_InlineCredentials drives App.StartTunnel end to end: the
+// exit connection is saved without a password, so starting the tunnel fails on
+// ssh auth; passing the password inline (as the credential dialog would) makes
+// it run.
+func TestApp_StartTunnel_InlineCredentials(t *testing.T) {
+	targetPort := unreachableLocalPort(t)
+	sshPort := startFakeJumpSSHD(t)
+
+	cs, err := store.NewConnectionStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("connection store: %v", err)
+	}
+	cs.SetPasswordStore(stubPasswordStore{})
+	// No saved password — the case the credential prompt exists for.
+	if err := cs.Save(session.ConnectionStoreData{
+		Connections: []session.ConnectionConfig{{
+			ID:       "jump-1",
+			Type:     "ssh",
+			Host:     "127.0.0.1",
+			Port:     sshPort,
+			User:     "jump",
+			AuthType: "password",
+		}},
+	}); err != nil {
+		t.Fatalf("save jump connection: %v", err)
+	}
+
+	ts := store.NewTunnelStore(t.TempDir())
+	tunnel := session.Tunnel{
+		ID:         "tun-1",
+		Name:       "regression",
+		Mode:       session.TunnelLocal,
+		SSHConnID:  "jump-1",
+		ListenPort: freeLocalPort(t),
+		TargetHost: "127.0.0.1",
+		TargetPort: targetPort,
+	}
+	if err := ts.Save(session.TunnelStoreData{Version: 1, Tunnels: []session.Tunnel{tunnel}}); err != nil {
+		t.Fatalf("save tunnel: %v", err)
+	}
+
+	a := NewApp("")
+	a.connectionStore = cs
+	a.tunnelService = session.NewTunnelService()
+	a.tunnelStore = ts
+
+	// Guard: without inline credentials the ssh handshake fails.
+	st, err := a.StartTunnel("tun-1", "", "")
+	if err != nil {
+		t.Fatalf("no inline creds: unexpected error: %v", err)
+	}
+	if st.Status != session.TunnelError {
+		t.Fatalf("no inline creds: expected error state, got %q (%s)", st.Status, st.Error)
+	}
+	a.StopTunnel("tun-1")
+
+	// With the password supplied inline the tunnel comes up.
+	st, err = a.StartTunnel("tun-1", "", "jump-pw")
+	if err != nil {
+		t.Fatalf("inline creds: unexpected error: %v", err)
+	}
+	if st.Status != session.TunnelRunning {
+		t.Fatalf("inline creds: expected running state, got %q (%s)", st.Status, st.Error)
+	}
+	a.StopTunnel("tun-1")
+}
+
+// freeLocalPort reserves an ephemeral loopback port for the tunnel's local
+// listener and releases it immediately.
+func freeLocalPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	return port
+}
+
+func TestApp_SaveTunnels_CancelsReconnectForDeletedTunnel(t *testing.T) {
+	a := NewApp("")
+	a.tunnelStore = store.NewTunnelStore(t.TempDir())
+	a.tunnelService = session.NewTunnelService()
+	t.Cleanup(a.tunnelService.Shutdown)
+	tunnel := session.Tunnel{ID: "deleted", SSHConnID: "missing", AutoReconnect: true}
+	if err := a.SaveTunnels(session.TunnelStoreData{Version: 1, Tunnels: []session.Tunnel{tunnel}}); err != nil {
+		t.Fatal(err)
+	}
+	state := a.tunnelService.StartTunnel(tunnel, func(string) (session.ConnectionConfig, bool) {
+		return session.ConnectionConfig{}, false
+	})
+	if state.Status != session.TunnelReconnecting {
+		t.Fatalf("expected pending reconnect, got %+v", state)
+	}
+	if err := a.SaveTunnels(session.TunnelStoreData{Version: 1}); err != nil {
+		t.Fatal(err)
+	}
+	for _, state := range a.ListTunnelStates() {
+		if state.ID == tunnel.ID && state.Status != session.TunnelStopped {
+			t.Fatalf("deleted tunnel still active: %+v", state)
+		}
+	}
+}
+
+func TestApp_CancelsTunnelWhilePreparing(t *testing.T) {
+	actions := map[string]func(*App) error{
+		"stop": func(a *App) error { return a.StopTunnel("pending") },
+		"delete": func(a *App) error {
+			return a.SaveTunnels(session.TunnelStoreData{Version: 1})
+		},
+		"shutdown": func(a *App) error { a.shutdown(); return nil },
+	}
+	for name, cancel := range actions {
+		t.Run(name, func(t *testing.T) {
+			a := NewApp(t.TempDir())
+			a.tunnelStore = store.NewTunnelStore(t.TempDir())
+			a.tunnelService = session.NewTunnelService()
+			t.Cleanup(a.tunnelService.Shutdown)
+			preparing, done := make(chan struct{}), make(chan struct{})
+			resume, release := context.WithCancel(context.Background())
+			t.Cleanup(release)
+			var state session.TunnelState
+			var err error
+			go func() {
+				defer close(done)
+				state, err = a.runTunnelStart("pending", func(ctx context.Context) (session.TunnelState, error) {
+					close(preparing)
+					<-resume.Done()
+					return a.tunnelService.StartTunnelContext(ctx, session.Tunnel{
+						ID: "pending", SSHConnID: "missing", AutoReconnect: true,
+					}, func(string) (session.ConnectionConfig, bool) {
+						return session.ConnectionConfig{}, false
+					}), nil
+				})
+			}()
+			waitTunnelTestSignal(t, preparing)
+			if err := cancel(a); err != nil {
+				t.Fatal(err)
+			}
+			release()
+			waitTunnelTestSignal(t, done)
+			if err != nil || state.Status != session.TunnelStopped {
+				t.Fatalf("cancelled preparation: state=%+v error=%v", state, err)
+			}
+			if states := a.ListTunnelStates(); len(states) != 0 {
+				t.Fatalf("cancelled preparation reached the service: %+v", states)
+			}
+			if name == "shutdown" {
+				state, _ := a.runTunnelStart("late", func(context.Context) (session.TunnelState, error) {
+					t.Fatal("started preparing a tunnel after shutdown")
+					return session.TunnelState{}, nil
+				})
+				if state.Status != session.TunnelStopped {
+					t.Fatalf("start after shutdown: %+v", state)
+				}
+			}
+		})
+	}
+}
+
+func TestApp_SuccessfulTunnelStartKeepsLifecycleContext(t *testing.T) {
+	a := NewApp("")
+	var lifecycle context.Context
+	a.runTunnelStart("running", func(ctx context.Context) (session.TunnelState, error) {
+		lifecycle = ctx
+		return session.TunnelState{ID: "running", Status: session.TunnelRunning}, nil
+	})
+	if lifecycle.Err() != nil {
+		t.Fatal("successful start cancelled its lifecycle when returning")
+	}
+}
+
+func TestApp_OldTunnelPreparationCannotRemoveReplacement(t *testing.T) {
+	a := NewApp("")
+	start := func() (context.CancelFunc, <-chan struct{}, <-chan context.Context) {
+		resume, release := context.WithCancel(context.Background())
+		t.Cleanup(release)
+		done := make(chan struct{})
+		prepared := make(chan context.Context, 1)
+		go func() {
+			defer close(done)
+			a.runTunnelStart("same", func(ctx context.Context) (session.TunnelState, error) {
+				prepared <- ctx
+				<-resume.Done()
+				return session.TunnelState{ID: "same", Status: session.TunnelRunning}, nil
+			})
+		}()
+		return release, done, prepared
+	}
+	oldRelease, oldDone, oldPrepared := start()
+	var oldCtx context.Context
+	select {
+	case oldCtx = <-oldPrepared:
+	case <-time.After(3 * time.Second):
+		t.Fatal("old preparation did not start")
+	}
+	a.StopTunnel("same")
+	newRelease, newDone, newPrepared := start()
+	var newCtx context.Context
+	select {
+	case newCtx = <-newPrepared:
+	case <-time.After(3 * time.Second):
+		t.Fatal("replacement preparation did not start")
+	}
+	oldRelease()
+	waitTunnelTestSignal(t, oldDone)
+	if oldCtx.Err() == nil || newCtx.Err() != nil {
+		t.Fatal("old cancellation affected the replacement")
+	}
+	a.StopTunnel("same")
+	if newCtx.Err() == nil {
+		t.Fatal("old completion removed the replacement cancellation handle")
+	}
+	newRelease()
+	waitTunnelTestSignal(t, newDone)
+}
+
+func TestApp_AutoStartSkipsTunnelDeletedWhileEarlierStartIsPending(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	accepted := make(chan struct{})
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		t.Cleanup(func() { conn.Close() })
+		// Leave the SSH handshake pending until the test stops this tunnel.
+		close(accepted)
+	}()
+	cs, err := store.NewConnectionStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs.SetPasswordStore(stubPasswordStore{})
+	if err := cs.Save(session.ConnectionStoreData{Connections: []session.ConnectionConfig{{
+		ID: "slow", Type: "ssh", Host: "127.0.0.1", Port: listener.Addr().(*net.TCPAddr).Port,
+		AuthType: "password", User: "test",
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	a := NewApp("")
+	a.connectionStore = cs
+	a.tunnelStore = store.NewTunnelStore(t.TempDir())
+	a.tunnelService = session.NewTunnelService()
+	t.Cleanup(a.tunnelService.Shutdown)
+	first := session.Tunnel{ID: "first", SSHConnID: "slow", AutoStart: true}
+	second := session.Tunnel{ID: "deleted", SSHConnID: "missing", AutoStart: true, AutoReconnect: true}
+	if err := a.SaveTunnels(session.TunnelStoreData{Version: 1, Tunnels: []session.Tunnel{first, second}}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); a.autoStartTunnels() }()
+	waitTunnelTestSignal(t, accepted)
+	if err := a.SaveTunnels(session.TunnelStoreData{Version: 1, Tunnels: []session.Tunnel{first}}); err != nil {
+		t.Fatal(err)
+	}
+	a.StopTunnel(first.ID)
+	waitTunnelTestSignal(t, done)
+	for _, state := range a.ListTunnelStates() {
+		if state.ID == second.ID {
+			t.Fatalf("deleted tunnel was started from the old snapshot: %+v", state)
+		}
+	}
+}
+
+func waitTunnelTestSignal(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for tunnel operation")
+	}
+}
+type stubPasswordStore struct{}
+
+func (stubPasswordStore) Encrypt(s string) (string, error) { return s, nil }
+func (stubPasswordStore) Decrypt(s string) (string, error) { return s, nil }
+
+// unreachableLocalPort returns a loopback port with no listener, so a direct
+// dial to it always fails with connection refused.
+func unreachableLocalPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	return port
+}
+
+// startFakeJumpSSHD starts a minimal SSH server that accepts password auth
+// (user "jump", password "jump-pw") and direct-tcpip channels — acting as the
+// jump host whose forwarding makes the unreachable target reachable.
+func startFakeJumpSSHD(t *testing.T) int {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate host key: %v", err)
+	}
+	signer, err := ssh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatalf("host signer: %v", err)
+	}
+	serverConfig := &ssh.ServerConfig{
+		PasswordCallback: func(m ssh.ConnMetadata, pw []byte) (*ssh.Permissions, error) {
+			if m.User() == "jump" && string(pw) == "jump-pw" {
+				return &ssh.Permissions{}, nil
+			}
+			return nil, fmt.Errorf("auth rejected for %q", m.User())
+		},
+	}
+	serverConfig.AddHostKey(signer)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				sconn, chans, reqs, err := ssh.NewServerConn(conn, serverConfig)
+				if err != nil {
+					conn.Close()
+					return
+				}
+				defer sconn.Close()
+				go func() {
+					for req := range reqs {
+						if req.WantReply {
+							_ = req.Reply(false, nil)
+						}
+					}
+				}()
+				for newChan := range chans {
+					if newChan.ChannelType() != "direct-tcpip" {
+						_ = newChan.Reject(ssh.UnknownChannelType, "unsupported")
+						continue
+					}
+					ch, chReqs, err := newChan.Accept()
+					if err != nil {
+						continue
+					}
+					go func() {
+						for req := range chReqs {
+							if req.WantReply {
+								_ = req.Reply(false, nil)
+							}
+						}
+					}()
+					// Hold the channel open and drain it until the client closes.
+					go func() {
+						_, _ = io.Copy(io.Discard, ch)
+						_ = ch.Close()
+					}()
+				}
+			}()
+		}
+	}()
+
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+// TestApp_TestConnection_RidesJumpHostTunnel locks in that TestConnection
+// honors config.TunnelSSHConnID for non-k8s/container types: the probe must
+// ride a jump-host tunnel like a real CreateSession connect does, instead of
+// dialing config.Host:Port directly.
+func TestApp_TestConnection_RidesJumpHostTunnel(t *testing.T) {
+	targetPort := unreachableLocalPort(t)
+	sshPort := startFakeJumpSSHD(t)
+
+	cs, err := store.NewConnectionStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("connection store: %v", err)
+	}
+	cs.SetPasswordStore(stubPasswordStore{})
+	if err := cs.Save(session.ConnectionStoreData{
+		Connections: []session.ConnectionConfig{{
+			ID:       "jump-1",
+			Type:     "ssh",
+			Host:     "127.0.0.1",
+			Port:     sshPort,
+			User:     "jump",
+			AuthType: "password",
+			Password: "jump-pw",
+		}},
+	}); err != nil {
+		t.Fatalf("save jump connection: %v", err)
+	}
+
+	a := NewApp("")
+	a.connectionStore = cs
+	a.tunnelService = session.NewTunnelService()
+
+	// Through the tunnel the jump host serves the direct-tcpip channel itself,
+	// so the probe succeeds even though nothing listens on targetPort.
+	desc, err := a.TestConnection(session.ConnectionConfig{
+		Type:            "tcp",
+		Host:            "127.0.0.1",
+		Port:            targetPort,
+		TunnelSSHConnID: "jump-1",
+	})
+	if err != nil {
+		t.Fatalf("TestConnection with tunnel: %v", err)
+	}
+	if desc == "" {
+		t.Fatal("TestConnection returned empty description")
+	}
+
+	// Guard: without the tunnel the same target is unreachable — proving the
+	// tunnel was what made the first probe succeed.
+	if _, err := a.TestConnection(session.ConnectionConfig{
+		Type: "tcp",
+		Host: "127.0.0.1",
+		Port: targetPort,
+	}); err == nil {
+		t.Fatal("direct probe to unreachable target unexpectedly succeeded")
 	}
 }

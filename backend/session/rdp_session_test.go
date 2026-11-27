@@ -689,12 +689,26 @@ func testWasmProxyHandshake(t *testing.T, options RDPOptions) {
 	select {
 	case packet := <-received:
 		definitions := clientStaticChannelDefinitions(packet)
-		if len(definitions) != 12 || string(bytes.TrimRight(definitions[:8], "\x00")) != "cliprdr" {
+		// Engine v0.5.8 announces only the channels the wasm build actually
+		// drives (cliprdr, drdyncvc) instead of the full legacy 12-channel
+		// set. The regression this guards is a connect request whose
+		// clipboard channel exists and is already initialized.
+		if len(definitions) == 0 || len(definitions)%12 != 0 {
 			t.Fatalf("unexpected channel definitions: %x", definitions)
 		}
-		flags := binary.LittleEndian.Uint32(definitions[8:])
-		if flags&channelOptionInitialized == 0 {
-			t.Fatalf("server received uninitialized clipboard channel: 0x%x", flags)
+		clipInitialized := false
+		for i := 0; i+12 <= len(definitions); i += 12 {
+			if string(bytes.TrimRight(definitions[i:i+8], "\x00")) != "cliprdr" {
+				continue
+			}
+			flags := binary.LittleEndian.Uint32(definitions[i+8:])
+			if flags&channelOptionInitialized == 0 {
+				t.Fatalf("server received uninitialized clipboard channel: 0x%x", flags)
+			}
+			clipInitialized = true
+		}
+		if !clipInitialized {
+			t.Fatalf("clipboard channel missing from connect request: %x", definitions)
 		}
 		initializeLegacyStaticChannels(original)
 		if options.AdminSession {

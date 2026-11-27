@@ -1,6 +1,9 @@
 package session
 
 import (
+"bytes"
+"encoding/binary"
+"errors"
 	"fmt"
 	"io"
 	"net"
@@ -8,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+"sync"
 	"testing"
 	"time"
 
@@ -338,5 +342,322 @@ func TestRetryTransferSkipsCompletedFiles(t *testing.T) {
 	s.mu.RUnlock()
 	if kept {
 		t.Fatal("dismissed task still present")
+	}
+}
+
+
+// newDelayedSFTPSession is newTestSFTPSession with a transparent proxy between
+// the SFTP client and server that delays every protocol frame by `delay` in
+// each direction, simulating an RTT of 2×delay. Frames are forwarded via
+// time.AfterFunc (asynchronously), so arbitrarily many requests may be in
+// flight at once: the delay penalises stop-and-wait request loops but not
+// pipelined ones. This is what makes request pipelining observable in a unit
+// test: a stop-and-wait transfer of N chunks needs N round trips, a pipelined
+// one needs about N/64.
+func newDelayedSFTPSession(t *testing.T, delay time.Duration) (*SFTPSession, string) {
+	t.Helper()
+	root := t.TempDir()
+	a1, a2 := net.Pipe() // a1: client end
+	b1, b2 := net.Pipe() // b2: server end
+	t.Cleanup(func() { a1.Close(); a2.Close(); b1.Close(); b2.Close() })
+
+	srv, err := sftp.NewServer(b2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go srv.Serve()
+	t.Cleanup(func() { srv.Close() })
+
+	go forwardFrames(a2, b1, delay) // client -> server
+	go forwardFrames(b1, a2, delay) // server -> client
+
+	// Configure the client exactly as production does (sftpClientOptions),
+	// otherwise ReadFrom silently falls back to sequential writes.
+	client, err := sftp.NewClientPipe(a1, a1, sftpClientOptions()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { client.Close() })
+
+	s := NewSFTPSession("test-sftp")
+	s.sftpClient = client
+	s.sshClient = nil
+	return s, root
+}
+
+// forwardFrames relays length-prefixed SFTP frames from src to dst, each after
+// an asynchronous delay. The SFTP wire format is uint32 length + payload, so
+// no parsing beyond the frame header is needed.
+func forwardFrames(src io.Reader, dst io.Writer, delay time.Duration) {
+	var hdr [4]byte
+	for {
+		if _, err := io.ReadFull(src, hdr[:]); err != nil {
+			return
+		}
+		n := binary.BigEndian.Uint32(hdr[:])
+		frame := make([]byte, 4+n)
+		copy(frame, hdr[:])
+		if _, err := io.ReadFull(src, frame[4:]); err != nil {
+			return
+		}
+		time.AfterFunc(delay, func() { _, _ = dst.Write(frame) })
+	}
+}
+
+// waitCompleteLong waits for the task's "complete" event with a deadline long
+// enough to also accommodate a failed (non-pipelined) transfer, so the tests
+// below fail via their latency assertion, not via a wait timeout.
+func waitCompleteLong(t *testing.T, events <-chan map[string]any, id string) map[string]any {
+	t.Helper()
+	deadline := time.After(60 * time.Second)
+	for {
+		select {
+		case ev := <-events:
+			if ev["taskId"] == id && ev["event"] == "complete" {
+				return ev
+			}
+		case <-deadline:
+			t.Fatal("transfer did not finish in time")
+			return nil
+		}
+	}
+}
+
+// pipelineProbeSize is 128 chunks of 32 KiB. At a simulated RTT of 80ms a
+// stop-and-wait transfer takes ~10s (upload, one round trip per 32 KiB chunk)
+// or ~5s (download, one per 64 KiB chunk); a pipelined one takes a couple of
+// round trips. The tests fail above 2s, far below the stop-and-wait floor and
+// far above the pipelined time.
+const pipelineProbeSize = 4 << 20
+
+func pipelineProbeData() []byte {
+	data := make([]byte, pipelineProbeSize)
+	for i := range data {
+		data[i] = byte(i * 7)
+	}
+	return data
+}
+
+func assertPipelinedElapsed(t *testing.T, start time.Time) {
+	t.Helper()
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("transfer took %v: SFTP requests are not pipelined", elapsed)
+	}
+}
+
+func TestUploadTransferPipelinesRequests(t *testing.T) {
+	s, root := newDelayedSFTPSession(t, 40*time.Millisecond)
+	events := captureTransferEvents(t)
+	local := filepath.Join(root, "in")
+	if err := os.MkdirAll(local, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local, "big.bin"), pipelineProbeData(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	remote := filepath.Join(root, "out")
+
+	start := time.Now()
+	id, err := s.startDirTransfer("upload", local, remote, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := waitCompleteLong(t, events, id)
+	if ev["status"] != "done" {
+		t.Fatalf("status = %v, failed=%v", ev["status"], ev["failedFiles"])
+	}
+	assertPipelinedElapsed(t, start)
+
+	got, err := os.ReadFile(filepath.Join(remote, "big.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, pipelineProbeData()) {
+		t.Fatal("uploaded content mismatch")
+	}
+}
+
+func TestDownloadTransferPipelinesRequests(t *testing.T) {
+	s, root := newDelayedSFTPSession(t, 40*time.Millisecond)
+	events := captureTransferEvents(t)
+	remote := filepath.Join(root, "src")
+	if err := os.MkdirAll(remote, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(remote, "big.bin"), pipelineProbeData(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	local := filepath.Join(root, "out")
+
+	start := time.Now()
+	id, err := s.startDirTransfer("download", local, remote, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := waitCompleteLong(t, events, id)
+	if ev["status"] != "done" {
+		t.Fatalf("status = %v, failed=%v", ev["status"], ev["failedFiles"])
+	}
+	assertPipelinedElapsed(t, start)
+
+	got, err := os.ReadFile(filepath.Join(local, "big.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, pipelineProbeData()) {
+		t.Fatal("downloaded content mismatch")
+	}
+}
+
+
+// TestPauseResumeEvents checks the dedicated paused/resumed event payloads.
+func TestPauseResumeEvents(t *testing.T) {
+	var events []string
+	TransferEventSink = func(sid string, p map[string]any) {
+		if sid != "s1" {
+			t.Fatalf("sessionId = %q, want s1", sid)
+		}
+		events = append(events, p["event"].(string))
+	}
+	defer func() { TransferEventSink = nil }()
+
+	s := &baseSession{id: "s1", sessionType: "sftp", status: StatusConnected}
+	task := &TransferTask{ID: "t1", Type: "download", Status: "running"}
+	task.start()
+	defer task.done()
+
+	task.Status = "paused"
+	s.emitTransferPaused(task)
+	task.Status = "running"
+	s.emitTransferResumed(task)
+
+	if len(events) != 2 || events[0] != "paused" || events[1] != "resumed" {
+		t.Fatalf("events = %v, want [paused resumed]", events)
+	}
+}
+
+// pauseResumer matches the Pause/Resume surface shared by the transfer
+// backends under test.
+type pauseResumer interface {
+	PauseTransfer(taskID string) error
+	ResumeTransfer(taskID string) error
+}
+
+// putTransferTask registers task in a session's transfers map so the
+// Pause/Resume entry points can find it.
+func putTransferTask(s any, task *TransferTask) {
+	switch v := s.(type) {
+	case *SFTPSession:
+		v.mu.Lock()
+		v.transfers[task.ID] = task
+		v.mu.Unlock()
+	case *SCPSession:
+		v.mu.Lock()
+		v.transfers[task.ID] = task
+		v.mu.Unlock()
+	default:
+		panic(fmt.Sprintf("putTransferTask: unsupported session %T", s))
+	}
+}
+
+// TestPauseResumeTransferLifecycle drives PauseTransfer/ResumeTransfer through
+// both backends: pausing must emit the dedicated "paused" event (not a fake
+// "complete"), resuming must emit "resumed", and resuming a task that is not
+// paused (e.g. already done) must fail without emitting anything.
+func TestPauseResumeTransferLifecycle(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		sess pauseResumer
+	}{
+		{"sftp", NewSFTPSession("s1")},
+		{"scp", NewSCPSession("s2")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var events []string
+			TransferEventSink = func(sid string, p map[string]any) {
+				events = append(events, p["event"].(string))
+			}
+			defer func() { TransferEventSink = nil }()
+
+			task := &TransferTask{ID: "t-live", Type: "download", Status: "running"}
+			task.start()
+			defer task.done()
+			putTransferTask(tc.sess, task)
+
+			// Pause: honest "paused" event, status flipped, no fake "complete".
+			if err := tc.sess.PauseTransfer("t-live"); err != nil {
+				t.Fatalf("PauseTransfer: %v", err)
+			}
+			if task.Status != "paused" {
+				t.Fatalf("status after pause = %q, want paused", task.Status)
+			}
+			if len(events) != 1 || events[0] != "paused" {
+				t.Fatalf("events after pause = %v, want [paused]", events)
+			}
+
+			// Resume: back to running with a "resumed" event.
+			if err := tc.sess.ResumeTransfer("t-live"); err != nil {
+				t.Fatalf("ResumeTransfer: %v", err)
+			}
+			if task.Status != "running" {
+				t.Fatalf("status after resume = %q, want running", task.Status)
+			}
+			if len(events) != 2 || events[1] != "resumed" {
+				t.Fatalf("events after resume = %v, want [..., resumed]", events)
+			}
+
+			// Resuming a finished task must be rejected and stay silent.
+			task.Status = "done"
+			events = nil
+			if err := tc.sess.ResumeTransfer("t-live"); err == nil {
+				t.Fatal("ResumeTransfer on done task: want error, got nil")
+			}
+			if task.Status != "done" {
+				t.Fatalf("status after rejected resume = %q, want done", task.Status)
+			}
+			if len(events) != 0 {
+				t.Fatalf("rejected resume emitted %v, want none", events)
+			}
+		})
+	}
+}
+
+
+func TestTransferTaskFileState(t *testing.T) {
+	task := &TransferTask{ID: "dl-1", Type: "download"}
+	task.SetSkip([]string{"already/done.txt"})
+	if !task.shouldSkip("already/done.txt") || task.shouldSkip("other.txt") {
+		t.Fatal("skip set mismatch")
+	}
+	task.setFileCount(3)
+	if task.fileCount() != 3 {
+		t.Fatal("fileCount")
+	}
+	task.beginFile("a.txt")
+	task.finishFile("a.txt")
+	task.failFile("b.txt", errors.New("denied"))
+	if task.completedCount() != 1 {
+		t.Fatalf("completed = %d", task.completedCount())
+	}
+	if len(task.FailedFiles) != 1 || task.FailedFiles[0].Path != "b.txt" || task.FailedFiles[0].Error != "denied" {
+		t.Fatalf("FailedFiles = %v", task.FailedFiles)
+	}
+}
+
+func TestTransferTaskConcurrentProgress(t *testing.T) {
+	task := &TransferTask{ID: "dl-2"}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 1000; j++ {
+				task.addProgress(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if task.loadProgress() != 8000 {
+		t.Fatalf("progress = %d, want 8000", task.loadProgress())
 	}
 }
