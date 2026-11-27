@@ -1522,7 +1522,7 @@
   "conn.x11Forwarding": "X11 転送",
   "conn.agentForwarding": "SSH Agent 転送",
   "conn.agentForwardingDesc": "ローカル SSH Agent をリモートホストに公開します。信頼できるサーバーでのみ有効にしてください",
-  "quickCommands.quickCommandsTab": "クイックコマンド",
+  "quickCommands.quickCommandsTab": "コマンド",
   "quickCommands.historyTab": "履歴",
   "quickCommands.saveAs": "クイックコマンドに保存",
   "quickCommands.addGroup": "グループ追加",
@@ -2500,7 +2500,7 @@
   "batch.selectAll": "すべて選択",
   "sidebar.locSidebar": "左サイドバー",
   "sidebar.locBottom": "下パネル",
-  "sidebar.bottomPanelEmpty": "ここに表示するパネルを選択",
+  "sidebar.locRight": "右サイドバー",
   "sidebar.moveTo": "移動先",
   "sidebar.panelsMenu": "パネル",
   "sidebar.sidebarEmpty": "ここに表示するパネルを選択",
@@ -2614,5 +2614,9 @@
   "tools.yaml": "YAML ↔ JSON",
   "tools.yamlToJson": "YAML → JSON",
   "tools.jsonToYaml": "JSON → YAML",
-  "tools.yamlInputPlaceholder": "YAML を貼り付け…"
+  "tools.yamlInputPlaceholder": "YAML を貼り付け…",
+  "sidebar.tabNames": "タブ名",
+  "sidebar.tabNamesNone": "すべて非表示",
+  "sidebar.tabNamesActive": "アクティブタブのみ",
+  "sidebar.tabNamesAll": "すべて表示"
 }

@@ -57,6 +57,10 @@ interface LocalState {
   // config and keeps the frontend default.
   bottomPanelVisible: boolean
   bottomPanelHeight: number
+  // Dock-strip tab labels mode: "active" (default, only the active tab
+  // shows its panel name), "all" (every tab labeled) or "none" (icon-only).
+  // Local-only UI preference, never synced.
+  panelTabLabels: string
   // Command-send panel's edited content (issue #1341). Local-only text,
   // never synced; restored when the panel mounts.
   commandSendDraft: string
@@ -95,6 +99,7 @@ const DEFAULT: LocalState = {
   lastTabsSnapshot: null,
   bottomPanelVisible: true,
   bottomPanelHeight: 220,
+  panelTabLabels: 'active',
   commandSendDraft: '',
   commandSendWrap: true,
 } as LocalState

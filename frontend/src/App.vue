@@ -4,7 +4,7 @@
     <div v-if="bgVisible" class="app-bg" :style="bgStyle"></div>
     <AppHeader
       :sidebar-visible="sidebarVisible"
-      @toggle-ai="aiStore.toggle"
+      @toggle-right-panel="onToggleRightPanel"
       @toggle-sidebar="sidebarVisible = !sidebarVisible"
       @open-settings="openSettings"
       @open-netscan="openNetscan"
@@ -22,7 +22,7 @@
       @new-local-terminal="createNewTab"
     />
     <div class="main-content">
-      <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onSidebarConnect" @connect-to-workspace="({ config, workspaceId }: any) => onConnect(config, undefined, undefined, true, workspaceId)" @create-workspace="(configs: any) => onCreateWorkspaceFromConfigs(configs)" @connect-only="onConnectOnly" @open-netscan="openNetscan" />
+      <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onSidebarConnect" @connect-to-workspace="({ config, workspaceId }: any) => onConnect(config, undefined, undefined, true, workspaceId)" @create-workspace="(configs: any) => onCreateWorkspaceFromConfigs(configs)" @connect-only="onConnectOnly" @open-netscan="openNetscan" @open-settings="openSettings" />
       <div class="center-column">
       <div class="tab-area" :class="{ frameless: tabAreaFrameless }">
         <template v-if="activeTab">
@@ -138,7 +138,7 @@
       </div>
       <BottomPanel @select="onBottomPanelSelect" />
       </div>
-      <AISidebar ref="aiSidebarRef" @open-settings="openSettings" />
+      <RightPanel @select="onRightPanelSelect" />
     </div>
     <!-- Universal ＋ junctions: four-way grips wherever a vertical drag bar
          (workspace splitter / sidebar / AI sidebar handle) crosses a
@@ -227,8 +227,8 @@ import K8sTabContent from './components/K8sTabContent.vue'
 import ContainerTabContent from './components/ContainerTabContent.vue'
 import StartTabContent from './components/StartTabContent.vue'
 import ConnectionForm from './components/ConnectionForm.vue'
-import AISidebar from './components/AISidebar.vue'
 import BottomPanel from './components/BottomPanel.vue'
+import RightPanel from './components/RightPanel.vue'
 import SplitterCrossings from './components/SplitterCrossings.vue'
 import SyncConflictDialog from './components/SyncConflictDialog.vue'
 import WorkspaceSaveDialog from './components/WorkspaceSaveDialog.vue'
@@ -535,7 +535,6 @@ async function checkCredentials() {
 const showConnectionForm = ref(false)
 const sidebarVisible = ref(false)
 const sidebarRef = ref<any>(null)
-const aiSidebarRef = ref<any>(null)
 
 
 // Input context menu state
@@ -845,17 +844,23 @@ function onWheel(e: WheelEvent) {
 // (maximizePanel action).
 let isMac = false
 
-// Toggle the AI sidebar, restoring terminal focus on hide and focusing the
-// chat input on show. Shared by the keyboard-settings action and the
-// double-Ctrl gesture.
+// Mirror the AI view's on-screen state into aiStore.visible so the AI
+// internals (timers, auto-open paths, collapsed styling) keep their single
+// source of truth without reaching into the dock layout.
+watch(() => uiLayout.aiShown, (shown) => { aiStore.visible = shown }, { immediate: true })
+
+// Toggle the AI panel with the same dock contract as every other panel
+// (sidebarViewShortcut): foreground → collapse its dock; otherwise open its
+// dock and bring AI to the front. Terminal focus returns on hide, the chat
+// input takes it on show. Shared by the keyboard action and double-Ctrl.
 function toggleAISidebar() {
-  if (aiStore.visible) {
-    aiStore.visible = false
+  const showing = !uiLayout.aiShown
+  sidebarViewShortcut('ai')
+  if (showing) {
+    nextTick(() => sidebarRef.value?.focusAIInput())
+  } else {
     const pid = tabStore.getActivePanelId()
     if (pid) nextTick(() => focusPanelTerminal(pid))
-  } else {
-    aiStore.visible = true
-    nextTick(() => aiSidebarRef.value?.focusInput())
   }
 }
 
@@ -1172,21 +1177,29 @@ function closeSidebar() {
   if (pid) nextTick(() => focusPanelTerminal(pid))
 }
 
-// Toggle a view on whichever dock it currently lives in (left sidebar or
-// bottom panel): not in the foreground → open it there; already in the
-// foreground → collapse its dock and hand focus back to the terminal.
+// Toggle a view on whichever dock it currently lives in (left sidebar, right
+// rail or bottom panel): not in the foreground → open it there; already in
+// the foreground → collapse its dock and hand focus back to the terminal.
 function sidebarViewShortcut(view: SidebarView, usePanelOpener = false) {
-  const atBottom = uiLayout.panelLocation(view) === 'bottom'
-  const isForeground = atBottom
-    ? uiLayout.bottomPanelVisible && uiLayout.bottomActiveView === view
-    : sidebarVisible.value && sidebarRef.value?.activeView === view
+  const loc = uiLayout.effectiveLocation(view)
+  const isForeground =
+    loc === 'bottom'
+      ? uiLayout.bottomPanelVisible && uiLayout.bottomActiveView === view
+      : loc === 'right'
+        ? uiLayout.rightPanelVisible && uiLayout.rightActiveView === view
+        : sidebarVisible.value && sidebarRef.value?.activeView === view
   if (isForeground) {
-    if (atBottom) uiLayout.setBottomPanelVisible(false)
+    if (loc === 'bottom') uiLayout.setBottomPanelVisible(false)
+    else if (loc === 'right') uiLayout.setRightPanelVisible(false)
     else closeSidebar()
     return
   }
-  if (atBottom) {
+  // Re-show a view hidden via the panel menu, then surface its dock.
+  uiLayout.setViewVisible(view, true)
+  if (loc === 'bottom') {
     if (!uiLayout.bottomPanelVisible) uiLayout.setBottomPanelVisible(true)
+  } else if (loc === 'right') {
+    if (!uiLayout.rightPanelVisible) uiLayout.setRightPanelVisible(true)
   } else {
     sidebarVisible.value = true
   }
@@ -1202,10 +1215,23 @@ function onToggleBottomPanel() {
   uiLayout.setBottomPanelVisible(!uiLayout.bottomPanelVisible)
 }
 
+// Header right-rail button: show/hide the whole dock (same as the left
+// sidebar and bottom panel toggles). The AI panel itself is toggled by the
+// keyboard action / double-Ctrl gesture, not here.
+function onToggleRightPanel() {
+  uiLayout.setRightPanelVisible(!uiLayout.rightPanelVisible)
+}
+
 // Bottom-panel tab click: route through Sidebar.openTab so files/monitor
 // tabs keep their companion-session open logic; activeView lives in the
 // shared uiLayout store, so both strips highlight the same view.
 function onBottomPanelSelect(view: string) {
+  sidebarRef.value?.openTab(view)
+}
+
+// Right-rail tab click: same routing — openTab activates the view as the
+// right dock's active tab wherever it is docked.
+function onRightPanelSelect(view: string) {
   sidebarRef.value?.openTab(view)
 }
 
@@ -2375,6 +2401,7 @@ body > .conn-context-menu {
 /* 边栏毛玻璃 */
 .app-container.has-bg .main-content :deep(.sidebar),
 .app-container.has-bg .main-content :deep(.ai-sidebar),
+.app-container.has-bg .main-content :deep(.right-panel),
 .app-container.has-bg .main-content :deep(.companion-sidebar) {
   backdrop-filter: blur(0.5rem);
 }

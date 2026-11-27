@@ -420,9 +420,9 @@ export interface AppSettings {
   // Which connection-sidebar tab icons are visible, keyed by view id.
   // Missing keys fall back to SIDEBAR_TAB_DEFAULTS.
   sidebarTabs: Record<string, boolean>
-  // Dock position per sidebar view ("sidebar" | "bottom"). Missing keys
-  // fall back to PANEL_LOCATION_DEFAULTS. Layout companion of sidebarTabs.
-  panelLocations: Record<string, 'sidebar' | 'bottom'>
+  // Dock position per sidebar view ("sidebar" | "right" | "bottom"). Missing
+  // keys fall back to PANEL_LOCATION_DEFAULTS. Layout companion of sidebarTabs.
+  panelLocations: Record<string, 'sidebar' | 'right' | 'bottom'>
   // Global tab order across both docks (view ids); views absent from the
   // list append in SIDEBAR_TAB_ORDER order.
   panelOrder: string[]
@@ -445,6 +445,7 @@ export const SIDEBAR_TAB_DEFAULTS: Record<string, boolean> = {
   personalization: true,
   commandSend: true,
   notes: true,
+  ai: true,
 }
 
 // Canonical sidebar tab order shared by the tab-strip context menu and the
@@ -459,14 +460,16 @@ export const SIDEBAR_TAB_ORDER: { key: string; labelKey: string }[] = [
   { key: 'personalization', labelKey: 'sidebar.personalization' },
   { key: 'commandSend', labelKey: 'sidebar.commandSend' },
   { key: 'notes', labelKey: 'notes.notesTab' },
+  { key: 'ai', labelKey: 'ai.title' },
 ]
 
-// Default dock position per sidebar view: "sidebar" (left) or "bottom"
-// (docked panel under the tab area). Views absent from a saved
-// PanelLocations map fall back to these. Everything ships docked to the
-// left sidebar by default; the bottom panel only starts non-empty because
-// the command-send panel targets batch sends there (issue #1341).
-export const PANEL_LOCATION_DEFAULTS: Record<string, 'sidebar' | 'bottom'> = {
+// Default dock position per sidebar view: "sidebar" (left), "right" (right
+// rail) or "bottom" (docked panel under the tab area). Views absent from a
+// saved PanelLocations map fall back to these. Everything ships docked to
+// the left sidebar by default; the bottom panel only starts non-empty
+// because the command-send panel targets batch sends there (issue #1341),
+// and the AI assistant owns the right rail (issue #1646).
+export const PANEL_LOCATION_DEFAULTS: Record<string, 'sidebar' | 'right' | 'bottom'> = {
   connections: 'sidebar',
   files: 'sidebar',
   monitor: 'sidebar',
@@ -476,6 +479,7 @@ export const PANEL_LOCATION_DEFAULTS: Record<string, 'sidebar' | 'bottom'> = {
   history: 'sidebar',
   commandSend: 'bottom',
   notes: 'bottom',
+  ai: 'right',
 }
 
 // Monitor sections with their default enabled state. Disabled sections are

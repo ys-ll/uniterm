@@ -42,7 +42,7 @@ let raf = 0
 const BAR_SELECTOR = [
   '.panel-splitter',
   '.sidebar .resize-handle',
-  '.ai-sidebar .resize-handle',
+  '.right-panel .resize-handle',
   '.bottom-panel .resize-handle',
   '.db-resizer',
   '.es-resizer',
@@ -75,9 +75,31 @@ function collectBars(root: HTMLElement): { vBars: Bar[]; hBars: Bar[] } {
   return { vBars, hBars }
 }
 
+/* Last known pointer position (viewport coords) — lets recompute() re-light
+   the hint of a grip that is still under the pointer. */
+let lastPointerX = -1
+let lastPointerY = -1
+
+function onWindowPointerMove(e: MouseEvent) {
+  lastPointerX = e.clientX
+  lastPointerY = e.clientY
+}
+
 function recompute() {
   const root = hostEl.value?.parentElement
   if (!root) return
+  /* A layout shift can destroy or move a grip the pointer rests on — its
+     mouseleave then never fires and the accent hint on the two bars it
+     joined stays lit forever (reads as a stray colored line across the
+     gutter). Drop every hint on each recompute, then re-light the grip the
+     pointer is still on: during a drag the layout shifts every frame and no
+     mouseenter refires while the pointer stays inside the re-rendered grip
+     — without this the two-bar highlight would go dark mid-drag. */
+  for (const el of hintedBars) el.classList.remove('hint')
+  hintedBars.clear()
+  const containerRect = root.getBoundingClientRect()
+  const px = lastPointerX - containerRect.left
+  const py = lastPointerY - containerRect.top
   const { vBars, hBars } = collectBars(root)
   const found: Crossing[] = []
   /* T-junction bars often only TOUCH edge-to-edge (a sidebar's gutter ends
@@ -101,6 +123,10 @@ function recompute() {
     }
   }
   crossings.value = found
+  /* Grip box: 0.75rem (12px) centered on the crossing, so ±7px covers it. */
+  for (const c of crossings.value) {
+    if (Math.abs(px - c.x) <= 7 && Math.abs(py - c.y) <= 7) setHint(c, true)
+  }
 }
 
 function scheduleRecompute() {
@@ -108,9 +134,19 @@ function scheduleRecompute() {
   raf = requestAnimationFrame(recompute)
 }
 
+/* Bars currently carrying the hint accent, so recompute() can clear them. */
+const hintedBars = new Set<HTMLElement>()
+
 function setHint(c: Crossing, on: boolean) {
   c.vBar.classList.toggle('hint', on)
   c.hBar.classList.toggle('hint', on)
+  if (on) {
+    hintedBars.add(c.vBar)
+    hintedBars.add(c.hBar)
+  } else {
+    hintedBars.delete(c.vBar)
+    hintedBars.delete(c.hBar)
+  }
 }
 
 /* Hand the same gesture to both bars as synthetic mousedowns carrying the
@@ -140,6 +176,7 @@ onMounted(() => {
     resizeObserver.observe(hostEl.value.parentElement)
   }
   window.addEventListener('resize', scheduleRecompute)
+  window.addEventListener('mousemove', onWindowPointerMove, { passive: true })
 })
 
 onUnmounted(() => {
@@ -147,6 +184,7 @@ onUnmounted(() => {
   resizeObserver?.disconnect()
   cancelAnimationFrame(raf)
   window.removeEventListener('resize', scheduleRecompute)
+  window.removeEventListener('mousemove', onWindowPointerMove)
 })
 </script>
 
