@@ -1,6 +1,6 @@
 <template>
   <div class="detail-drawer-backdrop" :class="{ open: !!mode }" @click="$emit('close')"></div>
-  <div ref="drawerEl" class="detail-drawer" :class="{ open: !!mode }" :style="mode ? { width: drawerWidth + 'px' } : undefined">
+  <div ref="drawerEl" @mousedown.capture="onDetailMouseDown" class="detail-drawer" :class="{ open: !!mode }" :style="mode ? { width: drawerWidth + 'px' } : undefined">
     <div class="drawer-resizer" @mousedown="onResizeStart"></div>
     <div class="detail-drawer-header">
       <span class="detail-drawer-title">{{ headerTitle }}</span>
@@ -18,7 +18,59 @@
           <div class="detail-section-title">{{ sec.label }}</div>
           <div v-for="f in sec.fields" :key="f.label" class="detail-row">
             <span class="detail-label">{{ f.label }}</span>
-            <span class="detail-value">{{ fieldText(f) }}</span>
+            <div v-if="resourceKey === 'ingresses' && f.label === 'Rules'" class="detail-value ingress-detail-table">
+              <table v-if="ingressRoutes.length">
+                <thead><tr><th>Host</th><th>Path</th><th>Path Type</th><th>Backend</th><th>Port</th></tr></thead>
+                <tbody>
+                  <tr v-for="(route, index) in ingressRoutes" :key="index">
+                    <td>{{ route.host }}</td><td>{{ route.path }}</td><td>{{ route.pathType }}</td><td>{{ route.backend }}</td><td>{{ route.port }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <span v-else>—</span>
+            </div>
+            <div v-else-if="resourceKey === 'ingresses' && f.label === 'TLS'" class="detail-value ingress-detail-table">
+              <table v-if="target?.spec?.tls?.length">
+                <thead><tr><th>Hosts</th><th>Secret</th></tr></thead>
+                <tbody>
+                  <tr v-for="(tls, index) in target.spec.tls" :key="index">
+                    <td>{{ (tls.hosts || []).join(', ') || '—' }}</td><td>{{ tls.secretName || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <span v-else>—</span>
+            </div>
+            <div v-else-if="f.label === 'Labels'" class="detail-value k8s-labels">
+              <span v-for="(value, key) in target?.metadata?.labels || {}" :key="key" class="k8s-label-chip">{{ key }}={{ value }}</span>
+              <span v-if="!Object.keys(target?.metadata?.labels || {}).length">—</span>
+            </div>
+            <div v-else-if="f.label === 'Annotations'" class="detail-value k8s-annotations">
+              <div v-for="[key, value] in annotationEntries" :key="key" class="k8s-annotation">
+                <div class="k8s-annotation-key">{{ key }}</div>
+                <details v-if="value.length > 160 || value.includes('\n')">
+                  <summary>{{ value.slice(0, 100) }}{{ value.length > 100 ? '…' : '' }}</summary>
+                  <pre>{{ value }}</pre>
+                </details>
+                <div v-else class="k8s-annotation-value">{{ value }}</div>
+              </div>
+              <span v-if="!annotationEntries.length">—</span>
+            </div>
+            <div v-else-if="f.label === 'Conditions'" class="detail-value k8s-conditions">
+              <div v-for="(condition, index) in target?.status?.conditions || []" :key="condition.type || index" class="k8s-condition">
+                <div class="k8s-condition-header">
+                  <strong>{{ condition.type || '—' }}</strong>
+                  <span :class="['k8s-condition-status', conditionTone(condition)]">
+                    {{ conditionTone(condition) === 'ok' ? '✓' : conditionTone(condition) === 'warn' ? '!' : '·' }}
+                    {{ condition.status || '—' }}
+                  </span>
+                </div>
+                <div v-if="condition.reason" class="k8s-condition-reason">{{ condition.reason }}</div>
+                <div v-if="condition.message" class="k8s-condition-message">{{ condition.message }}</div>
+                <div v-if="condition.lastTransitionTime" class="k8s-condition-time">{{ condition.lastTransitionTime }}</div>
+              </div>
+              <span v-if="!target?.status?.conditions?.length">—</span>
+            </div>
+            <span v-else class="detail-value">{{ fieldText(f) }}</span>
           </div>
         </div>
         <div v-if="resourceKey === 'configmaps'" :key="target?.metadata?.uid || headerTitle" class="detail-section">
@@ -103,8 +155,8 @@
             <el-button size="small" @click="cancelEdit">{{ t('common.cancel') }}</el-button>
           </template>
         </div>
-        <SyntaxEditor v-if="!editing && tab === 'yaml'" :model-value="yamlText" lang="yaml" readonly compact />
-        <SyntaxEditor v-else-if="editing" v-model="draft" lang="yaml" compact />
+        <SyntaxEditor v-if="!editing && tab === 'yaml'" :model-value="yamlText" lang="yaml" readonly compact selection-copy-menu @selection-contextmenu="onEditorCopyContextMenu" />
+        <SyntaxEditor v-else-if="editing" v-model="draft" lang="yaml" compact selection-copy-menu @selection-contextmenu="onEditorCopyContextMenu" />
         <div v-if="saveError" class="yaml-error">{{ saveError }}</div>
       </div>
     </template>
@@ -142,7 +194,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElButton, ElIcon, ElMessage, ElSelect, ElOption, ElCheckbox, ElInput } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
 import { dump, load } from 'js-yaml'
@@ -152,7 +204,7 @@ import { useI18n } from '../i18n'
 import Menu from './Menu.vue'
 import SyntaxEditor from './SyntaxEditor.vue'
 import { decodePropertiesUnicode, restorePropertiesUnicode } from '../services/propertiesPreview'
-import { Clipboard } from '@wailsio/runtime'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import MenuItem from './MenuItem.vue'
 
 const props = defineProps<{ connId: string; mode: 'detail' | 'logs' | null; target: any | null; resourceKey: string; selfPathOverride?: (obj: any) => string; initialTab?: 'detail' | 'yaml' }>()
@@ -164,34 +216,103 @@ const { t } = useI18n()
 // selected; positioned at the pointer (Menu.openAt, viewport-adaptive).
 const copyMenuRef = ref<InstanceType<typeof Menu> | null>(null)
 const copyMenuVisible = ref(false)
+const copyMenuText = ref('')
+let rightClickText = ''
 
-function onCopyContextMenu(e: MouseEvent) {
-  const sel = window.getSelection()?.toString() || ''
-  if (!sel) return
+function onEditorCopyContextMenu(e: MouseEvent, text: string) {
+  if (!text) return
   e.preventDefault()
   e.stopPropagation()
+  copyMenuText.value = text
   copyMenuRef.value?.openAt(e.clientX, e.clientY)
 }
 
-async function onCopyMenu() {
-  const sel = window.getSelection()?.toString() || ''
-  if (sel) {
-    try { await Clipboard.SetText(sel) } catch { try { await navigator.clipboard.writeText(sel) } catch { /* ignore */ } }
-  }
-  copyMenuVisible.value = false
+function detailSelection(): string {
+  const selection = window.getSelection()
+  const root = drawerEl.value
+  if (!root || !selection || selection.isCollapsed || !selection.rangeCount) return ''
+  if (!root.contains(selection.getRangeAt(0).commonAncestorContainer)) return ''
+  return selection.toString()
 }
 
-// Drawer width (draggable). Defaults widen for logs mode; not persisted.
+function isEditorTarget(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest('.syntax-editor, input, textarea, [contenteditable="true"]')
+}
+
+// WKWebView may collapse a text selection on right mouse down. Retain it
+// only for this context-menu gesture, never for a later unrelated copy.
+function onDetailMouseDown(e: MouseEvent) {
+  rightClickText = e.button === 2 && !isEditorTarget(e.target) ? detailSelection() : ''
+}
+
+function onCopyContextMenu(e: MouseEvent) {
+  if (isEditorTarget(e.target)) { rightClickText = ''; return }
+  const text = detailSelection() || rightClickText
+  rightClickText = ''
+  onEditorCopyContextMenu(e, text)
+}
+
+async function copyDetailText(text: string) {
+  if (text && !await writeClipboard(text)) ElMessage.error(t('k8s.copyFailed'))
+}
+
+async function onCopyMenu() {
+  const text = copyMenuText.value
+  copyMenuVisible.value = false
+  copyMenuText.value = ''
+  await copyDetailText(text)
+}
+
+// Plain text can be selected even when no editor has keyboard focus. Listen
+// on document, but only handle selections wholly inside the active drawer.
+function onDetailCopyShortcut(e: KeyboardEvent) {
+  if (!props.mode || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'c' || isEditorTarget(e.target)) return
+  const text = detailSelection()
+  if (!text) return
+  e.preventDefault()
+  e.stopPropagation()
+  void copyDetailText(text)
+}
+
+function onDetailCopy(e: ClipboardEvent) {
+  if (!props.mode || isEditorTarget(e.target)) return
+  const text = detailSelection()
+  if (!text) return
+  e.preventDefault()
+  e.stopPropagation()
+  e.clipboardData?.setData('text/plain', text)
+  void copyDetailText(text)
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', onDetailCopyShortcut, true)
+  document.addEventListener('copy', onDetailCopy, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onDetailCopyShortcut, true)
+  document.removeEventListener('copy', onDetailCopy, true)
+})
+
+// Drawer width (draggable). Remember explicit user resizing across sessions.
 // Max width tracks the actual parent container (not the window) so the drawer
 // never extends past the container's left edge on any screen size.
 const drawerEl = ref<HTMLElement | null>(null)
-const drawerWidth = ref(420)
+const DRAWER_WIDTH_KEY = 'uniterm:k8s-detail-width'
+function readDrawerWidth() {
+  try {
+    const saved = Number(localStorage.getItem(DRAWER_WIDTH_KEY))
+    if (Number.isFinite(saved) && saved >= 320) return saved
+  } catch { /* storage may be unavailable */ }
+  return 640
+}
+let preferredDrawerWidth = readDrawerWidth()
+const drawerWidth = ref(preferredDrawerWidth)
 function maxDrawerWidth() {
   const parent = drawerEl.value?.parentElement
   return parent ? Math.max(320, parent.clientWidth - 40) : window.innerWidth - 120
 }
 watch(() => props.mode, (m) => {
-  if (m === 'logs' && drawerWidth.value < 640) drawerWidth.value = Math.min(640, maxDrawerWidth())
+  if (m) drawerWidth.value = Math.min(preferredDrawerWidth, Math.max(320, maxDrawerWidth()))
 })
 let resizeStartX = 0
 let resizeStartW = 0
@@ -202,6 +323,9 @@ function onResizeMove(e: MouseEvent) {
 function onResizeEnd() {
   document.removeEventListener('mousemove', onResizeMove)
   document.removeEventListener('mouseup', onResizeEnd)
+  if (drawerWidth.value === resizeStartW) return
+  preferredDrawerWidth = drawerWidth.value
+  try { localStorage.setItem(DRAWER_WIDTH_KEY, String(preferredDrawerWidth)) } catch { /* storage may be unavailable */ }
 }
 function onResizeStart(e: MouseEvent) {
   // Block the mousedown default action so the drag cannot promote into a text
@@ -340,12 +464,62 @@ const headerTitle = computed(() => {
   return `${o.kind || getResource(props.resourceKey)?.kind || '?'} / ${o.metadata?.namespace || 'cluster'} / ${o.metadata?.name || ''}`
 })
 
-const sections = computed<DetailSection[]>(() => {
+const baseSections = computed<DetailSection[]>(() => {
   const desc = getResource(props.resourceKey)
   if (desc?.detailSections?.length) return props.resourceKey === 'configmaps'
     ? desc.detailSections.filter(s => s.label !== 'Data') : desc.detailSections
   return genericDetailSections()
 })
+
+// Show both service and resource backends, including the default backend.
+const ingressRoutes = computed(() => {
+  const routes: { host: string; path: string; pathType: string; backend: string; port: string }[] = []
+  const spec = props.target?.spec
+  function append(host: string, path: string, pathType: string, backend: any) {
+    const service = backend?.service
+    const resource = backend?.resource
+    routes.push({
+      host, path, pathType,
+      backend: service?.name || (resource?.name ? [resource.apiGroup, resource.kind, resource.name].filter(Boolean).join('/') : '—'),
+      port: String(service?.port?.number ?? service?.port?.name ?? '—'),
+    })
+  }
+  for (const rule of spec?.rules || []) {
+    for (const path of rule.http?.paths || []) {
+      append(rule.host || '*', path.path || '/', path.pathType || '—', path.backend)
+    }
+  }
+  if (spec?.defaultBackend) append('*', '—', 'Default backend', spec.defaultBackend)
+  return routes
+})
+
+const annotationEntries = computed(() => Object.entries((props.target?.metadata?.annotations || {}) as Record<string, string>))
+
+// A resource may expose conditions even when its descriptor has no explicit field.
+const sections = computed<DetailSection[]>(() => {
+  const metadata = props.target?.metadata
+  const existing = baseSections.value.map(sec => ({
+    ...sec,
+    fields: sec.fields.filter(field => {
+      if (field.label === 'Labels') return Object.keys(metadata?.labels || {}).length > 0
+      if (field.label === 'Annotations') return Object.keys(metadata?.annotations || {}).length > 0
+      if (field.label === 'Owner') return (metadata?.ownerReferences || []).length > 0
+      return true
+    }),
+  })).filter(sec => sec.fields.length > 0)
+  if (!props.target?.status?.conditions?.length || existing.some(sec => sec.fields.some(f => f.label === 'Conditions'))) return existing
+  return [...existing, { label: 'Conditions', fields: [{ label: 'Conditions', value: () => '' }] }]
+})
+
+// Only known condition types have a success/warning interpretation.
+const positiveConditions = new Set(['Ready', 'ContainersReady', 'Initialized', 'PodScheduled', 'Available', 'Complete', 'Established', 'NamesAccepted', 'Accepted', 'Programmed', 'ResolvedRefs', 'Succeeded'])
+const negativeConditions = new Set(['MemoryPressure', 'DiskPressure', 'PIDPressure', 'NetworkUnavailable', 'ReplicaFailure', 'Degraded'])
+function conditionTone(condition: { type?: string; status?: string }): 'ok' | 'warn' | 'neutral' {
+  if (condition.status !== 'True' && condition.status !== 'False') return 'neutral'
+  if (positiveConditions.has(condition.type || '')) return condition.status === 'True' ? 'ok' : 'warn'
+  if (negativeConditions.has(condition.type || '')) return condition.status === 'False' ? 'ok' : 'warn'
+  return 'neutral'
+}
 
 function fieldText(f: any): string {
   if (!props.target) return ''
@@ -392,8 +566,8 @@ const yamlText = computed(() => {
 function startEdit() { draft.value = yamlText.value; editing.value = true; saveError.value = '' }
 function cancelEdit() { editing.value = false; saveError.value = '' }
 async function copyYaml() {
-  try { await navigator.clipboard.writeText(yamlText.value); ElMessage.success(t('k8s.copied')) }
-  catch (e: any) { ElMessage.error(`${t('k8s.copyFailed')}: ${e?.message || e}`) }
+  if (await writeClipboard(yamlText.value)) ElMessage.success(t('k8s.copied'))
+  else ElMessage.error(t('k8s.copyFailed'))
 }
 
 function selfPath(o: any): string {
@@ -478,7 +652,11 @@ watch(() => [props.mode, props.target], () => {
   }
 })
 
-onBeforeUnmount(stopLogs)
+onBeforeUnmount(() => {
+  stopLogs()
+  document.removeEventListener('mousemove', onResizeMove)
+  document.removeEventListener('mouseup', onResizeEnd)
+})
 </script>
 
 <style scoped>
@@ -502,6 +680,42 @@ onBeforeUnmount(stopLogs)
 .config-entry summary { cursor: pointer; font-family: var(--font-mono); }
 .config-preview { height: 16rem; margin-top: 0.5rem; }
 .config-binary { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16rem; overflow: auto; user-select: text; }
+/* body disables selection globally; explicitly opt the detail surface out
+   in WKWebView as well as other browsers. Do not make action buttons draggable. */
+.detail-body, .detail-body .detail-section, .detail-body .detail-section-title,
+.detail-body .detail-row, .detail-body .detail-label, .detail-body .detail-value,
+.detail-body summary, .detail-body pre, .detail-body td, .detail-body th,
+.detail-drawer-title, .logs-body {
+  user-select: text;
+  -webkit-user-select: text;
+  --wails-draggable: no-drag;
+}
+.detail-body :deep(.cm-content) { user-select: text; -webkit-user-select: text; }
+.detail-body :deep(.el-button) { user-select: none; -webkit-user-select: none; }
+
+.detail-value.ingress-detail-table { min-width: 0; overflow-x: auto; white-space: normal; word-break: normal; }
+.ingress-detail-table table { border-collapse: collapse; width: 100%; text-align: left; }
+.ingress-detail-table th, .ingress-detail-table td { padding: 0.375rem; border-bottom: 1px solid var(--border-subtle); vertical-align: top; overflow-wrap: anywhere; }
+.ingress-detail-table th { color: var(--text-muted); font-weight: 500; }
+
+.detail-value.k8s-labels { display: flex; flex-wrap: wrap; gap: 0.375rem; min-width: 0; }
+.k8s-label-chip { max-width: 100%; padding: 0.2rem 0.375rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-hover); overflow-wrap: anywhere; word-break: normal; }
+
+.detail-value.k8s-annotations { min-width: 0; word-break: normal; }
+.k8s-annotation + .k8s-annotation { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-subtle); }
+.k8s-annotation-key { color: var(--text-muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+.k8s-annotation-value, .k8s-annotation summary { overflow-wrap: anywhere; white-space: pre-wrap; }
+.k8s-annotation summary { cursor: pointer; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.k8s-annotation pre { margin: 0.25rem 0 0; max-height: 16rem; overflow: auto; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.detail-value.k8s-conditions { min-width: 0; word-break: normal; overflow-wrap: anywhere; }
+.k8s-condition + .k8s-condition { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-subtle); }
+.k8s-condition-header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.25rem; }
+.k8s-condition-status.ok { color: var(--el-color-success, #67c23a); }
+.k8s-condition-status.warn { color: var(--el-color-warning, #e6a23c); }
+.k8s-condition-status.neutral, .k8s-condition-time { color: var(--text-muted); }
+.k8s-condition-reason, .k8s-condition-time { font-size: 0.75rem; }
+.k8s-condition-message { white-space: pre-wrap; }
 
 /* Copied verbatim from MonitorTabContent.vue */
 .detail-drawer-backdrop {

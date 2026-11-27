@@ -128,6 +128,7 @@ const props = withDefaults(defineProps<{
   wrap?: boolean
   readonly?: boolean
   showSearchButton?: boolean
+  selectionCopyMenu?: boolean
   fontSize?: number
 }>(), { wrap: true })
 
@@ -135,6 +136,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
   execute: []
   'search-open': [open: boolean]
+  'selection-contextmenu': [event: MouseEvent, text: string]
 }>()
 
 const hostRef = ref<HTMLElement | null>(null)
@@ -573,7 +575,32 @@ function buildExtensions(path: string) {
     EditorView.editable.of(!props.readonly),
     ...(props.readonly ? [EditorView.contentAttributes.of({ tabindex: '0' })] : []),
     props.lang ? languageFor(props.lang) : languageExtension(path),
+    EditorView.domEventHandlers({
+      copy(event) {
+        if (!view || view.state.selection.main.empty) return false
+        event.preventDefault()
+        void copySelection()
+        return true
+      },
+      contextmenu(event) {
+        if (!props.selectionCopyMenu || !view || view.state.selection.main.empty) return false
+        const { from, to } = view.state.selection.main
+        event.preventDefault()
+        event.stopPropagation()
+        emit('selection-contextmenu', event, view.state.sliceDoc(from, to))
+        return true
+      },
+    }),
     keymap.of([
+      {
+        key: 'Mod-c',
+        stopPropagation: true,
+        run: () => {
+          if (!view || view.state.selection.main.empty) return false
+          void copySelection()
+          return true
+        },
+      },
       {
         key: 'Mod-Enter',
         run: () => {
