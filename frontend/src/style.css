@@ -115,30 +115,29 @@
   --el-font-size-extra-large: 1.25rem;
 }
 
-/* Deep blue: saturated navy surfaces with a clearer lightness ramp. */
+/* Deep blue: navy surfaces at v1.12.4's muted tone (hue ~219°, saturation
+   38-46%) riding the current lightness ramp, so the layer contrast is kept
+   while the color cast stays deep-ocean rather than electric blue. */
 [data-theme="deep-blue"] {
-  /* Deep navy with EVEN lightness steps (~6 points per layer) so layer
-     contrast stays consistent, at muted saturation (~45%) so it still reads
-     as deep blue rather than bright blue */
-  --bg-base: #0b1322;
-  --bg-elevated: #14223c;
-  --bg-surface: #1d3050;
-  --bg-overlay: #263b64;
+  --bg-base: #0c1321;
+  --bg-elevated: #16233c;
+  --bg-surface: #202f4b;
+  --bg-overlay: #2c3d5d;
   --bg-hover: #324974;
   --bg-active: #3e598c;
-  --bg-titlebar: #0d1727;
+  --bg-titlebar: #0e1726;
 
   --text-primary: #e8eef8;
   --text-secondary: #c8d5e8;
   --text-muted: #93a8c8;
   --text-disabled: #6b84a8;
 
-  --accent: #4e9dff;
-  --accent-glow: rgba(78, 157, 255, 0.22);
-  --accent-subtle: rgba(78, 157, 255, 0.12);
+  --accent: #53caf9;
+  --accent-glow: rgba(83, 202, 249, 0.22);
+  --accent-subtle: rgba(83, 202, 249, 0.12);
 
-  --info: #69a9f0;
-  --info-subtle: rgba(105, 169, 240, 0.12);
+  --info: #5eb3f5;
+  --info-subtle: rgba(94, 179, 245, 0.12);
   --on-accent: #ffffff;
 
   --chart-1: #4ade80;
@@ -160,8 +159,8 @@
   --error-subtle: rgba(248, 113, 113, 0.06);
   --error-glow: rgba(248, 113, 113, 0.15);
 
-  --border-subtle: #2e3d5c;
-  --border-hover: #3d4f73;
+  --border-subtle: rgba(255, 255, 255, 0.16);
+  --border-hover: rgba(255, 255, 255, 0.22);
 
   --scrollbar-thumb: rgba(255, 255, 255, 0.22);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.36);
@@ -170,11 +169,11 @@
   --shadow-md: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.6);
 
-  --el-bg-color: #14223c;
-  --el-bg-color-page: #0b1322;
-  --el-fill-color-blank: #1d3050;
-  --el-fill-color: #14223c;
-  --el-fill-color-light: #263b64;
+  --el-bg-color: #16233c;
+  --el-bg-color-page: #0c1321;
+  --el-fill-color-blank: #202f4b;
+  --el-fill-color: #16233c;
+  --el-fill-color-light: #2c3d5d;
   --el-fill-color-lighter: #324974;
   --el-text-color-primary: var(--text-primary);
   --el-text-color-regular: var(--text-secondary);
