@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RESOURCES, getResource, ingressRuleLinks } from './k8sResources'
+import { RESOURCES, getResource, ingressRuleLinks, configMapEntries } from './k8sResources'
 
 describe('k8sResources', () => {
   it('exposes at least Pods', () => {
@@ -200,5 +200,43 @@ describe('ingress rule links', () => {
     expect(ingressRuleLinks({ spec: { rules: [rule('app.example.com', '/', '/')] } })).toEqual([
       { text: 'http://app.example.com/', url: 'http://app.example.com/' },
     ])
+  })
+})
+
+describe('ConfigMap preview entries', () => {
+  it('keeps scalar values and their original whitespace', () => {
+    expect(configMapEntries({ LOG_LEVEL: ' INFO ', EMPTY: '', PORT: '8080' })).toEqual([
+      { key: 'LOG_LEVEL', value: ' INFO ', lang: undefined, multiline: false },
+      { key: 'EMPTY', value: '', lang: undefined, multiline: false },
+      { key: 'PORT', value: '8080', lang: undefined, multiline: false },
+    ])
+    expect(configMapEntries(undefined)).toEqual([])
+  })
+
+  it('recognizes supported file extensions without parsing or rewriting content', () => {
+    const data = {
+      'application.YML': '# comment\nserver:\n  port: 8080\n',
+      'app.properties': 'server.port=8080\n',
+      'config.json': '{"enabled":true}',
+      'log4j2.xml': '<Configuration />',
+    }
+    const entries = configMapEntries(data)
+    expect(entries.map(e => e.lang)).toEqual(['yaml', 'conf', 'json', 'xml'])
+    expect(entries.every(e => e.multiline)).toBe(true)
+    expect(entries.map(e => e.value)).toEqual(Object.values(data))
+  })
+
+  it('detects multiline config content and preserves unrecognized or invalid text', () => {
+    const data = {
+      yaml: 'server:\n  port: 8080',
+      propertiesText: 'a=1\nb=2',
+      jsonText: '{\n  "a": 1\n}',
+      xmlText: '<root>\n</root>',
+      notes: 'first line\nsecond line',
+      malformed: '{\ninvalid',
+    }
+    const entries = configMapEntries(data)
+    expect(entries.map(e => e.lang)).toEqual(['yaml', 'conf', 'json', 'xml', undefined, undefined])
+    expect(entries.map(e => e.value)).toEqual(Object.values(data))
   })
 })

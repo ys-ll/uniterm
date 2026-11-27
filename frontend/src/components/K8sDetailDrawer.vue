@@ -10,7 +10,7 @@
     <template v-if="mode === 'detail'">
       <div class="db-tabs">
         <button class="db-tab" :class="{ active: tab === 'struct' }" @click="tab = 'struct'">{{ t('k8s.detail') }}</button>
-        <button class="db-tab" :class="{ active: tab === 'yaml' }" @click="tab = 'yaml'">YAML</button>
+        <button class="db-tab" :class="{ active: tab === 'yaml' }" :disabled="keyEditVisible" @click="tab = 'yaml'">YAML</button>
       </div>
 
       <div v-show="tab === 'struct'" class="detail-body" @contextmenu="onCopyContextMenu">
@@ -73,6 +73,65 @@
             <span v-else class="detail-value">{{ fieldText(f) }}</span>
           </div>
         </div>
+        <div v-if="resourceKey === 'configmaps'" :key="target?.metadata?.uid || headerTitle" class="detail-section">
+          <div class="detail-section-title">Data ({{ configEntries.length }})</div>
+          <template v-for="entry in configEntries" :key="entry.key">
+            <div v-if="!entry.multiline" class="detail-row">
+              <span class="detail-label config-key">{{ entry.key }}</span>
+              <div v-if="isEditingKey(entry.key)" class="detail-value config-inline-edit">
+                <el-input v-model="keyEditDraft" type="textarea" :autosize="{ minRows: 1, maxRows: 5 }" :disabled="keySaving" />
+                <div class="config-edit-actions">
+                  <el-button size="small" :disabled="keySaving" @click="cancelKeyEdit">{{ t('common.cancel') }}</el-button>
+                  <el-button size="small" type="primary" :loading="keySaving" @click="saveKeyEdit">{{ t('common.save') }}</el-button>
+                </div>
+                <div v-if="keySaveError" class="yaml-error">{{ keySaveError }}</div>
+              </div>
+              <template v-else>
+                <span class="detail-value">{{ entry.value === '' ? '—' : entry.value }}</span>
+                <el-button v-if="!target?.immutable" link size="small" :disabled="keyEditVisible || editing || saving" @click.stop="startKeyEdit(entry)">{{ t('k8s.edit') }}</el-button>
+              </template>
+            </div>
+            <details v-else class="config-entry" :open="expandedConfig.has(entry.key)" @toggle="onConfigToggle(entry.key, $event)">
+              <summary class="config-key config-entry-header" @click="isEditingKey(entry.key) && $event.preventDefault()">
+                <span class="config-entry-name">{{ entry.key }}</span>
+                <span class="config-header-actions">
+                  <span v-if="isEditingKey(entry.key) && keyEditLang === 'conf'" class="config-edit-encoding">{{ keyEditRaw ? 'Raw' : 'Unicode' }}</span>
+                  <el-button v-if="expandedConfig.has(entry.key) && !isEditingKey(entry.key) && entry.lang === 'conf' && decodePropertiesUnicode(entry.value) !== entry.value"
+                    link size="small" @click.stop.prevent="toggleRawProperties(entry.key)">{{ rawProperties.has(entry.key) ? 'Unicode' : 'Raw' }}</el-button>
+                  <el-button v-if="!target?.immutable && !isEditingKey(entry.key)" link size="small"
+                    :disabled="keyEditVisible || editing || saving" @click.stop.prevent="startKeyEdit(entry)">{{ t('k8s.edit') }}</el-button>
+                </span>
+              </summary>
+              <div v-if="expandedConfig.has(entry.key)">
+                <template v-if="isEditingKey(entry.key)">
+                  <div class="config-preview">
+                    <SyntaxEditor :ref="setKeyEditor" v-model="keyEditDraft" :file-path="keyEditName" :lang="keyEditLang"
+                      compact show-search-button :readonly="keySaving" />
+                  </div>
+                  <div class="config-edit-actions">
+                  <el-button size="small" :disabled="keySaving" @click="cancelKeyEdit">{{ t('common.cancel') }}</el-button>
+                  <el-button size="small" type="primary" :loading="keySaving" @click="saveKeyEdit">{{ t('common.save') }}</el-button>
+                </div>
+                <div v-if="keySaveError" class="yaml-error">{{ keySaveError }}</div>
+                </template>
+                <template v-else>
+                  <div class="config-preview">
+                    <SyntaxEditor :model-value="entry.lang === 'conf' && !rawProperties.has(entry.key) ? decodePropertiesUnicode(entry.value) : entry.value"
+                      :file-path="entry.key" :lang="entry.lang" readonly compact show-search-button />
+                  </div>
+                </template>
+              </div>
+            </details>
+          </template>
+          <div v-if="!configEntries.length" class="detail-row"><span class="detail-value">—</span></div>
+          <template v-if="Object.keys(target?.binaryData || {}).length">
+            <div class="detail-section-title">binaryData (Base64)</div>
+            <details v-for="(value, key) in target.binaryData" :key="key" class="config-entry">
+              <summary class="config-key">{{ key }}</summary>
+              <pre class="config-binary">{{ value }}</pre>
+            </details>
+          </template>
+        </div>
         <!-- Pod events (async) -->
         <div v-if="isPod" class="detail-section">
           <div class="detail-section-title">Events</div>
@@ -96,8 +155,8 @@
             <el-button size="small" @click="cancelEdit">{{ t('common.cancel') }}</el-button>
           </template>
         </div>
-        <pre v-if="!editing" class="k8s-yaml-drawer-body" @contextmenu="onCopyContextMenu">{{ yamlText }}</pre>
-        <SyntaxEditor v-else v-model="draft" lang="yaml" compact selection-copy-menu @selection-contextmenu="onEditorCopyContextMenu" />
+        <SyntaxEditor v-if="!editing && tab === 'yaml'" :model-value="yamlText" lang="yaml" readonly compact selection-copy-menu @selection-contextmenu="onEditorCopyContextMenu" />
+        <SyntaxEditor v-else-if="editing" v-model="draft" lang="yaml" compact selection-copy-menu @selection-contextmenu="onEditorCopyContextMenu" />
         <div v-if="saveError" class="yaml-error">{{ saveError }}</div>
       </div>
     </template>
@@ -136,14 +195,15 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { ElButton, ElIcon, ElMessage, ElSelect, ElOption, ElCheckbox } from 'element-plus'
+import { ElButton, ElIcon, ElMessage, ElSelect, ElOption, ElCheckbox, ElInput } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
 import { dump, load } from 'js-yaml'
-import { getResource, genericDetailSections, type DetailSection } from '../services/k8sResources'
+import { getResource, genericDetailSections, configMapEntries, type DetailSection } from '../services/k8sResources'
 import { requestJSON, startLogStream, type LogHandle } from '../services/k8sClient'
 import { useI18n } from '../i18n'
 import Menu from './Menu.vue'
 import SyntaxEditor from './SyntaxEditor.vue'
+import { decodePropertiesUnicode, restorePropertiesUnicode } from '../services/propertiesPreview'
 import { writeClipboard } from '../composables/useClipboardWrite'
 import MenuItem from './MenuItem.vue'
 
@@ -283,10 +343,117 @@ const editing = ref(false)
 const draft = ref('')
 const saving = ref(false)
 const saveError = ref('')
+const expandedConfig = ref(new Set<string>())
+const rawProperties = ref(new Set<string>())
+function toggleRawProperties(key: string) {
+  if (rawProperties.value.has(key)) rawProperties.value.delete(key)
+  else rawProperties.value.add(key)
+}
+const savedConfigMap = ref<any>(null)
+const configEntries = computed(() => configMapEntries((savedConfigMap.value || props.target)?.data))
+const keyEditVisible = ref(false)
+const keySaving = ref(false)
+const keySaveError = ref('')
+const keyEditName = ref('')
+const keyEditLang = ref<string>()
+const keyEditOriginal = ref('')
+const keyEditRaw = ref(false)
+const keyEditDraft = ref('')
+const keyEditorRef = ref<InstanceType<typeof SyntaxEditor> | null>(null)
+function setKeyEditor(editor: unknown) {
+  keyEditorRef.value = editor as InstanceType<typeof SyntaxEditor> | null
+}
+function isEditingKey(key: string) {
+  return keyEditVisible.value && keyEditName.value === key
+}
+function cancelKeyEdit() {
+  if (keySaving.value) return
+  keyEditVisible.value = false
+  keySaveError.value = ''
+  keyEditTarget = null
+  keyEditorRef.value = null
+}
+let keyEditTarget: any = null
+let keyEditConnId = ''
+let keyEditSession = 0
+
+function startKeyEdit(entry: { key: string; value: string; lang?: string }) {
+  const obj = savedConfigMap.value || props.target
+  if (!obj || obj.immutable || keySaving.value || keyEditVisible.value || editing.value || saving.value) return
+  keyEditTarget = obj
+  keyEditConnId = props.connId
+  keyEditName.value = entry.key
+  keyEditLang.value = entry.lang
+  keyEditOriginal.value = entry.value
+  keyEditRaw.value = entry.lang === 'conf' && rawProperties.value.has(entry.key)
+  keyEditDraft.value = entry.lang === 'conf' && !keyEditRaw.value ? decodePropertiesUnicode(entry.value) : entry.value
+  keySaveError.value = ''
+  keyEditSession++
+  keyEditorRef.value = null
+  expandedConfig.value.add(entry.key)
+  keyEditVisible.value = true
+}
+
+async function saveKeyEdit() {
+  if (keySaving.value || !keyEditTarget || !keyEditVisible.value) return
+  const session = keyEditSession
+  const normalize = (s: string) => s.replace(/\r\n|\r/g, '\n')
+  const original = keyEditOriginal.value
+  const text = keyEditorRef.value?.getValue() ?? keyEditDraft.value
+  const value = keyEditLang.value === 'conf' && !keyEditRaw.value
+    ? restorePropertiesUnicode(original, text)
+    : normalize(original) === normalize(text) ? original
+      : original.includes('\r\n') ? normalize(text).replace(/\n/g, '\r\n') : text
+  if (value === original) { keyEditVisible.value = false; return }
+  const uid = keyEditTarget.metadata?.uid
+  if (!uid) { keySaveError.value = 'ConfigMap UID is missing. Reopen the resource and retry.'; return }
+  const keyPath = '/data/' + keyEditName.value.replace(/~/g, '~0').replace(/\//g, '~1')
+  const resourcePath = selfPath(keyEditTarget)
+  keySaving.value = true
+  keySaveError.value = ''
+  try {
+    // Atomic optimistic concurrency: a concurrent change to this key or a
+    // deleted/recreated ConfigMap rejects the patch; other keys are untouched.
+    const { status, data, raw } = await requestJSON(keyEditConnId, 'PATCH', resourcePath, [
+      { op: 'test', path: '/metadata/uid', value: uid },
+      { op: 'test', path: keyPath, value: original },
+      { op: 'replace', path: keyPath, value },
+    ], 'application/json-patch+json')
+    if (status < 200 || status >= 300) throw new Error(`HTTP ${status}: ${raw?.slice(0, 300) || ''}`)
+    if (session !== keyEditSession) return
+    savedConfigMap.value = data || { ...keyEditTarget, data: { ...keyEditTarget.data, [keyEditName.value]: value } }
+    keyEditVisible.value = false
+    emit('saved')
+    ElMessage.success(t('k8s.saved'))
+  } catch (e: any) {
+    if (session === keyEditSession) keySaveError.value = String(e?.message || e)
+  } finally {
+    keySaving.value = false
+  }
+}
+
+
+function onConfigToggle(key: string, event: Event) {
+  const details = event.target as HTMLDetailsElement
+  if (!details.isConnected) return
+  if (isEditingKey(key) && !details.open) {
+    details.open = true
+    return
+  }
+  if (details.open) expandedConfig.value.add(key)
+  else expandedConfig.value.delete(key)
+
+}
 
 watch(() => props.target, () => {
   tab.value = props.initialTab === 'yaml' ? 'yaml' : 'struct'
   editing.value = false; saveError.value = ''
+  expandedConfig.value = new Set()
+  rawProperties.value = new Set()
+  savedConfigMap.value = null
+  keyEditSession++
+  keyEditVisible.value = false
+  keyEditTarget = null
   events.value = []; eventsError.value = ''
   if (isPod.value) loadEvents()
 })
@@ -299,7 +466,8 @@ const headerTitle = computed(() => {
 
 const baseSections = computed<DetailSection[]>(() => {
   const desc = getResource(props.resourceKey)
-  if (desc?.detailSections?.length) return desc.detailSections
+  if (desc?.detailSections?.length) return props.resourceKey === 'configmaps'
+    ? desc.detailSections.filter(s => s.label !== 'Data') : desc.detailSections
   return genericDetailSections()
 })
 
@@ -391,7 +559,7 @@ async function loadEvents() {
 
 const yamlText = computed(() => {
   if (!props.target) return ''
-  try { return dump(props.target, { sortKeys: false, lineWidth: 120 }) }
+  try { return dump(savedConfigMap.value || props.target, { sortKeys: false, lineWidth: 120 }) }
   catch (e: any) { return `# dump failed: ${e?.message || e}` }
 })
 
@@ -492,6 +660,26 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.config-entry-header { display: flex; align-items: center; gap: 0.5rem; list-style: none; }
+.config-entry-header::-webkit-details-marker { display: none; }
+.config-entry-header::before { content: ''; flex: none; width: 0.375rem; height: 0.375rem; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin-inline: 0.125rem; }
+.config-entry[open] > .config-entry-header::before { transform: rotate(45deg); }
+.config-entry-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.config-header-actions { display: inline-flex; align-items: center; flex: none; gap: 0.75rem; font-family: var(--font-ui); }
+.config-header-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.config-inline-edit { min-width: 0; }
+.config-edit-actions { display: flex; justify-content: flex-end; gap: 0.25rem; margin-top: 0.5rem; }
+.config-edit-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.db-tab:disabled { opacity: 0.5; cursor: not-allowed; }
+.config-edit-encoding { color: var(--text-muted); font-size: 0.75rem; }
+
+
+.config-key { overflow-wrap: anywhere; user-select: text; }
+.detail-label.config-key { width: 40%; min-width: 0; }
+.config-entry { margin: 0.5rem 0; padding: 0.5rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+.config-entry summary { cursor: pointer; font-family: var(--font-mono); }
+.config-preview { height: 16rem; margin-top: 0.5rem; }
+.config-binary { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16rem; overflow: auto; user-select: text; }
 /* body disables selection globally; explicitly opt the detail surface out
    in WKWebView as well as other browsers. Do not make action buttons draggable. */
 .detail-body, .detail-body .detail-section, .detail-body .detail-section-title,
