@@ -362,6 +362,8 @@ uniTerm이 도움이 되었다면 ⭐ Star를 눌러 주세요 — 프로젝트�
   <tr>
     <td align="center"><a href="https://github.com/guberm">@guberm</a></td>
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
+    <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
+    <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
   </tr>
 </table>
 
