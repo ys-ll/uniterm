@@ -180,7 +180,7 @@
             <el-form-item v-if="(form.authType !== 'identity' || showsIdentityUserField) && form.type !== 'vnc' && form.type !== 'spice' && !(form.type === 'database' && form.dbType === 'rqlite') && !isSqliteDb && form.type !== 'local' && form.type !== 'wsl' && form.type !== 'local-file' && form.type !== 'wsl-file' && form.type !== 'serial' && form.type !== 'tcp' && form.type !== 'k8s' && form.type !== 'container' && !isEsApiKey" :label="form.authType === 'identity' ? t('conn.identityUserOverride') : (form.type === 's3' ? 'Access Key' : t('conn.user'))">
               <el-input v-model="form.user" :placeholder="form.authType === 'identity' ? t('conn.identityUserOverrideHint') : (form.type === 's3' ? 'Access Key ID' : t('conn.userPlaceholder'))" />
             </el-form-item>
-            <el-form-item v-if="form.type !== 'local' && form.type !== 'wsl' && form.type !== 'local-file' && form.type !== 'wsl-file' && form.type !== 'serial' && form.type !== 'tcp' && form.type !== 'k8s' && form.type !== 'container' && form.authType !== 'identity' && ((form.authType === 'password') || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3' || form.type === 'elasticsearch') && !(form.type === 'database' && form.dbType === 'rqlite') && !isSqliteDb" :label="form.type === 's3' ? 'Secret Key' : (isEsApiKey ? t('conn.esApiKey') : t('conn.password'))">
+            <el-form-item v-if="form.type !== 'local' && form.type !== 'wsl' && form.type !== 'local-file' && form.type !== 'wsl-file' && form.type !== 'serial' && form.type !== 'tcp' && form.type !== 'k8s' && form.type !== 'container' && form.authType !== 'identity' && ((form.authType === 'password') || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3' || isElasticsearch) && !(form.type === 'database' && form.dbType === 'rqlite') && !isSqliteDb" :label="form.type === 's3' ? 'Secret Key' : (isEsApiKey ? t('conn.esApiKey') : t('conn.password'))">
               <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" :placeholder="form.type === 's3' ? 'Secret Access Key' : (isEsApiKey ? t('conn.esApiKeyPlaceholder') : '')" />
             </el-form-item>
             <el-form-item v-if="form.authType === 'kerberos' && !isMobilePlatform()" :label="t('conn.kerberos')">
@@ -1126,7 +1126,7 @@ const showAdvanced = ref(false)
 
 // Connection types that support the "test connection" button (issue #377).
 // local/serial/mosh/vnc/rdp/spice/x11-desktop don't have a non-interactive probe.
-const TESTABLE_TYPES = ['ssh', 'telnet', 'ftp', 'sftp', 'scp', 's3', 'webdav', 'smb', 'database', 'mongodb', 'redis', 'elasticsearch', 'k8s', 'container', 'tcp']
+const TESTABLE_TYPES = ['ssh', 'telnet', 'ftp', 'sftp', 'scp', 's3', 'webdav', 'smb', 'database', 'mongodb', 'redis', 'elasticsearch', 'opensearch', 'k8s', 'container', 'tcp']
 // Test-connection result state: 'checking' shows a spinner; 'success'/'error'
 // keep a colored status icon on the button until the next test or a reopen.
 const testStatus = ref<'idle' | 'checking' | 'success' | 'error'>('idle')
@@ -1283,14 +1283,14 @@ const showProxy = computed(() =>
   !isRedisSentinel.value
 )
 const showAdvancedToggle = computed(() =>
-  showTunnel.value || form.type === 'ssh' || form.type === 'sftp' || form.type === 'scp' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'wsl' || form.type === 'serial' || form.type === 'ftp' || form.type === 'database' || form.type === 'elasticsearch' || form.type === 'x11-desktop' || form.type === 'rdp'
+  showTunnel.value || form.type === 'ssh' || form.type === 'sftp' || form.type === 'scp' || form.type === 'telnet' || form.type === 'mosh' || form.type === 'local' || form.type === 'wsl' || form.type === 'serial' || form.type === 'ftp' || form.type === 'database' || isElasticsearch.value || form.type === 'x11-desktop' || form.type === 'rdp'
 )
 
 const isRedisSentinel = computed(() =>
   form.type === 'redis' && form.redisMode === 'sentinel'
 )
 const isElasticsearch = computed(() =>
-  form.type === 'elasticsearch'
+  form.type === 'elasticsearch' || form.type === 'opensearch'
 )
 const isEsApiKey = computed(() =>
   isElasticsearch.value && form.authType === 'apikey'
@@ -1408,7 +1408,7 @@ const hasFileStartPaths = computed(() =>
 // carry no credentials at all. Key-type identities only make sense for the
 // SSH family — the identity select filters to password entries elsewhere.
 const IDENTITY_USERLESS_TYPES = ['vnc', 'spice']
-const IDENTITY_EXTRA_TYPES = ['rdp', 'telnet', 'ftp', 'smb', 'webdav', 's3', 'vnc', 'spice', 'redis', 'mongodb', 'elasticsearch']
+const IDENTITY_EXTRA_TYPES = ['rdp', 'telnet', 'ftp', 'smb', 'webdav', 's3', 'vnc', 'spice', 'redis', 'mongodb', 'elasticsearch', 'opensearch']
 const supportsIdentityAuth = computed(() => {
   if (isSSHAlgoType.value) return true
   if (form.type === 'database') return form.dbType !== 'sqlite' && form.dbType !== 'rqlite'
@@ -1433,7 +1433,7 @@ const advGroupNetwork = computed(() =>
   showProxy.value || showTunnel.value
 )
 const advGroupProtocol = computed(() =>
-  ['database', 'mongodb', 'redis', 'elasticsearch', 'ftp', 'vnc', 'telnet', 'mosh', 'rdp', 'local', 'wsl',
+  ['database', 'mongodb', 'redis', 'elasticsearch', 'opensearch', 'ftp', 'vnc', 'telnet', 'mosh', 'rdp', 'local', 'wsl',
    's3', 'smb', 'webdav', 'container', 'local-file', 'wsl-file'].includes(form.type) ||
   isSSHAlgoType.value
 )
@@ -1608,7 +1608,7 @@ watch(() => props.editConfig, (config) => {
     // Backfill legacy ES auth: older versions stored the auth type in a dedicated
     // `esAuthType` ('basic'|'apikey') and the key in `esApiKey`. Both now live in
     // the shared `authType` ('password'|'apikey') and `password` fields.
-    if (form.type === 'elasticsearch') {
+    if (isElasticsearch.value) {
       const legacy = config as any
       const legacyType = legacy?.esAuthType
       if (legacyType) {
@@ -1703,7 +1703,7 @@ watch(() => form.type, (newType) => {
   if (isEdit.value) return
   const port = defaultPortFor(newType)
   if (port !== undefined) form.port = port
-  if (newType === 'elasticsearch') {
+  if (isElasticsearch.value) {
     // ES shares the common `authType` field; default to 'password' unless an API key was already chosen.
     form.authType = form.authType === 'apikey' ? 'apikey' : 'password'
   }
@@ -1715,7 +1715,7 @@ watch(() => form.type, (newType) => {
   if (!isSSHAlgoType.value && ['key', 'keyText', 'kerberos', 'agent'].includes(form.authType)) {
     form.authType = 'password'
   }
-  if (form.authType === 'apikey' && newType !== 'elasticsearch') {
+  if (form.authType === 'apikey' && !isElasticsearch.value) {
     form.authType = 'password'
   }
   if (form.authType === 'identity' && !supportsIdentityAuth.value) {
@@ -2160,7 +2160,7 @@ function normalizeForm(): ConnectionConfig {
   if (normalized.type === 'database' && normalized.dbType === 'oracle' && !normalized.dbName?.trim()) {
     throw new Error(t('db.serviceNameRequired'))
   }
-  if (normalized.type === 'elasticsearch' && normalized.authType === 'apikey' && !normalized.password?.trim()) {
+  if (isElasticsearch.value && normalized.authType === 'apikey' && !normalized.password?.trim()) {
     throw new Error(t('conn.esApiKeyRequired'))
   }
   if (!normalized.name.trim()) {

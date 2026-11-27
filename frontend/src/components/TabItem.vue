@@ -369,7 +369,7 @@ const supportsOutputLog = computed(() => {
 // terminals, file transfer, database (incl. mongodb/redis variants), and k8s.
 const canDuplicate = computed(() => {
   const type = props.tab.type
-  return type === 'terminal' || type === 'sftp' || type === 'database' || type === 'mongodb' || type === 'redis' || type === 'elasticsearch' || type === 'k8s'
+  return type === 'terminal' || type === 'sftp' || type === 'database' || type === 'mongodb' || type === 'redis' || type === 'elasticsearch' || type === 'opensearch' || type === 'k8s'
 })
 
 // Channel clone (issue #983): SSH terminal tabs with a live session — the
@@ -389,7 +389,7 @@ const TTY_RECONNECT_TYPES: readonly string[] = ['ssh', 'telnet', 'serial', 'mosh
 const canReconnect = computed(() => {
   const type = props.tab.type
   if (type === 'rdp' || type === 'vnc' || type === 'spice' || type === 'x11-desktop') return true
-  if (type === 'database' || type === 'redis' || type === 'mongodb' || type === 'elasticsearch' || type === 'sftp' || type === 'monitor') {
+  if (type === 'database' || type === 'redis' || type === 'mongodb' || type === 'elasticsearch' || type === 'opensearch' || type === 'sftp' || type === 'monitor') {
     return 'panelId' in props.tab && !!panelStore.getPanel(props.tab.panelId)
   }
   if (type === 'k8s' || type === 'container') {

@@ -93,6 +93,11 @@ func (sm *SessionManager) Create(sessionType string, config ConnectionConfig) (S
 	case "elasticsearch":
 		s = NewElasticsearchSession(config.ID)
 
+	// OpenSearch shares the Elasticsearch REST surface; the same session
+	// implementation serves both.
+	case "opensearch":
+		s = NewElasticsearchSession(config.ID)
+
 	case "x11-desktop":
 		s = NewX11DesktopSession(config.ID)
 
