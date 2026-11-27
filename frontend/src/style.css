@@ -321,6 +321,17 @@
   box-sizing: border-box;
 }
 
+/* Native <button> elements carry the Chromium UA font (10pt/13.33px) and do
+   NOT inherit from their parent, so icon-only buttons sized via 1em boxes
+   (el-icon, lucide svgs) stayed fixed while the rest of the UI scaled with
+   the uiFontSize setting. Inherit font like normalize.css does. Components
+   that set their own font-size override this as usual. */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
 /* Global monospace baseline: pre/code/kbd/samp would otherwise render in the
    browser's default mono stack, bypassing JetBrains Mono. Components with
    their own rules override this as usual. */

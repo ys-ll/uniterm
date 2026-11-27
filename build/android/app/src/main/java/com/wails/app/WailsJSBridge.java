@@ -145,6 +145,16 @@ public class WailsJSBridge {
     }
 
     /**
+     * Paint the system-bar/cutout inset padding with the frontend's theme
+     * background color. json: {"color":"#RRGGBB"} (issue #1599).
+     * Called from JavaScript: wails.setSystemBarBackground(json)
+     */
+    @JavascriptInterface
+    public void setSystemBarBackground(final String json) {
+        bridge.setSystemBarBackground(json);
+    }
+
+    /**
      * Send a callback response to JavaScript
      */
     private void sendCallback(String callbackId, String result, String error) {
