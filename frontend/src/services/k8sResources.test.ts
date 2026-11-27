@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RESOURCES, getResource } from './k8sResources'
+import { RESOURCES, getResource, ingressRuleLinks } from './k8sResources'
 
 describe('k8sResources', () => {
   it('exposes at least Pods', () => {
@@ -154,5 +154,51 @@ describe('expanded resources', () => {
   })
   it('endpoints not creatable', () => {
     expect(getResource('endpoints')!.canCreate).toBe(false)
+  })
+})
+
+describe('ingress rule links', () => {
+  const rule = (host: string | undefined, ...paths: string[]) => ({
+    host, http: { paths: paths.map(path => ({ path })) },
+  })
+
+  it('uses HTTPS only for hosts covered by TLS and keeps distinct paths', () => {
+    const ingress = { spec: {
+      tls: [{ hosts: ['secure.example.com'] }],
+      rules: [rule('secure.example.com', '/', '/api'), rule('plain.example.com', '/')],
+    } }
+    expect(ingressRuleLinks(ingress)).toEqual([
+      { text: 'https://secure.example.com/', url: 'https://secure.example.com/' },
+      { text: 'https://secure.example.com/api', url: 'https://secure.example.com/api' },
+      { text: 'http://plain.example.com/', url: 'http://plain.example.com/' },
+    ])
+    expect(getResource('ingresses')!.columns.find(c => c.header === 'Rules')!.value(ingress))
+      .toContain('https://secure.example.com/api')
+  })
+
+  it('matches TLS wildcard for one DNS label only', () => {
+    expect(ingressRuleLinks({ spec: {
+      tls: [{ hosts: ['*.example.com'] }],
+      rules: [rule('app.example.com', '/'), rule('nested.app.example.com', '/')],
+    } }).map(r => r.url)).toEqual([
+      'https://app.example.com/', 'http://nested.app.example.com/',
+    ])
+  })
+
+  it('keeps wildcard hosts, catch-all hosts, and regex-like paths as plain text', () => {
+    expect(ingressRuleLinks({ spec: { rules: [
+      rule('*.example.com', '/'), rule(undefined, '/'),
+      rule('app.example.com', '/api(/|$)(.*)'), rule('app.example.com', '/a?b'),
+    ] } })).toEqual([
+      { text: '*.example.com/' }, { text: '*/' },
+      { text: 'app.example.com/api(/|$)(.*)' }, { text: 'app.example.com/a?b' },
+    ])
+  })
+
+  it('deduplicates URLs and tolerates missing rules', () => {
+    expect(ingressRuleLinks({})).toEqual([])
+    expect(ingressRuleLinks({ spec: { rules: [rule('app.example.com', '/', '/')] } })).toEqual([
+      { text: 'http://app.example.com/', url: 'http://app.example.com/' },
+    ])
   })
 })
