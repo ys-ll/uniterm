@@ -94,9 +94,9 @@ func NewDBWithDial(dbType, dsn string, dialFunc DialContextFunc) (*sql.DB, error
 	// The MySQL-family and PostgreSQL-family dbTypes all reuse their family's
 	// dial injection point; only genuinely different drivers get their own
 	// branch.
-	case "postgres", "kingbase", "opengauss", "greenplum", "gbase8c", "cockroachdb", "yugabytedb":
+	case "postgres", "kingbase", "opengauss", "greenplum", "gbase8c", "cockroachdb", "yugabytedb", "highgo", "cloudberry", "vastbase":
 		db, err = openPostgresWithDial(dsn, dialFunc)
-	case "mysql", "mariadb", "tidb", "oceanbase", "doris", "starrocks", "gbase8a":
+	case "mysql", "mariadb", "tidb", "oceanbase", "doris", "starrocks", "gbase8a", "greatsql", "goldendb":
 		db, err = openMySQLWithDial(dsn, dialFunc)
 	case "sqlserver":
 		db, err = openSQLServerWithDial(dsn, dialFunc)
@@ -231,7 +231,7 @@ func driverNameOf(db *sql.DB) string {
 // dbDriverName maps a database type to the driver name sql.Open will use.
 func dbDriverName(dbType string) string {
 	switch dbType {
-	case "postgres", "kingbase", "opengauss", "greenplum", "gbase8c", "cockroachdb", "yugabytedb":
+	case "postgres", "kingbase", "opengauss", "greenplum", "gbase8c", "cockroachdb", "yugabytedb", "highgo", "cloudberry", "vastbase":
 		return "pgx"
 	default:
 		if p, err := NewProvider(dbType); err == nil {
@@ -269,7 +269,12 @@ func queryStrings(db *sql.DB, query string, args ...any) ([]map[string]string, e
 		}
 		row := make(map[string]string, len(cols))
 		for i, col := range cols {
+			// Keep the driver-reported key (providers like ClickHouse and
+			// SQLite read it as-is) and add an upper-case alias: Oracle/DM
+			// report upper-case column names natively while the GBase 8s
+			// driver lower-cases them.
 			row[col] = scanToStringCol(values[i], isGuidCol(guids, i))
+			row[strings.ToUpper(col)] = row[col]
 		}
 		result = append(result, row)
 	}
