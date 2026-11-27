@@ -1,6 +1,6 @@
 <template>
   <div class="detail-drawer-backdrop" :class="{ open: !!mode }" @click="$emit('close')"></div>
-  <div ref="drawerEl" class="detail-drawer" :class="{ open: !!mode }" :style="mode ? { width: drawerWidth + 'px' } : undefined">
+  <div ref="drawerEl" @mousedown.capture="onDetailMouseDown" class="detail-drawer" :class="{ open: !!mode }" :style="mode ? { width: drawerWidth + 'px' } : undefined">
     <div class="drawer-resizer" @mousedown="onResizeStart"></div>
     <div class="detail-drawer-header">
       <span class="detail-drawer-title">{{ headerTitle }}</span>
@@ -97,7 +97,7 @@
           </template>
         </div>
         <pre v-if="!editing" class="k8s-yaml-drawer-body" @contextmenu="onCopyContextMenu">{{ yamlText }}</pre>
-        <SyntaxEditor v-else v-model="draft" lang="yaml" compact />
+        <SyntaxEditor v-else v-model="draft" lang="yaml" compact selection-copy-menu @selection-contextmenu="onEditorCopyContextMenu" />
         <div v-if="saveError" class="yaml-error">{{ saveError }}</div>
       </div>
     </template>
@@ -135,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElButton, ElIcon, ElMessage, ElSelect, ElOption, ElCheckbox } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
 import { dump, load } from 'js-yaml'
@@ -144,7 +144,7 @@ import { requestJSON, startLogStream, type LogHandle } from '../services/k8sClie
 import { useI18n } from '../i18n'
 import Menu from './Menu.vue'
 import SyntaxEditor from './SyntaxEditor.vue'
-import { Clipboard } from '@wailsio/runtime'
+import { writeClipboard } from '../composables/useClipboardWrite'
 import MenuItem from './MenuItem.vue'
 
 const props = defineProps<{ connId: string; mode: 'detail' | 'logs' | null; target: any | null; resourceKey: string; selfPathOverride?: (obj: any) => string; initialTab?: 'detail' | 'yaml' }>()
@@ -156,22 +156,82 @@ const { t } = useI18n()
 // selected; positioned at the pointer (Menu.openAt, viewport-adaptive).
 const copyMenuRef = ref<InstanceType<typeof Menu> | null>(null)
 const copyMenuVisible = ref(false)
+const copyMenuText = ref('')
+let rightClickText = ''
 
-function onCopyContextMenu(e: MouseEvent) {
-  const sel = window.getSelection()?.toString() || ''
-  if (!sel) return
+function onEditorCopyContextMenu(e: MouseEvent, text: string) {
+  if (!text) return
   e.preventDefault()
   e.stopPropagation()
+  copyMenuText.value = text
   copyMenuRef.value?.openAt(e.clientX, e.clientY)
 }
 
-async function onCopyMenu() {
-  const sel = window.getSelection()?.toString() || ''
-  if (sel) {
-    try { await Clipboard.SetText(sel) } catch { try { await navigator.clipboard.writeText(sel) } catch { /* ignore */ } }
-  }
-  copyMenuVisible.value = false
+function detailSelection(): string {
+  const selection = window.getSelection()
+  const root = drawerEl.value
+  if (!root || !selection || selection.isCollapsed || !selection.rangeCount) return ''
+  if (!root.contains(selection.getRangeAt(0).commonAncestorContainer)) return ''
+  return selection.toString()
 }
+
+function isEditorTarget(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest('.syntax-editor, input, textarea, [contenteditable="true"]')
+}
+
+// WKWebView may collapse a text selection on right mouse down. Retain it
+// only for this context-menu gesture, never for a later unrelated copy.
+function onDetailMouseDown(e: MouseEvent) {
+  rightClickText = e.button === 2 && !isEditorTarget(e.target) ? detailSelection() : ''
+}
+
+function onCopyContextMenu(e: MouseEvent) {
+  if (isEditorTarget(e.target)) { rightClickText = ''; return }
+  const text = detailSelection() || rightClickText
+  rightClickText = ''
+  onEditorCopyContextMenu(e, text)
+}
+
+async function copyDetailText(text: string) {
+  if (text && !await writeClipboard(text)) ElMessage.error(t('k8s.copyFailed'))
+}
+
+async function onCopyMenu() {
+  const text = copyMenuText.value
+  copyMenuVisible.value = false
+  copyMenuText.value = ''
+  await copyDetailText(text)
+}
+
+// Plain text can be selected even when no editor has keyboard focus. Listen
+// on document, but only handle selections wholly inside the active drawer.
+function onDetailCopyShortcut(e: KeyboardEvent) {
+  if (!props.mode || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'c' || isEditorTarget(e.target)) return
+  const text = detailSelection()
+  if (!text) return
+  e.preventDefault()
+  e.stopPropagation()
+  void copyDetailText(text)
+}
+
+function onDetailCopy(e: ClipboardEvent) {
+  if (!props.mode || isEditorTarget(e.target)) return
+  const text = detailSelection()
+  if (!text) return
+  e.preventDefault()
+  e.stopPropagation()
+  e.clipboardData?.setData('text/plain', text)
+  void copyDetailText(text)
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', onDetailCopyShortcut, true)
+  document.addEventListener('copy', onDetailCopy, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onDetailCopyShortcut, true)
+  document.removeEventListener('copy', onDetailCopy, true)
+})
 
 // Drawer width (draggable). Remember explicit user resizing across sessions.
 // Max width tracks the actual parent container (not the window) so the drawer
@@ -338,8 +398,8 @@ const yamlText = computed(() => {
 function startEdit() { draft.value = yamlText.value; editing.value = true; saveError.value = '' }
 function cancelEdit() { editing.value = false; saveError.value = '' }
 async function copyYaml() {
-  try { await navigator.clipboard.writeText(yamlText.value); ElMessage.success(t('k8s.copied')) }
-  catch (e: any) { ElMessage.error(`${t('k8s.copyFailed')}: ${e?.message || e}`) }
+  if (await writeClipboard(yamlText.value)) ElMessage.success(t('k8s.copied'))
+  else ElMessage.error(t('k8s.copyFailed'))
 }
 
 function selfPath(o: any): string {
@@ -432,6 +492,19 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* body disables selection globally; explicitly opt the detail surface out
+   in WKWebView as well as other browsers. Do not make action buttons draggable. */
+.detail-body, .detail-body .detail-section, .detail-body .detail-section-title,
+.detail-body .detail-row, .detail-body .detail-label, .detail-body .detail-value,
+.detail-body summary, .detail-body pre, .detail-body td, .detail-body th,
+.detail-drawer-title, .logs-body {
+  user-select: text;
+  -webkit-user-select: text;
+  --wails-draggable: no-drag;
+}
+.detail-body :deep(.cm-content) { user-select: text; -webkit-user-select: text; }
+.detail-body :deep(.el-button) { user-select: none; -webkit-user-select: none; }
+
 .detail-value.ingress-detail-table { min-width: 0; overflow-x: auto; white-space: normal; word-break: normal; }
 .ingress-detail-table table { border-collapse: collapse; width: 100%; text-align: left; }
 .ingress-detail-table th, .ingress-detail-table td { padding: 0.375rem; border-bottom: 1px solid var(--border-subtle); vertical-align: top; overflow-wrap: anywhere; }
