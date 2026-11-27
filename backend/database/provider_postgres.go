@@ -253,6 +253,15 @@ func (p *postgresProvider) tableListBase(dbName string) (string, []any, int) {
 
 func (p *postgresProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, error) {
 	base, args, _ := p.tableListBase(dbName)
+	return pgListTables(db, base, args)
+}
+
+// pgListTables runs a fully-built table-listing body (see tableListBase) and
+// maps the rows. It is package-level so dialect subclasses that extend the
+// listing filter can share the mapping — inherited methods would otherwise
+// resolve tableListBase against the embedded PostgreSQL receiver, never the
+// override.
+func pgListTables(db *sql.DB, base string, args []any) ([]TableInfo, error) {
 	results, err := queryStrings(db, base+"\n\t\tORDER BY c.relname", args...)
 	if err != nil {
 		return nil, fmt.Errorf("get tables: %w", err)
@@ -273,10 +282,16 @@ func (p *postgresProvider) GetTables(db *sql.DB, dbName string) ([]TableInfo, er
 }
 
 func (p *postgresProvider) GetTablePage(db *sql.DB, dbName string, query string, offset, limit int) ([]TableInfo, int, error) {
-	// Placeholder numbers continue after the schema arg ($1 when the node is
-	// "db.schema"); the driver maps $N positionally, so numbering must stay
-	// contiguous and unique per statement.
 	base, baseArgs, next := p.tableListBase(dbName)
+	return pgListTablesPage(db, base, baseArgs, next, query, offset, limit)
+}
+
+// pgListTablesPage runs one ordered page of a fully-built table-listing body
+// with an optional name filter; see pgListTables for why it is package-level.
+// Placeholder numbers continue after the schema arg ($1 when the node is
+// "db.schema"); the driver maps $N positionally, so numbering must stay
+// contiguous and unique per statement.
+func pgListTablesPage(db *sql.DB, base string, baseArgs []any, next int, query string, offset, limit int) ([]TableInfo, int, error) {
 
 	countSQL := "SELECT COUNT(*) AS n FROM (" + base + ") c"
 	countArgs := append([]any{}, baseArgs...)
