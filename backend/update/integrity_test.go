@@ -46,8 +46,18 @@ func tarGzBytes(t *testing.T, name string, content []byte) []byte {
 func useTestUpdateBase(t *testing.T, base string) {
 	t.Helper()
 	t.Setenv("UNITERM_UPDATE_API_BASE", base)
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // isolate the release disk cache
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())  // isolate download staging
+	// Isolate the release disk cache and the download staging dir. The XDG
+	// vars cover Linux; os.UserConfigDir/os.UserCacheDir read AppData /
+	// LocalAppData on Windows and $HOME/Library on macOS, where the XDG vars
+	// are ignored — without these overrides the tests share (and poison) the
+	// real per-user cache, making results order- and machine-dependent.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("AppData", t.TempDir())
+	t.Setenv("LocalAppData", t.TempDir())
+	if runtime.GOOS == "darwin" {
+		t.Setenv("HOME", t.TempDir())
+	}
 }
 
 // TestDownloadFailsClosedWithoutChecksum is the regression test for the
@@ -273,24 +283,40 @@ func TestChecksumsForFallsBackToMirror(t *testing.T) {
 func TestCheckKeepsAssetsForReleaseWithChecksums(t *testing.T) {
 	payload := []byte("package-payload")
 	payloadSum := sha256Hex(payload)
-	assetName := "uniterm-" + runtime.GOOS + "-" + runtime.GOARCH + "-v99.0.0.tar.gz"
-	debName := "uniterm-linux-" + runtime.GOARCH + "-v99.0.0.deb"
+	// The fixture must carry an asset for EVERY update channel: DetectChannel
+	// inspects the host install state (Windows registry, dpkg/rpm ownership),
+	// so a dev/CI machine can report installer/deb/rpm/portable regardless of
+	// GOOS. A single-kind fixture made this test fail on Windows machines
+	// where uniTerm was installed via the NSIS installer (installer channel,
+	// which only matches -installer-*.exe / *.zip assets).
+	arch := runtime.GOOS + "-" + runtime.GOARCH
+	assetNames := []string{
+		"uniterm-" + arch + "-v99.0.0.tar.gz",              // binary-tar.gz
+		"uniterm-" + arch + "-portable-v99.0.0.zip",        // portable
+		"uniterm-" + arch + "-installer-v99.0.0.exe",       // installer
+		"uniterm-linux-" + runtime.GOARCH + "-v99.0.0.deb", // deb
+		"uniterm-linux-" + runtime.GOARCH + "-v99.0.0.rpm", // rpm
+	}
 
 	var base string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases/latest":
+			assets := []releaseAsset{{Name: "checksums.txt", BrowserDownloadURL: base + "/checksums.txt"}}
+			for _, name := range assetNames {
+				assets = append(assets, releaseAsset{Name: name, BrowserDownloadURL: base + "/payload"})
+			}
 			rel := release{
 				TagName: "v99.0.0",
-				Assets: []releaseAsset{
-					{Name: "checksums.txt", BrowserDownloadURL: base + "/checksums.txt"},
-					{Name: assetName, BrowserDownloadURL: base + "/payload"},
-					{Name: debName, BrowserDownloadURL: base + "/payload"},
-				},
+				Assets:  assets,
 			}
 			_ = json.NewEncoder(w).Encode(rel)
 		case "/checksums.txt":
-			_, _ = w.Write([]byte(payloadSum + "  " + assetName + "\n" + payloadSum + "  " + debName + "\n"))
+			var sb strings.Builder
+			for _, name := range assetNames {
+				sb.WriteString(payloadSum + "  " + name + "\n")
+			}
+			_, _ = w.Write([]byte(sb.String()))
 		case "/payload":
 			_, _ = w.Write(payload)
 		default:
