@@ -177,10 +177,12 @@
              user's machine. -->
         <MenuSubmenu :label="t('menu.networkToolbox')">
           <MenuItem @click="openNetscan">{{ t('netscan.title') }}</MenuItem>
-          <MenuItem v-if="!webServerMode" @click="openLocalServices">{{ t('localsrv.title') }}</MenuItem>
-          <MenuItem v-if="!webServerMode" @click="openPacketcap">{{ t('packetcap.title') }}</MenuItem>
-          <MenuItem v-if="!webServerMode" @click="openFirewall">{{ t('firewall.title') }}</MenuItem>
-          <MenuItem @click="openCategory('tunnels')">{{ t('settings.tunnels') }}</MenuItem>
+          <MenuItem v-if="features.enabled('localServices')" @click="openLocalServices">{{ t('localsrv.title') }}</MenuItem>
+          <MenuItem v-if="features.enabled('packetCapture')" @click="openPacketcap">{{ t('packetcap.title') }}</MenuItem>
+          <MenuItem v-if="features.enabled('firewall')" @click="openFirewall">{{ t('firewall.title') }}</MenuItem>
+          <!-- Tunnels bind their forward ports on the worker host, which a
+               browser user cannot reach — desktop-only. -->
+          <MenuItem v-if="!webServerMode" @click="openCategory('tunnels')">{{ t('settings.tunnels') }}</MenuItem>
         </MenuSubmenu>
 
         <!-- 开发者工具箱：JSON 格式化 / 哈希与编码 -->
@@ -193,8 +195,8 @@
           <MenuItem @click="openCategory('commands')">{{ t('settings.commands') }}</MenuItem>
           <!-- MCP features have no mobile backend; the built-in MCP server is
                also hidden in server deployments (binds a worker loopback port). -->
-          <MenuItem v-if="!isMobilePlatform(platform.value)" @click="openCategory('mcp-client')">{{ t('settings.mcpClient') }}</MenuItem>
-          <MenuItem v-if="!isMobilePlatform(platform.value) && !webServerMode" @click="openCategory('mcp')">{{ t('settings.mcp') }}</MenuItem>
+          <MenuItem v-if="!isMobilePlatform(platform.value) && features.enabled('mcpClientProcess')" @click="openCategory('mcp-client')">{{ t('settings.mcpClient') }}</MenuItem>
+          <MenuItem v-if="!isMobilePlatform(platform.value) && features.enabled('mcpServer')" @click="openCategory('mcp')">{{ t('settings.mcp') }}</MenuItem>
         </MenuSubmenu>
 
         <MenuDivider />
@@ -211,7 +213,7 @@
         <MenuItem @click="openCategory('about')">{{ t('settings.about') }}</MenuItem>
         <!-- In-app update download is desktop-only; server deployments update
              by pulling a new image and the backend refuses the call. -->
-        <MenuItem v-if="!isMobilePlatform(platform.value) && !webServerMode" @click="checkUpdate">{{ t('settings.checkUpdate') }}</MenuItem>
+        <MenuItem v-if="!isMobilePlatform(platform.value) && features.enabled('update')" @click="checkUpdate">{{ t('settings.checkUpdate') }}</MenuItem>
       </Menu>
 
       <ImportDialog v-model:visible="showImportDialog" />
@@ -246,6 +248,7 @@ import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { formatKeyBinding } from '../composables/useKeyboardShortcuts'
 import { isWebServerMode } from '../services/webSftpBridge'
+import { useFeaturesStore } from '../stores/featuresStore'
 import { useLocalStateStore } from '../stores/localStateStore'
 import { useUiLayoutStore } from '../stores/uiLayoutStore'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
@@ -463,6 +466,11 @@ const isMaximised = ref(false)
 // window to minimise/maximise/close, so the buttons are hidden entirely.
 const webServerMode = ref(false)
 isWebServerMode().then((v) => { webServerMode.value = v })
+
+// Menu entries for policy-gated feature groups: shown only when the backend
+// bound the group (desktop binds everything; a default-deny web deployment
+// hides them until the operator enables the group in UNITERM_SERVER_POLICY).
+const features = useFeaturesStore()
 
 const showWindowControls = computed(
   () =>

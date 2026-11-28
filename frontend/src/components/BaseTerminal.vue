@@ -94,7 +94,10 @@
         <MenuItem :shortcut="menuShortcut('resetOutput')" @click="menu.closeMenu(); resetTerminalOutput()">{{ t('terminal.resetOutput') }}</MenuItem>
         <MenuItem :shortcut="menuShortcut('clearScrollback')" @click="menu.closeMenu(); clearScrollback()">{{ t('terminal.clearScrollback') }}</MenuItem>
       </MenuSubmenu>
-      <MenuSubmenu :label="t('session.logRecordMenu')">
+      <!-- Web keeps only export from the group below: the log/record entries
+           are worker-disk features. -->
+      <MenuItem v-if="webServerMode" @click="menu.closeMenu(); exportContent()">{{ t('terminal.export') }}</MenuItem>
+      <MenuSubmenu v-if="!webServerMode" :label="t('session.logRecordMenu')">
         <MenuItem v-if="supportsOutputLog" @click="menu.closeMenu(); toggleOutputLog()">
           {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
         </MenuItem>
@@ -169,7 +172,7 @@ import { useNativeFileDrop } from '../composables/useFilePanel'
 import { connectFileMenuKey } from '../utils/fileTransferUtils'
 import { isMobilePlatform } from '../utils/platform'
 import { tryAndroidSave } from '../utils/androidSave'
-import { openExternalUrl, saveBase64InWebServerMode } from '../services/webSftpBridge'
+import { openExternalUrl, saveBase64InWebServerMode, isWebServerMode } from '../services/webSftpBridge'
 import { applyMobileCtrl } from '../utils/mobileCtrlKey'
 import { msg } from '../services/message'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -254,6 +257,10 @@ function menuShortcut(action: ShortcutAction): string {
 const sessionStore = useSessionStore()
 const tabStore = useTabStore()
 const panelStore = usePanelStore()
+// Session logs and recordings live on the worker's disk — meaningless to a
+// browser user; hide the whole 日志与录制 submenu in web deployments.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 const zmodemStore = useZmodemStore()
 const localStateStore = useLocalStateStore()
 const { t } = useI18n()

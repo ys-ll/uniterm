@@ -42,6 +42,7 @@
 // submenu), favorite state and duplicate/delete flows; parents only wire the
 // connect routing and the edit/group dialogs.
 import { computed, onMounted, ref } from 'vue'
+import { isWebServerMode } from '../services/webSftpBridge'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@lucide/vue'
 import Menu from './Menu.vue'
@@ -87,6 +88,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const favoriteStore = useFavoriteStore()
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 const panelStore = usePanelStore()
 const tabStore = useTabStore()
 const connectionStore = useConnectionStore()
@@ -109,7 +112,11 @@ const workspaceTabs = computed(() => tabStore.tabs.filter(tab => tab.type === 'w
 
 const connectMenuLabelKey = computed(() => {
   const type = props.config?.type
-  return type ? CONNECTION_TYPES.find(i => i.type === type && i.connectMenuKey)?.connectMenuKey : undefined
+  if (!type) return undefined
+  // X11 desktop binds a local X server on the worker — not connectable from
+  // a browser deployment.
+  if (webServerMode.value && type === 'x11-desktop') return undefined
+  return CONNECTION_TYPES.find(i => i.type === type && i.connectMenuKey)?.connectMenuKey ?? undefined
 })
 
 // Whether「定位会话」has a target: a panel holding the connection, or — for a

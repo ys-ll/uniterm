@@ -265,7 +265,7 @@
     </DockHost>
 
     <DockHost :location="uiLayout.effectiveLocation('tunnels')">
-      <TunnelsPanel v-if="uiLayout.isViewActive('tunnels')" />
+      <TunnelsPanel v-if="!webServerMode && uiLayout.isViewActive('tunnels')" />
     </DockHost>
 
     <DockHost :location="uiLayout.effectiveLocation('history')">
@@ -526,6 +526,7 @@ import { GetAllFonts } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { useLocalStateStore } from '../stores/localStateStore'
 import { useUiLayoutStore } from '../stores/uiLayoutStore'
 import type { SidebarView } from '../stores/uiLayoutStore'
+import { isWebServerMode } from '../services/webSftpBridge'
 import { usePanelStripDrag } from '../composables/usePanelStripDrag'
 import { shortcutSuffix, PANEL_VIEW_ACTIONS } from '../composables/shortcutHint'
 
@@ -536,6 +537,10 @@ const emit = defineEmits(['connect', 'connectToWorkspace', 'createWorkspace', 'c
 const connectionStore = useConnectionStore()
 const favoriteStore = useFavoriteStore()
 const settingsStore = useSettingsStore()
+// SSH tunnels bind their forward ports on the worker host, which a browser
+// user cannot reach — the whole tunnels UI is desktop-only.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 // "Right-click menu" host-list mode hides the hover star/⋯ buttons entirely —
 // the same connection menu stays reachable via right-click (issue #934).
 const showHostRowButtons = computed(() => settingsStore.settings.hostListMenuStyle !== 'rightclick')
@@ -631,14 +636,17 @@ function tabInSidebar(key: string): boolean {
 }
 
 // Sidebar-strip tabs in persisted order, filtered to views docked here.
-const sidebarTabKeys = computed(() => uiLayout.orderedViews.filter(v => tabInSidebar(v)))
+// Tunnels never render in a web deployment (desktop-only feature).
+const sidebarTabKeys = computed(() =>
+  uiLayout.orderedViews.filter(v => !(webServerMode.value && v === 'tunnels') && tabInSidebar(v))
+)
 
 // Empty-sidebar hint: views that could be moved back here (docked to the
 // bottom panel or the right rail, visible ones). Fixed SIDEBAR_TAB_ORDER —
 // the hint list must not jump around as the user reorders tabs.
 const sidebarDockableViews = computed(() =>
   SIDEBAR_TAB_ORDER.map(tab => tab.key)
-    .filter(v => tabVisible(v) && uiLayout.panelLocation(v) !== 'sidebar')
+    .filter(v => !(webServerMode.value && v === 'tunnels') && tabVisible(v) && uiLayout.panelLocation(v) !== 'sidebar')
 )
 
 function sidebarTabLabelKey(key: string): string {

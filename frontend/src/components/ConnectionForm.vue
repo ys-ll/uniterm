@@ -157,9 +157,9 @@
               <el-radio-group v-model="form.authType">
                 <el-radio-button v-if="supportsIdentityAuth" value="identity">{{ t('conn.identity') }}</el-radio-button>
                 <el-radio-button value="password">{{ t('conn.password') }}</el-radio-button>
-                <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="key">{{ t('conn.keyPath') }}</el-radio-button>
+                <el-radio-button v-if="!webServerMode && (form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop')" value="key">{{ t('conn.keyPath') }}</el-radio-button>
                 <el-radio-button v-if="form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop'" value="keyText">{{ t('conn.keyText') }}</el-radio-button>
-                <el-radio-button v-if="(form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop') && !isMobilePlatform()" value="kerberos">{{ t('conn.kerberos') }}</el-radio-button>
+                <el-radio-button v-if="(form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop') && !isMobilePlatform() && !webServerMode" value="kerberos">{{ t('conn.kerberos') }}</el-radio-button>
                 <el-radio-button v-if="(isWindows || isMac) && (form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop')" value="agent">{{ t('conn.sshAgent') }}</el-radio-button>
                 <el-radio-button v-if="isElasticsearch" value="apikey">{{ t('conn.esAuthApiKey') }}</el-radio-button>
               </el-radio-group>
@@ -183,10 +183,10 @@
             <el-form-item v-if="form.type !== 'local' && form.type !== 'wsl' && form.type !== 'local-file' && form.type !== 'wsl-file' && form.type !== 'serial' && form.type !== 'tcp' && form.type !== 'k8s' && form.type !== 'container' && form.authType !== 'identity' && ((form.authType === 'password') || form.type === 'vnc' || form.type === 'spice' || form.type === 'database' || form.type === 'telnet' || form.type === 'ftp' || form.type === 'smb' || form.type === 'webdav' || form.type === 's3' || isElasticsearch) && !(form.type === 'database' && form.dbType === 'rqlite') && !isSqliteDb" :label="form.type === 's3' ? 'Secret Key' : (isEsApiKey ? t('conn.esApiKey') : t('conn.password'))">
               <el-input v-model="form.password" type="password" show-password :key="passwordInputKey" :placeholder="form.type === 's3' ? 'Secret Access Key' : (isEsApiKey ? t('conn.esApiKeyPlaceholder') : '')" />
             </el-form-item>
-            <el-form-item v-if="form.authType === 'kerberos' && !isMobilePlatform()" :label="t('conn.kerberos')">
+            <el-form-item v-if="form.authType === 'kerberos' && !isMobilePlatform() && !webServerMode" :label="t('conn.kerberos')">
               <div class="field-hint">{{ t('conn.kerberosHint') }}</div>
             </el-form-item>
-            <el-form-item v-if="form.authType === 'kerberos' && !isMobilePlatform()" :label="t('conn.kerberosRealm')">
+            <el-form-item v-if="form.authType === 'kerberos' && !isMobilePlatform() && !webServerMode" :label="t('conn.kerberosRealm')">
               <el-input v-model="form.kerberosRealm" :placeholder="t('conn.kerberosRealmPlaceholder')" />
               <div class="field-hint">{{ t('conn.kerberosRealmHint') }}</div>
             </el-form-item>
@@ -209,7 +209,7 @@
                 <el-input v-model="form.sentinelPassword" type="password" show-password :key="passwordInputKey" :placeholder="t('conn.sentinelAuthHint')" />
               </el-form-item>
             </template>
-            <el-form-item v-if="form.authType === 'key' && (form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop')" :label="t('conn.keyPath')">
+            <el-form-item v-if="!webServerMode && form.authType === 'key' && (form.type === 'ssh' || form.type === 'scp' || form.type === 'sftp' || form.type === 'mosh' || form.type === 'x11-desktop')" :label="t('conn.keyPath')">
               <el-input v-model="form.keyPath" :placeholder="t('conn.keyPathPlaceholder')">
                 <template #append>
                   <div class="key-path-actions">
@@ -494,7 +494,8 @@
                      opening the panel from a terminal still lands at the shell's
                      cwd. -->
                 <template v-if="hasFileStartPaths">
-                  <el-form-item :label="t('conn.localStartPath')">
+                  <!-- The local pane (and with it this start path) does not exist in web -->
+                  <el-form-item v-if="!webServerMode" :label="t('conn.localStartPath')">
                     <el-input v-model="form.localDir" :placeholder="t('conn.localStartPathPlaceholder')" clearable />
                   </el-form-item>
                   <el-form-item :label="t('conn.remoteStartPath')">
@@ -515,7 +516,7 @@
                   <el-switch v-model="form.agentForwarding" />
                   <span class="field-hint hint-after-switch">{{ t('conn.agentForwardingDesc') }}</span>
                 </el-form-item>
-                <el-form-item v-if="form.type === 'ssh' && !isMobilePlatform()" :label="t('conn.x11Forwarding')">
+                <el-form-item v-if="form.type === 'ssh' && !isMobilePlatform() && !webServerMode" :label="t('conn.x11Forwarding')">
                   <el-switch v-model="form.x11Forwarding" />
                   <span v-if="x11HintKey" class="field-hint hint-after-switch">{{ t(x11HintKey) }}</span>
                 </el-form-item>
@@ -767,7 +768,7 @@
                 </div>
               </el-form-item>
                 <el-form-item
-                  v-if="['ssh','telnet','serial','mosh','local','wsl','tcp'].includes(form.type)"
+                  v-if="!webServerMode && ['ssh','telnet','serial','mosh','local','wsl','tcp'].includes(form.type)"
                   :label="t('conn.logOnConnect')"
                 >
                   <el-switch v-model="form.logOnConnect" />
@@ -932,6 +933,10 @@ onMounted(() => {
 const isWindows = ref(/windows/i.test(navigator.userAgent) || /win32/i.test(navigator.platform))
 const isMac = ref(/mac/i.test(navigator.platform))
 const platform = ref<string>('')
+// Private-key files live on the user's machine; a browser deployment has no
+// usable key path — hide the key-file auth option (key-text paste still works).
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 GetPlatform().then(p => {
   platform.value = p
   isWindows.value = p === 'windows'
@@ -962,8 +967,9 @@ const allSubTypes = computed((): Record<string, SubTypeInfo[]> => {
     if (info.formHidden) continue
     if (info.windowsOnly && !isWindows.value) continue
     if (info.type === 'local' && !supportsLocalTerminal()) continue
-    // Serial hardware and a local X server remain desktop-only.
-    if (isMobilePlatform() && (info.type === 'serial' || info.type === 'x11-desktop')) continue
+    // Serial hardware and a local X server remain desktop-only; in a browser
+    // deployment they would touch the worker's hardware/display instead.
+    if ((isMobilePlatform() || webServerMode.value) && (info.type === 'serial' || info.type === 'x11-desktop')) continue
     groups[info.category].push({
       type: info.type,
       dbType: info.dbType,
@@ -1400,7 +1406,7 @@ const isSSHAlgoType = computed(() => ['ssh', 'scp', 'sftp', 'mosh', 'x11-desktop
 // remote pane (the sftp-family panel renders both regardless of the wire
 // protocol behind it). These get the local/remote start-path fields.
 const hasFileStartPaths = computed(() =>
-  ['ssh', 'scp', 'sftp', 'ftp', 's3', 'smb', 'webdav', 'container', 'local-file', 'wsl-file'].includes(form.type))
+  ['scp', 'sftp', 'ftp', 's3', 'smb', 'webdav', 'container', 'local-file', 'wsl-file'].includes(form.type))
 
 // Identity (密钥库) auth extends beyond the SSH family (issues #1389/#1440):
 // every protocol that authenticates with a username+password pair can

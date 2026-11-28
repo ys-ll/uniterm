@@ -78,8 +78,8 @@
             </div>
           </div>
 
-          <!-- No OS window title bar on mobile -->
-          <div v-if="!isMobile" class="setting-card">
+          <!-- No OS window title bar on mobile; a browser has no OS window either -->
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.systemTitleBar') }}</div>
               <div class="setting-desc">{{ t('settings.systemTitleBarDesc') }}</div>
@@ -223,8 +223,8 @@
             </div>
           </div>
 
-          <!-- Mobile apps don't "quit" (back button = background) -->
-          <div v-if="!isMobile" class="setting-card">
+          <!-- Mobile apps don't "quit" (back button = background); a browser has no app window either -->
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.closeAppPrompt') }}</div>
             </div>
@@ -233,8 +233,8 @@
             </div>
           </div>
 
-          <!-- System tray icon (macOS menu bar); no tray on mobile -->
-          <div v-if="!isMobile" class="setting-card">
+          <!-- System tray icon (macOS menu bar); no tray on mobile or in a browser -->
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.showTrayIcon') }}</div>
               <div class="setting-desc">{{ t('settings.showTrayIconDesc') }}</div>
@@ -245,8 +245,8 @@
           </div>
 
           <!-- Minimize-to-tray: the minimize button hides the window to the
-               tray (issue #1556); no tray on mobile -->
-          <div v-if="!isMobile" class="setting-card">
+               tray (issue #1556); no tray on mobile or in a browser -->
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.minimizeToTray') }}</div>
               <div class="setting-desc">{{ t('settings.minimizeToTrayDesc') }}</div>
@@ -267,8 +267,8 @@
             </div>
           </div>
 
-          <!-- No local CLI editors on mobile -->
-          <div v-if="!isMobile" class="setting-card">
+          <!-- No local CLI editors on mobile; a browser has no local editors either -->
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.externalEditor') }}</div>
               <div class="setting-desc">{{ t('settings.externalEditorDesc') }}</div>
@@ -724,7 +724,7 @@
             </div>
           </div>
 
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.gitBashPath') }}</div>
               <div class="setting-desc">{{ t('settings.gitBashPathDesc') }}</div>
@@ -756,7 +756,7 @@
             </div>
           </div>
 
-          <div class="setting-card">
+          <div v-if="!webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.zmodemIdleTimeoutSec') }}</div>
               <div class="setting-desc">{{ t('settings.zmodemIdleTimeoutSecDesc') }}</div>
@@ -774,7 +774,7 @@
           </div>
 
           <!-- Local dirs are not user-selectable under mobile scoped storage -->
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.zmodemDownloadDir') }}</div>
               <div class="setting-desc">{{ t('settings.zmodemDownloadDirDesc') }}</div>
@@ -798,7 +798,7 @@
             </div>
           </div>
 
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.sessionLogAutoStart') }}</div>
               <div class="setting-desc">{{ t('settings.sessionLogAutoStartDesc') }}</div>
@@ -811,7 +811,7 @@
             </div>
           </div>
 
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.sessionLogDir') }}</div>
               <div class="setting-desc">{{ t('settings.sessionLogDirDesc', { path: defaultLogDir }) }}</div>
@@ -837,7 +837,7 @@
 
           <!-- Session logs go to the app-private dir on mobile; the filename
                pattern is not user-serviceable there -->
-          <div v-if="!isMobile" class="setting-card">
+          <div v-if="!isMobile && !webServerMode" class="setting-card">
             <div class="setting-info">
               <div class="setting-title">{{ t('settings.sessionLogFilename') }}</div>
               <div class="setting-desc">{{ t('settings.sessionLogFilenameDesc') }}</div>
@@ -1235,7 +1235,8 @@
           </table>
         </template>
 
-        <!-- 系统全局热键（托盘等，系统级生效） -->
+        <!-- 系统全局热键（托盘等，系统级生效） — desktop-only, hidden on web -->
+        <template v-if="!webServerMode">
         <h2 class="section-title">{{ t('shortcut.globalHotkeys') }}</h2>
         <table class="kb-table">
           <thead>
@@ -1280,6 +1281,7 @@
             </tr>
           </tbody>
         </table>
+        </template>
       </div>
 
       <!-- AI助理设置 -->
@@ -1875,6 +1877,7 @@ import IdentityEditDialog from './IdentityEditDialog.vue'
 import ProxyEditDialog from './ProxyEditDialog.vue'
 import TunnelEditDialog from './TunnelEditDialog.vue'
 import { useCredentialStore } from '../stores/credentialStore'
+import { useFeaturesStore } from '../stores/featuresStore'
 import { useIdentityStore } from '../stores/identityStore'
 import { useProxyStore } from '../stores/proxyStore'
 import { useTunnelStore } from '../stores/tunnelStore'
@@ -1910,6 +1913,7 @@ const detectedEditors = ref<{ label: string; value: string }[]>([])
 
 // ── Config management (data dir + encryption mode) ──
 const credStore = useCredentialStore()
+const features = useFeaturesStore()
 const dataDirVisible = ref(false)
 const showSetupMaster = ref(false)
 const showVerifyMaster = ref(false)
@@ -2572,7 +2576,7 @@ async function pickZmodemDownloadDir() {
 }
 
 watch(() => settingsStore.openCategory, (cat) => {
-  if (cat && (cat === 'basic' || cat === 'terminal' || cat === 'ai' || cat === 'sync' || cat === 'about' || (cat === 'keyboard' && !isMobile) || cat === 'identities' || cat === 'proxies' || cat === 'tunnels')) {
+  if (cat && (cat === 'basic' || cat === 'terminal' || cat === 'ai' || cat === 'sync' || cat === 'about' || (cat === 'keyboard' && !isMobile) || cat === 'identities' || cat === 'proxies' || (cat === 'tunnels' && !webServerMode.value))) {
     settingsStore.activeCategory = cat
     settingsStore.openCategory = null
   }
@@ -2592,7 +2596,10 @@ const rebindingTrayHotkey = ref(false)
 // a sub-heading so the long list stays scannable. The two digit-modifier
 // rows are hardcoded in the 'tabs' section (custom edit/clear controls).
 // Every ShortcutAction must appear exactly once.
-const shortcutCategories: { key: string; label: string; actions: ShortcutAction[] }[] = [
+// Computed (not a plain const): the web-mode filter for toggleTunnels must
+// re-evaluate once isWebServerMode() resolves — at setup time it is still
+// false even in a browser.
+const shortcutCategories = computed<{ key: string; label: string; actions: ShortcutAction[] }[]>(() => [
   {
     key: 'tabs',
     label: 'shortcut.catTabs',
@@ -2601,14 +2608,14 @@ const shortcutCategories: { key: string; label: string; actions: ShortcutAction[
   {
     key: 'sidebar',
     label: 'shortcut.catSidebar',
-    actions: ['toggleSidebar', 'openQuickCommands', 'toggleNotes', 'focusAI', 'toggleFilePanel', 'toggleMonitor', 'toggleTunnels', 'toggleHistory', 'togglePersonalization', 'toggleCommandSend', 'openSettings'],
+    actions: ['toggleSidebar', 'openQuickCommands', 'toggleNotes', 'focusAI', 'toggleFilePanel', 'toggleMonitor', ...(!webServerMode.value ? ['toggleTunnels'] : []), 'toggleHistory', 'togglePersonalization', 'toggleCommandSend', 'openSettings'],
   },
   {
     key: 'terminal',
     label: 'shortcut.catTerminal',
     actions: ['focusTerminal', 'copy', 'paste', 'terminalSearch', 'zoomFontIn', 'zoomFontOut', 'toggleLineNumbers', 'toggleTimestamps', 'resetOutput', 'clearScrollback'],
   },
-]
+])
 
 function bindingDisplay(action: ShortcutAction): string {
   const b = settingsStore.settings.keyboard[action]
@@ -2973,14 +2980,17 @@ const categories = computed(() => {
     { key: 'skills', label: t('settings.skills'), icon: Wrench, group: 'ai' },
     { key: 'commands', label: t('settings.commands'), icon: SquareSlash, group: 'ai' },
     // MCP features have no mobile backend — hidden from the category list there.
-    ...(!isMobile ? [{ key: 'mcp-client', label: t('settings.mcpClient'), icon: Plug, group: 'ai' }] : []),
-    // MCP server exposure is hidden in headless server deployments: the
-    // endpoint binds a worker's loopback port and is unreachable from outside
-    // the container.
-    ...(!isMobile && !webServerMode.value ? [{ key: 'mcp', label: t('settings.mcp'), icon: Server, group: 'ai' }] : []),
+    // Both MCP surfaces are policy-gated feature groups: a default-deny web
+    // deployment hides them until the operator enables the group.
+    ...(!isMobile && features.enabled('mcpClientProcess') ? [{ key: 'mcp-client', label: t('settings.mcpClient'), icon: Plug, group: 'ai' }] : []),
+    // MCP server exposure binds a worker's loopback port and is unreachable
+    // from outside the container — pointless in a web deployment even when
+    // the operator enables the group, so keep the server-mode hide as well.
+    ...(!isMobile && features.enabled('mcpServer') && !webServerMode.value ? [{ key: 'mcp', label: t('settings.mcp'), icon: Server, group: 'ai' }] : []),
     { key: 'identities', label: t('settings.identities'), icon: Key, group: 'net' },
     { key: 'proxies', label: t('settings.proxies'), icon: Network, group: 'net' },
-    { key: 'tunnels', label: t('settings.tunnels'), icon: ArrowRightLeft, group: 'net' },
+    // Tunnels bind their forward ports on the worker host — desktop-only.
+    ...(!webServerMode.value ? [{ key: 'tunnels', label: t('settings.tunnels'), icon: ArrowRightLeft, group: 'net' }] : []),
     // Local data (data dir / encryption / master password) and cloud sync both
     // manage where configuration lives, so they share a group. The local-data
     // tab is desktop-only: on mobile the data dir is OS-managed and keychain

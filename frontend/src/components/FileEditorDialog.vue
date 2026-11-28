@@ -112,7 +112,7 @@
           </el-select>
         </div>
         <div class="editor-buttons">
-          <el-button v-if="!isMobilePlatform()" size="small" @click="onExternal">{{ t('sftp.editExternal') }}</el-button>
+          <el-button v-if="!isMobilePlatform() && !webServerMode" size="small" @click="onExternal">{{ t('sftp.editExternal') }}</el-button>
           <el-button @click="close">{{ t('sftp.dialog.cancel') }}</el-button>
           <el-button :loading="saving" @click="onSave(false)">{{ t('sftp.edit.save') }}</el-button>
           <el-button type="primary" :loading="saving" @click="onSave(true)">{{ t('sftp.edit.saveClose') }}</el-button>
@@ -128,6 +128,7 @@ import { ElMessageBox } from 'element-plus'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
 import { useLocalStateStore } from '../stores/localStateStore'
+import { isWebServerMode } from '../services/webSftpBridge'
 import { utf8ToBase64 } from '../utils/base64'
 import { isMobilePlatform } from '../utils/platform'
 import {
@@ -143,6 +144,8 @@ import { Undo2, Redo2, ZoomOut, ZoomIn, WrapText, Search, Scissors, Copy, Clipbo
 
 const { t } = useI18n()
 const localStateStore = useLocalStateStore()
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 
 const props = defineProps<{
   visible?: boolean

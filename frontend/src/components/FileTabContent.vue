@@ -2,6 +2,7 @@
   <div class="sftp-tab-content">
     <div class="panes-area">
       <div
+        v-if="!webServerMode"
         class="local-pane"
         @dragover.prevent="onDragOver"
         @dragenter.prevent="onDragEnter('local')"
@@ -179,6 +180,7 @@ import {
   SftpOpenExternalEditor, OpenExternalEditorLocal, ListSessions,
   SftpOpenWithSystem, OpenWithSystemLocal,
 } from '../../bindings/github.com/ys-ll/uniterm/app'
+import { isWebServerMode } from '../services/webSftpBridge'
 
 import FileList from './FileList.vue'
 import TransferPanel from './TransferPanel.vue'
@@ -205,6 +207,10 @@ const props = defineProps<{
 
 const panelStore = usePanelStore()
 const settingsStore = useSettingsStore()
+// The "local" pane browses the worker's filesystem — meaningless (and
+// misleading) in a browser deployment; show a full-width remote pane there.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 const transferTasks = panelStore.getTransferTasks(props.panelId)
 const transferHeight = ref(130)
 const { t } = useI18n()

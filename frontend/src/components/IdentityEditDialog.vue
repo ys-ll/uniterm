@@ -13,7 +13,7 @@
       <el-form-item :label="t('conn.authType')">
         <el-radio-group v-model="form.authType">
           <el-radio-button value="password">{{ t('conn.password') }}</el-radio-button>
-          <el-radio-button value="key">{{ t('conn.keyPath') }}</el-radio-button>
+          <el-radio-button v-if="!webServerMode" value="key">{{ t('conn.keyPath') }}</el-radio-button>
           <el-radio-button value="keyText">{{ t('conn.keyText') }}</el-radio-button>
         </el-radio-group>
       </el-form-item>
@@ -23,7 +23,7 @@
       <el-form-item v-if="form.authType === 'password'" :label="t('conn.password')">
         <el-input v-model="passwordInput" type="password" show-password />
       </el-form-item>
-      <template v-else-if="form.authType === 'key'">
+      <template v-else-if="form.authType === 'key' && !webServerMode">
         <el-form-item :label="t('conn.keyPath')">
           <el-input v-model="form.keyPath" :placeholder="t('conn.keyPathPlaceholder')">
             <template #append>
@@ -102,6 +102,10 @@ const props = defineProps<{ visible: boolean; identity: Identity | null }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'saved', entity: Identity): void }>()
 const { t } = useI18n()
 const store = useIdentityStore()
+// Private-key files live on the user's machine; a browser deployment has no
+// usable key path — hide the key-file option (key-text paste still works).
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 
 function newId(): string {
   // crypto.randomUUID() may be unavailable in the Wails/webview runtime, so

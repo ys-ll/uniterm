@@ -78,12 +78,18 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { SIDEBAR_TAB_DEFAULTS, SIDEBAR_TAB_ORDER } from '../types/settings'
 import { usePanelStripDrag } from '../composables/usePanelStripDrag'
 import { shortcutSuffix, PANEL_VIEW_ACTIONS } from '../composables/shortcutHint'
+import { isWebServerMode } from '../services/webSftpBridge'
 import PanelStripMenu from './PanelStripMenu.vue'
 import PanelTitleBar from './PanelTitleBar.vue'
 
 const { t } = useI18n()
 const uiLayout = useUiLayoutStore()
 const settingsStore = useSettingsStore()
+// Tunnels are desktop-only (forward ports bind on the worker host); hide the
+// strip tab and docking hints in web deployments.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
+const notWebOnlyView = (key: string) => !(webServerMode.value && key === 'tunnels')
 
 const emit = defineEmits<{
   (e: 'select', view: string): void
@@ -110,7 +116,7 @@ function tabVisible(key: string): boolean {
 // narrow layout — everything merges into the sidebar) and not hidden via the
 // sidebarTabs visibility setting, in persisted order.
 const bottomTabKeys = computed(() =>
-  uiLayout.orderedViews.filter(key => tabVisible(key) && uiLayout.effectiveLocation(key) === 'bottom')
+  uiLayout.orderedViews.filter(key => notWebOnlyView(key) && tabVisible(key) && uiLayout.effectiveLocation(key) === 'bottom')
 )
 
 // Empty-panel placeholder: views still docked to the sidebar (one click
@@ -118,7 +124,7 @@ const bottomTabKeys = computed(() =>
 // around as the user reorders tabs.
 const dockableViews = computed(() =>
   SIDEBAR_TAB_ORDER.map(tab => tab.key)
-    .filter(key => tabVisible(key) && uiLayout.panelLocation(key) !== 'bottom')
+    .filter(key => notWebOnlyView(key) && tabVisible(key) && uiLayout.panelLocation(key) !== 'bottom')
 )
 
 // Panel is shown whenever it's toggled on (even empty — see the placeholder
