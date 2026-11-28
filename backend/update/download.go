@@ -34,6 +34,14 @@ func downloadHTTPClient() *http.Client {
 		downloadClient = &http.Client{
 			Transport: transport,
 			Timeout:   0, // stream large assets without an overall deadline
+			// Every redirect hop must stay on an official host; a tampered
+			// API payload cannot bounce the download off-site.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 10 {
+					return errors.New("stopped after 10 redirects")
+				}
+				return allowedRedirectURL(req.URL.String())
+			},
 		}
 	})
 	return downloadClient
@@ -119,6 +127,15 @@ func (m *Manager) Download(candidates []UpdateAsset, onProgress func(Progress)) 
 }
 
 func (m *Manager) downloadOne(cand UpdateAsset, onProgress func(Progress)) (_ *PendingUpdate, err error) {
+	// Fail closed before touching the network or creating a staging directory:
+	// a release without a checksum entry is never installable.
+	if strings.TrimSpace(cand.SHA256) == "" {
+		return nil, fmt.Errorf("refusing to install %s: the release provides no sha256 checksum; install it manually from %s", cand.Name, sourceReleaseURL(cand.Source))
+	}
+	if err := allowedDownloadURL(cand.URL); err != nil {
+		return nil, fmt.Errorf("refusing to download %s: %w", cand.Name, err)
+	}
+
 	kind := classifyAsset(cand.Name)
 	var stage string
 	if isSystemPackage(kind) {
@@ -141,22 +158,26 @@ func (m *Manager) downloadOne(cand UpdateAsset, onProgress func(Progress)) (_ *P
 		return nil, fmt.Errorf("download %s: %w", cand.Name, err)
 	}
 
-	if cand.SHA256 != "" {
-		if onProgress != nil {
-			onProgress(Progress{Phase: "verifying", Total: -1, Message: cand.Name})
-		}
-		got, err := sha256File(filePath)
-		if err != nil {
-			cleanup()
-			return nil, fmt.Errorf("hash %s: %w", cand.Name, err)
-		}
-		if !strings.EqualFold(got, cand.SHA256) {
-			log.Writef("[update] sha256 mismatch for %s: got %s want %s", cand.Name, got, cand.SHA256)
-			cleanup()
-			return nil, fmt.Errorf("sha256 mismatch for %s", cand.Name)
-		}
-		log.Writef("[update] sha256 verified for %s", cand.Name)
+	// Verification is unconditional: the SHA256 was required up front, and a
+	// missing one must never slip through a defensive check.
+	if onProgress != nil {
+		onProgress(Progress{Phase: "verifying", Total: -1, Message: cand.Name})
 	}
+	if strings.TrimSpace(cand.SHA256) == "" {
+		cleanup()
+		return nil, fmt.Errorf("refusing to install %s: no sha256 checksum", cand.Name)
+	}
+	got, err := sha256File(filePath)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("hash %s: %w", cand.Name, err)
+	}
+	if !strings.EqualFold(got, cand.SHA256) {
+		log.Writef("[update] sha256 mismatch for %s: got %s want %s", cand.Name, got, cand.SHA256)
+		cleanup()
+		return nil, fmt.Errorf("sha256 mismatch for %s", cand.Name)
+	}
+	log.Writef("[update] sha256 verified for %s", cand.Name)
 
 	pend := &PendingUpdate{
 		Asset:    cand,
@@ -182,6 +203,17 @@ func (m *Manager) downloadOne(cand UpdateAsset, onProgress func(Progress)) (_ *P
 		return nil, fmt.Errorf("extract %s: %w", cand.Name, err)
 	}
 
+	// Record the extracted binary's hash so Apply can detect any change
+	// between extraction and replacement. The archive SHA256 above remains
+	// the authenticity anchor; this only closes the local TOCTOU window.
+	if pend.NewBinary != "" {
+		pend.NewBinarySHA256, err = sha256File(pend.NewBinary)
+		if err != nil {
+			cleanup()
+			return nil, fmt.Errorf("hash extracted %s: %w", cand.Name, err)
+		}
+	}
+
 	m.setPending(pend)
 	return pend, nil
 }
@@ -190,6 +222,9 @@ func (m *Manager) downloadOne(cand UpdateAsset, onProgress func(Progress)) (_ *P
 // set. Non-200 responses are errors (the fallback loop then tries the mirror).
 // An overall 30-minute deadline bounds stalled connections.
 func downloadToFile(url, dest, label string, onProgress func(Progress)) error {
+	if err := allowedDownloadURL(url); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

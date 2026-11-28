@@ -17,7 +17,7 @@ func (m *Manager) applyPlatform(pend *PendingUpdate, onProgress func(Progress)) 
 	case "installer":
 		return launchInstallerUpdate(pend, onProgress)
 	case "portable":
-		if err := applyBinary(pend.NewBinary, onProgress); err != nil {
+		if err := applyBinary(pend.NewBinary, pend.NewBinarySHA256, onProgress); err != nil {
 			return err
 		}
 		return copyPlugins(pend.StageDir)

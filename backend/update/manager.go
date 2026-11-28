@@ -18,6 +18,11 @@ type PendingUpdate struct {
 	StageDir  string // staging directory holding the downloaded artifact + extracted payload
 	FilePath  string // the downloaded artifact itself
 	NewBinary string // extracted replacement executable (empty for "installer")
+	// NewBinarySHA256 is the extracted binary's hash recorded right after
+	// extraction. Apply re-hashes immediately before replacing the executable
+	// and aborts on a mismatch (post-extraction tampering). It is not an
+	// authenticity anchor: the archive SHA256 in Asset is.
+	NewBinarySHA256 string
 }
 
 // NewManager returns an empty update Manager.

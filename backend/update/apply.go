@@ -1,8 +1,13 @@
 package update
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/minio/selfupdate"
 	"github.com/ys-ll/uniterm/backend/log"
@@ -19,14 +24,51 @@ func (m *Manager) Apply(onProgress func(Progress)) error {
 	return m.applyPlatform(pend, onProgress)
 }
 
+// openVerifiedBinary opens newBinary, re-hashes it, and rewinds it for
+// selfupdate.Apply. Verifying the same file descriptor that is handed to
+// Apply removes the path-swap window between the hash and the replacement:
+// the bytes read by Apply are exactly the bytes hashed here.
+func openVerifiedBinary(newBinary, wantSHA string) (*os.File, error) {
+	if wantSHA == "" {
+		return nil, fmt.Errorf("refusing to apply %s: no recorded binary sha256", newBinary)
+	}
+	f, err := os.Open(newBinary)
+	if err != nil {
+		return nil, err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		f.Close()
+		return nil, err
+	}
+	got := hex.EncodeToString(h.Sum(nil))
+	if !strings.EqualFold(got, wantSHA) {
+		f.Close()
+		log.Writef("[update] extracted binary sha256 mismatch: got %s want %s", got, wantSHA)
+		return nil, fmt.Errorf("sha256 mismatch for extracted binary %s", newBinary)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
 // applyBinary replaces the running executable with newBinary using
 // minio/selfupdate (which handles the Windows locked-file rename dance and
-// Unix permission semantics). A backup copy of the current binary is kept at
+// Unix permission semantics). The extracted binary is re-hashed immediately
+// before the replacement; a backup copy of the current binary is kept at
 // <exe>.uniterm-old and removed on success or used for a best-effort rollback.
-func applyBinary(newBinary string, onProgress func(Progress)) error {
+func applyBinary(newBinary, wantSHA string, onProgress func(Progress)) error {
 	if onProgress != nil {
 		onProgress(Progress{Phase: "applying", Total: -1})
 	}
+
+	f, err := openVerifiedBinary(newBinary, wantSHA)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 
 	exe, err := os.Executable()
 	if err != nil {
@@ -40,12 +82,6 @@ func applyBinary(newBinary string, onProgress func(Progress)) error {
 			backedUp = true
 		}
 	}
-
-	f, err := os.Open(newBinary)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
 
 	if err := selfupdate.Apply(f, selfupdate.Options{}); err != nil {
 		log.Writef("[update] apply failed: %v", err)

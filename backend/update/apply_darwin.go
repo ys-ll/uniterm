@@ -12,7 +12,7 @@ import (
 )
 
 func (m *Manager) applyPlatform(pend *PendingUpdate, onProgress func(Progress)) error {
-	if err := applyBinary(pend.NewBinary, onProgress); err != nil {
+	if err := applyBinary(pend.NewBinary, pend.NewBinarySHA256, onProgress); err != nil {
 		return err
 	}
 	// Replacing Contents/MacOS/uniTerm invalidates the bundle signature.
