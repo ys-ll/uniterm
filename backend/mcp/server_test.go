@@ -55,6 +55,22 @@ func TestClassifyCommand(t *testing.T) {
 		{"ls > /dev/null", RiskRead},
 		{"kill 1234", RiskWrite},
 		{"chmod +x script.sh", RiskWrite},
+		// Bare wrappers and env+wrapper segments must not panic (issue #1677).
+		{"env", RiskRead},
+		{"env | grep PATH", RiskRead},
+		{"sudo", RiskRead},
+		{"doas", RiskRead},
+		{"nohup", RiskRead},
+		{"time", RiskRead},
+		{"nice", RiskRead},
+		{"FOO=1 sudo", RiskRead},
+		{"FOO=1 env", RiskRead},
+		{"sudo env", RiskRead},
+		{"FOO=1 sudo rm -rf /tmp/x", RiskDangerous},
+		{"env > /tmp/env.txt", RiskWrite},
+		{"env > /etc/profile", RiskDangerous},
+		{"echo ok; env; sudo", RiskRead},
+		{"grep -E 'a|env|b' /tmp/log", RiskRead},
 	}
 	for _, c := range cases {
 		if got := classifyCommand(c.cmd); got != c.want {
@@ -562,5 +578,64 @@ func TestInvalidOriginHeaders(t *testing.T) {
 		if validRequestOrigin(r) {
 			t.Fatalf("accepted invalid Origin headers: %q", origins)
 		}
+	}
+}
+
+func TestRecoverMiddleware(t *testing.T) {
+	// Direct middleware test: panic is converted into an error.
+	wrapped := recoverMiddleware(func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+		panic("boom")
+	})
+	res, err := wrapped(context.Background(), "tools/call", nil)
+	if res != nil {
+		t.Fatalf("expected nil result on panic, got %#v", res)
+	}
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("expected panic error, got %v", err)
+	}
+
+	// End-to-end test: a panicking Env callback inside a tool call must not
+	// crash the MCP server and must leave the server able to serve subsequent calls.
+	panicNow := true
+	env := Env{
+		ListSessions: func() []SessionSummary {
+			if panicNow {
+				panic("simulated handler crash")
+			}
+			return []SessionSummary{{ID: "s1", Type: "ssh", Status: "connected"}}
+		},
+		Audit: func(entry AuditEntry) {},
+	}
+	srv := NewServer(env)
+	token, hash := GenerateToken()
+	srv.SetTokens(map[string]TokenInfo{hash: {Name: "recover-agent"}})
+	if err := srv.Start(0, false); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Stop)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client := mcp.NewClient(&mcp.Implementation{Name: "recover-probe", Version: "1"}, nil)
+	transport := &mcp.StreamableClientTransport{
+		Endpoint:   "http://127.0.0.1:" + strconv.Itoa(srv.Port()) + "/mcp",
+		HTTPClient: &http.Client{Transport: tokenTransport{rt: http.DefaultTransport, token: token}},
+	}
+	cs, err := client.Connect(ctx, transport, nil)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer cs.Close()
+
+	_, err = cs.CallTool(ctx, &mcp.CallToolParams{Name: "list_sessions"})
+	if err == nil || !strings.Contains(err.Error(), "simulated handler crash") {
+		t.Fatalf("expected recovered panic error, got %v", err)
+	}
+
+	// Subsequent call succeeds after recovery.
+	panicNow = false
+	res2, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "list_sessions"})
+	if err != nil || res2.IsError {
+		t.Fatalf("subsequent list_sessions failed: err=%v res=%+v", err, res2)
 	}
 }

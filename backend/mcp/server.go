@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -297,6 +298,7 @@ func (s *Server) Start(port int, allowRemote bool) error {
 		Name:    "uniterm",
 		Version: "1.0.0",
 	}, nil)
+	srv.AddReceivingMiddleware(recoverMiddleware)
 	s.registerTools(srv)
 
 	handler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
@@ -359,6 +361,23 @@ func (s *Server) stop() {
 // tokenNameContextKey carries the resolved token name from the auth
 // middleware into tool handlers (the SDK passes req.Context() through).
 type tokenNameContextKey struct{}
+
+// recoverMiddleware turns any unexpected panic inside an MCP request handler
+// into a JSON-RPC error instead of crashing the whole uniTerm process. The
+// go-sdk dispatches JSON-RPC handlers on a dedicated goroutine outside
+// net/http's built-in recovery, so panics here would otherwise be fatal.
+func recoverMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
+	return func(ctx context.Context, method string, req mcp.Request) (res mcp.Result, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Writef("mcp: panic in %s: %v\n%s", method, r, debug.Stack())
+				res = nil
+				err = fmt.Errorf("internal error handling %s: %v", method, r)
+			}
+		}()
+		return next(ctx, method, req)
+	}
+}
 
 // authMiddleware rejects requests without a valid bearer token. Loopback
 // binding alone is not trust: browser pages and local processes can reach
