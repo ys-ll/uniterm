@@ -120,6 +120,7 @@ var Methods = map[string]Group{
 	"SaveFileDialogFiltered":  GroupNativeDialogs,
 	// mcpServer
 	"CaptureScreen":          GroupMCPServer,
+	"EnsureMCPRunning":       GroupMCPServer,
 	"GenerateMCPToken":       GroupMCPServer,
 	"GetMCPStatus":           GroupMCPServer,
 	"InterruptForeground":    GroupMCPServer,
