@@ -333,7 +333,9 @@ func newHookReadyScanner(marker string) hookReadyScanner {
 // chunk. cleaned must always be used in place of the input: a partially
 // arrived marker is withheld and flushed on a later Feed.
 func (sc *hookReadyScanner) Feed(data []byte) (cleaned []byte, found bool) {
-	if sc.done {
+	// An empty marker (e.g. a zero-value scanner) would make bytes.Index return
+	// 0 forever and stall the PTY read loop; treat it as a passthrough.
+	if sc.done || sc.marker == "" {
 		return data, false
 	}
 	buf := append(append([]byte{}, sc.leftover...), data...)

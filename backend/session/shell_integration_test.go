@@ -420,3 +420,24 @@ func TestTypedCwdHookStateTwoPhase(t *testing.T) {
 		t.Fatal("disarm must drop the body")
 	}
 }
+
+func TestHookReadyScannerEmptyMarkerPassthrough(t *testing.T) {
+	var sc hookReadyScanner
+	cleaned, found := sc.Feed([]byte("hello world"))
+	if found || string(cleaned) != "hello world" {
+		t.Fatalf("zero-value scanner: cleaned=%q found=%v", cleaned, found)
+	}
+
+	// Zero-value typedCwdHookState (uninitialized scanners) must pass through
+	// instead of spinning forever on the first output chunk.
+	var h typedCwdHookState
+	cleaned, armed, confirmed := h.onOutput([]byte("user@host:~$ "))
+	if armed || confirmed || string(cleaned) != "user@host:~$ " {
+		t.Fatalf("zero-value hook state: cleaned=%q armed=%v confirmed=%v", cleaned, armed, confirmed)
+	}
+	h.arm("echo body\n")
+	cleaned, armed, confirmed = h.onOutput([]byte("more output"))
+	if armed || confirmed || string(cleaned) != "more output" {
+		t.Fatalf("armed zero-value hook state: cleaned=%q armed=%v confirmed=%v", cleaned, armed, confirmed)
+	}
+}
