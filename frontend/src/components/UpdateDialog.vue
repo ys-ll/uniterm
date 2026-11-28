@@ -186,8 +186,13 @@ function fmtSize(bytes: number): string {
   margin-bottom: 0.625rem;
   word-break: break-word;
 }
+.update-dialog-progress :deep(.el-progress__text) {
+  /* el-progress sets an inline font-size from stroke-width (16px here); force it down */
+  font-size: 0.75rem !important;
+  min-width: 2.5rem;
+}
 .update-dialog-progress-label {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   margin-top: 0.5rem;
   color: var(--text-muted, #8a8a8a);
 }

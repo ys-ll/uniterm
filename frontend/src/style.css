@@ -461,10 +461,16 @@ body {
    becomes a traffic-light dot on the left. Platform comes from
    documentElement.dataset.platform (set in App.vue's GetPlatform callback). */
 .el-dialog {
-  background: var(--bg-surface) !important;
-  border: 1px solid var(--border-subtle) !important;
+  /* Island layout (trial): the dialog chrome sits on the title-bar tone and
+     body+footer float as one raised card inside it. */
+  background: var(--bg-titlebar) !important;
+  /* Outer edge softened: plain --border-subtle reads too strong against the
+     dark title-bar chrome, so keep only ~40% of it. */
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 40%, transparent) !important;
   border-radius: var(--radius-md) !important;
-  box-shadow: var(--shadow-lg) !important;
+  /* Windows-style window shadow: the themed directional drop plus an ambient
+     halo that wraps all four edges instead of only falling downward */
+  box-shadow: var(--shadow-lg), 0 0 1.25rem rgba(0, 0, 0, 0.2) !important;
   /* EP pads the dialog element itself (16px), which insets the header/footer
      so their dividers never reach the edges and the title bar reads taller
      than it is. Flush the chrome sections instead — body padding rules below
@@ -492,6 +498,8 @@ body {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  /* Match the app title bar (AppHeader) so the dialog reads as a mini window */
+  background: var(--bg-titlebar);
   /* Positioning context for the absolute close button — without it the
      button centres against the whole dialog and disappears under the body */
   position: relative;
@@ -506,7 +514,35 @@ body {
      specificity); keep the pointer neutral so the title bar doesn't read as
      a web drag handle */
   cursor: default !important;
-  border-bottom: 1px solid var(--border-subtle);
+}
+/* Dialog header only: the island cap (see ::before below) is pinned inside
+   the header's bottom edge, so grow the header by half the cap height —
+   fully absorbing it read as extra headroom — and pad the title to centre
+   in the dark area above the cap. MessageBox has no cap and keeps the
+   plain 2.25rem header above. */
+.el-dialog__header {
+  height: calc(2.25rem + 0.25rem);
+  padding-bottom: var(--radius-md) !important;
+}
+/* Island cap: a thin elevated strip pinned to the header's bottom edge that
+   draws the island card's rounded top corners (border line included), so the
+   scrolling body below can stay square. Rounding the body itself would force
+   a composited rounded-rect mask on the scroller, which drops subpixel
+   antialiasing and blurs form text on fractional-DPI displays (Windows
+   125%/150%). Pure background painting — no mask, no blur. Inset 4px on the
+   sides to match the body's island margins. */
+.el-dialog__header::before {
+  content: "";
+  position: absolute;
+  left: 0.25rem;
+  right: 0.25rem;
+  bottom: 0;
+  height: var(--radius-md);
+  box-sizing: border-box;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 .el-dialog__title,
 .el-message-box__title {
@@ -528,9 +564,9 @@ body {
    minimise/maximise hover boxes. */
 .el-dialog__headerbtn,
 .el-message-box__headerbtn {
-  top: 50%;
+  /* Centre in the 2.25rem title bar: (2.25rem - 1.75rem button) / 2 = 0.25rem */
+  top: 0.25rem;
   right: 0.25rem;
-  transform: translateY(-50%);
   width: 1.875rem;
   height: 1.75rem;
   font-size: 0.875rem;
@@ -579,19 +615,30 @@ body {
 .el-message-box__headerbtn:active {
   background: #f1707a;
 }
+/* Dialog-only: recentre the close key in the dark area above the island cap
+   (header 2.5rem, cap 0.5rem → dark area 2rem). MessageBox keeps 0.25rem. */
+.el-dialog__headerbtn {
+  top: 0.125rem;
+}
 /* Darwin close key: traffic-light dot on the left, glyph shows on hover. */
 :root[data-platform="darwin"] .el-dialog__headerbtn,
 :root[data-platform="darwin"] .el-message-box__headerbtn {
-  top: 50%;
+  /* Centre in the 2.25rem title bar: (2.25rem - 0.75rem dot) / 2 = 0.75rem */
+  top: 0.75rem;
   right: auto;
   left: 0.875rem;
-  transform: translateY(-50%);
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 50%;
   background: #ff5f57;
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
   transition: filter 0.15s ease;
+}
+/* Dialog-only darwin dot: recentre in the dark area above the island cap
+   (header 2.5rem, cap 0.5rem → dark area 2rem): (2rem - 0.75rem) / 2. Same
+   specificity as the shared darwin rule above; this later rule wins. */
+:root[data-platform="darwin"] .el-dialog__headerbtn {
+  top: 0.625rem;
 }
 :root[data-platform="darwin"] .el-dialog__headerbtn:hover,
 :root[data-platform="darwin"] .el-message-box__headerbtn:hover {
@@ -622,9 +669,28 @@ body {
 }
 .el-dialog__body {
   color: var(--text-primary);
-  padding: 0.75rem 1rem;
-  /* Whole dialog sits on the surface colour (matches the title bar) */
-  background: var(--bg-surface);
+  /* No top padding: the island cap in the header above already provides the
+     visual gap between the title bar and the content */
+  padding: 0 1rem 0.75rem;
+  /* Island card: raised surface floating on the title-bar chrome, flush to
+     the header on top, inset 4px on the other sides; the footer below closes
+     the card's bottom edge. NOTE: border-radius here forces a composited
+     rounded-rect mask on this scrolling element, which drops subpixel
+     antialiasing — form text looks slightly blurry on fractional-DPI
+     displays (Windows 125%/150%). Remove the radius if sharpness matters
+     more than the rounded island look. */
+  /* Island card at the panel tone (elevated), floating on the title-bar chrome */
+  background: var(--bg-elevated);
+  /* Side edges only — the island cap in the header above draws the top edge
+     and its rounded corners; the footer's border-top is the bottom divider.
+     No border-radius here either: rounding a scrolling element forces a
+     composited rounded-rect mask (intermediate texture + resample), which
+     drops subpixel antialiasing and blurs form text on fractional-DPI
+     displays (Windows 125%/150%). */
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-bottom: none;
+  margin: 0 0.25rem 0;
   /* Scrollable middle section of the capped-height dialog: take the leftover
      space and scroll when content exceeds it (min-height: 0 lets flex shrink
      below the content's intrinsic height) */
@@ -632,10 +698,18 @@ body {
   min-height: 0;
   overflow-y: auto;
 }
+/* Dialogs rendered without a footer close the island themselves */
+.el-dialog__body:last-child {
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 0.25rem;
+}
 .el-dialog__footer {
   padding: 0.625rem 1rem;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  /* Island edge (sides+bottom); the top edge is the body/footer divider */
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  margin: 0 0.25rem 0.25rem;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   /* Keep the command bar pinned while the body scrolls */
   flex-shrink: 0;
   /* Buttons wrap onto a second row at narrow widths: inline flow packs the
@@ -670,21 +744,27 @@ body {
 /* Message box (ElMessageBox.confirm/prompt) — mirror .el-dialog above so k8s
    delete/scale/restart/drain confirms share the same native chrome. */
 .el-message-box {
-  background: var(--bg-surface) !important;
-  border: 1px solid var(--border-subtle) !important;
+  background: var(--bg-titlebar) !important;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 40%, transparent) !important;
   border-radius: var(--radius-md) !important;
-  box-shadow: var(--shadow-lg) !important;
+  box-shadow: var(--shadow-lg), 0 0 1.25rem rgba(0, 0, 0, 0.2) !important;
   padding: 0 !important;
 }
 .el-message-box__content {
   color: var(--text-primary);
   padding: 0.875rem 1rem;
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  margin: 0 0.25rem 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 .el-message-box__btns {
   padding: 0.625rem 1rem;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  margin: 0 0.25rem 0.25rem;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
 .el-form-item {
@@ -735,11 +815,19 @@ body {
   /* EP's default-button hover mixes --el-color-primary with white
      (--el-color-primary-light-9/7), which reads as an inverted near-white
      fill on dark themes. Use the app's neutral highlight instead (same as
-     .btn-default / .start-action-btn); typed buttons override these vars
-     with their own values, so this only hits default buttons. */
+     .btn-default / .start-action-btn). Scoped to default (untyped) buttons:
+     this rule ties on specificity with EP's typed classes (.el-button--*
+     also 0-1-0) and wins by source order, so unscoped it would also defeat
+     EP's white hover text on typed buttons — primary hover text turned
+     dark-on-accent in light themes. */
   --el-button-hover-text-color: var(--text-primary);
   --el-button-hover-border-color: var(--border-hover);
   --el-button-hover-bg-color: var(--bg-hover);
+}
+.el-button:is(.el-button--primary, .el-button--success, .el-button--warning, .el-button--danger, .el-button--info, .el-button--error) {
+  /* Typed buttons keep their on-accent hover text (EP's white) — see the
+     scoping note above. */
+  --el-button-hover-text-color: var(--on-accent);
 }
 
 /* ============================================================
