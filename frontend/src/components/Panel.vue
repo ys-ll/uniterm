@@ -106,7 +106,8 @@
               <MenuItem @click="triggerResetOutput(); moreMenuVisible = false">{{ t('terminal.resetOutput') }}</MenuItem>
               <MenuItem @click="triggerClearScrollback(); moreMenuVisible = false">{{ t('terminal.clearScrollback') }}</MenuItem>
             </MenuSubmenu>
-            <MenuSubmenu :label="t('session.logRecordMenu')">
+            <MenuItem v-if="webServerMode" @click="triggerExport(); moreMenuVisible = false">{{ t('terminal.export') }}</MenuItem>
+            <MenuSubmenu v-if="!webServerMode" :label="t('session.logRecordMenu')">
               <MenuItem @click="toggleOutputLog(); moreMenuVisible = false">
                 {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
               </MenuItem>
@@ -198,6 +199,11 @@ import { Clipboard } from '@wailsio/runtime'
 const RESET_MOUSE_MODES = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l'
 
 const { t } = useI18n()
+// Session logs and recordings live on the worker's disk — hide the
+// 日志与录制 menu group in web deployments.
+import { isWebServerMode } from '../services/webSftpBridge'
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 
 const props = defineProps<{
   panel: Panel

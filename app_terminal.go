@@ -1382,8 +1382,13 @@ func (a *App) setSessionLogAutoStart(v bool) {
 // autoLogRequested reports whether a freshly created session should have
 // its output log started automatically: either the global
 // sessionLogAutoStart setting is on, or the connection opted in via
-// LogOnConnect.
+// LogOnConnect. Server (multi-user web) builds always answer false: the
+// log file would land on the worker's disk where the browser user cannot
+// reach it, so auto-logging is skipped there entirely.
 func (a *App) autoLogRequested(sessionID string) bool {
+	if serverMode {
+		return false
+	}
 	a.sessionLogSettingsMu.RLock()
 	auto := a.sessionLogAutoStart
 	a.sessionLogSettingsMu.RUnlock()

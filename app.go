@@ -24,6 +24,7 @@ import (
 	"github.com/ys-ll/uniterm/backend/packetcap"
 	"github.com/ys-ll/uniterm/backend/platform"
 	"github.com/ys-ll/uniterm/backend/session"
+	"github.com/ys-ll/uniterm/backend/serverpolicy"
 	"github.com/ys-ll/uniterm/backend/store"
 	"github.com/ys-ll/uniterm/backend/sync"
 	"github.com/ys-ll/uniterm/backend/update"
@@ -2528,12 +2529,24 @@ func (a *App) OnConnectionsChanged(callback func(session.ConnectionStoreData)) {
 type AppInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Features reports, per server-policy group, whether the backend bound
+	// that group's methods. The frontend uses it to hide UI for denied
+	// feature groups instead of calling unbound methods (which surface as
+	// "unknown bound method id" errors). Desktop builds report every group
+	// enabled (AllowAll).
+	Features map[string]bool `json:"features"`
 }
 
 func (a *App) GetAppInfo() AppInfo {
+	policy := currentServerPolicy()
+	features := make(map[string]bool, len(serverpolicy.Groups))
+	for _, group := range serverpolicy.Groups {
+		features[string(group)] = policy.Enabled(group)
+	}
 	return AppInfo{
-		Name:    "Carrear's Terminal",
-		Version: Version,
+		Name:     "Carrear's Terminal",
+		Version:  Version,
+		Features: features,
 	}
 }
 

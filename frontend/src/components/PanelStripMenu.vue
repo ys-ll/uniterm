@@ -25,7 +25,7 @@
          sidebar and the bottom panel strips). -->
     <MenuSubmenu :label="t('sidebar.panelsMenu')">
       <MenuItem
-        v-for="tab in SIDEBAR_TAB_ORDER"
+        v-for="tab in stripTabs"
         :key="tab.key"
         iconic
         :icon="tabVisible(tab.key) ? Check : undefined"
@@ -53,6 +53,7 @@ import { useI18n } from '../i18n'
 import { useUiLayoutStore, type PanelLocation } from '../stores/uiLayoutStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { SIDEBAR_TAB_DEFAULTS, SIDEBAR_TAB_ORDER } from '../types/settings'
+import { isWebServerMode } from '../services/webSftpBridge'
 import Menu from './Menu.vue'
 import MenuItem from './MenuItem.vue'
 import MenuSubmenu from './MenuSubmenu.vue'
@@ -61,6 +62,12 @@ import MenuDivider from './MenuDivider.vue'
 const { t } = useI18n()
 const uiLayout = useUiLayoutStore()
 const settingsStore = useSettingsStore()
+// Tunnels are desktop-only; keep them out of the visibility menu on the web.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
+const stripTabs = computed(() =>
+  SIDEBAR_TAB_ORDER.filter(tab => !(webServerMode.value && tab.key === 'tunnels'))
+)
 
 const DOCKS: PanelLocation[] = ['sidebar', 'right', 'bottom']
 

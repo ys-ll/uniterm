@@ -13,7 +13,7 @@ import {
 } from '../../bindings/github.com/ys-ll/uniterm/app'
 import { Events } from '@wailsio/runtime'
 import { useZmodemStore } from '../stores/zmodemStore'
-import { isWebServerMode, pickBrowserFiles, stageLocalFilesInBrowser } from './webSftpBridge'
+import { isWebServerMode, pickBrowserFiles, stageLocalFilesInBrowser, downloadStagedFileInBrowser } from './webSftpBridge'
 import { queuedSessionWrite } from './sessionWriter'
 
 const dialogLocks = new Set<string>()
@@ -527,6 +527,15 @@ export function startZmodemService(options: ZmodemServiceOptions) {
             () => { receivedFileOffer = true },
           )
           await finishTransfer(files)
+          // Web server mode: the staged copies land inside the worker
+          // container — push each one to the browser's download bar so the
+          // user actually gets the file. The worker deletes its staged copy
+          // once the stream completes (failed streams keep it for retry).
+          if (files.length > 0 && await isWebServerMode()) {
+            for (const stagedPath of files) {
+              downloadStagedFileInBrowser(stagedPath)
+            }
+          }
         }
       }
 

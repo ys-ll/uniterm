@@ -120,7 +120,9 @@
         <MenuItem @click="triggerResetOutput">{{ t('terminal.resetOutput') }}</MenuItem>
         <MenuItem @click="triggerClearScrollback">{{ t('terminal.clearScrollback') }}</MenuItem>
       </MenuSubmenu>
-      <MenuSubmenu v-if="tab.type === 'terminal'" :label="t('session.logRecordMenu')">
+      <!-- Web keeps only export from the group below (worker-disk features). -->
+      <MenuItem v-if="webServerMode && tab.type === 'terminal'" @click="triggerExport">{{ t('terminal.export') }}</MenuItem>
+      <MenuSubmenu v-if="!webServerMode && tab.type === 'terminal'" :label="t('session.logRecordMenu')">
         <MenuItem v-if="supportsOutputLog" @click="closeContextMenu(); toggleOutputLog()">
           {{ isOutputLogOn ? t('session.stopLog') : t('session.startLog') }}
         </MenuItem>
@@ -219,6 +221,11 @@ const settingsStore = useSettingsStore()
 const companionStore = useCompanionStore()
 const { duplicateSession, duplicateChannel } = useDuplicateSession()
 const { t } = useI18n()
+// Session logs and recordings live on the worker's disk — hide the
+// 日志与录制 menu group in web deployments.
+import { isWebServerMode } from '../services/webSftpBridge'
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent)
 const tabShortcut = computed(() => {

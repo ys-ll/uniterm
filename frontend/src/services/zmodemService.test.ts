@@ -98,6 +98,7 @@ vi.mock('./webSftpBridge', () => ({
   isWebServerMode: mockIsWebServerMode,
   pickBrowserFiles: mockPickBrowserFiles,
   stageLocalFilesInBrowser: mockStageLocalFilesInBrowser,
+  downloadStagedFileInBrowser: vi.fn(),
 }))
 
 import { pickZmodemUploadPaths, startZmodemService, zmodemWebDownloadDir } from './zmodemService'

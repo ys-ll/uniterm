@@ -158,9 +158,9 @@
                top-level (high frequency / keep delete visible). -->
           <MenuSubmenu :label="t('sftp.openMenu')">
             <MenuItem @click="doEdit">{{ t('sftp.edit') }}</MenuItem>
-            <!-- No external editor / system-app association in the mobile sandbox -->
-            <MenuItem v-if="!isMobilePlatform()" @click="doEditExternal">{{ t('sftp.editExternal') }}</MenuItem>
-            <MenuItem v-if="!isMobilePlatform()" @click="doOpenWithSystem">{{ t('sftp.openWithSystem') }}</MenuItem>
+            <!-- No external editor / system-app association in the mobile sandbox, none in a browser either -->
+            <MenuItem v-if="!isMobilePlatform() && !webServerMode" @click="doEditExternal">{{ t('sftp.editExternal') }}</MenuItem>
+            <MenuItem v-if="!isMobilePlatform() && !webServerMode" @click="doOpenWithSystem">{{ t('sftp.openWithSystem') }}</MenuItem>
           </MenuSubmenu>
           <MenuSubmenu :label="t('sftp.newMenu')">
             <MenuItem @click="doNewFile">{{ t('sftp.newFile') }}</MenuItem>
@@ -175,7 +175,7 @@
           <MenuDivider />
           <MenuSubmenu v-if="mode === 'remote' || props.showSendToOther !== false" :label="t('terminal.transfer')">
             <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-            <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+            <MenuItem v-if="showSendToOtherEntry" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
             <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
           </MenuSubmenu>
           <MenuSubmenu :label="t('sftp.copyPathMenu')">
@@ -203,7 +203,7 @@
           <MenuDivider />
           <MenuSubmenu v-if="mode === 'remote' || props.showSendToOther !== false" :label="t('terminal.transfer')">
             <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-            <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+            <MenuItem v-if="showSendToOtherEntry" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
             <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
           </MenuSubmenu>
           <MenuSubmenu :label="t('sftp.copyPathMenu')">
@@ -225,7 +225,7 @@
           <MenuDivider />
           <MenuSubmenu v-if="mode === 'remote' || props.showSendToOther !== false" :label="t('terminal.transfer')">
             <MenuItem v-if="mode === 'remote'" @click="doUpload">{{ t('sftp.upload') }}</MenuItem>
-            <MenuItem v-if="props.showSendToOther !== false" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
+            <MenuItem v-if="showSendToOtherEntry" @click="doSendToOther">{{ t(sendToKey) }}</MenuItem>
             <MenuItem v-if="mode === 'remote' && !isMobilePlatform()" @click="doDownloadTo">{{ t('sftp.downloadTo') }}</MenuItem>
           </MenuSubmenu>
           <MenuSubmenu :label="t('sftp.copyPathMenu')">
@@ -295,6 +295,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { isWebServerMode } from '../services/webSftpBridge'
 import { Folder, File, Link, RefreshCw, Eye, Upload, FilePlus2, FolderPlus, MoreHorizontal, ChevronLeft, ChevronRight, CornerLeftUp } from '@lucide/vue'
 import { useI18n } from '../i18n'
 import { msg } from '../services/message'
@@ -351,6 +352,13 @@ const props = withDefaults(defineProps<{
 }>(), {
   showSendToOther: true,
 })
+
+// In a browser deployment the counterpart "local" pane does not exist and
+// external-editor / system-open actions would hit policy-denied methods —
+// hide those context-menu entries.
+const webServerMode = ref(false)
+isWebServerMode().then((v) => { webServerMode.value = v })
+const showSendToOtherEntry = computed(() => props.showSendToOther !== false && !webServerMode.value)
 
 const emit = defineEmits<{
   open: [item: FileItem]

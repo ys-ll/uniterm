@@ -91,6 +91,19 @@ export function downloadRemoteFileInBrowser(sessionId: string, remotePath: strin
 }
 
 /**
+ * Streams one file from the tenant's staging save directory (where zmodem
+ * sz receives land) to the browser's download bar. The worker deletes its
+ * staged copy once the stream completes; a failed download leaves the file
+ * in place for retry (24h janitor as backstop).
+ */
+export function downloadStagedFileInBrowser(stagedPath: string): void {
+  const sep = stagedPath.includes('\\') ? '\\' : '/';
+  const idx = stagedPath.lastIndexOf(sep);
+  const name = idx >= 0 ? stagedPath.slice(idx + 1) : stagedPath;
+  triggerHiddenDownloadLink(`/api/web/staged/download?name=${encodeURIComponent(name)}`);
+}
+
+/**
  * Streams multiple remote files or directories as an on-the-fly .tar.gz archive to the browser.
  */
 export function downloadRemoteArchiveInBrowser(

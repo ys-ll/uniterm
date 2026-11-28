@@ -178,9 +178,12 @@
     <CredentialUnlockDialog v-model:visible="unlockVisible" @done="onUnlockDone" @reset="onReset" />
     <MobileKeyBar v-if="keyBarSessionId" :key="keyBarSessionId" :session-id="keyBarSessionId" />
     <NetworkScanTabContent v-model:visible="netscanVisible" @new-connection="onNetscanNewConnection" />
-    <PacketCaptureTabContent v-model:visible="packetcapVisible" />
-    <FirewallTabContent v-model:visible="firewallVisible" />
-    <LocalServices v-model:visible="localServicesVisible" />
+    <!-- Policy-gated panels: mounted only when the server policy bound their
+         feature group, so a default-deny web deployment never calls an
+         unbound method (the capture panel fetches interfaces on mount). -->
+    <PacketCaptureTabContent v-if="features.enabled('packetCapture')" v-model:visible="packetcapVisible" />
+    <FirewallTabContent v-if="features.enabled('firewall')" v-model:visible="firewallVisible" />
+    <LocalServices v-if="features.enabled('localServices')" v-model:visible="localServicesVisible" />
     <HostKeyChangedDialog />
   </div>
   </el-config-provider>
@@ -259,6 +262,7 @@ import { useCommandStore } from './stores/commandStore'
 import { useTunnelStore } from './stores/tunnelStore'
 import { useLocalStateStore } from './stores/localStateStore'
 import { useUiLayoutStore } from './stores/uiLayoutStore'
+import { useFeaturesStore } from './stores/featuresStore'
 import type { SidebarView } from './stores/uiLayoutStore'
 import { useContainerStore } from './stores/containerStore'
 import { useSyncStore } from './stores/syncStore'
@@ -422,6 +426,7 @@ const uiLayout = useUiLayoutStore()
 const containerStore = useContainerStore()
 const syncStore = useSyncStore()
 const tunnelStore = useTunnelStore()
+const features = useFeaturesStore()
 const updateCheck = useUpdateCheck()
 let uninstallFocusRestore: (() => void) | null = null
 // Unsubscribers for module-level Wails EventsOn listeners (FE-03).
@@ -957,6 +962,10 @@ function onPlatformSystemShortcut(e: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  // Feature flags come from the backend's server policy; load them first so
+  // policy-gated panels (capture/firewall/local services) know whether to
+  // mount at all.
+  features.load()
   connectionStore.load()
   aiStore.init()
   // Update check does an IPC roundtrip (GetAppInfo/isWebServerMode) and
@@ -1263,7 +1272,8 @@ const actionHandlers: Record<ShortcutAction, () => void> = {
   toggleMonitor: () => sidebarViewShortcut('monitor'),
   openQuickCommands: () => sidebarViewShortcut('quickCommands', true),
   toggleNotes: () => sidebarViewShortcut('notes'),
-  toggleTunnels: () => sidebarViewShortcut('tunnels'),
+  // Tunnels UI is desktop-only; the shortcut is a no-op in web deployments.
+  toggleTunnels: () => { if (!webServerMode.value) sidebarViewShortcut('tunnels') },
   toggleHistory: () => sidebarViewShortcut('history'),
   togglePersonalization: () => sidebarViewShortcut('personalization'),
   toggleCommandSend: () => sidebarViewShortcut('commandSend'),

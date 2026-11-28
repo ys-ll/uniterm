@@ -25,6 +25,7 @@
 - SSH: the current TOTP code is now visible — live in the connection form and from the connection right-click menu, with a countdown and one-click copy, for authenticator binding on a bastion's web console. (@surenwuyuwuqiu)
 - Kubernetes: ConfigMaps support viewing and inline editing, and the resource detail drawer presents Labels as chips, shows Annotations and Conditions, and renders Ingress rules / TLS as tables. (@it-linnan)
 - Security: server (web) mode runs under a default-deny operator policy with an App allowlist and tenant local-path confinement — unauthorized calls fail closed. (@zielony360)
+- Web: browser deployments now hide desktop-only features (SSH tunnels, X11 desktop, capture / firewall / local-services panels, log & recording menus, tray / window settings), and zmodem sz downloads stream straight to the browser's download bar.
 - AI: a proposed command that echoes lines seen in terminal output, file reads or remote MCP results requires confirmation in every confirm mode — bypass and self-composed commands are unchanged. (@zielony360)
 
 **Bug Fixes**
@@ -85,6 +86,7 @@ Thanks to @AuroraLZDF, @it-linnan, @surenwuyuwuqiu, @AnxysUaen, @etanman, @zielo
 - SSH：新增当前 TOTP 验证码展示——连接编辑表单内实时显示，连接右键菜单也能随时打开，带倒计时与一键复制，方便在堡垒机 Web 页面完成验证器绑定。(@surenwuyuwuqiu)
 - Kubernetes：ConfigMap 支持查看与内联编辑，资源详情抽屉展示优化——Labels 以标签片呈现，新增 Annotations、Conditions 展示，Ingress 规则 / TLS 以表格呈现。(@it-linnan)
 - 安全：服务器（Web）模式启用默认拒绝的操作策略，配合 App 白名单与租户本地路径收窄——未授权调用一律失败。(@zielony360)
+- Web：浏览器端部署自动隐藏桌面专属功能（SSH 隧道、X11 桌面、抓包 / 防火墙 / 本地服务面板、日志与录制菜单、托盘 / 窗口设置）；zmodem sz 下载改为直接推送浏览器下载栏。
 - AI：建议执行的命令若复述自终端输出、文件读取或远程 MCP 结果，在任何确认模式下都必须确认——绕过模式与自行输入的命令不受影响。(@zielony360)
 
 **问题修复**

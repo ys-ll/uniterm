@@ -102,13 +102,25 @@ func (s *WebStreamService) cleanupStagingLoop() {
 			return
 		}
 		cutoff := time.Now().Add(-24 * time.Hour)
+		// The save/ subdirectory (zmodem sz receives, staged exports) is
+		// walked too: files whose browser download never completed would
+		// otherwise pile up forever, since nothing else removes them.
+		saveEntries := mustReadDir(filepath.Join(s.stagingDir, "save"))
+		type doomed struct{ path string; modTime time.Time }
+		var doomedFiles []doomed
 		for _, e := range entries {
-			info, err := e.Info()
-			if err != nil || info.IsDir() {
-				continue
+			if info, err := e.Info(); err == nil && !info.IsDir() {
+				doomedFiles = append(doomedFiles, doomed{filepath.Join(s.stagingDir, e.Name()), info.ModTime()})
 			}
-			if info.ModTime().Before(cutoff) {
-				_ = os.Remove(filepath.Join(s.stagingDir, e.Name()))
+		}
+		for _, e := range saveEntries {
+			if info, err := e.Info(); err == nil && !info.IsDir() {
+				doomedFiles = append(doomedFiles, doomed{filepath.Join(s.stagingDir, "save", e.Name()), info.ModTime()})
+			}
+		}
+		for _, d := range doomedFiles {
+			if d.modTime.Before(cutoff) {
+				_ = os.Remove(d.path)
 			}
 		}
 	}
@@ -118,6 +130,16 @@ func (s *WebStreamService) cleanupStagingLoop() {
 	for range ticker.C {
 		purge()
 	}
+}
+
+// mustReadDir lists a directory, returning nil when it does not exist (the
+// save/ dir is created lazily on first zmodem receive).
+func mustReadDir(dir string) []os.DirEntry {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	return entries
 }
 
 // registerWebStreamService mounts WebStreamService at /api/web for the
@@ -264,6 +286,8 @@ func (s *WebStreamService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleSFTPCancel(w, r)
 	case subPath == "/dialog/stage-file" && r.Method == http.MethodPost:
 		s.handleStageLocalFile(w, r)
+	case subPath == "/staged/download" && r.Method == http.MethodGet:
+		s.handleStagedDownload(w, r)
 	default:
 		http.Error(w, "Not Found", http.StatusNotFound)
 	}
@@ -725,6 +749,51 @@ func (s *WebStreamService) handleStageLocalFile(w http.ResponseWriter, r *http.R
 		"fileName":   origName,
 		"size":       written,
 	})
+}
+
+// handleStagedDownload streams one file from the tenant's staging save
+// directory (where zmodem sz-receives land) to the browser, then deletes the
+// staged copy on a successful stream. On a failed/interrupted stream the file
+// is kept for retry; the 24h janitor (extended below to walk save/) is the
+// backstop for anything abandoned.
+func (s *WebStreamService) handleStagedDownload(w http.ResponseWriter, r *http.Request) {
+	name := path.Base(strings.TrimPrefix(r.URL.Query().Get("name"), "/"))
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+		http.Error(w, "invalid file name", http.StatusBadRequest)
+		return
+	}
+	stagedPath := filepath.Join(s.stagingDir, "save", name)
+	// Containment check: the resolved file must stay inside staging/save.
+	cleanSave := filepath.Clean(filepath.Join(s.stagingDir, "save")) + string(os.PathSeparator)
+	if !strings.HasPrefix(filepath.Clean(stagedPath), cleanSave) {
+		http.Error(w, "invalid file name", http.StatusBadRequest)
+		return
+	}
+
+	f, err := os.Open(stagedPath)
+	if err != nil {
+		http.Error(w, "staged file not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil || fi.IsDir() {
+		http.Error(w, "staged file not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", formatContentDisposition(name))
+	if fi.Size() >= 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(fi.Size(), 10))
+	}
+
+	if _, copyErr := io.Copy(w, f); copyErr == nil {
+		// Stream delivered in full — the browser has its copy; drop ours.
+		_ = os.Remove(stagedPath)
+	}
 }
 
 // streamWithProgress copies from src to dst in 64 KiB chunks while emitting throttled Wails progress events.
