@@ -579,10 +579,13 @@ onUnmounted(() => {
 }
 
 /* Wide sidebars tile the cards horizontally (wrapping); narrow ones fall
-   back to a single column because each card grows into the full width. */
+   back to a single column because each card grows into the full width.
+   min(13rem, 100%): the floor holds while two cards still fit, but once the
+   sidebar itself is narrower than one card the floor yields to the container
+   — a hard 13rem would overflow into a horizontal scrollbar. */
 .monitor-body > .card {
   flex: 1 1 16rem;
-  min-width: 13rem;
+  min-width: min(13rem, 100%);
   align-self: flex-start;
 }
 

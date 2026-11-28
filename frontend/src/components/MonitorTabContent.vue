@@ -1,6 +1,6 @@
 <template>
   <div class="monitor-tab">
-    <div class="monitor-tabs-header">
+    <div class="monitor-tabs-header" @wheel.prevent="onTabsWheel">
       <div class="tab-item" :class="{ active: activeTab === 'performance' }" @click="activeTab = 'performance'">{{ t('monitor.performance') }}</div>
       <div class="tab-item" :class="{ active: activeTab === 'processes' }" @click="activeTab = 'processes'">{{ t('monitor.processes') }}</div>
       <div class="tab-item" :class="{ active: activeTab === 'ports' }" @click="activeTab = 'ports'">{{ t('monitor.ports') }}</div>
@@ -586,6 +586,13 @@ const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const activeTab = ref('performance')
 const selectedPerf = ref('cpu')
+
+/* Vertical wheel scrolls the tab strip horizontally (deltaX already covers
+   shift-wheel and touchpad horizontal swipes). */
+function onTabsWheel(e: WheelEvent) {
+  const el = e.currentTarget as HTMLElement
+  el.scrollLeft += e.deltaY + e.deltaX
+}
 
 // Monitor display sections (panel more menu): disabled sections are hidden
 // and the monitor session does not collect their data.
@@ -1691,6 +1698,8 @@ watch(activeTab, (tab) => {
   gap: 0;
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .tab-item {
@@ -1701,6 +1710,8 @@ watch(activeTab, (tab) => {
   user-select: none;
   border-bottom: 0.125rem solid transparent;
   transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab-item:hover {
@@ -1778,6 +1789,9 @@ watch(activeTab, (tab) => {
   flex-direction: column;
   padding: 1rem 1.25rem;
   overflow-y: auto;
+  /* No horizontal scrollbar: narrow sidebars must shrink the content below,
+     never scroll it sideways */
+  overflow-x: hidden;
   min-height: 0;
 }
 
@@ -1901,13 +1915,17 @@ watch(activeTab, (tab) => {
   white-space: nowrap;
 }
 /* Disk rows: fixed name/bar columns so bars and values line up across rows
-   regardless of how long the mount point or the used/total string is. */
+   regardless of how long the mount point or the used/total string is.
+   flex-basis (not flex: 0 0) lets the columns shrink together when the
+   sidebar is narrow instead of overflowing into a horizontal scrollbar. */
 .perf-sub-row.disk .sub-name {
-  flex: 0 0 9rem;
+  flex: 0 1 9rem;
+  min-width: 0;
 }
 .perf-sub-row.disk .sub-bar {
-  flex: 0 0 7rem;
+  flex: 0 1 7rem;
   max-width: 7rem;
+  min-width: 0;
 }
 .perf-sub-row.disk .sub-val {
   flex: 1;
