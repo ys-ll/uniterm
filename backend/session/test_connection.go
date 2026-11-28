@@ -20,13 +20,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jlaffaye/ftp"
-	"github.com/pkg/sftp"
 	"github.com/FZambia/sentinel"
 	"github.com/gomodule/redigo/redis"
+	"github.com/jlaffaye/ftp"
+	"github.com/pkg/sftp"
 	"github.com/rhnvrm/simples3"
 	"github.com/studio-b12/gowebdav"
-	"golang.org/x/crypto/ssh"
 
 	"github.com/cloudsoda/go-smb2"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -78,6 +77,17 @@ func ProbeConnection(config ConnectionConfig) (string, error) {
 			return probeElasticsearch(config)
 		}
 		return probeDatabase(config)
+	case "rdp":
+		return probeRDP(config)
+	case "vnc":
+		return probeVNC(config)
+	case "spice":
+		return probeSPICE(config)
+	case "x11-desktop":
+		// X11 desktop rides SSH + X11 forwarding: the SSH probe validates the
+		// port and credentials, then the remote desktop command and local X
+		// server checks complete the path the session will take.
+		return probeX11Desktop(config)
 	default:
 		return "", fmt.Errorf("connection type %q does not support connection testing", config.Type)
 	}
@@ -86,32 +96,7 @@ func ProbeConnection(config ConnectionConfig) (string, error) {
 func probeSSH(config ConnectionConfig) (string, error) {
 	// Non-interactive: keyboard-interactive challenges are rejected so a test
 	// can never block waiting for typed input in a modal dialog.
-	kb := func(user, instruction string, questions []string, echos []bool) ([]string, error) {
-		return nil, fmt.Errorf("interactive auth not allowed during connection test")
-	}
-	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
-	newConfig := func(challenge ssh.KeyboardInteractiveChallenge) sshClientConfigFactory {
-		return func() (*ssh.ClientConfig, func(), error) {
-			authMethods, cleanup, err := makeSSHAuthMethodsForAttempt(config, challenge)
-			if err != nil {
-				return nil, nil, err
-			}
-			return &ssh.ClientConfig{User: config.User, Auth: authMethods, Timeout: 15 * time.Second, HostKeyCallback: ssh.InsecureIgnoreHostKey()}, cleanup, nil
-		}
-	}
-	// Honor a materialized proxy (set by App.materializeProxy) on the first hop,
-	// mirroring the terminal session's dial path.
-	var keyboardConfig sshClientConfigFactory
-	if config.AuthType != "kerberos" {
-		keyboardConfig = newConfig(kb)
-	}
-	sets, err := resolveSSHDialAlgorithms(config.SSHAlgorithms)
-	if err != nil {
-		return "", err
-	}
-	client, err := dialSSHWithAuthRetry(addr, sets, newConfig(nil), keyboardConfig, func() (net.Conn, error) {
-		return dialFirstHop(addr, config.Proxy)
-	})
+	client, err := dialSSHProbe(config)
 	if err != nil {
 		return "", fmt.Errorf("ssh: %w", err)
 	}
@@ -123,30 +108,7 @@ func probeSSH(config ConnectionConfig) (string, error) {
 // handshake, so a failed test reports hosts where the subsystem is disabled
 // (those hosts should use an SCP connection instead).
 func probeSFTP(config ConnectionConfig) (string, error) {
-	kb := func(user, instruction string, questions []string, echos []bool) ([]string, error) {
-		return nil, fmt.Errorf("interactive auth not allowed during connection test")
-	}
-	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
-	newConfig := func(challenge ssh.KeyboardInteractiveChallenge) sshClientConfigFactory {
-		return func() (*ssh.ClientConfig, func(), error) {
-			authMethods, cleanup, err := makeSSHAuthMethodsForAttempt(config, challenge)
-			if err != nil {
-				return nil, nil, err
-			}
-			return &ssh.ClientConfig{User: config.User, Auth: authMethods, Timeout: 15 * time.Second, HostKeyCallback: ssh.InsecureIgnoreHostKey()}, cleanup, nil
-		}
-	}
-	var keyboardConfig sshClientConfigFactory
-	if config.AuthType != "kerberos" {
-		keyboardConfig = newConfig(kb)
-	}
-	sets, err := resolveSSHDialAlgorithms(config.SSHAlgorithms)
-	if err != nil {
-		return "", err
-	}
-	client, err := dialSSHWithAuthRetry(addr, sets, newConfig(nil), keyboardConfig, func() (net.Conn, error) {
-		return dialFirstHop(addr, config.Proxy)
-	})
+	client, err := dialSSHProbe(config)
 	if err != nil {
 		return "", fmt.Errorf("sftp: %w", err)
 	}
@@ -162,30 +124,7 @@ func probeSFTP(config ConnectionConfig) (string, error) {
 // probeSCP verifies SSH connectivity AND that the exec channel (which the SCP
 // transfer engine drives) is usable — a plain shell command round-trip.
 func probeSCP(config ConnectionConfig) (string, error) {
-	kb := func(user, instruction string, questions []string, echos []bool) ([]string, error) {
-		return nil, fmt.Errorf("interactive auth not allowed during connection test")
-	}
-	addr := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
-	newConfig := func(challenge ssh.KeyboardInteractiveChallenge) sshClientConfigFactory {
-		return func() (*ssh.ClientConfig, func(), error) {
-			authMethods, cleanup, err := makeSSHAuthMethodsForAttempt(config, challenge)
-			if err != nil {
-				return nil, nil, err
-			}
-			return &ssh.ClientConfig{User: config.User, Auth: authMethods, Timeout: 15 * time.Second, HostKeyCallback: ssh.InsecureIgnoreHostKey()}, cleanup, nil
-		}
-	}
-	var keyboardConfig sshClientConfigFactory
-	if config.AuthType != "kerberos" {
-		keyboardConfig = newConfig(kb)
-	}
-	sets, err := resolveSSHDialAlgorithms(config.SSHAlgorithms)
-	if err != nil {
-		return "", err
-	}
-	client, err := dialSSHWithAuthRetry(addr, sets, newConfig(nil), keyboardConfig, func() (net.Conn, error) {
-		return dialFirstHop(addr, config.Proxy)
-	})
+	client, err := dialSSHProbe(config)
 	if err != nil {
 		return "", fmt.Errorf("scp: %w", err)
 	}
