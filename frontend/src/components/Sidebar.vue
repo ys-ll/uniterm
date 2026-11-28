@@ -1611,7 +1611,11 @@ function getChangeGroupIds(): string[] {
 async function confirmChangeGroup() {
   if (changeDialogMode.value === 'group') {
     if (selectedGroup.value && selectedGroup.value.id !== '__ungrouped__') {
-      await connectionStore.reparentGroup(selectedGroup.value.id, changeGroupTargetId.value)
+      // "(无分组)" (__none__) means the root level — normalize to undefined,
+      // same as the connections branch below, so the literal sentinel never
+      // lands in parentId (issue #1683).
+      const parent = changeGroupTargetId.value === '__none__' ? undefined : changeGroupTargetId.value
+      await connectionStore.reparentGroup(selectedGroup.value.id, parent)
     }
     showChangeGroupDialog.value = false
     return
