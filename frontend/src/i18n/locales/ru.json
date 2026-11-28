@@ -612,6 +612,7 @@
   "commandSend.sendHint": "Ctrl+Enter — отправить в {n} терминалов",
   "commandSend.clear": "Очистить",
   "commandSend.noTarget": "В этой области нет подключённых терминалов",
+  "commandSend.appendEnter": "Enter в конце",
   "commandSend.sent": "Отправлено в {n} терминалов",
   "commandSend.meta": "{lines} строк, {chars} символов",
   "commandSend.wrap": "Перенос строк",

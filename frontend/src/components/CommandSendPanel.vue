@@ -11,6 +11,7 @@
         <el-option :label="t('commandSend.modeBracketed')" value="bracketed" />
       </el-select>
       <div class="cs-toolbar-spacer" />
+      <el-checkbox v-model="appendEnter" class="cs-append-enter">{{ t('commandSend.appendEnter') }}</el-checkbox>
       <button class="btn btn-ghost btn-icon btn-sm" :title="t('commandSend.clear')" :disabled="!draft" @click="clearDraft">
         <Eraser :size="14" />
       </button>
@@ -37,9 +38,7 @@
     </div>
 
     <div class="cs-meta">
-      <span>{{ t('commandSend.meta', { lines: lineCount, chars: draft.length }) }}</span>
       <span v-if="draft && targets.length === 0" class="cs-no-target">{{ t('commandSend.noTarget') }}</span>
-      <el-checkbox v-model="wrap" class="cs-wrap">{{ t('commandSend.wrap') }}</el-checkbox>
     </div>
   </div>
 </template>
@@ -85,12 +84,19 @@ const mode = computed<'lines' | 'bracketed'>({
 })
 
 const targets = computed(() => resolveSendTargets(scope.value))
-const lineCount = computed(() => draft.value.replace(/\n+$/, '').split('\n').length)
 
 // Word wrap of the editor — device-local preference, survives restarts.
 const wrap = computed({
   get: () => localState.state.commandSendWrap ?? true,
   set: (v: boolean) => { void localState.update({ commandSendWrap: v }) },
+})
+
+// Trailing Enter on send — device-local preference, ON by default: a draft
+// without a trailing newline would otherwise be typed into the terminal
+// without ever executing.
+const appendEnter = computed({
+  get: () => localState.state.commandSendAppendEnter ?? true,
+  set: (v: boolean) => { void localState.update({ commandSendAppendEnter: v }) },
 })
 
 const canSend = computed(() => draft.value.trim().length > 0 && targets.value.length > 0)
@@ -123,7 +129,7 @@ function send() {
   const modeValue = mode.value
   const text = draft.value
   for (const sid of targets.value) {
-    queuedSessionWrite(sid, buildSendPayload(text, modeValue, targetBracketedPasteMode(sid)))
+    queuedSessionWrite(sid, buildSendPayload(text, modeValue, targetBracketedPasteMode(sid), appendEnter.value))
   }
   msg.success(t('commandSend.sent', { n: targets.value.length }))
   clearDraft()
@@ -185,14 +191,14 @@ function send() {
   flex-shrink: 0;
 }
 
-.cs-wrap {
+.cs-append-enter {
   height: auto;
   flex-shrink: 0;
 }
 
-.cs-wrap :deep(.el-checkbox__label) {
-  font-size: 0.6875rem;
-  color: var(--text-muted);
+.cs-append-enter :deep(.el-checkbox__label) {
+  font-size: 0.8125rem;
+  padding-left: 0.375rem;
 }
 
 .cs-no-target {

@@ -612,6 +612,7 @@
   "commandSend.sendHint": "Ctrl+Enter — {n}개 터미널에 전송",
   "commandSend.clear": "지우기",
   "commandSend.noTarget": "이 범위에 연결된 터미널이 없습니다",
+  "commandSend.appendEnter": "끝에 Enter",
   "commandSend.sent": "{n}개 터미널에 전송했습니다",
   "commandSend.meta": "{lines}줄, {chars}자",
   "commandSend.wrap": "자동 줄바꿈",

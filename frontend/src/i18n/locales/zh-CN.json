@@ -636,6 +636,7 @@
   "commandSend.sendHint": "Ctrl+Enter — 发送到 {n} 个终端",
   "commandSend.clear": "清空",
   "commandSend.noTarget": "当前范围内没有已连接的终端",
+  "commandSend.appendEnter": "结尾回车",
   "commandSend.sent": "已发送到 {n} 个终端",
   "commandSend.meta": "{lines} 行,{chars} 个字符",
   "commandSend.wrap": "自动换行",
