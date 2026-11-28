@@ -110,6 +110,38 @@ func (a *App) StartMCP() error {
 	return srv.Start(port, cfg.AllowRemote)
 }
 
+// EnsureMCPRunning starts the MCP endpoint immediately using the persisted
+// port/allowRemote/tokens even if auto-start (cfg.Enabled) is currently false.
+// Used by explicit CLI (--start-mcp) and deep-link (uniterm://mcp/start) launches.
+func (a *App) EnsureMCPRunning() error {
+	if serverMode {
+		return nil
+	}
+	if a.localStateStore == nil {
+		return fmt.Errorf("local state store not initialized")
+	}
+	srv := a.ensureMCPServer()
+	state, err := a.localStateStore.Load()
+	if err != nil {
+		return err
+	}
+	cfg := state.MCP
+	limit := 0
+	port := mcp.DefaultPort
+	allowRemote := false
+	if cfg != nil {
+		limit = cfg.MaxConcurrentCommands
+		if cfg.Port > 0 {
+			port = cfg.Port
+		}
+		allowRemote = cfg.AllowRemote
+	}
+	session.SetMCPMaxConcurrentCommands(limit)
+	a.jobRegistry().SetMaxConcurrent(limit)
+	srv.SetTokens(a.mcpLoadTokens())
+	return srv.Start(port, allowRemote)
+}
+
 // MCPStatus_ reports endpoint state to the settings UI.
 func (a *App) GetMCPStatus() MCPStatus {
 	if a.mcpServer == nil {

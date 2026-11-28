@@ -61,7 +61,13 @@ type App struct {
 	// quitting marks that the full shutdown sequence (App.shutdown) has begun.
 	// Set by shutdown(); the native-close hook (main.go) reads it to let
 	// already-quitting closes pass through to the default close handler.
-	quitting             atomic.Bool
+	quitting atomic.Bool
+	// Launch / deep-link state (issue #1571).
+	startHidden     bool
+	forceStartMCP   bool
+	deepLinkMu      stdsync.Mutex
+	deepLinkReady   bool
+	pendingDeepLink *DeepLinkAction
 	connectionStore      *store.ConnectionStore
 	aiSessionStore       *store.AISessionStore
 	settingsStore        *store.SettingsStore
@@ -535,11 +541,18 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 
 	a.storesReady = true
 
-	// External-agent MCP server: auto-start when enabled in settings.
+	// External-agent MCP server: auto-start when enabled in settings, or when
+	// explicitly requested via CLI (--start-mcp) / deep link (uniterm://mcp/start).
 	a.mcpApprovals = make(map[string]chan mcpApprovalVerdict)
-	if err := a.StartMCP(); err != nil {
-		log.Writef("mcp: start failed: %v", err)
-		a.emit("app:startup-error", "MCP server: "+err.Error())
+	var mcpErr error
+	if a.forceStartMCP {
+		mcpErr = a.EnsureMCPRunning()
+	} else {
+		mcpErr = a.StartMCP()
+	}
+	if mcpErr != nil {
+		log.Writef("mcp: start failed: %v", mcpErr)
+		a.emit("app:startup-error", "MCP server: "+mcpErr.Error())
 	}
 
 	// MCP client: connect persisted external servers so their tools are
@@ -551,11 +564,13 @@ func (a *App) initStores(dataDir string, upgrade bool) {
 	// relaunched instance can otherwise land behind other windows; the short delay
 	// keeps this one-shot raise inside the window where the old (foreground)
 	// process is still alive, which is what grants the set-foreground permission
-	// (see RelaunchApp). No-op on other platforms.
-	go func() {
-		time.Sleep(250 * time.Millisecond)
-		a.bringMainWindowToFront()
-	}()
+	// (see RelaunchApp). No-op on other platforms or when started hidden in tray.
+	if !a.startHidden {
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			a.bringMainWindowToFront()
+		}()
+	}
 
 	// Drain any non-fatal init failures and surface them to the frontend so
 	// the user sees a banner instead of getting an NPE on the first store

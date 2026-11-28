@@ -101,6 +101,11 @@ Section "Install"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayVersion" "${VERSION}"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "NoModify" 1
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "NoRepair" 1
+  ; Register uniterm:// custom URL protocol (issue #1571)
+  WriteRegStr HKCR "uniterm" "" "URL:uniTerm Protocol"
+  WriteRegStr HKCR "uniterm" "URL Protocol" ""
+  WriteRegStr HKCR "uniterm\DefaultIcon" "" '"$INSTDIR\${BINARY}",0'
+  WriteRegStr HKCR "uniterm\shell\open\command" "" '"$INSTDIR\${BINARY}" "%1"'
 SectionEnd
 
 Section "Uninstall"
@@ -114,4 +119,5 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall.lnk"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
+  DeleteRegKey HKCR "uniterm"
 SectionEnd
