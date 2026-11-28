@@ -2140,7 +2140,6 @@ defineExpose({ focusInput })
   display: flex;
   flex-direction: column;
   position: relative;
-  background: var(--bg-elevated);
 }
 .ai-sidebar.collapsed {
   /* Out of the flex flow entirely (like BottomPanel's v-show): the outer
