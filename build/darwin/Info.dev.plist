@@ -32,5 +32,16 @@
         <string>pt</string>
         <string>vi</string>
     </array>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>net.uniterm.url</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>uniterm</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

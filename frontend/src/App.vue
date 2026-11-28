@@ -430,6 +430,7 @@ let unsubTrayOpenSettings: (() => void) | null = null
 let unsubTrayOpenAbout: (() => void) | null = null
 let unsubTrayOpenNetscan: (() => void) | null = null
 let unsubTrayOpenPacketcap: (() => void) | null = null
+let unsubDeepLink: (() => void) | null = null
 // Records every terminal's cwd reports app-wide (see companionStore.sessionCwd).
 let unsubTerminalCwd: (() => void) | null = null
 const { t, locale } = useI18n()
@@ -1030,6 +1031,24 @@ onMounted(async () => {
   unsubTrayOpenAbout = Events.On('app:open-about', () => openSettings('about'))
   unsubTrayOpenNetscan = Events.On('app:open-netscan', () => openNetscan())
   unsubTrayOpenPacketcap = Events.On('app:open-packetcap', () => openPacketcap())
+  unsubDeepLink = Events.On('app:deeplink', (ev) => {
+    const p = ev?.data as { action?: string; connectionId?: string; section?: string } | undefined
+    if (!p?.action) return
+    if (p.action === 'settings') {
+      openSettings(p.section || undefined)
+    } else if (p.action === 'open' && p.connectionId) {
+      void (async () => {
+        if (connectionStore.connections.length === 0) {
+          await connectionStore.load()
+        }
+        const conn = connectionStore.connections.find(c => c.id === p.connectionId)
+        if (conn) await onConnect(conn)
+      })()
+    }
+  })
+  try {
+    Events.Emit('app:deeplink-ready')
+  } catch { /* non-Wails test environment */ }
   // MCP (external AI agents): approval dialogs + session takeover.
   unsubMcpApproval = Events.On('mcp:approval-request', (ev) => {
     mcpApprovalRequest.value = ev.data as MCPApprovalRequest
@@ -1369,6 +1388,7 @@ onUnmounted(() => {
   unsubTrayOpenAbout?.()
   unsubTrayOpenNetscan?.()
   unsubTrayOpenPacketcap?.()
+  unsubDeepLink?.()
   unsubMcpApproval?.()
   unsubMcpSessionCreated?.()
   unsubTerminalCwd?.()

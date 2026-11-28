@@ -220,6 +220,8 @@ func main() {
 	os.MkdirAll(webviewDataPath, 0700)
 
 	app := NewApp(webviewDataPath)
+	app.applyLaunchOptions(parseLaunchArgs(os.Args[1:]))
+	startHidden := os.Getenv("UNITERM_UPDATE_AUTOTEST") == "1" || app.startHidden
 
 	// Read persisted window geometry and theme before creating the window —
 	// both are fixed at creation in v3 (services start before the window
@@ -344,7 +346,7 @@ func main() {
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: singleInstanceID,
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				showMainWindow(window)
+				app.handleSecondInstance(data.Args)
 			},
 		},
 		// WebviewUserDataPath is a Windows-only path for WebView2 user data; it is
@@ -421,8 +423,8 @@ func main() {
 		StartState:      startState,
 		MinWidth:        500,
 		MinHeight:       450,
-		// Headless local update e2e runs must not flash a window.
-		Hidden:           os.Getenv("UNITERM_UPDATE_AUTOTEST") == "1",
+		// Headless update autotest and --tray/--minimized launches start hidden.
+		Hidden:           startHidden,
 		Frameless:        !systemTitleBar,
 		BackgroundColour: windowBackgroundColour(savedTheme),
 		EnableFileDrop:   true,
@@ -524,6 +526,19 @@ func main() {
 	app.window = window
 	w3app.RegisterService(application.NewServiceWithOptions(app, appServiceOptions()))
 
+	// Deep link (uniterm://) events: macOS delivers URLs via AppleEvents here
+	// (Windows/Linux pass them via argv / SingleInstanceData.Args). The
+	// frontend emits app:deeplink-ready once its listener and connection store
+	// are mounted so cold-start deep links flush without racing webview load.
+	w3app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(event *application.ApplicationEvent) {
+		if u := event.Context().URL(); u != "" {
+			app.handleDeepLinkURL(u)
+		}
+	})
+	w3app.Event.On("app:deeplink-ready", func(_ *application.CustomEvent) {
+		app.markDeepLinkReady()
+	})
+
 	// Browser streaming SFTP/SCP + file staging routes (/api/web/*) exist only
 	// in the headless server build; a no-op on desktop.
 	registerWebStreamService(w3app, app)
@@ -553,7 +568,7 @@ func main() {
 	// exists so the click handlers can drive it. Skipped entirely when the
 	// user turned the icon off; created lazily if re-enabled at runtime
 	// (see applyTrayVisibility).
-	if trayIconEnabled(&savedSettings) || minimizeToTrayEnabled(&savedSettings) {
+	if trayIconEnabled(&savedSettings) || minimizeToTrayEnabled(&savedSettings) || app.startHidden {
 		setupTray(w3app, app, window, savedSettings.Language)
 	}
 
@@ -578,7 +593,7 @@ func main() {
 	// dark window instead of white. Finish-navigation still runs its own
 	// Show(), which is idempotent.
 	window.OnWindowEvent(events.Mac.WebViewDidCommitNavigation, func(*application.WindowEvent) {
-		if os.Getenv("UNITERM_UPDATE_AUTOTEST") != "1" {
+		if !startHidden {
 			window.Show()
 		}
 	})
