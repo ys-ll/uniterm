@@ -22,7 +22,7 @@
       @new-local-terminal="createNewTab"
     />
     <div class="main-content">
-      <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onSidebarConnect" @connect-to-workspace="({ config, workspaceId }: any) => onConnect(config, undefined, undefined, true, workspaceId)" @create-workspace="(configs: any) => onCreateWorkspaceFromConfigs(configs)" @connect-only="onConnectOnly" @open-netscan="openNetscan" @open-settings="openSettings" />
+      <Sidebar ref="sidebarRef" :visible="sidebarVisible" @toggle="sidebarVisible = !sidebarVisible" @connect="onSidebarConnect" @connect-to-workspace="onSidebarConnectToWorkspace" @create-workspace="(configs: any) => onCreateWorkspaceFromConfigs(configs)" @connect-only="onConnectOnly" @open-netscan="openNetscan" @open-settings="openSettings" />
       <div class="center-column">
       <div class="tab-area" :class="{ frameless: tabAreaFrameless }">
         <template v-if="activeTab">
@@ -1688,6 +1688,7 @@ function onSaveOnly(saveOnlyConfig: ConnectionConfig) {
 // Transient connection ("connect only"): connect a new form config without
 // persisting it to the connection list. Reuses onConnect with persist=false.
 function onConnectOnly(config: ConnectionConfig) {
+  if (uiLayout.narrowLayout) sidebarVisible.value = false
   editConfig.value = null
   onConnect(config, undefined, false, false)
 }
@@ -1696,12 +1697,22 @@ function onConnectOnly(config: ConnectionConfig) {
 // sidebar's `kind` routing and the app:connect-sftp / app:connect-monitor
 // window events).
 function onSidebarConnect(config: ConnectionConfig, kind?: 'file' | 'wsl-file' | 'monitor') {
+  // Narrow layout: the sidebar overlays the whole screen — get it out of the
+  // way as soon as a connect is triggered so the new tab stays visible.
+  if (uiLayout.narrowLayout) sidebarVisible.value = false
   const prev = tabStore.activeTab
   const prevStart = prev?.type === 'start' ? prev : undefined
   if (kind === 'file') return void openFileBrowser(config, prevStart)
   if (kind === 'monitor') return void openMonitorPanel(config, prevStart)
   if (kind === 'wsl-file') return void launchWslFileBrowser(config, { prevStart })
   return onConnect(config)
+}
+
+// Sidebar "connect to workspace" entry: same narrow-layout panel close as
+// onSidebarConnect before the members start connecting.
+function onSidebarConnectToWorkspace(payload: { config: ConnectionConfig; workspaceId: string }) {
+  if (uiLayout.narrowLayout) sidebarVisible.value = false
+  onConnect(payload.config, undefined, undefined, true, payload.workspaceId)
 }
 
 function openFileBrowser(config: ConnectionConfig, prevStart?: any, afterTabId?: string, initialPath?: string) {

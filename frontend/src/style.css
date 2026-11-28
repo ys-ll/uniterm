@@ -1536,6 +1536,21 @@ button:disabled,
   .conn-dialog .subtype-btn {
     flex-shrink: 0;
   }
+  /* The SQL "更多数据库类型" list wraps onto rows instead of joining the
+     pinned row's single-line horizontal scroller (the generic .subtype-grid
+     rule above). width/min-width pin its used width to the form column —
+     as a flex item of EP's .el-form-item__content its intrinsic main size is
+     the single-line max-content, which would stretch it past the dialog's
+     right edge where .conn-main's overflow-x:hidden clips the outer tiles
+     out of reach. Height handling stays with the component's own rule
+     (max-height + overflow-y: auto), so the list scrolls vertically. */
+  .conn-dialog .subtype-grid.subtype-grid-more {
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    overflow-x: hidden;
+  }
   /* conn-main is a flex column with overflow-y:auto; without flex-shrink:0
      its children compress (overflow!=visible zeroes their automatic minimum
      size) instead of the area scrolling. min-width:0/max-width:100% let the
@@ -1557,17 +1572,18 @@ button:disabled,
   .conn-dialog .expect-row {
     grid-template-columns: 1.625rem minmax(3rem, 1fr) minmax(3rem, 1fr) minmax(2.5rem, 4rem) minmax(1.5rem, 2.5rem) 1.875rem;
   }
-  /* Phone mode: the connection sidebar and the AI panel float fullscreen over
-     the content (same treatment as the AI panel's own "maximized" state)
-     instead of squeezing the terminal column. :not(.collapsed) leaves closed
-     panels as the in-flow zero-width stub; width !important beats the inline
-     resize width, and the .main-content prefix out-specifies the components'
-     scoped position: relative. */
-  .main-content .sidebar:not(.collapsed),
-  .main-content .ai-sidebar:not(.collapsed) {
+  /* Phone mode: the connection sidebar floats fullscreen over the content
+     (same treatment as the AI panel's own "maximized" state) instead of
+     squeezing the terminal column. :not(.collapsed) leaves closed panels as
+     the in-flow zero-width stub; width auto beats the inline resize width,
+     and the .main-content prefix out-specifies the components' scoped
+     position: relative. The overlay keeps the app's outer 4px gutters —
+     same insets as .main-content's own padding — so its border reads as a
+     normal island edge instead of a line flush against the screen border. */
+  .main-content .sidebar:not(.collapsed) {
     position: absolute;
-    inset: 0;
-    width: 100% !important;
+    inset: 0 0.25rem 0.25rem;
+    width: auto !important;
     max-width: 100%;
     z-index: 100;
   }
