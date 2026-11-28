@@ -52,7 +52,7 @@
 - **터미널** — SSH / Telnet / Mosh / Raw TCP / 시리얼, 그리고 로컬 셸(PowerShell / CMD / Git Bash / WSL).
 - **파일 전송** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / 로컬 파일 / WSL 파일 / Zmodem을 지원하며, 듀얼 패인 브라우징과 SSH 터미널에서의 `rz`/`sz`를 지원합니다.
 - **원격 데스크톱** — RDP(Windows 원격 데스크톱), VNC(Linux 원격 제어), SPICE(KVM/QEMU 가상 머신), X11(X Window 포워딩)
-- **데이터베이스 클라이언트** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch를 지원하며, AI 기반 자연어 쿼리와 데이터 행 편집을 제공합니다.
+- **데이터베이스 클라이언트** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch 등 30개 이상의 데이터베이스를 지원하며, AI 기반 자연어 쿼리와 데이터 행 편집을 제공합니다.
 - **Kubernetes 및 컨테이너** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC를 지원하며, 클러스터 리소스 및 이미지 관리, Pod 로그와 exec 터미널, CPU/메모리 메트릭을 제공합니다.
 - **서버 모니터링** — CPU, 메모리, 디스크, 네트워크, 프로세스, 포트, 네트워크 인터페이스를 실시간으로 표시합니다.
 
@@ -106,7 +106,10 @@
 | 데이터베이스 | Oracle Database | 순수 Go 드라이버를 통한 Oracle Database 연결 |
 | 데이터베이스 | SQL Server | 순수 Go 드라이버를 통한 SQL Server 연결 |
 | 데이터베이스 | SQLite | 임베디드 로컬 데이터베이스, 데이터베이스 파일을 열어 연결 |
+| 데이터베이스 | ClickHouse | 순수 Go 네이티브 드라이버 기반의 컬럼 지향 OLAP 데이터베이스 |
 | 데이터베이스 | rqlite | Raft 합의 기반으로 SQLite 위에 구축된 경량 분산 DB |
+| 데이터베이스 | DM (Dameng) | 순수 Go 드라이버를 통한 DM8 연결 |
+| 데이터베이스 | GBase 8s | 순수 Go 드라이버를 통한 GBase 8s 연결 |
 | 데이터베이스 | Redis | 시각적 키 탐색 및 편집이 가능한 인메모리 키-값 스토어 |
 | 데이터베이스 | MongoDB | 트리 탐색, 쿼리 에디터, 인라인 편집을 지원하는 문서 데이터베이스 |
 | 데이터베이스 | Elasticsearch | 인덱스 및 문서 관리를 지원하는 분산 검색·분석 엔진 |
@@ -364,6 +367,9 @@ uniTerm이 도움이 되었다면 ⭐ Star를 눌러 주세요 — 프로젝트�
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

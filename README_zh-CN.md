@@ -52,7 +52,7 @@
 - **终端** — SSH / Telnet / Mosh / Raw TCP / 串口，外加本地 Shell（PowerShell / CMD / Git Bash / WSL）。
 - **文件传输** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / 本地文件 / WSL 文件 / Zmodem，双栏浏览、鼠标拖拽上传下载，SSH 内 `rz`/`sz`
 - **远程桌面** — RDP（Windows 远程桌面）、VNC（Linux 远程控制）、SPICE（KVM/QEMU 虚拟机）、X11（X Window 图形界面转发）
-- **数据库客户端** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch，支持 AI 自然语言生成查询与数据行编辑
+- **数据库客户端** — 支持 30 余种数据库，包括 MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch，支持 AI 自然语言生成查询与数据行编辑
 - **Kubernetes & 容器** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC，集群资源与容器镜像管理、Pod 日志与 exec 终端、CPU/内存指标
 - **服务器监控** — CPU/内存/磁盘/网络、进程、端口、网卡实时监控
 
@@ -106,7 +106,10 @@
 | 数据库 | Oracle Database | 通过纯 Go 驱动连接 Oracle Database |
 | 数据库 | SQL Server | 通过纯 Go 驱动连接 SQL Server |
 | 数据库 | SQLite | 本地嵌入式数据库，直接打开数据库文件 |
+| 数据库 | ClickHouse | 通过纯 Go 原生驱动连接的列式 OLAP 数据库 |
 | 数据库 | rqlite | 基于 SQLite、Raft 共识的轻量分布式数据库 |
+| 数据库 | DM (达梦) | 通过纯 Go 驱动连接 DM8 |
+| 数据库 | GBase 8s | 通过纯 Go 驱动连接 GBase 8s |
 | 数据库 | Redis | 内存键值数据库，可视化键值浏览与编辑 |
 | 数据库 | MongoDB | 文档数据库，树形浏览、查询编辑与行内编辑 |
 | 数据库 | Elasticsearch | 分布式搜索与分析引擎，支持索引与文档管理 |
@@ -364,6 +367,9 @@ uniTerm/
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

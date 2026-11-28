@@ -52,7 +52,7 @@ Terminal remoto, terminal local e serial, transferência de arquivos, área de t
 - **Terminal** — SSH / Telnet / Mosh / Raw TCP / Serial, além de shells locais (PowerShell / CMD / Git Bash / WSL).
 - **Transferência de Arquivos** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Arquivo local / Arquivos WSL / Zmodem, com navegação em painéis duplos e suporte a `rz`/`sz` em terminais SSH.
 - **Área de Trabalho Remota** — RDP (área de trabalho remota do Windows), VNC (controle remoto de Linux), SPICE (máquinas virtuais KVM/QEMU), X11 (encaminhamento do X Window)
-- **Cliente de Banco de Dados** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, com consultas em linguagem natural assistidas por IA e edição de linhas de dados.
+- **Cliente de Banco de Dados** — Mais de 30 bancos de dados, incluindo MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch, com consultas em linguagem natural assistidas por IA e edição de linhas de dados.
 - **Kubernetes e Containers** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, com gerenciamento de recursos e imagens do cluster, logs de Pods e terminais exec, e métricas de CPU/memória.
 - **Monitoramento de Servidores** — CPU, memória, disco, rede, processos, portas e interfaces de rede em tempo real.
 
@@ -106,7 +106,10 @@ Gerenciamento de conexões, painéis divididos, sincronização em nuvem, temas 
 | Banco de Dados | Oracle Database | Conexões ao Oracle Database por meio de um driver Go puro |
 | Banco de Dados | SQL Server | Conexões ao SQL Server por meio de um driver Go puro |
 | Banco de Dados | SQLite | Banco de dados local embarcado, conecte-se abrindo o arquivo do banco de dados |
+| Banco de Dados | ClickHouse | Banco de dados OLAP orientado a colunas sobre seu protocolo nativo |
 | Banco de Dados | rqlite | Banco de dados distribuído leve construído sobre SQLite com consenso Raft |
+| Banco de Dados | DM (Dameng) | Conexões ao DM8 por meio de um driver Go puro |
+| Banco de Dados | GBase 8s | Conexões ao GBase 8s por meio de um driver Go puro |
 | Banco de Dados | Redis | Armazenamento chave-valor em memória com navegação e edição visual de chaves |
 | Banco de Dados | MongoDB | Banco de dados de documentos com navegação em árvore, editor de consultas e edição inline |
 | Banco de Dados | Elasticsearch | Motor de busca e análise distribuído com gerenciamento de índices e documentos |
@@ -364,6 +367,9 @@ Agradecemos às seguintes pessoas por contribuírem com código e melhorias, e a
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

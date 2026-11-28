@@ -52,7 +52,7 @@ Uzak terminal, yerel ve seri terminal, dosya aktarımı, uzak masaüstü, verita
 - **Terminal** — SSH / Telnet / Mosh / Raw TCP / Seri bağlantı ve yerel kabuklar (PowerShell / CMD / Git Bash / WSL).
 - **Dosya Aktarımı** — Çift bölmeli gezinme ve SSH terminallerinde `rz`/`sz` desteğiyle SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Yerel Dosya / WSL Dosya / Zmodem.
 - **Uzak Masaüstü** — RDP (Windows Uzak Masaüstü), VNC (Linux uzaktan kontrol), SPICE (KVM/QEMU sanal makineleri), X11 (X Window yönlendirme).
-- **Veritabanı İstemcisi** — Yapay zekâ destekli doğal dil sorguları ve veri satırı düzenleme özellikleriyle MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch.
+- **Veritabanı İstemcisi** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch dahil 30'dan fazla veritabanı, yapay zekâ destekli doğal dil sorguları ve veri satırı düzenleme özellikleriyle.
 - **Kubernetes ve Konteynerler** — Küme kaynak ve imaj yönetimi, Pod günlükleri ile exec terminalleri ve CPU/bellek metrikleriyle Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC.
 - **Sunucu İzleyici** — Gerçek zamanlı CPU, bellek, disk, ağ, süreçler, portlar ve ağ arayüzleri.
 
@@ -106,7 +106,10 @@ Bağlantı yönetimi, bölünmüş bölmeler, bulut eşitleme, temalar ve çoklu
 | Veritabanı | Oracle Database | Saf Go sürücüsü üzerinden Oracle Database bağlantıları |
 | Veritabanı | SQL Server | Saf Go sürücüsü üzerinden SQL Server bağlantıları |
 | Veritabanı | SQLite | Gömülü yerel veritabanı, veritabanı dosyasını açarak bağlanın |
+| Veritabanı | ClickHouse | Yerel protokolü üzerinden sütun odaklı OLAP veritabanı |
 | Veritabanı | rqlite | Raft mutabakatı ile SQLite üzerine kurulu hafif dağıtık veritabanı |
+| Veritabanı | DM (Dameng) | Saf Go sürücüsü üzerinden DM8 bağlantıları |
+| Veritabanı | GBase 8s | Saf Go sürücüsü üzerinden GBase 8s bağlantıları |
 | Veritabanı | Redis | Görsel anahtar tarama ve düzenleme ile bellek içi anahtar-değer deposu |
 | Veritabanı | MongoDB | Ağaç görünümü, sorgu düzenleyici ve satır içi düzenleme ile belge veritabanı |
 | Veritabanı | Elasticsearch | Dizin ve belge yönetimli dağıtık arama ve analitik motoru |
@@ -364,6 +367,9 @@ Kod ve iyileştirme katkısında bulunan aşağıdaki kişilere ve sorun bildiri
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

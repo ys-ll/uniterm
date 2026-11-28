@@ -52,7 +52,7 @@
 - **Терминал** — SSH / Telnet / Mosh / Raw TCP / Serial, а также локальные оболочки (PowerShell / CMD / Git Bash / WSL).
 - **Передача файлов** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Локальные файлы / Файлы WSL / Zmodem с двухпанельным просмотром и поддержкой `rz`/`sz` в SSH-терминалах.
 - **Удалённый рабочий стол** — RDP (удалённый рабочий стол Windows), VNC (удалённое управление Linux), SPICE (виртуальные машины KVM/QEMU), X11 (проброс X Window)
-- **Клиент баз данных** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, с запросами на естественном языке на базе AI и редактированием строк данных.
+- **Клиент баз данных** — Более 30 баз данных, включая MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch, с запросами на естественном языке на базе AI и редактированием строк данных.
 - **Kubernetes и контейнеры** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, с управлением ресурсами кластера и образами, логами Pod и exec-терминалами, а также метриками CPU/памяти.
 - **Мониторинг серверов** — CPU, память, диски, сеть, процессы, порты и сетевые интерфейсы в реальном времени.
 
@@ -106,7 +106,10 @@
 | Базы данных | Oracle Database | Подключение к Oracle Database через чистый драйвер на Go |
 | Базы данных | SQL Server | Подключение к SQL Server через чистый драйвер на Go |
 | Базы данных | SQLite | Встроенная локальная база данных, подключение путём открытия файла базы данных |
+| Базы данных | ClickHouse | Колонкоориентированная OLAP-СУБД через собственный протокол |
 | Базы данных | rqlite | Лёгкая распределённая СУБД на основе SQLite с консенсусом Raft |
+| Базы данных | DM (Dameng) | Подключение к DM8 через чистый драйвер на Go |
+| Базы данных | GBase 8s | Подключение к GBase 8s через чистый драйвер на Go |
 | Базы данных | Redis | Хранилище «ключ–значение» в памяти с визуальным просмотром и редактированием ключей |
 | Базы данных | MongoDB | Документная база данных с просмотром в виде дерева, редактором запросов и редактированием на месте |
 | Базы данных | Elasticsearch | Распределённый поисковый и аналитический движок с управлением индексами и документами |
@@ -364,6 +367,9 @@ uniTerm/
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

@@ -52,7 +52,7 @@
 - **終端機** — SSH / Telnet / Mosh / Raw TCP / 序列埠，外加本地 Shell（PowerShell / CMD / Git Bash / WSL）。
 - **檔案傳輸** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / 本機檔案 / WSL 檔案 / Zmodem，雙窗格瀏覽，並在 SSH 終端機內支援 `rz`/`sz`。
 - **遠端桌面** — RDP（Windows 遠端桌面）、VNC（Linux 遠端控制）、SPICE（KVM/QEMU 虛擬機器）、X11（X Window 轉發）
-- **資料庫用戶端** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch，支援 AI 自然語言查詢與資料列編輯。
+- **資料庫用戶端** — 支援 30 餘種資料庫，包括 MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch，支援 AI 自然語言查詢與資料列編輯。
 - **Kubernetes 與容器** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC，叢集資源與映像檔管理、Pod 日誌與 exec 終端機、CPU/記憶體指標。
 - **伺服器監控** — 即時監控 CPU、記憶體、磁碟、網路、程序、連接埠與網路介面。
 
@@ -106,7 +106,10 @@
 | 資料庫 | Oracle Database | 透過純 Go 驅動連線 Oracle Database |
 | 資料庫 | SQL Server | 透過純 Go 驅動連線 SQL Server |
 | 資料庫 | SQLite | 本地嵌入式資料庫，直接開啟資料庫檔案即可連線 |
+| 資料庫 | ClickHouse | 透過純 Go 原生驅動連線的列式 OLAP 資料庫 |
 | 資料庫 | rqlite | 以 SQLite 為基礎、採用 Raft 共識的輕量級分散式資料庫 |
+| 資料庫 | DM (達夢) | 透過純 Go 驅動連線 DM8 |
+| 資料庫 | GBase 8s | 透過純 Go 驅動連線 GBase 8s |
 | 資料庫 | Redis | 記憶體鍵值資料庫，提供視覺化鍵值瀏覽與編輯 |
 | 資料庫 | MongoDB | 文件型資料庫，支援樹狀瀏覽、查詢編輯與行內編輯 |
 | 資料庫 | Elasticsearch | 分散式搜尋與分析引擎，支援索引與文件管理 |
@@ -364,6 +367,9 @@ uniTerm/
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

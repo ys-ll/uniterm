@@ -1,6 +1,6 @@
 # Databases
 
-uniTerm has a built-in database client that supports mainstream relational databases, Redis, MongoDB, and Elasticsearch.
+uniTerm has a built-in database client that supports mainstream relational databases, Redis, MongoDB, and Elasticsearch / OpenSearch.
 
 ## Relational Databases
 
@@ -13,9 +13,29 @@ uniTerm has a built-in database client that supports mainstream relational datab
 | Database | Default Port |
 |--------|----------|
 | MySQL | 3306 |
+| MariaDB | 3306 |
+| TiDB | 4000 |
+| OceanBase | 2881 |
+| Doris | 9030 |
+| StarRocks | 9030 |
+| GBase 8a | 5258 |
+| GreatSQL | 3306 |
+| GoldenDB | 3306 |
 | PostgreSQL | 5432 |
+| openGauss | 5432 |
+| KingbaseES | 54321 |
+| Vastbase | 5432 |
+| HighGo | 5866 |
+| GBase 8c | 5432 |
+| Greenplum | 5432 |
+| Cloudberry | 5432 |
+| CockroachDB | 26257 |
+| YugabyteDB | 5433 |
 | Oracle | 1521 |
 | SQL Server | 1433 |
+| DM (Dameng) | 5236 |
+| GBase 8s | 9088 |
+| ClickHouse | 9000 |
 | SQLite | - (local file) |
 | rqlite | 4001 |
 
@@ -157,9 +177,9 @@ The left-side tree panel displays the MongoDB hierarchy: databases, collections,
 View existing indexes, create new indexes with custom keys and options.
 
 
-## Elasticsearch
+## Elasticsearch / OpenSearch
 
-Elasticsearch provides browsing and management of clusters, indexes, and documents.
+Elasticsearch / OpenSearch provides browsing and management of clusters, indexes, and documents. Both use the same connection and operations (OpenSearch default port 9200).
 
 ![Elasticsearch](/imgs/elasticsearch_light.webp)
 

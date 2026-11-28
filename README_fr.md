@@ -52,7 +52,7 @@ Terminal distant, terminal local et série, transfert de fichiers, bureau à dis
 - **Terminal** — SSH / Telnet / Mosh / TCP brut / Série, plus des shells locaux (PowerShell / CMD / Git Bash / WSL).
 - **Transfert de fichiers** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Fichier local / Fichiers WSL / Zmodem avec navigation à double volet et prise en charge de `rz`/`sz` dans les terminaux SSH.
 - **Bureau à distance** — RDP (bureau à distance Windows), VNC (contrôle à distance Linux), SPICE (machines virtuelles KVM/QEMU), X11 (redirection X Window)
-- **Client de bases de données** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, avec requêtes en langage naturel assistées par IA et édition des lignes de données.
+- **Client de bases de données** — Plus de 30 bases de données, dont MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch, avec requêtes en langage naturel assistées par IA et édition des lignes de données.
 - **Kubernetes et conteneurs** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, avec gestion des ressources et des images du cluster, journaux et terminaux exec des Pods, et métriques CPU/mémoire.
 - **Supervision de serveurs** — CPU, mémoire, disque, réseau, processus, ports et interfaces réseau en temps réel.
 
@@ -106,7 +106,10 @@ Gestion des connexions, volets divisés, synchronisation cloud, thèmes et i18n 
 | Base de données | Oracle Database | Connexions Oracle Database via un pilote Go pur |
 | Base de données | SQL Server | Connexions SQL Server via un pilote Go pur |
 | Base de données | SQLite | Base de données locale embarquée, connexion en ouvrant le fichier de base de données |
+| Base de données | ClickHouse | Base de données OLAP orientée colonnes via son protocole natif |
 | Base de données | rqlite | Base de données distribuée légère construite sur SQLite avec consensus Raft |
+| Base de données | DM (Dameng) | Connexions DM8 via un pilote Go pur |
+| Base de données | GBase 8s | Connexions GBase 8s via un pilote Go pur |
 | Base de données | Redis | Magasin clé-valeur en mémoire avec navigation et édition visuelle des clés |
 | Base de données | MongoDB | Base de données documentaire avec navigation arborescente, éditeur de requêtes et édition en ligne |
 | Base de données | Elasticsearch | Moteur de recherche et d'analyse distribué avec gestion des index et des documents |
@@ -364,6 +367,9 @@ Merci aux personnes suivantes pour leurs contributions de code et leurs amélior
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

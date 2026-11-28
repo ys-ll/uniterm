@@ -52,7 +52,7 @@
 - **ターミナル** — SSH / Telnet / Mosh / Raw TCP / シリアル、さらにローカルシェル（PowerShell / CMD / Git Bash / WSL）。
 - **ファイル転送** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / ローカルファイル / WSL ファイル / Zmodem。2 ペインでのブラウジングと、SSH のターミナルでの `rz`/`sz` に対応しています。
 - **リモートデスクトップ** — RDP（Windows のリモートデスクトップ）、VNC（Linux のリモート操作）、SPICE（KVM/QEMU の仮想マシン）、X11（X Window のフォワーディング）
-- **データベースのクライアント** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch。AI による自然言語でのクエリと、データの行の編集に対応しています。
+- **データベースのクライアント** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch を含む 30 以上のデータベースに対応。AI による自然言語でのクエリと、データの行の編集に対応しています。
 - **Kubernetes とコンテナ** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC。クラスターのリソースとイメージの管理、Pod のログと exec のターミナル、CPU/メモリーのメトリクスに対応しています。
 - **サーバーの監視** — CPU、メモリー、ディスク、ネットワーク、プロセス、ポート、ネットワークインターフェースをリアルタイムで表示します。
 
@@ -106,7 +106,10 @@
 | データベース | Oracle Database | 純粋な Go のドライバーによる Oracle Database への接続 |
 | データベース | SQL Server | 純粋な Go のドライバーによる SQL Server への接続 |
 | データベース | SQLite | 組み込みのローカルデータベース。データベースのファイルを開いて接続します |
+| データベース | ClickHouse | ネイティブプロトコルによる列指向の OLAP データベース |
 | データベース | rqlite | Raft の合意アルゴリズムを使い、SQLite の上に構築された軽量な分散 DB |
+| データベース | DM (達夢) | 純粋な Go のドライバーによる DM8 への接続 |
+| データベース | GBase 8s | 純粋な Go のドライバーによる GBase 8s への接続 |
 | データベース | Redis | キーの閲覧と編集を視覚的に行えるインメモリーのキーバリューストア |
 | データベース | MongoDB | ツリーでの閲覧、クエリエディター、インラインでの編集に対応したドキュメントデータベース |
 | データベース | Elasticsearch | インデックスとドキュメントの管理に対応した分散型の検索・分析エンジン |
@@ -364,6 +367,9 @@ Issue、提案、フィードバックは [GitHub Issues](https://github.com/ys-
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

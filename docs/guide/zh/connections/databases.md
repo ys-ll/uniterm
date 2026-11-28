@@ -1,6 +1,6 @@
 # 数据库
 
-uniTerm 内置数据库客户端，支持主流关系型数据库、Redis、MongoDB 和 Elasticsearch。
+uniTerm 内置数据库客户端，支持主流关系型数据库、Redis、MongoDB 和 Elasticsearch / OpenSearch。
 
 ## 关系型数据库
 
@@ -13,9 +13,29 @@ uniTerm 内置数据库客户端，支持主流关系型数据库、Redis、Mong
 | 数据库 | 默认端口 |
 |--------|----------|
 | MySQL | 3306 |
+| MariaDB | 3306 |
+| TiDB | 4000 |
+| OceanBase | 2881 |
+| Doris | 9030 |
+| StarRocks | 9030 |
+| 南大通用 GBase 8a | 5258 |
+| GreatSQL | 3306 |
+| 金象 GoldenDB | 3306 |
 | PostgreSQL | 5432 |
+| openGauss | 5432 |
+| 金仓 KingBaseES | 54321 |
+| 海量 Vastbase | 5432 |
+| 瀚高 HighGo | 5866 |
+| 南大通用 GBase 8c | 5432 |
+| Greenplum | 5432 |
+| Cloudberry | 5432 |
+| CockroachDB | 26257 |
+| YugabyteDB | 5433 |
 | Oracle | 1521 |
 | SQL Server | 1433 |
+| 达梦 DM | 5236 |
+| 南大通用 GBase 8s | 9088 |
+| ClickHouse | 9000 |
 | SQLite | -（本地文件） |
 | rqlite | 4001 |
 
@@ -157,9 +177,9 @@ MongoDB 提供文档数据库浏览、查询和行内文档编辑功能。
 查看已有索引，创建自定义键和选项的新索引。
 
 
-## Elasticsearch
+## Elasticsearch / OpenSearch
 
-Elasticsearch 提供集群、索引与文档的浏览和管理功能。
+Elasticsearch / OpenSearch 提供集群、索引与文档的浏览和管理功能，两者使用相同的连接与操作方式（OpenSearch 默认端口 9200）。
 
 ![Elasticsearch](/imgs/elasticsearch_light.webp)
 

@@ -52,7 +52,7 @@ Terminal từ xa, terminal cục bộ & cổng serial, truyền tệp, máy tín
 - **Terminal** — SSH / Telnet / Mosh / Raw TCP / Serial, cùng các shell cục bộ (PowerShell / CMD / Git Bash / WSL).
 - **Truyền tệp** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Tệp cục bộ / Tệp WSL / Zmodem với duyệt tệp hai khung và hỗ trợ `rz`/`sz` trong terminal SSH.
 - **Máy tính từ xa** — RDP (Remote Desktop của Windows), VNC (điều khiển từ xa Linux), SPICE (máy ảo KVM/QEMU), X11 (chuyển tiếp X Window)
-- **Ứng dụng khách cơ sở dữ liệu** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, với truy vấn ngôn ngữ tự nhiên hỗ trợ bởi AI và chỉnh sửa trực tiếp các dòng dữ liệu.
+- **Ứng dụng khách cơ sở dữ liệu** — Hơn 30 cơ sở dữ liệu, bao gồm MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch, với truy vấn ngôn ngữ tự nhiên hỗ trợ bởi AI và chỉnh sửa trực tiếp các dòng dữ liệu.
 - **Kubernetes & Container** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, với quản lý tài nguyên & image của cluster, log Pod và terminal exec, cùng chỉ số CPU/bộ nhớ.
 - **Giám sát máy chủ** — CPU, bộ nhớ, ổ đĩa, mạng, tiến trình, cổng và giao diện mạng theo thời gian thực.
 
@@ -106,7 +106,10 @@ Quản lý kết nối, chia khung, đồng bộ đám mây, chủ đề & đa n
 | Cơ sở dữ liệu | Oracle Database | Kết nối Oracle Database qua driver thuần Go |
 | Cơ sở dữ liệu | SQL Server | Kết nối SQL Server qua driver thuần Go |
 | Cơ sở dữ liệu | SQLite | Cơ sở dữ liệu cục bộ nhúng, kết nối bằng cách mở tệp cơ sở dữ liệu |
+| Cơ sở dữ liệu | ClickHouse | Cơ sở dữ liệu OLAP hướng cột qua giao thức gốc |
 | Cơ sở dữ liệu | rqlite | Cơ sở dữ liệu phân tán nhẹ được xây dựng trên SQLite với đồng thuận Raft |
+| Cơ sở dữ liệu | DM (Dameng) | Kết nối DM8 qua driver thuần Go |
+| Cơ sở dữ liệu | GBase 8s | Kết nối GBase 8s qua driver thuần Go |
 | Cơ sở dữ liệu | Redis | Kho key-value trong bộ nhớ với duyệt và chỉnh sửa key trực quan |
 | Cơ sở dữ liệu | MongoDB | Cơ sở dữ liệu tài liệu với duyệt dạng cây, trình soạn thảo truy vấn và chỉnh sửa trực tiếp |
 | Cơ sở dữ liệu | Elasticsearch | Công cụ tìm kiếm và phân tích phân tán với quản lý index và tài liệu |
@@ -364,6 +367,9 @@ Cảm ơn những người đã đóng góp mã nguồn và cải tiến dưới
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 

@@ -52,7 +52,7 @@ Remote-Terminal, lokale und serielle Terminals, Dateiübertragung, Remote-Deskto
 - **Terminal** — SSH / Telnet / Mosh / Raw TCP / Seriell, plus lokale Shells (PowerShell / CMD / Git Bash / WSL).
 - **Dateiübertragung** — SFTP / SCP / FTP / FTPS / SMB / WebDAV / S3 / Lokale Dateien / WSL-Dateien / Zmodem mit Zweifenster-Browsing und `rz`/`sz`-Unterstützung in SSH-Terminals.
 - **Remote-Desktop** — RDP (Windows-Remote-Desktop), VNC (Fernsteuerung von Linux), SPICE (KVM/QEMU-VMs), X11 (X-Window-Weiterleitung)
-- **Datenbank-Client** — MySQL / PostgreSQL / Oracle / SQL Server / SQLite / rqlite / Redis / MongoDB / Elasticsearch, mit KI-gestützten Abfragen in natürlicher Sprache und Bearbeitung von Datenzeilen.
+- **Datenbank-Client** — Über 30 Datenbanken, darunter MySQL / PostgreSQL / Oracle / SQL Server / SQLite / ClickHouse / Redis / MongoDB / Elasticsearch, mit KI-gestützten Abfragen in natürlicher Sprache und Bearbeitung von Datenzeilen.
 - **Kubernetes & Container** — Kubernetes / Docker / Podman / nerdctl (containerd) / WSLC, mit Verwaltung von Cluster-Ressourcen und Images, Pod-Protokollen und Exec-Terminals sowie CPU-/Speicher-Metriken.
 - **Serverüberwachung** — CPU, Speicher, Festplatten, Netzwerk, Prozesse, Ports und Netzwerkschnittstellen in Echtzeit.
 
@@ -106,7 +106,10 @@ Verbindungsverwaltung, geteilte Bereiche, Cloud-Sync, Themes & Internationalisie
 | Datenbank | Oracle Database | Oracle-Database-Verbindungen über einen reinen Go-Treiber |
 | Datenbank | SQL Server | SQL-Server-Verbindungen über einen reinen Go-Treiber |
 | Datenbank | SQLite | Eingebettete lokale Datenbank, Verbindung durch Öffnen der Datenbankdatei |
+| Datenbank | ClickHouse | Spaltenorientierte OLAP-Datenbank über das native Protokoll |
 | Datenbank | rqlite | Leichtgewichtige verteilte DB auf SQLite-Basis mit Raft-Konsens |
+| Datenbank | DM (Dameng) | DM8-Verbindungen über einen reinen Go-Treiber |
+| Datenbank | GBase 8s | GBase-8s-Verbindungen über einen reinen Go-Treiber |
 | Datenbank | Redis | In-Memory-Schlüssel-Wert-Speicher mit visueller Schlüsselverwaltung und -bearbeitung |
 | Datenbank | MongoDB | Dokumentendatenbank mit Baumansicht, Abfrage-Editor und Inline-Bearbeitung |
 | Datenbank | Elasticsearch | Verteilte Such- und Analyse-Engine mit Index- und Dokumentenverwaltung |
@@ -364,6 +367,9 @@ Dank an die folgenden Personen für Code-Beiträge und Verbesserungen sowie an a
     <td align="center"><a href="https://github.com/zielony360">@zielony360</a></td>
     <td align="center"><a href="https://github.com/AnxysUaen">@AnxysUaen</a></td>
     <td align="center"><a href="https://github.com/it-linnan">@it-linnan</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/Burakceliks">@Burakceliks</a></td>
   </tr>
 </table>
 
