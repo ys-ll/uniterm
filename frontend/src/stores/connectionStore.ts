@@ -45,7 +45,15 @@ export const useConnectionStore = defineStore('connection', () => {
     loading.value = true
     try {
       const data = await LoadConnections() as { groups?: ConnectionGroup[]; connections?: ConnectionConfig[] }
-      groups.value = data.groups || []
+      const loadedGroups = data.groups || []
+      // Repair data written by the #1683 bug: the "(无分组)" sentinel could
+      // land in parentId as a literal "__none__", hiding the group from every
+      // view that filters root groups by `!parentId`. Normalize on load so
+      // affected installs self-heal.
+      for (const g of loadedGroups) {
+        if ((g as any).parentId === '__none__') (g as any).parentId = undefined
+      }
+      groups.value = loadedGroups
       connections.value = migrateLegacyDatabaseTypes((data.connections || []) as ConnectionConfig[])
     } catch (e) {
       console.error('Failed to load connections:', e)
@@ -181,6 +189,9 @@ export const useConnectionStore = defineStore('connection', () => {
   }
 
   async function reparentGroup(groupId: string, newParentId: string | undefined) {
+    // The "(无分组)" tree-select sentinel means the root level — never a
+    // literal parent id (issue #1683).
+    if (newParentId === '__none__') newParentId = undefined
     // Prevent self-parenting and cycles
     if (newParentId === groupId) return
     if (newParentId && isDescendantOf(groupId, newParentId)) return
@@ -260,6 +271,7 @@ export const useConnectionStore = defineStore('connection', () => {
   // it within the groups array so it lands right before beforeId sibling
   // (or at the end of its new parent when beforeId is omitted).
   async function moveGroup(groupId: string, newParentId: string | undefined, beforeId?: string) {
+    if (newParentId === '__none__') newParentId = undefined
     if (newParentId === groupId) return
     if (newParentId && isDescendantOf(groupId, newParentId)) return
 
