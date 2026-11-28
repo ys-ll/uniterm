@@ -2417,7 +2417,9 @@ function onConnect() {
   flex-direction: column;
   /* Vertical + right spacing moved here from the dialog body (which is
      padding-less so the rail divider spans header-to-footer) */
-  padding: 1rem 1.25rem 1rem 1rem;
+  /* Top padding kept small: the island cap above the body already provides
+     the visual gap (see .el-dialog__header::before in style.css) */
+  padding: 0.25rem 1.25rem 1rem 1rem;
   /* The scrolling happens here, not in the dialog body, so the left
      category rail never moves */
   overflow-y: auto;
