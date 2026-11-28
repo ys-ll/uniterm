@@ -135,7 +135,7 @@
             v-for="cmd in store.getCommandsByGroup(undefined).filter(matchesSearch)"
             :key="cmd.id"
             class="qc-item"
-            :class="[{ active: selectedId === cmd.id, 'qc-chip': isButtonMode }]"
+            :class="[{ active: selectedId === cmd.id, 'qc-chip': isButtonMode, indented: !isButtonMode }]"
             :title="isButtonMode ? cmd.command : undefined"
             draggable="true"
             @dragstart="onCommandDragStart($event, cmd)"
