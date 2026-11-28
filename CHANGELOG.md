@@ -1,15 +1,16 @@
 # Changelog
 
-## v1.13.0-alpha
+## v2.0.0
 
 ### What's Changed
 
 **New Features**
 
-- UI: a brand-new interface style — the whole app adopts floating rounded panels with a softer, modern palette; panels, tabs, sidebar dividers, header toggles and the four-way splitter are all redrawn.
-- UI: a customizable right panel — a new dockable right rail is added, and any panel (including the AI assistant) can dock freely into the left, right or bottom dock areas via tab drag / drop or the move-to menu, each dock keeping its own tabs and size.
-- Database: Dameng DM8 support — schema browsing, table data with paging and editing, export and DDL, backed by a pure-Go driver.
-- Tools: a new toolbox tab with everyday converters — JSON format, hash, URL, JWT, timestamp, cron, UUID, regex and YAML. (@AuroraLZDF)
+- UI: a floating-island visual refresh — function panels are presented as floating cards with clear hierarchy and airy spacing; three dockable side rails are added, and every panel (including the AI assistant) can be dragged, docked or hidden to compose your own workspace.
+- Database: support for over 20 new relational databases, including Dameng, KingbaseES, GBase and TiDB.
+- Database: ClickHouse support — schema browsing, table data with paging and editing, export, backed by the pure-Go native driver.
+- Tools: a new toolbox tab with a dozen-plus everyday utilities — Base64, URL, timestamp, JSON and more. (@AuroraLZDF)
+- CLI: a `uniterm://` URL scheme deep link and new launch flags — start minimized to tray, or start the MCP server, from the command line or a `uniterm://mcp/start` link; flags and URLs from a second instance are forwarded to the running app. (@surenwuyuwuqiu)
 
 **Improvements**
 
@@ -22,22 +23,32 @@
 - RDP: connections can be opened in the Windows Remote Desktop client (mstsc) from the context menu — address, port, username and domain are pre-filled (Windows only).
 - Remote desktop: a send-keys menu for system-reserved shortcuts (Ctrl+Alt+Del and friends) on RDP / VNC / SPICE sessions.
 - SSH: the current TOTP code is now visible — live in the connection form and from the connection right-click menu, with a countdown and one-click copy, for authenticator binding on a bastion's web console. (@surenwuyuwuqiu)
+- Kubernetes: ConfigMaps support viewing and inline editing, and the resource detail drawer presents Labels as chips, shows Annotations and Conditions, and renders Ingress rules / TLS as tables. (@it-linnan)
+- Security: server (web) mode runs under a default-deny operator policy with an App allowlist and tenant local-path confinement — unauthorized calls fail closed. (@zielony360)
+- AI: a proposed command that echoes lines seen in terminal output, file reads or remote MCP results requires confirmation in every confirm mode — bypass and self-composed commands are unchanged. (@zielony360)
 
 **Bug Fixes**
 
 - Startup: the launch black / white flash is gone — the first frame uses a single theme source, and non-critical init (shell probe, update check) no longer competes with first paint.
 - Gateway: the web session cookie is browser-scoped.
 - Gateway: sessions require re-authentication after an app restart — cookies issued before a restart no longer work. (@AnxysUaen)
+- Update: release downloads fail closed on missing checksums, are restricted to the official GitHub / Gitee hosts over HTTPS (every redirect hop included), and are re-verified before install. (@zielony360)
+- Local file server: requests are served through an os.Root handle, so containment holds after symlink resolution — anything resolving outside the root returns 403. (@zielony360)
 - ZMODEM: large sz downloads no longer fail mid-transfer with moving CRC errors (oversized event payloads are coalesced instead of swept), and a download whose target file is transiently locked retries instead of aborting.
 - TFTP: transfers with clients that don't negotiate blksize now use RFC 1350 512-byte blocks — network devices (e.g. Huawei) no longer stop after exactly 512 bytes; the WRQ / OACK handshake is hardened and transient UDP errors are retried. (@etanman)
 - FTP: directory entries whose names carry column-padding spaces parse correctly.
 - RDP: the selected quality tier is always sent to the server, fixing rendering quality. (@zielony360)
 - RDP: sessions to Windows Server 2012 hosts now render correctly — the client was missing EGFX graphics channel support.
+- RDP: launching mstsc from the context menu keeps the native client window visible — it previously opened invisibly because the console-hide flag was passed along.
+- RDP: adaptive resolution allows only one reconnect per target size — a server that can't hold the requested resolution no longer enters a resize / reconnect loop (observed on mobile).
 - Terminal: the line model resyncs after shell Tab completion.
 - Terminal: local shell output works again on macOS. (@surenwuyuwuqiu)
-- AI: a race on the block map no longer crashes the chat mid-stream. (@guberm)
-- Database: PostgreSQL row CRUD handles schema-qualified table names. (@surenwuyuwuqiu)
 - Terminal: the MobaXterm Default palette matches the official colors. (@etanman)
+- SSH / WSL: the cwd-hook ready scanner no longer spins forever when the marker is empty. (@surenwuyuwuqiu)
+- AI: a race on the block map no longer crashes the chat mid-stream. (@guberm)
+- MCP: an empty wrapper list no longer panics while stripping tool-result wrappers, and handler panics are recovered. (@surenwuyuwuqiu)
+- Database: PostgreSQL row CRUD handles schema-qualified table names. (@surenwuyuwuqiu)
+- Kubernetes: selected text in the resource detail drawer can be copied. (@it-linnan)
 - Notes / editor: the notes editor and the code editor default to line wrapping, and notes preview styles match the AI typography.
 - Connections: an empty auth type defaults to password when editing.
 - Connections: container connections wait for the save to finish before opening and no longer offer connect-only. (@AnxysUaen)
@@ -55,10 +66,11 @@ Thanks to @AuroraLZDF, @it-linnan, @surenwuyuwuqiu, @AnxysUaen, @etanman, @zielo
 
 **新功能**
 
-- 界面：全新界面风格——整个应用改用浮动圆角面板与更柔和的现代配色；面板、标签页、边栏分隔线、头部开关与四向分割线全部重绘。
-- 界面：新增右侧面板自定义停靠功能——任意面板（含 AI 面板）均可通过标签拖拽或「移动到」菜单自由停靠到左、右、下三处面板停靠区，每个停靠区独立管理标签与尺寸。
-- 数据库：新增达梦 DM8 支持——schema 浏览、表数据分页与编辑、导出与 DDL，基于纯 Go 驱动实现。
-- 工具箱：新增工具箱标签页，内置常用转换器——JSON 格式化、哈希、URL、JWT、时间戳、cron、UUID、正则和 YAML。(@AuroraLZDF)
+- 界面：浮岛式视觉焕新——各功能面板改为悬浮卡片式呈现，层次分明、留白通透；新增三个可停靠边栏，所有面板（含 AI 面板）均可拖动、停靠或隐藏，自由搭配你的工作区。
+- 数据库：新增支持达梦、金仓、南大通用 GBase、TiDB 等 20 余种关系型数据库。
+- 数据库：新增 ClickHouse 支持——基于纯 Go 原生驱动，支持 schema 浏览、表数据分页与编辑、导出。
+- 工具箱：新增工具箱标签页，内置 Base64、URL、时间戳、JSON 等十余种常用小工具。(@AuroraLZDF)
+- 命令行：新增 `uniterm://` URL scheme 深链接与启动参数——可通过命令行或 `uniterm://mcp/start` 链接启动 MCP 服务、启动即最小化到托盘；第二实例的参数和链接会转发给已运行实例。(@surenwuyuwuqiu)
 
 **改进**
 
@@ -71,22 +83,32 @@ Thanks to @AuroraLZDF, @it-linnan, @surenwuyuwuqiu, @AnxysUaen, @etanman, @zielo
 - RDP：连接右键菜单支持用 Windows 远程桌面客户端（mstsc）打开——自动预填地址、端口、用户名和域名（仅 Windows）。
 - 远程桌面：RDP / VNC / SPICE 会话新增按键发送菜单，可发送 Ctrl+Alt+Del 等系统保留快捷键。
 - SSH：新增当前 TOTP 验证码展示——连接编辑表单内实时显示，连接右键菜单也能随时打开，带倒计时与一键复制，方便在堡垒机 Web 页面完成验证器绑定。(@surenwuyuwuqiu)
+- Kubernetes：ConfigMap 支持查看与内联编辑，资源详情抽屉展示优化——Labels 以标签片呈现，新增 Annotations、Conditions 展示，Ingress 规则 / TLS 以表格呈现。(@it-linnan)
+- 安全：服务器（Web）模式启用默认拒绝的操作策略，配合 App 白名单与租户本地路径收窄——未授权调用一律失败。(@zielony360)
+- AI：建议执行的命令若复述自终端输出、文件读取或远程 MCP 结果，在任何确认模式下都必须确认——绕过模式与自行输入的命令不受影响。(@zielony360)
 
 **问题修复**
 
 - 启动：启动时的黑 / 白屏闪烁不再出现——首帧统一主题来源，非关键初始化（shell 探测、更新检查）不再与首帧渲染抢占资源。
 - 网关：Web 会话 Cookie 改为浏览器维度隔离。
 - 网关：应用重启后会话需重新认证——重启前签发的 Cookie 不再有效。(@AnxysUaen)
+- 更新：缺少校验和时下载直接失败；下载与每一级重定向仅限官方 GitHub / Gitee 的 HTTPS 地址，安装前重新校验。(@zielony360)
+- 本地文件服务：请求统一通过 os.Root 句柄提供，符号链接解析后仍受根目录约束——解析到根目录外一律返回 403。(@zielony360)
 - ZMODEM：大文件 sz 下载不再中途中断并报 CRC 错误（超大事件载荷改为合并发送、不再被超时清扫），目标文件被临时占用时下载会重试而非直接失败。
 - TFTP：对不协商 blksize 的客户端改用 RFC 1350 规定的 512 字节块——网络设备（如华为）传输不再恰好停在 512 字节；加固 WRQ / OACK 握手，瞬时 UDP 错误会自动重试。(@etanman)
 - FTP：LIST 解析结果中名字带对齐空格的目录项可正确识别。
 - RDP：画质档位始终发送到服务端，修复渲染质量问题。(@zielony360)
 - RDP：连接 Windows Server 2012 主机可正常显示画面——客户端此前缺少 EGFX 图形通道支持。
+- RDP：右键菜单用 mstsc 打开时原生客户端窗口保持可见——此前隐藏控制台的标志被连带传入，窗口打开后不可见。
+- RDP：自适应分辨率对同一目标尺寸只允许一次重连——服务端无法维持请求分辨率时不再陷入缩放 / 重连循环（移动端曾出现）。
 - 终端：shell Tab 补全后行模型重新同步。
 - 终端：macOS 本地终端输出恢复正常。(@surenwuyuwuqiu)
-- AI：修复块映射竞态导致的对话中途崩溃。(@guberm)
-- 数据库：PostgreSQL 行级增删改支持带 schema 前缀的表名。(@surenwuyuwuqiu)
 - 终端：MobaXterm Default 配色与官方颜色对齐。(@etanman)
+- SSH / WSL：cwd 钩子的就绪标记为空时扫描器不再陷入死循环。(@surenwuyuwuqiu)
+- AI：修复块映射竞态导致的对话中途崩溃。(@guberm)
+- MCP：工具结果包装列表为空时不再触发切片越界 panic，处理器 panic 已被捕获恢复。(@surenwuyuwuqiu)
+- 数据库：PostgreSQL 行级增删改支持带 schema 前缀的表名。(@surenwuyuwuqiu)
+- Kubernetes：资源详情抽屉中选中的文本可以复制。(@it-linnan)
 - 笔记 / 编辑器：笔记编辑器与代码编辑器默认开启自动换行，笔记预览样式与 AI 排版一致。
 - 连接：编辑时认证方式为空默认按密码处理。
 - 连接：容器连接等待保存完成后再打开，且不再显示仅连接选项。(@AnxysUaen)
