@@ -359,11 +359,6 @@ html, body, #app {
 
 body {
   box-sizing: border-box;
-  /* 1px inner inset: WebView2's CSS viewport runs ~1 physical px past the
-     visible window at fractional DPI (125%/150% — wails' frameless
-     WM_NCCALCSIZE workaround), so anything painted at the very edge gets
-     clipped. Insetting the app root keeps its window frame line visible. */
-  padding: 1px;
   font-family: var(--font-ui);
   background: var(--bg-base);
   color: var(--text-primary);
