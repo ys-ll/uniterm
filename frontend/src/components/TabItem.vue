@@ -332,6 +332,10 @@ const hasActiveTransfers = computed(() => {
 
 const isDisconnected = computed(() => {
   if (props.tab.type === 'start' || props.tab.type === 'settings' || props.tab.type === 'netscan') return false
+  // Tools likewise: a pure UI tab whose backing panel has no session, so the
+  // session lookup below would permanently flag it "disconnected" (half-gray
+  // tab label). (string compare: TabType's union predates the tools tab.)
+  if ((props.tab.type as string) === 'tools') return false
   // k8s main tab has no session; its connect status comes from the k8s store
   // (grey while connecting / on error).
   if (props.tab.type === 'k8s') {

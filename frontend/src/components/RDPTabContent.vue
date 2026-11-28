@@ -1191,6 +1191,11 @@ let canvasObserver: MutationObserver | null = null
 let pixelRatioQuery: MediaQueryList | null = null
 let reconnecting = false
 let lastResizeRequest: RdpDesktopSize | null = null
+// Target the last reconnect was issued for. A fresh connection at this size
+// that STILL doesn't land on it means the server won't hold it (clamps the
+// negotiated size, or DPI sync readjusts it) — reconnecting again just loops,
+// so every reconnect path checks this before dialing the same size twice.
+let reconnectSizeTarget: RdpDesktopSize | null = null
 // Desktop scale percent reported over the Display Control channel with the
 // last resize, or null before the first send after (re)connect.
 let lastScaleRequest: number | null = null
@@ -1271,6 +1276,7 @@ function onPixelRatioChange() {
 async function reconnectWithSize(width: number, height: number) {
   if (reconnecting) return
   reconnecting = true
+  reconnectSizeTarget = { width, height }
   try {
     teardownClient()
     if (currentSessionId.value) {
@@ -1320,6 +1326,11 @@ function requestAdaptiveResize() {
   const targetSize = adaptiveDesktopSize()
   if (!targetSize) return
   const { width, height } = targetSize
+  // A new target re-arms the one-reconnect-per-target guard; only repeats at
+  // the same size stay blocked.
+  if (lastResizeRequest?.width !== width || lastResizeRequest?.height !== height) {
+    reconnectSizeTarget = null
+  }
   const cur = currentDesktopSize()
   const sizeChanged = cur?.width !== width || cur.height !== height
   if (displayControlUsable === false) {
@@ -1375,12 +1386,22 @@ function requestAdaptiveResize() {
         displayControlUsable = true
       } else {
         displayControlUsable = false
+        // One reconnect per exact target: if a fresh connection at this size
+        // still doesn't hold it, accept the server's size instead of looping
+        // (mobile links can also exceed the 2s probe, making the first fail
+        // spurious — a real viewport change re-arms the guard via the new
+        // target above).
+        if (reconnectSizeTarget?.width === width && reconnectSizeTarget.height === height) {
+          rdpLog(`adaptive resize: reconnect at ${width}x${height} did not stick (server at ${now?.width}x${now?.height}); keeping server size`)
+          return
+        }
         reconnectWithSize(width, height)
       }
     }, 2000)
   } catch (e) {
     rdpLog(`adaptive resize failed: ${String(e)}`)
     displayControlUsable = false
+    if (reconnectSizeTarget?.width === width && reconnectSizeTarget.height === height) return
     reconnectWithSize(width, height)
   }
 }
