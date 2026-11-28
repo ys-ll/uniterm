@@ -1126,7 +1126,7 @@ const showAdvanced = ref(false)
 
 // Connection types that support the "test connection" button (issue #377).
 // local/serial/mosh/vnc/rdp/spice/x11-desktop don't have a non-interactive probe.
-const TESTABLE_TYPES = ['ssh', 'telnet', 'ftp', 'sftp', 'scp', 's3', 'webdav', 'smb', 'database', 'mongodb', 'redis', 'elasticsearch', 'opensearch', 'k8s', 'container', 'tcp']
+const TESTABLE_TYPES = ['ssh', 'telnet', 'ftp', 'sftp', 'scp', 's3', 'webdav', 'smb', 'database', 'mongodb', 'redis', 'elasticsearch', 'opensearch', 'k8s', 'container', 'tcp', 'rdp', 'vnc', 'spice', 'x11-desktop']
 // Test-connection result state: 'checking' shows a spinner; 'success'/'error'
 // keep a colored status icon on the button until the next test or a reopen.
 const testStatus = ref<'idle' | 'checking' | 'success' | 'error'>('idle')
