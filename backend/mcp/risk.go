@@ -51,10 +51,14 @@ func classifySegment(seg string) RiskClass {
 		return RiskRead
 	}
 	words := strings.Fields(seg)
+	if len(words) == 0 {
+		return RiskRead
+	}
 	head := strings.ToLower(words[0])
 	// Strip env assignments and sudo/nohup wrappers: "sudo rm -rf" is judged
-	// as "rm -rf"; "FOO=1 rm" likewise.
-	for isWrapper(head) || (strings.Contains(head, "=") && len(words) > 1) {
+	// as "rm -rf"; "FOO=1 rm" likewise. Keep at least one word so bare wrappers
+	// such as "env" or "FOO=1 sudo" do not slice words empty.
+	for len(words) > 1 && (isWrapper(head) || strings.Contains(head, "=")) {
 		words = words[1:]
 		head = strings.ToLower(words[0])
 	}
