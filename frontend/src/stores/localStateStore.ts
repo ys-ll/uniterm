@@ -66,6 +66,8 @@ interface LocalState {
   commandSendDraft: string
   // Word-wrap toggle of the command-send editor. Local-only UI preference.
   commandSendWrap: boolean
+  // Command-send: append a trailing Enter on send. Local-only UI preference.
+  commandSendAppendEnter: boolean
 }
 
 const DEFAULT: LocalState = {
@@ -102,6 +104,7 @@ const DEFAULT: LocalState = {
   panelTabLabels: 'active',
   commandSendDraft: '',
   commandSendWrap: true,
+  commandSendAppendEnter: true,
 } as LocalState
 
 export const useLocalStateStore = defineStore('localState', () => {

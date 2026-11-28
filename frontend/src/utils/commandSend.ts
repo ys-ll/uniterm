@@ -85,12 +85,16 @@ export function resolveSendTargets(scope: CommandSendScope): string[] {
  * when that target's terminal actually enabled bracketed paste, so targets
  * without it fall back to 'lines' for that write.
  */
-export function buildSendPayload(text: string, mode: 'lines' | 'bracketed', bracketedPasteMode: boolean): string {
+export function buildSendPayload(text: string, mode: 'lines' | 'bracketed', bracketedPasteMode: boolean, appendEnter = false): string {
   const normalized = normalizePastedText(text)
   if (mode === 'bracketed' && bracketedPasteMode) {
     return `\x1b[200~${normalized}\x1b[201~`
   }
-  return normalized.replace(/\n/g, '\r')
+  const lines = normalized.replace(/\n/g, '\r')
+  // Drafts rarely end with a newline; without this the command is only typed,
+  // never executed (the panel's trailing-Enter checkbox). Already-terminated
+  // text stays untouched — no double Enter.
+  return appendEnter && !lines.endsWith('\r') ? `${lines}\r` : lines
 }
 
 /** The bracketed-paste mode of a target session (false when unknown). */

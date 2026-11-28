@@ -636,6 +636,7 @@
   "commandSend.sendHint": "Ctrl+Enter — 傳送到 {n} 個終端",
   "commandSend.clear": "清空",
   "commandSend.noTarget": "目前範圍內沒有已連線的終端",
+  "commandSend.appendEnter": "結尾 Enter",
   "commandSend.sent": "已傳送到 {n} 個終端",
   "commandSend.meta": "{lines} 行,{chars} 個字元",
   "commandSend.wrap": "自動換行",

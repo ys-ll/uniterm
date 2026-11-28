@@ -612,6 +612,7 @@
   "commandSend.sendHint": "Ctrl+Enter — gửi tới {n} terminal",
   "commandSend.clear": "Xoá",
   "commandSend.noTarget": "Không có terminal nào đang kết nối trong phạm vi này",
+  "commandSend.appendEnter": "Enter cuối",
   "commandSend.sent": "Đã gửi tới {n} terminal",
   "commandSend.meta": "{lines} dòng, {chars} ký tự",
   "commandSend.wrap": "Tự động xuống dòng",

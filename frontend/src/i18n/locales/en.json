@@ -636,6 +636,7 @@
   "commandSend.sendHint": "Ctrl+Enter — send to {n} terminals",
   "commandSend.clear": "Clear",
   "commandSend.noTarget": "No connected terminal in this scope",
+  "commandSend.appendEnter": "Trailing Enter",
   "commandSend.sent": "Sent to {n} terminals",
   "commandSend.meta": "{lines} lines, {chars} characters",
   "commandSend.wrap": "Word wrap",

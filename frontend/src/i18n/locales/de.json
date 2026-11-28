@@ -612,6 +612,7 @@
   "commandSend.sendHint": "Ctrl+Enter — an {n} Terminals senden",
   "commandSend.clear": "Leeren",
   "commandSend.noTarget": "Kein verbundenes Terminal in diesem Bereich",
+  "commandSend.appendEnter": "Enter am Ende",
   "commandSend.sent": "An {n} Terminals gesendet",
   "commandSend.meta": "{lines} Zeilen, {chars} Zeichen",
   "commandSend.wrap": "Zeilenumbruch",
