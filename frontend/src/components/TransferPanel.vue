@@ -13,7 +13,7 @@
         <button
           class="filter-icon-btn"
           :title="collapsed ? t('sftp.transferPanel.show') : t('sftp.transferPanel.hide')"
-          @click="emit('update:collapsed', !collapsed)"
+          @click.stop="emit('update:collapsed', !collapsed)"
         ><el-icon><ChevronDown v-if="!collapsed" :size="'0.875rem'" /><ChevronUp v-else :size="'0.875rem'" /></el-icon></button>
         <span v-if="title" class="transfer-panel-title">{{ title }}</span>
       </div>
@@ -23,7 +23,7 @@
           class="filter-icon-btn"
           :disabled="!hasFinished"
           :title="t('companion.clearTransfers')"
-          @click="emit('clearCompleted')"
+          @click.stop="emit('clearCompleted')"
         ><el-icon><BrushCleaning :size="'0.875rem'" /></el-icon></button>
         <slot name="actions-end" />
       </div>
@@ -127,9 +127,13 @@ const { t } = useI18n()
 const panelRef = ref<HTMLElement | null>(null)
 
 /* Clicking anywhere on the title bar toggles collapse — same as the chevron
-   button. Clicks on real controls (buttons etc.) keep their own action. */
+   button. The chevron carries @click.stop so its own toggle can never pair
+   with this one into a double-fire (WebView2: an svg target here made the
+   button-level closest() guard unreliable, and the two handlers cancelled
+   each other out — icon clicks then looked dead). Clicks on the other head
+   controls keep their own action via the closest() guard below. */
 function onHeadClick(e: MouseEvent) {
-  if ((e.target as HTMLElement).closest('button, a, input, [role="button"]')) return
+  if ((e.target as Element).closest('button, a, input, [role="button"]')) return
   emit('update:collapsed', !props.collapsed)
 }
 
