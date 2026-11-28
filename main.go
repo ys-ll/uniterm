@@ -522,7 +522,7 @@ func main() {
 	// emit() / window operations route through these references.
 	app.app = w3app
 	app.window = window
-	w3app.RegisterService(application.NewService(app))
+	w3app.RegisterService(application.NewServiceWithOptions(app, appServiceOptions()))
 
 	// Browser streaming SFTP/SCP + file staging routes (/api/web/*) exist only
 	// in the headless server build; a no-op on desktop.

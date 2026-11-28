@@ -78,6 +78,10 @@ type WorkerInstance struct {
 	// token is the per-worker shared secret the gateway injects on every
 	// proxied request; the worker rejects /api/web calls without it.
 	token string
+	// adminToken is a second per-worker secret used only for the gateway's
+	// own credential-admin calls. The tenant proxy strips any client-supplied
+	// admin header, so tenants cannot reach reset/rekey.
+	adminToken string
 	// hasMasterPassword records whether the process was spawned with a login
 	// password forwarded (UNITERM_MASTER_PASSWORD). A worker without one can
 	// never silently unlock its credential store — the browser would bounce
@@ -528,6 +532,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 
 		targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
 		workerToken := newTransferID()
+		workerAdminToken := newTransferID()
 		masterPassword := gw.cachedPassword(username, forwardPassword)
 		cmd := exec.Command(gw.workerBinary)
 		cmd.Dir = userHome
@@ -542,6 +547,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 			"WAILS_SERVER_PORT="+strconv.Itoa(port),
 			"UNITERM_TENANT_USER="+username,
 			"UNITERM_WORKER_TOKEN="+workerToken,
+			"UNITERM_WORKER_ADMIN_TOKEN="+workerAdminToken,
 			"UNITERM_MASTER_PASSWORD="+masterPassword,
 		)
 		// The Go standard library ignores HOME/XDG_* on Windows and macOS:
@@ -568,19 +574,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 			return nil, fmt.Errorf("start %s failed: %w", gw.workerBinary, err)
 		}
 
-		proxy := httputil.NewSingleHostReverseProxy(targetURL)
-		proxy.FlushInterval = -1 // Flush immediately for SSE, WebSocket, and streaming SFTP downloads
-		proxy.Director = func(req *http.Request) {
-			req.URL.Scheme = targetURL.Scheme
-			req.URL.Host = targetURL.Host
-			// Rewrite Host to 127.0.0.1:<port> so Wails v3 Loopback Host Check passes cleanly
-			req.Host = targetURL.Host
-			if req.Header.Get("Origin") != "" {
-				req.Header.Set("Origin", "http://"+targetURL.Host)
-			}
-			// Set (not Add) so a client-supplied header cannot smuggle past.
-			req.Header.Set("X-Uniterm-Worker-Token", workerToken)
-		}
+		proxy := newWorkerProxy(targetURL, workerToken)
 
 		instance := &WorkerInstance{
 			Username:          username,
@@ -592,6 +586,7 @@ func (gw *MultiUserGateway) getOrSpawnWorker(username string, forwardPassword bo
 			done:              make(chan struct{}),
 			ready:             make(chan struct{}),
 			token:             workerToken,
+			adminToken:        workerAdminToken,
 			hasMasterPassword: masterPassword != "",
 		}
 		gw.workers[username] = instance
@@ -803,6 +798,28 @@ func (gw *MultiUserGateway) runningWorker(username string) (*WorkerInstance, err
 	return inst, nil
 }
 
+// newWorkerProxy builds the per-tenant reverse proxy. It strips any
+// client-supplied credential-admin header and replaces the worker token, so a
+// same-origin tenant browser can only reach tenant-facing routes; only the
+// gateway's own postToWorker sets the admin token.
+func newWorkerProxy(targetURL *url.URL, workerToken string) *httputil.ReverseProxy {
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	proxy.FlushInterval = -1 // Flush immediately for SSE, WebSocket, and streaming SFTP downloads
+	proxy.Director = func(req *http.Request) {
+		req.URL.Scheme = targetURL.Scheme
+		req.URL.Host = targetURL.Host
+		// Rewrite Host to 127.0.0.1:<port> so Wails v3 Loopback Host Check passes cleanly
+		req.Host = targetURL.Host
+		if req.Header.Get("Origin") != "" {
+			req.Header.Set("Origin", "http://"+targetURL.Host)
+		}
+		// Set (not Add) so a client-supplied header cannot smuggle past.
+		req.Header.Del("X-Uniterm-Worker-Admin-Token")
+		req.Header.Set("X-Uniterm-Worker-Token", workerToken)
+	}
+	return proxy
+}
+
 // postToWorker issues an authenticated POST against a running worker.
 func (gw *MultiUserGateway) postToWorker(inst *WorkerInstance, path string, body []byte) (int, []byte, error) {
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://127.0.0.1:%d%s", inst.Port, path), bytes.NewReader(body))
@@ -811,6 +828,7 @@ func (gw *MultiUserGateway) postToWorker(inst *WorkerInstance, path string, body
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Uniterm-Worker-Token", inst.token)
+	req.Header.Set("X-Uniterm-Worker-Admin-Token", inst.adminToken)
 	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
 	if err != nil {
 		return 0, nil, err
